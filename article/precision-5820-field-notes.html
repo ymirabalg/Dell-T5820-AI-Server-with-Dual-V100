@@ -806,6 +806,11 @@ Workload: llama-bench …
           <span class="bar-val cool">75.3 °C</span>
         </div>
         <div class="bar-row">
+          <span class="bar-lab">Two instances, real requests</span>
+          <span class="bar-track"><span class="bar-fill" style="width:calc(66.2% / 0.9);background:var(--cool)"></span><span class="spec-line" style="left:92.2%"></span></span>
+          <span class="bar-val cool">66.2 °C</span>
+        </div>
+        <div class="bar-row">
           <span class="bar-lab">MoE, both busy</span>
           <span class="bar-track"><span class="bar-fill" style="width:calc(67% / 0.9);background:var(--cool)"></span><span class="spec-line" style="left:92.2%"></span></span>
           <span class="bar-val cool">~66–68 °C</span>
@@ -837,6 +842,24 @@ Workload: llama-bench …
         going into the case — which also means chassis airflow improvements buy far less
         here than intuition suggests.
       </p>
+      <div class="finding verified">
+        <span class="flabel">The benchmark was pessimistic — by nine degrees</span>
+        <p>
+          Every figure above comes from a synthetic benchmark, which drives a continuous
+          stream with no idle. Loading the actual serving endpoints with real requests
+          instead gives <strong>66.2 °C</strong>, against 75.3 °C for the same two cards
+          under the benchmark.
+        </p>
+        <p>
+          The reason is duty cycle: across the run the cards were above 200 W for only
+          <strong>77 % of samples</strong>, and combined draw averaged 389 W rather than
+          the ~500 W the benchmark sustains. Real requests have gaps — client round-trip,
+          the transition from prefill to generation, a slot falling idle. So the
+          measurements that shaped every cooling decision here were conservative, and the
+          machine in service sits <strong>16.8 °C inside spec</strong>.
+        </p>
+      </div>
+
       <p>
         Fitting an exponential to the rise curve turned out to predict the plateau well.
         From 51 seconds of noisy data the fit gave 64.9 °C; the measured plateau was
@@ -1077,6 +1100,37 @@ $ curl -s -o /dev/null -w '%{http_code}' -X POST \
         module built" for a module it had just built successfully.
       </p>
 
+      <h3>The dependency that deleted itself</h3>
+      <p>
+        A fan-control service was declared as wanted by the system's main startup target,
+        and — carelessly — also ordered to start <em>after</em> that same target. That is a
+        cycle, but nothing complained, because for weeks nothing else referred to the
+        service.
+      </p>
+      <p>
+        Then the model servers were given an ordering dependency on it, so they would not
+        start before cooling was running. That closed the loop. The init system resolved
+        it the only way it can: by <strong>silently deleting the model servers' start
+        jobs</strong>. No failed unit. No error. Both units still reported themselves as
+        enabled and intending to start. The only trace anywhere was a single line:
+      </p>
+      <figure>
+        <div class="panel"><pre>multi-user.target: Found ordering cycle: llama-server@0.service/start after
+  gpu-fan-control.service/start after multi-user.target/start - after llama-server@0.service
+<span class="hot">multi-user.target: Job llama-server@0.service/start deleted to break ordering cycle</span></pre></div>
+        <figcaption>
+          The endpoints simply were not there after a reboot, and everything that reports
+          on services said they were fine.
+        </figcaption>
+      </figure>
+      <p>
+        The part worth carrying: <strong>this class of bug cannot be reproduced by
+        restarting the service.</strong> The cycle only exists while the startup target is
+        doing the starting. Every manual restart during development worked perfectly. It
+        took an actual power cycle to surface, on a machine that had by then been
+        reconfigured a dozen times without one.
+      </p>
+
       <h3>The readback that lied</h3>
       <p>
         The attribute reporting whether a fan channel is under manual control returns
@@ -1250,6 +1304,19 @@ $ ss -tln | grep 808
         for the per-token cost.
       </p>
 
+      <h3>Stage 7b — reboot before you believe any of it</h3>
+      <p>
+        Restarting a service is not the same as booting. Ordering between units, module
+        loading, device naming and firmware checks all behave differently when the startup
+        target is driving, and several failures exist only in that path. Power-cycle the
+        machine and confirm every service comes up with nothing typed afterwards.
+      </p>
+      <p class="note">
+        <strong>Gate:</strong> after a cold boot, no failed units, the accelerator fan
+        channel present, both endpoints listening, and — specifically —
+        <code>journalctl -b | grep "ordering cycle"</code> returns nothing.
+      </p>
+
       <h3>Stage 8 — serve it, then verify from another machine</h3>
       <p>
         One instance per accelerator, each pinned, each holding its own copy. Key in a file
@@ -1296,7 +1363,9 @@ that was never validated for them, over SSH. Ground rules:
      never paste bytes from another model.
   5. Anything that touches thermals runs under a watchdog that kills the
      workload at a limit I set, and the watchdog dies with the workload.
-  6. Tell me when a result contradicts something you told me earlier.</pre></div>
+  6. Tell me when a result contradicts something you told me earlier.
+  7. "systemctl restart works" is not evidence boot works. Anything touching
+     unit ordering gets verified by an actual reboot.</pre></div>
         <figcaption>Every rule here is a scar. Rules 1, 2 and 3 each cost hours before they were written down.</figcaption>
       </figure>
     </div>
