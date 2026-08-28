@@ -1,0 +1,59 @@
+From: Andrew Mark <android606@gmail.com>
+Date: Tue, 13 Jan 2026 21:55:49 -0500
+Subject: [PATCH v2] hwmon: (dell-smm) Extend fan support to 5 fans
+
+Dell Precision Tower workstations have 5 fan connectors, but the driver was
+limited to 4 fans by an earlier commit. Change DELL_SMM_NO_FANS to 5 and add
+the hwmon channel configuration for the fifth fan and its PWM control.
+
+The fifth (PCIe/GPU) cooling fan is uncontrollable without this change, which
+risks overheating on systems with high-power passive GPUs that depend on
+chassis airflow.
+
+Tested on Dell Precision Tower 5810 (BIOS A34); all five fans respond to PWM
+adjustment.
+
+Fan layout on the Precision Tower 5810:
+  fan0: CPU heatsink
+  fan1: Secondary CPU (dual-CPU configurations only)
+  fan2: Right DIMM bank
+  fan3: Left DIMM bank
+  fan4: PCIe/GPU cooling
+
+Signed-off-by: Andrew Mark <android606@gmail.com>
+---
+v2: Dropped the DMI quirk changes; fan type naming deferred to sensors3
+    configuration instead.
+
+ drivers/hwmon/dell-smm-hwmon.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/hwmon/dell-smm-hwmon.c b/drivers/hwmon/dell-smm-hwmon.c
+index 6040a8940..88263fa53 100644
+--- a/drivers/hwmon/dell-smm-hwmon.c
++++ b/drivers/hwmon/dell-smm-hwmon.c
+@@ -74,7 +74,7 @@
+ #define DELL_SMM_LEGACY_EXECUTE 0x1
+
+ #define DELL_SMM_NO_TEMP 10
+-#define DELL_SMM_NO_FANS 4
++#define DELL_SMM_NO_FANS 5
+
+ /* limit fan multiplier to avoid overflow */
+ #define DELL_SMM_MAX_FAN_MULT (INT_MAX / U16_MAX)
+@@ -1129,12 +1129,15 @@ static const struct hwmon_channel_info * const dell_smm_info[] = {
+ 		HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX |
+ 		HWMON_F_TARGET,
+ 		HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX |
++		HWMON_F_TARGET,
++		HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX |
+ 		HWMON_F_TARGET
+ 	),
+ 	HWMON_CHANNEL_INFO(pwm,
+ 		HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+ 		HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+ 		HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
++		HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+ 		HWMON_PWM_INPUT | HWMON_PWM_ENABLE
+ 	),
+ 	NULL
