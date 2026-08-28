@@ -229,6 +229,25 @@ request returns 401.
   ~140 s at 930 t/s. Round-robin would destroy that every turn. **Assign one agent per
   port.** Note `ip_hash` stickiness fails if all agents share one client machine.
 
+**⚠ ORDERING CYCLE — a unit must not be `After=` a target that `Wants` it.**
+`gpu-fan-control.service` shipped with both `WantedBy=multi-user.target` and
+`After=multi-user.target`. That is a cycle, and it was invisible for as long as nothing
+else ordered itself after that unit. The moment `llama-server@.service` added
+`After=gpu-fan-control.service`, systemd broke the loop by **silently deleting the
+llama-server start jobs** — so on 2026-08-28's boot neither endpoint came up, with no
+failed unit and no error anywhere except one line:
+
+```
+multi-user.target: Found ordering cycle: llama-server@0.service/start after
+  gpu-fan-control.service/start after multi-user.target/start - after llama-server@0.service
+multi-user.target: Job llama-server@0.service/start deleted to break ordering cycle
+```
+
+Fixed by ordering `After=sysinit.target` instead. **This class of bug only appears on a
+real boot** — `systemctl restart` can never reproduce it, because the cycle exists only
+while the target is doing the starting. Check after any unit-ordering change with:
+`journalctl -b | grep "ordering cycle"`.
+
 **⚠ Two systemd traps hit while building this — both silently "succeeded":**
 
 1. **`StartLimitIntervalSec`/`StartLimitBurst` must be in `[Unit]`, not `[Service]`.**
