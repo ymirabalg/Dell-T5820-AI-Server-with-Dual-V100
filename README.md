@@ -50,6 +50,19 @@ Several hard-won gotchas are recorded in `CLAUDE.md` under *Conventions in the s
 `$HOME` shifting under `sudo`, `set -u` and `EXIT` traps, `pipefail` with `grep -q`, and
 `pkill -f` matching the shell that invoked it.
 
+## Contributions
+
+**Forks welcome, pull requests are not.** This documents one specific machine and is
+kept as a stable reference rather than a collaborative project. A repository ruleset
+blocks branch creation, updates and deletion for everyone but the owner, so nothing can
+be pushed or merged here.
+
+GitHub offers no way to turn the pull-request button off, so you can still open one —
+it will not be merged. Fork it and take it wherever you need; that is what forks are for,
+and the licence permits it.
+
+If you have the same hardware and something here is wrong, an issue is the useful channel.
+
 ## Not included
 
 No credentials. The serving API key is generated on the server into `/etc` at install

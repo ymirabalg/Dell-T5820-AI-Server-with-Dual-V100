@@ -207,6 +207,7 @@
       <span><b>CPU</b> Xeon W-2135, 6C/12T</span>
       <span><b>GPU</b> 2 × Tesla V100 32 GB</span>
       <span><b>BIOS</b> 2.48.0</span>
+      <span><b>Scripts</b> <a href="https://github.com/ymirabalg/Dell-T5820-AI-Server-with-Dual-V100">github.com/ymirabalg/Dell-T5820-AI-Server-with-Dual-V100</a></span>
     </div>
   </div>
 </header>
@@ -224,6 +225,7 @@
       <li><a href="#c8"><span>Serving it</span></a></li>
       <li><a href="#c9"><span>Bugs that reported success</span></a></li>
       <li><a href="#c10"><span>Doing this yourself</span></a></li>
+      <li><a href="#c11"><span>The scripts</span></a></li>
     </ol>
   </div>
 </nav>
@@ -1184,6 +1186,124 @@ $ ss -tln | grep 808
 
 </main>
 
+<section class="ch" id="c11">
+  <div class="wrap">
+    <div class="measure">
+      <p class="chno">Chapter 11</p>
+      <h2>The scripts</h2>
+      <p class="dek">Nine tools, in the order you would use them. All in the repository, all
+        <code>--dry-run</code> capable where that means anything.</p>
+      <p>
+        Every one follows the same shape: <code>bash</code> with <code>set -euo pipefail</code>,
+        a comment header that <em>is</em> the <code>--help</code> output so the two cannot
+        drift, and a restoring trap on anything that changes hardware state. Run any of them
+        with no arguments to see usage.
+      </p>
+
+      <h3>Bring-up</h3>
+      <figure>
+        <div class="panel"><pre><span style="color:var(--muted)"># from the Mac — authorise your key, optionally write an ssh config alias</span>
+./setup-ssh-key.sh                          <span style="color:var(--muted)"># prompts, defaults to the known address</span>
+./setup-ssh-key.sh -a ai-server you@host    <span style="color:var(--muted)"># also writes the alias</span>
+./setup-ssh-key.sh --print-key              <span style="color:var(--muted)"># no network; prints what to paste</span>
+
+<span style="color:var(--muted)"># on the server — extend the root LV into free VG space, install base tooling</span>
+sudo ./provision-base.sh --dry-run          <span style="color:var(--muted)"># reports intent, changes nothing</span>
+sudo ./provision-base.sh                    <span style="color:var(--muted)"># LV extend + packages</span>
+sudo ./provision-base.sh --packages         <span style="color:var(--muted)"># skip the disk change</span></pre></div>
+        <figcaption>
+          Both are idempotent. The LV step asserts the root filesystem is ext4 before
+          calling <code>lvextend -r</code>, since xfs would need a different tool.
+        </figcaption>
+      </figure>
+
+      <h3>Making the fifth fan exist</h3>
+      <figure>
+        <div class="panel"><pre>./dell-smm-5fan.sh check                    <span style="color:var(--muted)"># preflight: headers, toolchain, current fan count</span>
+./dell-smm-5fan.sh build --source ~/src     <span style="color:var(--muted)"># patch + compile out of tree</span>
+sudo ./dell-smm-5fan.sh load                <span style="color:var(--muted)"># swap it in for THIS BOOT ONLY</span>
+sudo ./dell-smm-5fan.sh install             <span style="color:var(--muted)"># register with DKMS — survives kernel upgrades</span>
+./dell-smm-5fan.sh status                   <span style="color:var(--muted)"># what is loaded, how many fans, dkms state</span>
+sudo ./dell-smm-5fan.sh uninstall           <span style="color:var(--muted)"># restore the stock module</span></pre></div>
+        <figcaption>
+          Use <code>load</code> first and confirm the new channel actually moves the fan you
+          expect before making it permanent. <strong>DKMS only builds for the running
+          kernel</strong> — if a newer one is installed but not yet booted, build for it
+          explicitly or the next reboot silently drops back to four fans.
+        </figcaption>
+      </figure>
+
+      <h3>Fan control</h3>
+      <figure>
+        <div class="panel"><pre>./gpu-fan-control.sh list                   <span style="color:var(--muted)"># channels, RPM, state — no root needed</span>
+./gpu-fan-control.sh monitor 300            <span style="color:var(--muted)"># no root: CSV of RPM vs temps over time</span>
+sudo ./gpu-fan-control.sh probe 5           <span style="color:var(--muted)"># ramp ONE channel to identify its header</span>
+sudo ./gpu-fan-control.sh install           <span style="color:var(--muted)"># sbin + /etc config + systemd unit</span>
+sudo ./gpu-fan-control.sh restore           <span style="color:var(--muted)"># hand every channel back to the controller</span>
+
+<span style="color:var(--muted)"># /etc/gpu-fan-control.conf — the config wins over the script's defaults</span>
+PWM_TIERS="5:55:51"    <span style="color:var(--muted)"># channel:engage:release[:dwell_up], space separated</span>
+INTERVAL=1             <span style="color:var(--muted)"># re-assert every second; 5 lets the controller win</span>
+HIGH_DWELL=30          <span style="color:var(--muted)"># keep purging after the release point</span>
+STOP_STATE="high"      <span style="color:var(--muted)"># park loud-but-safe if the service dies</span></pre></div>
+        <figcaption>
+          <code>install</code> never overwrites an existing config — after changing a default
+          in the script, edit the config too or the change has no effect. Identify every
+          channel with <code>probe</code> before adding it: the numbering does not match any
+          published board diagram.
+        </figcaption>
+      </figure>
+
+      <h3>Measuring</h3>
+      <figure>
+        <div class="panel"><pre><span style="color:var(--muted)"># wrap any workload in a thermal watchdog with per-second telemetry</span>
+./gpu-bench.sh --limit 78 --csv run.csv -- llama-bench -m model.gguf -p 8192 -n 128 -ngl 99
+./gpu-bench.sh --watch                      <span style="color:var(--muted)"># just watch temperatures, no workload</span>
+
+<span style="color:var(--muted)"># load EVERY card at once and report the plateau</span>
+LIMIT=78 REPS=6 ./thermal-soak.sh ~/models/model.gguf my-tag</pre></div>
+        <figcaption>
+          <code>thermal-soak.sh</code> reports whether the run <strong>completed or
+          aborted</strong>, which matters more than the peak: a completed run has found an
+          equilibrium, an aborted one was still climbing. Set the limit <em>above</em> your
+          measured plateau or every healthy run reads as a failure.
+        </figcaption>
+      </figure>
+
+      <h3>Serving</h3>
+      <figure>
+        <div class="panel"><pre>./serve-llm.sh check                        <span style="color:var(--muted)"># per-card fit, firewall, cooling, GPU count</span>
+sudo ./serve-llm.sh install                 <span style="color:var(--muted)"># key + template unit + firewall, one instance per GPU</span>
+./serve-llm.sh status                       <span style="color:var(--muted)"># every instance, port, VRAM, temperature</span>
+./serve-llm.sh test                         <span style="color:var(--muted)"># round-trip through each instance</span>
+CTX=131072 sudo ./serve-llm.sh install      <span style="color:var(--muted)"># change context and reinstall</span>
+
+<span style="color:var(--muted)"># fetch a model faster than one connection allows</span>
+./hf-get.sh unsloth/Some-Model-GGUF Some-Model-Q4_K_M.gguf ~/models</pre></div>
+        <figcaption>
+          The API key is generated on the server into <code>/etc</code> at install time and
+          never printed. <code>hf-get.sh</code> resumes per chunk and verifies every chunk's
+          length before joining, so an interrupted 25 GB download costs nothing.
+        </figcaption>
+      </figure>
+
+      <div class="finding verified">
+        <span class="flabel">Everything is in the repository</span>
+        <p>
+          <a href="https://github.com/ymirabalg/Dell-T5820-AI-Server-with-Dual-V100">github.com/ymirabalg/Dell-T5820-AI-Server-with-Dual-V100</a>
+          — the scripts, the kernel patch, and <code>CLAUDE.md</code>, which carries the
+          findings in far more detail than this article: exact byte offsets, command codes,
+          per-channel measurements and the reasoning behind each choice.
+        </p>
+        <p>
+          Forks are welcome; pull requests are not accepted. It documents one specific
+          machine and is kept as a stable reference. Take it and adapt it.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section class="ch" id="c10">
   <div class="wrap">
     <div class="measure">
@@ -1381,6 +1501,7 @@ that was never validated for them, over SSH. Ground rules:
   <div class="wrap">
     <p>
       Precision 5820 · 2 × Tesla V100 32 GB · Ubuntu 26.04 · llama.cpp<br>
+      Scripts and full notes: <a href="https://github.com/ymirabalg/Dell-T5820-AI-Server-with-Dual-V100">github.com/ymirabalg/Dell-T5820-AI-Server-with-Dual-V100</a><br>
       All measurements taken on the machine described. Benchmark figures are from
       <code>llama-bench</code>; thermal figures from per-second <code>nvidia-smi</code>
       telemetry under a watchdog.
