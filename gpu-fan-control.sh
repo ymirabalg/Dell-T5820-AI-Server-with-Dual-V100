@@ -644,7 +644,13 @@ EOF
 [Unit]
 Description=GPU temperature driven chassis fan control
 Documentation=file:$SBIN
-After=multi-user.target
+# NOT After=multi-user.target. This unit is WantedBy that target, so ordering it
+# after the target is a cycle — and it stays invisible until something else orders
+# itself after THIS unit. When llama-server@.service did exactly that, systemd broke
+# the loop by silently dropping the llama-server start jobs, and the endpoints failed
+# to come up on every boot with no error anywhere except the ordering-cycle line.
+# All this really needs is the hwmon module, which is present well before here.
+After=sysinit.target
 # A missing pwm channel is a hard failure (see 'run'), and without a start limit
 # Restart=on-failure would retry every RestartSec forever, filling the journal.
 # The likely cause is DKMS failing to rebuild dell-smm-hwmon-5fan after a kernel

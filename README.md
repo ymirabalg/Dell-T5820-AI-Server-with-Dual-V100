@@ -18,6 +18,8 @@ drives the remote box over SSH*.
 | `gpu-fan-control.sh` | server | drives the GPU fan header from GPU temperature, with a hand-back band and release dwell |
 | `gpu-bench.sh` | server | runs a GPU workload under a thermal watchdog, with per-second telemetry |
 | `serve-llm.sh` | server | runs one `llama-server` instance per GPU as a systemd template unit, key-gated, firewalled to the LAN |
+| `thermal-soak.sh` | server | loads every GPU at once under a watchdog and logs GPU temp/power plus every fan channel and thermal sensor; reports the plateau and whether the run completed |
+| `hf-get.sh` | anywhere | chunked parallel download from Hugging Face with per-chunk resume and verification — a single stream settles to ~5 MB/s no matter your link |
 
 `article/precision-5820-field-notes.html` is a written-up account of the whole build —
 self-contained, photos embedded, no external assets.
