@@ -710,6 +710,17 @@ operating / 87 C slowdown. If the plateau really is ~65 C, every soak aborts jus
 reaches steady state and the flat part of the curve is never observed. Raising
 `gpu-bench.sh --limit` to 75 for one run would settle it, still 8 C inside spec.
 
+**PRODUCTION thermals, measured 2026-08-28 against the LIVE endpoints: 66.2 C.** Both
+`llama-server` instances hammered concurrently for 410 s — GPU0 mean 66.2 C (64-67),
+GPU1 63.2 C, fan5 4273 RPM, ran to term. **16.8 C inside the 83 C spec.**
+
+**Every synthetic figure below is ~9 C pessimistic for real use.** Across that run the
+cards were above 200 W for only **77 % of samples** and combined draw averaged **389 W**
+against the ~500 W `llama-bench` sustains — real requests have gaps (client round-trip,
+the prefill-to-generation transition, a slot falling idle) that a synthetic stream never
+has. Use **66 C** as the number describing the machine in service and 75.3 C as the worst
+case. Harness: `~/serve-soak.sh`, which loads the endpoints and needs no service stop.
+
 **PLATEAU MEASURED 2026-08-27 — the cooling is sufficient.** `-p 32768 -n 128 -r 8
 -sm layer` at `--limit 75` ran to completion, 318 s of compute, both cards at ~250 W:
 
