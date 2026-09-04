@@ -353,6 +353,30 @@ separately while `content` still carries the answer.
 enabled)`), so the model's own template — including Gemma 4's tool-calling macros — is
 what runs, and `--chat-template-kwargs` reaches it.
 
+**Measured against the live endpoint 2026-09-04**, single slot, `--parallel 1`, a
+21397-token prompt (this file) at `temperature 0`:
+
+| | Gemma 4 12B-it Q8_0 | Qwen3.6-27B Q4_K_M | ratio |
+|---|---|---|---|
+| prefill | **1526 t/s** (21396 tok in 14.0 s) | 930.5 t/s | 1.64x |
+| generation | **46.2 t/s** | 34.18 t/s | 1.35x |
+
+**The decode gap is far smaller than the parameter counts suggest, and that is
+expected** — decode is bandwidth-bound and Q8_0 costs twice the bytes per weight, so
+Gemma moves ~12 GB against Qwen's ~18 GB. 18/12 = 1.5, near the 1.35x measured. Do not
+read 12B-vs-27B as a 2x decode win; the quant cancels most of it. Both rates come from a
+21k prompt, and prefill will fall off approaching 128K as the attention term grows.
+
+**KV cache reuse CONFIRMED for this model, not merely inherited from the Qwen result.**
+A second request sharing the same 21k-token document prefix and differing only in the
+trailing question prefilled **39 tokens** — 3.1 s wall against 16.9 s cold. That is the
+measurement behind "assign one agent per port": round-robin would repay the full 14 s
+prefill every turn.
+
+Thermally, a full-tilt 14 s prefill took GPU 0 to 55 C, engaging channel 5 and then
+releasing it through the 30 s `HIGH_DWELL`. 28 C inside the 83 C spec, and the card never
+came near the 250 W cap.
+
 **⚠ ORDERING CYCLE — a unit must not be `After=` a target that `Wants` it.**
 `gpu-fan-control.service` shipped with both `WantedBy=multi-user.target` and
 `After=multi-user.target`. That is a cycle, and it was invisible for as long as nothing
