@@ -12,11 +12,20 @@ Early-stage, and still only shell scripts that set up a remote box:
 - `dell-smm-5fan.sh` + `dell-smm-5fan.patch` — rebuilds `dell-smm-hwmon` out of tree with
   `DELL_SMM_NO_FANS=5` so the board's 5th (PCIe/GPU) fan header becomes addressable at
   all. Runs on the server; only `load`/`unload` need root. See *The 5th fan header*.
+- `serve-llm.sh` — one `llama-server` systemd instance per GPU, each with its own model.
+  Runs on the server. See *Serving*.
+- `hf-get.sh` — multi-stream Hugging Face downloader with per-chunk resume and
+  verification. HF throttles a single connection to ~5 MB/s; this is the way to fetch a
+  model. Runs anywhere.
+- `gpu-bench.sh` / `thermal-soak.sh` — load generators used to measure the thermal
+  numbers throughout this file. Run on the server. (`~/serve-soak.sh` on the box loads
+  the LIVE endpoints instead, and needs no service stop.)
 
 There is no application code, build system, test suite, or package manifest yet — do
 not assume one exists.
 
-Not a git repository.
+It IS a git repository (branch `main`) as of 2026-08-27 — an earlier version of this
+file said otherwise. Commit only when asked.
 
 ## The remote host
 
@@ -186,26 +195,79 @@ absent from LVFS. Re-check only if Dell publishes something above 2.50.1.
 ## Serving (commissioned 2026-08-27)
 
 `serve-llm.sh` runs **one `llama-server` instance per GPU**, each pinned to its own card,
-as a systemd template unit. Runs on the server; only install/uninstall need root.
+as a systemd template unit. Runs on the server; install/uninstall/set-model need root.
+
+**This box does not run Ollama and never has** — `which ollama` is empty. The stack is
+llama.cpp's `llama-server` behind systemd, and models are plain GGUF files in
+`~/models/`. Ollama-style tags (`gemma4:12b-it-q8_0`) have to be translated to a repo
+and filename before `hf-get.sh` can fetch them.
 
 ```bash
-./serve-llm.sh check              # preflight: binary, model, per-card fit, ufw, cooling
+./serve-llm.sh check              # preflight: binary, models, per-card fit, ufw, cooling
 sudo ./serve-llm.sh install       # key + template + env files + ufw, enable & start all
-./serve-llm.sh status             # every instance, port, VRAM, temperature
+sudo ./serve-llm.sh set-model N MODEL [ALIAS] [CTX]   # repoint ONE instance
+./serve-llm.sh status             # every instance, port, model, VRAM, temperature
 ./serve-llm.sh test               # round-trip through each instance
 sudo ./serve-llm.sh uninstall     # remove units and ufw rule (keeps the key)
 ```
 
-Live configuration:
+**Each instance carries its own model**, since 2026-09-04. `MODEL`/`ALIAS`/`CTX` live
+next to `PORT` in `/etc/llama-server/<i>.env` and the single template unit substitutes
+`${MODEL}` etc. from the `EnvironmentFile`; the cards no longer have to serve the same
+thing. Two rules that fall out of that:
 
-| instance | endpoint | GPU | VRAM |
-|---|---|---|---|
-| `llama-server@0` | `http://192.168.4.71:8080/v1` | 0 | 26452 / 32768 MiB |
-| `llama-server@1` | `http://192.168.4.71:8081/v1` | 1 | 26452 / 32768 MiB |
+- **`install` never repoints a live instance.** It rewrites `PORT` (which it owns) but
+  keeps any `MODEL`/`ALIAS`/`CTX` already in the env file, so re-running it to fix a
+  unit or a firewall rule cannot silently swap a card's model. `set-model` is the only
+  thing that changes one.
+- **`set-model` rolls back.** It backs up the env file, restarts, and polls `/health`;
+  if the instance dies — a bad path, an OOM at that context — it restores the old env
+  and restarts on the previous model rather than leaving the card with no server while
+  systemd burns through its start limit.
 
-Model **Qwen3.6-27B Q4_K_M** (alias `qwen3.6-27b`), `--ctx-size 131072`,
-`--split-mode none`, `--parallel 1`. Verified: both serve, and an unauthenticated LAN
-request returns 401.
+Live configuration (2026-09-04):
+
+| instance | endpoint | GPU | model | ctx | VRAM |
+|---|---|---|---|---|---|
+| `llama-server@0` | `http://192.168.4.71:8080/v1` | 0 | **Gemma 4 12B-it Q8_0** (`gemma-4-12b-it`) | 131072 | 15188 / 32768 MiB |
+| `llama-server@1` | `http://192.168.4.71:8081/v1` | 1 | Qwen3.6-27B Q4_K_M (`qwen3.6-27b`) | 131072 | 26454 / 32768 MiB |
+
+Both `--split-mode none`, `--parallel 1`. Verified end to end from another LAN host:
+authenticated chat completions work on both, and inference without the key is 401.
+
+**The two ports are now different models**, which sharpens the existing "one agent per
+port" rule — anything round-robining between 8080 and 8081 would swap models mid
+conversation, not merely lose the KV cache.
+
+**⚠ THE FIREWALL WAS NEVER ENFORCING — found 2026-09-04, and the check that hid it was
+ours.** `serve-llm.sh` gated its ufw work on `systemctl is-active --quiet ufw`, which was
+green. `ufw status` said `Status: inactive`, and `/etc/ufw/ufw.conf` said `ENABLED=no`:
+
+```
+systemctl is-active ufw   -> active      systemctl is-enabled ufw -> enabled
+/etc/ufw/ufw.conf         -> ENABLED=no  /etc/ufw/user.rules      -> rule present, unused
+```
+
+**`ufw.service` is a oneshot that applies rules only when `ENABLED=yes` and reports
+`active (exited)` either way**, so `is-active` is green on a disabled firewall. `install`
+had written the `allow from 192.168.4.0/22` rule successfully into a firewall that never
+loaded it, and 8080/8081 sat open to anything routable — with only the API key gating
+inference — from 2026-08-27 to 2026-09-04. Ask ufw, not systemd: `ufw_enforcing()` now
+reads `ufw status` as root and `ufw.conf` otherwise, and `install` still writes the rule
+but says loudly when it is not in force. **Not yet fixed on the box — `sudo ufw enable`
+is still outstanding.** Textbook case of the rule below: writing the config is not
+evidence it took.
+
+**The API key does not gate everything, by llama.cpp's design.** Measured 2026-09-04:
+
+| endpoint | no key |
+|---|---|
+| `/v1/chat/completions`, `/v1/completions`, `/completion`, `/props` | **401** |
+| `/health`, `/v1/models` | **200** |
+
+So an unauthenticated host can discover that the server is up and what the model is
+called, but cannot run a token through it. Do not describe the endpoints as "401 without
+a key" without that qualification.
 
 **Why these choices, all measured — do not "optimise" them without re-measuring:**
 
@@ -229,6 +291,43 @@ request returns 401.
   ~140 s at 930 t/s. Round-robin would destroy that every turn. **Assign one agent per
   port.** Note `ip_hash` stickiness fails if all agents share one client machine.
 
+### Gemma 4 12B on GPU 0 — added 2026-09-04
+
+`ggml-org/gemma-4-12B-it-GGUF` / `gemma-4-12B-it-Q8_0.gguf`, 12.67 GB, fetched with
+`hf-get.sh` and verified by size + GGUF magic. That repo also holds a `mmproj-*` (vision
+tower — Gemma 4 is `any-to-any`, and the instance is TEXT-ONLY without `--mmproj`) and
+`mtp-*` files for the multi-token-prediction head; neither is loaded.
+
+**Context is nearly free on this model, unlike Qwen — the architectures are not
+comparable.** Gemma 4 is 5:1 sliding-window: of 48 layers, 40 are SWA with a 1024-token
+window (8 KV heads x 256) and only 8 are global (**one** KV head x 512). So the term
+that scales with context is 8 x 1 x 512 x 2 x 2 B = **16 KiB/token**, against Qwen's
+~65 KiB. Measured by loading it CPU-only and reading `RssAnon` — 4.66 GiB of KV +
+compute buffers at the full **262144**, over 11.84 GiB of Q8_0 weights, ~16.5 GiB total.
+**Its entire native 262K window fits on one V100**; 131072 is what is configured, and
+lands at a measured 15188 MiB.
+
+That CPU-load trick is worth reusing: `CUDA_VISIBLE_DEVICES="" llama-server --n-gpu-layers 0`
+plus `RssAnon` from `/proc/<pid>/status` sizes a model's KV **without touching the GPUs
+or stopping a live instance**. `RssFile` comes out as the mmap'd weights, `RssAnon` as
+everything allocated.
+
+**Check the build knows the architecture before planning around a new model:**
+`strings llama.cpp/build/bin/libllama.so.* | grep -x gemma4` — this build has `gemma4`
+and `gemma4-assistant`. A missing arch fails at load, after the download is paid for.
+
+**Gemma 4 uses the SAME `enable_thinking` template variable as Qwen, and defaults it to
+false** (`{%- set enable_thinking = enable_thinking | default(false) -%}`). So the unit's
+`--chat-template-kwargs '{"enable_thinking":false}'` is correct for it rather than dead
+Qwen-specific config, and clients opt in per request with
+`"chat_template_kwargs":{"enable_thinking":true}`. Verified both directions: off gives
+populated `content` and empty `reasoning_content`; on fills `reasoning_content`
+separately while `content` still carries the answer.
+
+`--jinja` is **on by default** in this build (`--jinja, --no-jinja ... (default:
+enabled)`), so the model's own template — including Gemma 4's tool-calling macros — is
+what runs, and `--chat-template-kwargs` reaches it.
+
 **⚠ ORDERING CYCLE — a unit must not be `After=` a target that `Wants` it.**
 `gpu-fan-control.service` shipped with both `WantedBy=multi-user.target` and
 `After=multi-user.target`. That is a cycle, and it was invisible for as long as nothing
@@ -244,7 +343,10 @@ multi-user.target: Job llama-server@0.service/start deleted to break ordering cy
 ```
 
 Fixed by ordering `After=sysinit.target` instead. **This class of bug only appears on a
-real boot** — `systemctl restart` can never reproduce it, because the cycle exists only
+real boot** — and it held on one: after the 2026-09-04 12:46 boot,
+`journalctl -b | grep "ordering cycle"` was empty and the units started themselves,
+`gpu-fan-control` at 12:46:13 with both `llama-server` instances at 12:46:18.
+`systemctl restart` can never reproduce it, because the cycle exists only
 while the target is doing the starting. Check after any unit-ordering change with:
 `journalctl -b | grep "ordering cycle"`.
 
@@ -783,6 +885,12 @@ dkms status -m dell-smm-hwmon-5fan          # one line per kernel, compare with 
 sudo dkms install -m dell-smm-hwmon-5fan -v 1.0 -k <NEW-KVER>
 ```
 
+**Worked example, 2026-09-04:** the box rebooted onto 7.0.0-30-generic and channel 5 came
+back intact, because that `dkms install -k` had been run ahead of time. `dkms status` now
+shows a line per kernel and `modinfo -n` points into `7.0.0-30-generic/updates/dkms/`.
+`/lib/modules` also still carries 7.0.0-14-generic with no DKMS line — harmless while
+`GRUB_DEFAULT=0` boots the newest, but it is what a rescue boot would land on.
+
 **Getting kernel source without root, and without touching `/etc/apt`.** Point apt at
 user-owned directories instead of enabling `deb-src` system-wide:
 
@@ -953,9 +1061,17 @@ the script, edit the config too or the change has no effect on the service.
 Sanity-check any curve against the quantisation: `MIN_PCT=50` → pwm 127 → LOW, and 100%
 → pwm 255 → HIGH. Both clear the pwm ≤ 63 cliff that would stop the fan.
 
-**Open items.** Confirm across an actual reboot that channel 5 comes back — every
-mechanism is verified (`modules.dep`, `modinfo -n`, matching `srcversion`) but the box
-has not been rebooted since. The 3-state quantisation still applies to fan 5: it gets
+**CONFIRMED ACROSS A REBOOT 2026-09-04 — and on a DIFFERENT kernel than it was built
+against.** The box rebooted at 12:46 (first boot since 2026-08-28) and came up on
+**7.0.0-30-generic**, not the 7.0.0-29 everything was originally built for. `fan5_input`
+exists and is driven, `modinfo -n dell_smm_hwmon` resolves to
+`/lib/modules/7.0.0-30-generic/updates/dkms/dell-smm-hwmon.ko.zst`, and `dkms status`
+lists both kernels `installed (Original modules exist)`. That is precisely the failure
+the DKMS warning above predicts, and the pre-emptive
+`dkms install -k 7.0.0-30-generic` is what stopped it — so treat that step as load
+bearing, not as belt-and-braces.
+
+**Open items.** The 3-state quantisation still applies to fan 5: it gets
 OFF/LOW/HIGH like the
 rest, so the curve-floor guard matters *more* there, not less, since a floor at or below
 pwm 63 would stop the GPU fan outright. Still unconfirmed physically: which fan is
