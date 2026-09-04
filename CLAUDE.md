@@ -258,6 +258,31 @@ but says loudly when it is not in force. **Not yet fixed on the box — `sudo uf
 is still outstanding.** Textbook case of the rule below: writing the config is not
 evidence it took.
 
+**⚠ ENABLING IT LOCKED SSH OUT — 2026-09-04, same day.** `sudo ufw enable` was run
+without an allow rule for port 22, and the box went unreachable. Read the symptom
+carefully, because it names its own cause:
+
+| observation | what it means |
+|---|---|
+| `ping` 0 % loss | machine is up; ufw's `before.rules` permits ICMP echo |
+| tcp/22 **times out** | a DROP rule. A dead `sshd` gives *connection refused* instantly |
+| 8080/8081 still answer | ufw IS enforcing, and the LAN rule works — only 22 was missed |
+
+**An already-established SSH session survives `ufw enable`** — `before.rules` permits
+`ESTABLISHED,RELATED` — so the fix is to run this in a session you already have open,
+and NOT disconnect until a fresh connection is verified:
+
+```bash
+sudo ufw allow from 192.168.4.0/22 to any port 22 proto tcp   # applies immediately
+sudo ufw status numbered
+```
+
+**With no session left open there is no remote path back.** The only reachable ports are
+the inference endpoints, which cannot run commands, and a Precision 5820 is a
+workstation with **no iDRAC/BMC** — recovery is the keyboard and monitor on the display
+card. Before ever running `ufw enable` here, check the rule exists first:
+**`sudo ufw show added` lists added rules without activating anything.**
+
 **The API key does not gate everything, by llama.cpp's design.** Measured 2026-09-04:
 
 | endpoint | no key |
