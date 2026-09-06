@@ -225,19 +225,23 @@ thing. Two rules that fall out of that:
   and restarts on the previous model rather than leaving the card with no server while
   systemd burns through its start limit.
 
-Live configuration (2026-09-04):
+Live configuration (2026-09-06):
 
 | instance | endpoint | GPU | model | ctx | VRAM |
 |---|---|---|---|---|---|
-| `llama-server@0` | `http://192.168.4.71:8080/v1` | 0 | **Gemma 4 12B-it Q8_0** (`gemma-4-12b-it`) | 131072 | 15188 / 32768 MiB |
-| `llama-server@1` | `http://192.168.4.71:8081/v1` | 1 | Qwen3.6-27B Q4_K_M (`qwen3.6-27b`) | 131072 | 26454 / 32768 MiB |
+| `llama-server@0` | `http://192.168.4.71:8080/v1` | 0 | Qwen3.6-27B Q4_K_M (`qwen3.6-27b`) | 131072 | 26452 / 32768 MiB |
+| `llama-server@1` | `http://192.168.4.71:8081/v1` | 1 | Qwen3.6-27B Q4_K_M (`qwen3.6-27b`) | 131072 | 26650 / 32768 MiB |
 
-Both `--split-mode none`, `--parallel 1`. Verified end to end from another LAN host:
-authenticated chat completions work on both, and inference without the key is 401.
+Both `--split-mode none`, `--parallel 1`, `FA=auto`, `SPEC=none`. Verified end to end
+from another LAN host: authenticated chat completions work on both, inference without the
+key is 401, and wall-clock generation is **31-32 t/s** on both within 4 %.
 
-**The two ports are now different models**, which sharpens the existing "one agent per
-port" rule — anything round-robining between 8080 and 8081 would swap models mid
-conversation, not merely lose the KV cache.
+Gemma 4 12B and Qwen3.5-35B-A3B were both run on instance 0 during 2026-09-04/06 and both
+returned to the dense 27B; their measurements are below and the weights are still in
+`~/models`. **When the ports carry DIFFERENT models the "one agent per port" rule stops
+being about efficiency and becomes about correctness** — round-robin would swap models
+mid conversation, not merely lose the KV cache. With both on the same model it is back to
+being only a prefill cost.
 
 **⚠ THE FIREWALL WAS NEVER ENFORCING — found 2026-09-04, and the check that hid it was
 ours.** `serve-llm.sh` gated its ufw work on `systemctl is-active --quiet ufw`, which was
@@ -332,10 +336,23 @@ compute buffers at the full **262144**, over 11.84 GiB of Q8_0 weights, ~16.5 Gi
 **Its entire native 262K window fits on one V100**; 131072 is what is configured, and
 lands at a measured 15188 MiB.
 
-That CPU-load trick is worth reusing: `CUDA_VISIBLE_DEVICES="" llama-server --n-gpu-layers 0`
-plus `RssAnon` from `/proc/<pid>/status` sizes a model's KV **without touching the GPUs
-or stopping a live instance**. `RssFile` comes out as the mmap'd weights, `RssAnon` as
-everything allocated.
+**⚠ THE CPU-LOAD SIZING TRICK NEEDS `--no-repack`, or it lies.** The method is: load the
+model CPU-only and read `RssAnon` from `/proc/<pid>/status` — `RssFile` comes out as the
+mmap'd weights, `RssAnon` as everything allocated. It sizes a model **without touching the
+GPUs or stopping a live instance**, which is its whole value. But llama.cpp rewrites
+quantized weights into a CPU-optimised layout on load (`--repack`, **on by default**),
+and that allocation lands in `RssAnon` where it looks exactly like KV cache. It does NOT
+happen on CUDA. Measured on Qwen3.5-35B-A3B at ctx 131072, 2026-09-06:
+
+| | RssAnon |
+|---|---|
+| default (repack on) | 13.87 GiB |
+| `--no-repack` | **2.74 GiB** |
+
+The first number would have said the model needed 34.4 GiB and could not run at 131072;
+the truth was 23.6 GiB measured on the card. Gemma escaped this — Q8_0 is barely
+repacked, so its numbers above are sound — which is exactly why the bug stayed hidden.
+**Always pass `--no-repack` when sizing.**
 
 **Check the build knows the architecture before planning around a new model:**
 `strings llama.cpp/build/bin/libllama.so.* | grep -x gemma4` — this build has `gemma4`
@@ -416,6 +433,89 @@ with — `systemctl show -p <property>`, `serve-llm.sh status` — before believ
 
 **⚠ Thermals: both instances busy reaches ~77-80 C against an 83 C spec.** `check` warns
 about this every run. Fine on a cool day, marginal on a warm one — see *Fan control*.
+
+### Serving flags added 2026-09-06
+
+Applied to the template after reading `tools/server` upstream and cross-checking every
+flag against THIS build (`0.1.1-dev`, commit `01818e4`) rather than master's docs:
+
+- **`--cache-reuse 256`** — was `0` (off). Plain prefix caching is on by default and
+  measured working (a second request sharing a 21k prefix re-prefilled 39 tokens). This
+  is the increment: KV reuse via shifting when the prompt's MIDDLE changes — an agent
+  dropping old turns, a system prompt carrying a timestamp. No VRAM cost.
+- **`--cache-ram 12288`** — host-RAM prompt cache, default 8192 MiB. States evicted from
+  a slot get restored instead of re-prefilled, against a ~140 s cost for a full 128K
+  re-prefill. 2 x 12 GiB of the box's 61 GiB.
+- **`--metrics`** — Prometheus endpoint. **Requires the API key (401 without)**, unlike
+  `/health` and `/v1/models`.
+- **`FA` and `SPEC` are PER-INSTANCE env values**, defaulting to `auto` and `none`.
+
+**`-fa on` was deliberately NOT pinned globally.** It only fails at *startup*, so a bad
+value on a shared template is invisible until the next reboot — the exact failure class
+this box has been bitten by twice (the ordering cycle, the DKMS kernel skew). Per-instance
+means one card can be tested behind `set-model`'s rollback before the other follows.
+
+### Qwen3.5-35B-A3B evaluated and rejected — 2026-09-06
+
+`unsloth/Qwen3.5-35B-A3B-GGUF` Q4_K_M, 22.02 GB. **Hybrid architecture, and the KV maths
+is nothing like a normal transformer:** 40 blocks with `full_attention_interval = 4`, so
+only **10 full-attention layers** keep a context-growing cache (2 KV heads x 256) while
+the other 30 are linear attention holding a fixed-size recurrent state (`ssm.conv_kernel`
+4, `ssm.state_size` 128, `ssm.inner_size` 4096). That is **20 KiB/token** against
+Qwen3.6-27B's ~65. At 131072 it measured **23630 MiB on the card** — 8 GiB spare despite
+carrying 8 GiB more weights than the 27B.
+
+Measured against the dense 27B, same 21589-token prompt:
+
+| | Qwen3.5-35B-A3B MoE | Qwen3.6-27B dense |
+|---|---|---|
+| prefill | 648.6 t/s | 660.0 t/s |
+| generation | **92.0 t/s** | 29.3 t/s |
+| VRAM | 23630 MiB | 26452 MiB |
+
+**Generation 3.1x, prefill identical.** That split is inherent to A3B: decode touches only
+8 of 256 experts so it moves ~3B parameters per token, but prefill batches activate
+essentially every expert. **An agent that reads long contexts and writes short answers
+gains nothing here; one that writes a lot gains 3x.** Consistent with the earlier finding
+that an MoE was ~3.5x faster and ~27 points worse on SWE-bench — quality was NOT measured
+for this one, and instance 0 was returned to the dense 27B.
+
+### ⚠ MTP speculative decoding is a 20x LOSS on this box — 2026-09-06
+
+`unsloth/Qwen3.6-27B-MTP-GGUF` (17.11 GB, MTP head at `blk.64.nextn.*`, verified present
+by tensor dump) with `--spec-type draft-mtp --spec-draft-n-max 6`. Unsloth claim
+~1.5-2x generation. Measured, wall-clock, client side:
+
+| | wall | tokens | REAL t/s | llama.cpp *reported* |
+|---|---|---|---|---|
+| spec on, short prompt | 91.8 s | 133 | **1.4** | 28.3 |
+| spec on, 21k prompt | 191.9 s | 239 | **1.2** | 31.4 |
+| spec off, short prompt | 3.8-4.9 s | 121 | **24.8-32.2** | 33.6 |
+
+**Speculation was working correctly by every internal metric while costing 20x the
+wall-clock time.** Draft acceptance 75-95%, mean accepted run 5.5-6.7 tokens, draft
+context created against the target model, `-ngld` defaults to `auto` so the draft was on
+the GPU (confirmed: 97 % util, 246 W throughout). Not a misconfiguration — each draft
+step simply costs far more than the pass it replaces on this build/hardware.
+
+Scope: this is Volta plus `0.1.1-dev`, where the MTP path merged only 2026-05-16. It is
+not a claim that MTP is broken generally. Untried: a lower `--spec-draft-n-max`.
+
+**⚠ THE GENERAL LESSON — `predicted_per_second` IS NOT ELAPSED TIME.** It reported 28.3
+t/s while the client waited 91.8 s for 133 tokens. It measures the target model's decode
+time and excludes draft work, so it is fine with speculation off and actively misleading
+with it on. **Benchmark wall-clock from the client.** Note the honest wall-clock figure
+for the dense 27B is 31-32 t/s, slightly BETTER than the 29.3 recorded from that field.
+
+Files kept in `~/models` after the experiment (nothing deleted):
+`Qwen3.6-27B-MTP-Q4_K_M.gguf` 17.11 GB, `Qwen3.5-35B-A3B-UD-Q4_K_M.gguf` 22.63 GB (MTP,
+head at `blk.40`), `mtp-gemma-4-12B-it-Q8_0.gguf` 0.47 GB (a standalone 49-tensor draft
+for `--spec-draft-model`, not a full model).
+
+**⚠ hf-get.sh writes by SOURCE filename — check for collisions.** Upstream's MTP build is
+also called `Qwen3.6-27B-Q4_K_M.gguf`, the exact name of the working 19.10 GB model. A
+direct fetch would have overwritten a model serving both ports. Stage into a scratch dir
+and rename on success.
 
 ## Server Administration & Infrastructure Guardrails
 
