@@ -8,13 +8,17 @@
 # enforcing, and `check` is the thing that says whether it is.
 # install/uninstall/set-model need root.
 #
-# Each instance carries its OWN model, alias and context size in
-# /etc/llama-server/<i>.env, so the two cards can serve different models.
+# Each instance carries its OWN model, alias, context size and flash-attention
+# setting in /etc/llama-server/<i>.env, so the two cards can serve different
+# models with different tuning.
 #
 #   ./serve-llm.sh check              # preflight: binary, models, GPUs, ufw, cooling
 #   sudo ./serve-llm.sh install       # key + template unit + ufw, then enable & start
 #   sudo ./serve-llm.sh uninstall     # remove units and ufw rule (keeps the key)
-#   sudo ./serve-llm.sh set-model N MODEL [ALIAS] [CTX]   # repoint one instance
+#   sudo ./serve-llm.sh set-model N MODEL [ALIAS] [CTX] [FA] [SPEC]
+#                                     # repoint one instance. FA is on|off|auto;
+#                                     # SPEC is none|draft-mtp|... Blank args keep
+#                                     # whatever that instance already has.
 #   ./serve-llm.sh status             # every instance, port, model, VRAM, temperature
 #   ./serve-llm.sh test               # one round-trip through each instance
 #   ./serve-llm.sh key-path           # where the key lives (never prints it)
@@ -44,6 +48,32 @@ PORT_BASE="${PORT_BASE:-8080}"
 # native window on one card; 131072 is the house default and lands near 14.6 GiB.
 CTX="${CTX:-131072}"
 SLOTS="${SLOTS:-1}"
+# Flash attention. llama.cpp's own default is `auto`, which decides silently — and a
+# silent fallback to the non-FA path costs a much larger compute buffer and slower
+# prefill with nothing in the log to say so. `on` makes it fail loudly instead, but it
+# fails at STARTUP, which on a shared template would be a latent bug that only shows up
+# at the next reboot. So it is PER-INSTANCE and defaults to auto: turn it on for one
+# card, confirm, then the other. Head dims matter here — 256 is well-supported, Gemma 4's
+# 512 global-layer dim is the one to actually test rather than assume.
+FA="${FA:-auto}"
+# Reuse KV across a prompt whose MIDDLE changed (an agent dropping old turns, a system
+# prompt carrying a timestamp) by shifting the cache instead of re-prefilling from the
+# divergence point. Plain prefix caching is already on by default and measured working;
+# this is the increment. 0 = off, which was the shipped default.
+CACHE_REUSE="${CACHE_REUSE:-256}"
+# Host-RAM prompt cache, in MiB: conversation states evicted from a slot get restored
+# instead of re-prefilled. A full 128K re-prefill costs ~140 s, so this is cheap
+# insurance. 12288 x 2 instances = 24 GiB of the box's 61 GiB, leaving plenty.
+CACHE_RAM="${CACHE_RAM:-12288}"
+# Speculative decoding, PER-INSTANCE and inert at `none` (the shipped default), so the
+# flag can sit in the template harmlessly until a model that supports it is deployed.
+# `draft-mtp` needs a GGUF carrying the multi-token-prediction head — the plain unsloth
+# Qwen3.5 build does NOT have one, the -MTP-GGUF build does. Unsloth measure ~1.5-2x
+# generation with it. NOTE: MTP is incompatible with --parallel > 1 and with --mmproj,
+# which is fine here only because SLOTS is 1. Verified 2026-09-06 that this build
+# accepts both `none` and `draft-mtp`.
+SPEC="${SPEC:-none}"
+SPEC_N_MAX="${SPEC_N_MAX:-6}"
 LAN="${LAN:-192.168.4.0/22}"
 KEYFILE="/etc/llama-server.apikey"
 TMPL="/etc/systemd/system/llama-server@.service"
@@ -56,7 +86,7 @@ ok()    { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 warn()  { printf '  \033[33m!\033[0m %s\n' "$*"; }
 die()   { printf '  \033[31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 
-usage() { sed -n '3,23p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '3,27p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 run()   { if (( DRY )); then printf '  \033[35m→\033[0m would run: %s\n' "$*"; else "$@"; fi; }
 need_root() { (( EUID == 0 )) || die "this subcommand needs root — re-run with sudo"; }
 
@@ -97,19 +127,23 @@ env_get() {  # env_get <instance> <key>
   sed -n "s/^${2}=//p" "$f" | tail -1
 }
 
-write_env() {  # write_env <instance> [model] [alias] [ctx] — blank args keep/inherit
-  local i="$1" m a c p f
+write_env() {  # write_env <inst> [model] [alias] [ctx] [fa] [spec] — blank args keep/inherit
+  local i="$1" m a c x p f
   f="${ENVDIR}/${i}.env"; p="$(port_of "$i")"
   m="${2:-$(env_get "$i" MODEL || true)}"; m="${m:-$MODEL}"
   a="${3:-$(env_get "$i" ALIAS || true)}"; a="${a:-$ALIAS}"
   c="${4:-$(env_get "$i" CTX   || true)}"; c="${c:-$CTX}"
-  if (( DRY )); then info "would write $f: PORT=$p MODEL=$m ALIAS=$a CTX=$c"; return 0; fi
+  x="${5:-$(env_get "$i" FA    || true)}"; x="${x:-$FA}"
+  local sp; sp="${6:-$(env_get "$i" SPEC || true)}"; sp="${sp:-$SPEC}"
+  if (( DRY )); then info "would write $f: PORT=$p MODEL=$m ALIAS=$a CTX=$c FA=$x SPEC=$sp"; return 0; fi
   mkdir -p "$ENVDIR"
   cat > "$f" <<ENVEOF
 PORT=${p}
 MODEL=${m}
 ALIAS=${a}
 CTX=${c}
+FA=${x}
+SPEC=${sp}
 ENVEOF
   chmod 644 "$f"
 }
@@ -217,6 +251,12 @@ ExecStart=${BIN} \\
   --split-mode none \\
   --parallel ${SLOTS} \\
   --cont-batching \\
+  --flash-attn \${FA} \\
+  --cache-reuse ${CACHE_REUSE} \\
+  --cache-ram ${CACHE_RAM} \\
+  --spec-type \${SPEC} \\
+  --spec-draft-n-max ${SPEC_N_MAX} \\
+  --metrics \\
   --host 0.0.0.0 \\
   --port \${PORT} \\
   --api-key-file ${KEYFILE} \\
@@ -295,7 +335,7 @@ setmodel_rollback() {
 # firewall rule.
 cmd_set_model() {
   need_root
-  local i="${1:-}" m="${2:-}" a="${3:-}" c="${4:-}" n p code t
+  local i="${1:-}" m="${2:-}" a="${3:-}" c="${4:-}" x="${5:-}" sp="${6:-}" n p code t
   [[ "$i" =~ ^[0-9]$ ]] || die "instance must be a single digit — got '${i}'"
   n="$(gpu_count)"; (( i < n )) || die "instance ${i} does not exist — ${n} GPU(s) visible"
   [[ -n "$m" ]] || die "no model given — usage: $0 set-model N MODEL [ALIAS] [CTX]"
@@ -307,10 +347,15 @@ cmd_set_model() {
   # The service runs as SVC_USER, so root being able to read it proves nothing.
   runuser -u "$SVC_USER" -- test -r "$m" || die "${SVC_USER} cannot read $m"
   [[ -z "$c" || "$c" =~ ^[0-9]+$ ]] || die "ctx must be a number — got '${c}'"
+  [[ -z "$x" || "$x" =~ ^(on|off|auto)$ ]] || die "FA must be on|off|auto — got '${x}'"
+  # Not an exhaustive list — llama.cpp accepts several ngram-* variants too — but it
+  # catches a typo before it takes the instance down at startup.
+  [[ -z "$sp" || "$sp" =~ ^(none|draft-simple|draft-eagle3|draft-mtp|draft-dflash|draft-dspark|ngram-[a-z0-9-]+)$ ]] \
+    || die "SPEC looks wrong — got '${sp}' (see --spec-type in llama-server --help)"
   [[ -f "$TMPL" ]] || die "$TMPL is missing — run 'sudo $0 install' first"
 
   bold "Pointing llama-server@${i} at $(basename "$m")"
-  if (( DRY )); then write_env "$i" "$m" "$a" "$c"; info "would restart llama-server@${i}"; return 0; fi
+  if (( DRY )); then write_env "$i" "$m" "$a" "$c" "$x" "$sp"; info "would restart llama-server@${i}"; return 0; fi
 
   # Take the old config first. A model that OOMs on load would otherwise leave the
   # card with no server at all while systemd burns through its start limit.
@@ -320,8 +365,8 @@ cmd_set_model() {
   fi
   trap setmodel_rollback EXIT
 
-  write_env "$i" "$m" "$a" "$c"
-  ok "wrote ${ENVDIR}/${i}.env — alias $(env_get "$i" ALIAS), ctx $(env_get "$i" CTX)"
+  write_env "$i" "$m" "$a" "$c" "$x" "$sp"
+  ok "wrote ${ENVDIR}/${i}.env — alias $(env_get "$i" ALIAS), ctx $(env_get "$i" CTX), fa $(env_get "$i" FA), spec $(env_get "$i" SPEC)"
 
   p="$(port_of "$i")"
   systemctl restart "llama-server@${i}"
@@ -346,19 +391,23 @@ cmd_set_model() {
 
 cmd_status() {
   bold "llama-server instances"
-  local i p a c m ip; ip="$(hostname -I | awk '{print $1}')"
+  local i p a c m x ip; ip="$(hostname -I | awk '{print $1}')"
   for i in $(instances); do
     p="$(port_of "$i")"
     a="$(env_get "$i" ALIAS || true)"; c="$(env_get "$i" CTX || true)"; m="$(env_get "$i" MODEL || true)"
+    x="$(env_get "$i" FA || true)"
     printf '  GPU %s  port %s  ' "$i" "$p"
     systemctl is-active --quiet "llama-server@${i}" && printf '\033[32mactive\033[0m' || printf '\033[33minactive\033[0m'
     systemctl is-enabled --quiet "llama-server@${i}" 2>/dev/null && printf '  (enabled)' || printf '  (not enabled)'
     printf '  http://%s:%s/v1\n' "$ip" "$p"
-    printf '         model %s  ctx=%s\n' "${a:-<no env file>}" "${c:-?}"
+    printf '         model %s  ctx=%s  fa=%s\n' "${a:-<no env file>}" "${c:-?}" "${x:-?}"
     printf '         %s\n' "${m:-—}"
   done
   echo
-  info "split=none  slots=${SLOTS}  (each card holds a full copy of its own model)"
+  info "split=none  slots=${SLOTS}  cache-reuse=${CACHE_REUSE}  cache-ram=${CACHE_RAM}MiB  metrics=on"
+  local j; for j in $(instances); do
+    printf '         GPU %s spec=%s\n' "$j" "$(env_get "$j" SPEC || echo '?')"
+  done
   nvidia-smi --query-gpu=index,memory.used,memory.total,temperature.gpu,power.draw \
     --format=csv,noheader | sed 's/^/    GPU /'
 }
