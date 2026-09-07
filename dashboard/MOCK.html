@@ -1,0 +1,2049 @@
+<!doctype html>
+<html lang="en" data-state="a">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ai-server Instrument Panel</title>
+<style>
+/* ============================================================================
+   ai-server dashboard — STATIC VISUAL MOCK
+   Deliverable 8.2 of dashboard/SPEC.md. Non-functional. Frozen readings.
+   Self-contained: no network, no fonts, no libraries. Opens from file://.
+
+   Design tokens
+   -------------
+   Ground / panels : cool blue-grey neutrals, deliberately hue-biased, not pure grey
+   Series          : GPU 0 #3987e5 (solid) · GPU 1 #199e70 (dashed) · fan 5 #d95926
+                     validated all-pairs against the #0d1116 surface,
+                     protan/deutan dE 9.4 min, normal-vision dE 20.9 min
+   Status          : good #0ca30c · warning #fab219 · critical #d03b3b
+                     reserved; never used for a series. Always glyph + label.
+   Numerals        : system monospace, tabular. Values stay in ink; state is
+                     carried by chips, stripes and glyphs, so one amber cell is
+                     the only thing that pulls the eye.
+   ========================================================================= */
+
+:root {
+  color-scheme: dark;
+
+  --ground:        #07090c;
+  --panel:         #0d1116;
+  --raised:        #11161d;
+  --sunken:        #090c11;
+
+  --hairline:      #1c232c;
+  --hairline-lo:   #151b23;
+  --hairline-hi:   #28313d;
+
+  --ink:           #e4eaf1;
+  --ink-2:         #98a5b4;
+  --ink-3:         #6b7889;
+  --ink-4:         #4a5566;
+
+  --good:          #0ca30c;
+  --good-ink:      #3fc63f;
+  --warn:          #fab219;
+  --warn-ink:      #fab219;
+  --crit:          #d03b3b;
+  --crit-ink:      #ef6a6a;
+
+  --s-gpu0:        #3987e5;
+  --s-gpu1:        #199e70;
+  --s-fan:         #d95926;
+  --meter:         #55697f;
+
+  --mock:          #b07ad6;
+
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas,
+          "DejaVu Sans Mono", "Liberation Mono", "Courier New", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --r: 3px;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--s-gpu0);
+  outline-offset: 2px;
+}
+
+/* ---------- shell ---------------------------------------------------- */
+
+.app {
+  max-width: 2200px;
+  margin: 0 auto;
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* ---------- top bar --------------------------------------------------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 6px 13px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r);
+}
+
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.brand__host {
+  font-size: 15px; font-weight: 600; letter-spacing: .02em; color: var(--ink);
+  white-space: nowrap;
+}
+.brand__meta { color: var(--ink-3); font-size: 11px; white-space: nowrap; }
+
+.topbar__spacer { flex: 1 1 auto; }
+
+.agg {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 10px 3px 8px;
+  border: 1px solid var(--hairline-hi);
+  border-radius: 999px;
+  background: var(--raised);
+  white-space: nowrap;
+}
+.agg__glyph { font-size: 11px; line-height: 1; }
+.agg__text { font-size: 11px; letter-spacing: .03em; }
+.agg[data-sev="ok"]   { border-color: rgba(12,163,12,.40); }
+.agg[data-sev="ok"]   .agg__glyph { color: var(--good-ink); }
+.agg[data-sev="warn"] { border-color: rgba(250,178,25,.42); }
+.agg[data-sev="warn"] .agg__glyph { color: var(--warn-ink); }
+.agg[data-sev="crit"] { border-color: rgba(208,59,59,.55); background: rgba(208,59,59,.10); }
+.agg[data-sev="crit"] .agg__glyph { color: var(--crit-ink); }
+
+/* MODE is a second, independent channel: the severity glyph answers "how is the
+   machine", the mode answers "how current is this". Paused/stale therefore sit
+   BESIDE the severity, never in place of it, and wear the neutral "no reading"
+   hatch rather than a status hue — an amber pill would say "warning". */
+.agg { padding-left: 4px; }
+.agg__mode {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 1px 8px 1px 7px;
+  border: 1px solid var(--hairline-hi);
+  border-radius: 999px 3px 3px 999px;
+  background: repeating-linear-gradient(45deg, rgba(152,165,180,.14) 0 3px, transparent 3px 6px);
+  color: var(--ink);
+  font-size: 10.5px; letter-spacing: .04em;
+}
+.agg__mode[hidden] { display: none; }
+.agg__mode i { font-style: normal; font-size: 9.5px; color: var(--ink-2); }
+
+.snap { display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; color: var(--ink-3); font-size: 11px; }
+.snap > span { white-space: nowrap; }
+.snap b { color: var(--ink-2); font-weight: 500; }
+
+/* mock-viewer strip — deliberately NOT product chrome. Dashed, violet, and
+   sitting outside the header so the real controls own the header's budget. */
+.mockstrip {
+  display: flex; align-items: center; gap: 6px 11px; flex-wrap: wrap;
+  padding: 4px 6px 4px 10px;
+  border: 1px dashed rgba(176,122,214,.55);
+  border-radius: var(--r);
+  background: rgba(176,122,214,.07);
+}
+.mockstrip__tag {
+  font-family: var(--sans); font-weight: 700;
+  font-size: 9px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--mock);
+}
+.mockstrip__seg { display: flex; gap: 3px; flex-wrap: wrap; }
+.mockstrip__btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 9px;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.mockstrip__btn:hover { color: var(--ink); background: rgba(176,122,214,.12); }
+.mockstrip__btn[aria-pressed="true"] {
+  color: #f0e2fb;
+  background: rgba(176,122,214,.24);
+  border-color: rgba(176,122,214,.60);
+}
+.mockstrip__note { font-size: 10px; color: var(--ink-4); }
+
+/* ---------- header controls (real UI chrome, §6.2) --------------------- */
+
+.ctl { display: flex; align-items: center; gap: 5px; }
+.ctl__sel {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 3px 7px 3px 8px;
+  border: 1px solid var(--hairline-hi); border-radius: 2px;
+  background: var(--raised);
+}
+.ctl__k {
+  font-family: var(--sans); font-size: 8.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-4);
+}
+.ctl__v { font-size: 11px; color: var(--ink); }
+.ctl__caret { font-size: 7px; color: var(--ink-3); }
+.ctl__btn {
+  font-family: var(--mono); font-size: 11px; line-height: 1;
+  min-width: 26px; height: 23px; padding: 0 7px;
+  color: var(--ink-2); background: var(--raised);
+  border: 1px solid var(--hairline-hi); border-radius: 2px; cursor: pointer;
+}
+.ctl__btn:hover { color: var(--ink); border-color: #3a4552; }
+.ctl__btn[data-on="1"] {
+  color: var(--ink); border-color: #3a4552;
+  background: repeating-linear-gradient(45deg, rgba(152,165,180,.16) 0 3px, transparent 3px 6px);
+}
+.ctl__sep { width: 1px; align-self: stretch; background: var(--hairline-hi); margin: 0 3px; }
+
+/* ---------- paused ------------------------------------------------------ */
+
+.snap[data-stale="1"] {
+  padding: 2px 6px; border-radius: 3px;
+  background: repeating-linear-gradient(45deg, rgba(152,165,180,.15) 0 3px, transparent 3px 6px);
+}
+.snap[data-stale="1"] b { color: var(--ink); }
+/* .banner--paused is declared ahead of .banner in this file, so it must out-
+   specify it or the alarm banner's red background wins on source order. */
+.banner.banner--paused {
+  background: repeating-linear-gradient(45deg, rgba(152,165,180,.10) 0 4px, transparent 4px 8px), var(--raised);
+  border-color: var(--hairline-hi);
+  border-left-color: var(--ink-3);
+}
+.banner.banner--paused .banner__glyph { color: var(--ink-2); }
+.banner.banner--paused .banner__count { color: var(--ink); }
+
+/* ---------- login (§5.2) ------------------------------------------------ */
+
+html[data-view="login"] .topbar,
+html[data-view="login"] #bannerHost,
+html[data-view="login"] .grid { display: none; }
+html[data-view="panel"] #loginHost { display: none; }
+
+.loginWrap { display: flex; flex-direction: column; gap: 10px; }
+.loginLead {
+  font-size: 10.5px; color: var(--ink-3);
+  padding: 7px 10px;
+  border: 1px solid var(--hairline); border-left: 2px solid var(--hairline-hi);
+  border-radius: var(--r); background: var(--panel);
+}
+.loginLead b { color: var(--ink-2); font-weight: 500; }
+.loginGrid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(262px, 1fr));
+  align-items: start;
+}
+.loginVar { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.loginVar__lbl {
+  font-family: var(--sans); font-weight: 600;
+  font-size: 9.5px; letter-spacing: .13em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+.loginVar__note { font-size: 10px; line-height: 1.4; color: var(--ink-4); }
+.login {
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 17px 15px 13px;
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r);
+}
+.login__mark { font-size: 17px; font-weight: 600; letter-spacing: .02em; color: var(--ink); line-height: 1.1; }
+.login__addr { font-size: 11px; color: var(--ink-3); margin-top: 3px; }
+.login__lbl {
+  font-family: var(--sans); font-size: 9.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-3);
+  margin-bottom: -4px;
+}
+.login__in {
+  font-family: var(--mono); font-size: 13px; letter-spacing: .14em;
+  width: 100%; padding: 7px 9px;
+  color: var(--ink); background: var(--sunken);
+  border: 1px solid var(--hairline-hi); border-radius: 2px;
+}
+.login__in:focus { outline: none; border-color: var(--s-gpu0); box-shadow: 0 0 0 1px rgba(57,135,229,.45); }
+.login__in[disabled] { opacity: .75; }
+.login__go {
+  font-family: var(--sans); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase;
+  padding: 8px 10px;
+  color: #eaf2fd; background: rgba(57,135,229,.22);
+  border: 1px solid rgba(57,135,229,.65); border-radius: 2px; cursor: pointer;
+}
+.login__go:hover:not([disabled]) { background: rgba(57,135,229,.32); }
+.login__go[disabled] { opacity: .42; cursor: not-allowed; }
+/* always present, so all five cards share one height and one baseline */
+.login__msg { display: flex; gap: 7px; font-size: 11px; line-height: 1.35; min-height: 15px; }
+.login__msg i { font-style: normal; }
+.login__msg[data-sev="crit"] { color: var(--crit-ink); }
+.login__msg[data-sev="warn"] { color: var(--warn-ink); }
+.login__disc {
+  margin: 0; padding-top: 9px;
+  border-top: 1px solid var(--hairline-lo);
+  display: flex; gap: 7px;
+  font-size: 10px; line-height: 1.45; color: var(--ink-3);
+}
+.login__disc i { font-style: normal; color: var(--warn-ink); }
+
+/* ---------- alarm banner ---------------------------------------------- */
+
+#bannerHost:empty { display: none; }
+
+.banner {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 8px 12px;
+  background: linear-gradient(90deg, rgba(208,59,59,.20), rgba(208,59,59,.07) 60%, rgba(208,59,59,.03));
+  border: 1px solid rgba(208,59,59,.55);
+  border-left: 3px solid var(--crit);
+  border-radius: var(--r);
+}
+.banner__glyph { color: var(--crit-ink); font-size: 14px; line-height: 1.25; }
+.banner__body { min-width: 0; flex: 1 1 auto; }
+.banner__head {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+}
+.banner__count {
+  font-family: var(--sans); font-size: 10px; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--crit-ink); font-weight: 700;
+}
+.banner__lead { font-size: 13px; color: var(--ink); }
+.banner__lead b { color: #fff; font-weight: 600; }
+.banner__since { color: var(--ink-3); font-size: 11px; }
+.banner__rest {
+  margin-top: 7px; display: flex; flex-wrap: wrap; gap: 6px 8px;
+}
+.banner__item {
+  display: inline-flex; align-items: baseline; gap: 7px;
+  font-size: 11px; color: var(--ink-2);
+  padding: 2px 8px;
+  border: 1px solid rgba(208,59,59,.32);
+  border-radius: 2px;
+  background: rgba(208,59,59,.06);
+}
+.banner__item i { font-style: normal; color: var(--ink-3); }
+
+/* ---------- grid ------------------------------------------------------ */
+
+/* >=1280: the single-screen wall panel. Explicit placement, so the tall
+   cooling module sits beside two stacked short panels instead of leaving a
+   column of dead ground under them. */
+.grid {
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+}
+.p-gpu0 { grid-column: 1 / 3; grid-row: 1; }
+.p-gpu1 { grid-column: 3 / 5; grid-row: 1; }
+.p-cool { grid-column: 1 / 3; grid-row: 2 / span 2; align-self: stretch; }
+.p-cpu  { grid-column: 3;     grid-row: 2; }
+.p-ram  { grid-column: 4;     grid-row: 2; }
+.p-safe { grid-column: 3;     grid-row: 3; }
+.p-store{ grid-column: 4;     grid-row: 3; }
+.p-serv { grid-column: 1 / 3; grid-row: 4; }
+.p-log  { grid-column: 3 / 5; grid-row: 4; }
+
+@media (max-width: 1279px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .p-gpu0, .p-gpu1, .p-cpu, .p-ram, .p-safe, .p-store { grid-column: auto; grid-row: auto; }
+  .p-cool, .p-serv, .p-log { grid-column: span 2; grid-row: auto; align-self: start; }
+}
+
+@media (max-width: 899px) {
+  .app { padding: 10px 10px 14px; }
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .p-gpu0, .p-gpu1, .p-cool, .p-serv, .p-log,
+  .p-cpu, .p-ram, .p-safe, .p-store { grid-column: span 1; grid-row: auto; align-self: start; }
+  /* priority order per SPEC 6.1: GPUs -> cooling -> safety -> serving -> host -> storage */
+  .p-gpu0 { order: 1; } .p-gpu1 { order: 2; } .p-cool { order: 3; }
+  .p-safe { order: 4; } .p-serv { order: 5; } .p-cpu { order: 6; }
+  .p-ram  { order: 7; } .p-store { order: 8; } .p-log { order: 9; }
+}
+
+/* ---------- panel ----------------------------------------------------- */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r);
+  padding: 8px 10px 9px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.panel__hd {
+  display: flex; align-items: center; gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--hairline-lo);
+}
+.panel__title {
+  font-family: var(--sans);
+  font-size: 10px; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.panel__sub {
+  font-size: 11px; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+}
+.panel__hd .sp { flex: 1 1 auto; }
+
+/* severity stripe on a panel that is not nominal */
+.panel[data-sev="warn"] { border-color: rgba(250,178,25,.34); }
+.panel[data-sev="crit"] { border-color: rgba(208,59,59,.46); }
+.panel[data-sev="crit"] { background: linear-gradient(180deg, rgba(208,59,59,.045), transparent 90px), var(--panel); }
+
+/* ---------- chips ----------------------------------------------------- */
+
+.chip {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  font-family: var(--sans);
+  font-size: 9.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 2px;
+  border: 1px solid var(--hairline-hi);
+  background: rgba(152,165,180,.07);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.chip i { font-style: normal; font-size: 9px; }
+.chip--ok   { border-color: rgba(12,163,12,.45);  background: rgba(12,163,12,.12);  color: var(--good-ink); }
+.chip--warn { border-color: rgba(250,178,25,.48); background: rgba(250,178,25,.13); color: var(--warn-ink); }
+.chip--crit { border-color: rgba(208,59,59,.58);  background: rgba(208,59,59,.16);  color: var(--crit-ink); }
+.chip--unk  { border-color: var(--hairline-hi);   background: repeating-linear-gradient(45deg, rgba(152,165,180,.10) 0 3px, transparent 3px 6px); color: var(--ink-2); }
+/* hex codes and unit strings must not be shouted into 0X4 by text-transform */
+.chip--code { text-transform: none; letter-spacing: .03em; font-family: var(--mono); font-weight: 400; font-size: 10px; }
+
+/* ---------- readouts -------------------------------------------------- */
+
+.hero {
+  display: flex; align-items: flex-end; gap: 4px;
+  line-height: .95;
+}
+.hero__v { font-size: 34px; font-weight: 500; letter-spacing: -.02em; color: var(--ink); }
+.hero__u { font-size: 13px; color: var(--ink-3); padding-bottom: 3px; }
+.hero--crit .hero__v { color: #fff; text-shadow: 0 0 22px rgba(208,59,59,.55); }
+.hero--warn .hero__v { color: #fff; }
+/* an unreadable channel: the value slot is struck through with the same hatch
+   the chart uses for "no reading", so it can never be mistaken for a zero */
+.hero--unk  .hero__v {
+  color: var(--ink-3); font-size: 28px; letter-spacing: .1em;
+  padding: 0 8px;
+  background: repeating-linear-gradient(45deg, rgba(152,165,180,.13) 0 3px, transparent 3px 6px);
+  border: 1px solid var(--hairline-hi);
+}
+
+.gpuTop { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.gpuTop__spark { flex: 1 1 130px; min-width: 110px; }
+.gpuTop__pw { text-align: right; margin-left: auto; }
+.gpuTop__pw .n { font-size: 18px; color: var(--ink); }
+.gpuTop__pw .u { font-size: 11px; color: var(--ink-3); }
+
+.caption {
+  font-size: 10.5px; color: var(--ink-3);
+  display: flex; gap: 10px; flex-wrap: wrap;
+  min-height: 14px;
+}
+.caption b { color: var(--ink-2); font-weight: 500; }
+
+/* meter */
+.meterRow { display: flex; flex-direction: column; gap: 3px; }
+.meterRow__lbl {
+  display: flex; justify-content: space-between; gap: 10px;
+  font-size: 10.5px; color: var(--ink-3);
+}
+.meterRow__lbl b { color: var(--ink-2); font-weight: 500; }
+.meter {
+  position: relative;
+  height: 6px;
+  background: var(--sunken);
+  border: 1px solid var(--hairline-lo);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.meter__fill { position: absolute; inset: 0 auto 0 0; background: var(--meter); }
+.meter__fill[data-sev="warn"] { background: var(--warn); }
+.meter__fill[data-sev="crit"] { background: var(--crit); }
+.meter__tick {
+  position: absolute; top: -1px; bottom: -1px; width: 1px;
+  background: var(--hairline-hi);
+}
+
+/* key / value strip */
+.strip {
+  display: flex; flex-wrap: wrap; gap: 3px 20px;
+  font-size: 11px;
+}
+.strip > div { display: flex; gap: 7px; min-width: 0; align-items: baseline; }
+.strip dt, .strip .k { color: var(--ink-3); }
+.strip dd, .strip .v { margin: 0; color: var(--ink); white-space: nowrap; }
+
+.rows { display: flex; flex-direction: column; gap: 1px; }
+.row {
+  display: flex; align-items: center; gap: 6px 9px; flex-wrap: wrap;
+  padding: 4px 7px; line-height: 1.25;
+  background: var(--raised);
+  border-left: 2px solid var(--hairline-hi);
+  min-width: 0;
+}
+.row[data-sev="ok"]   { border-left-color: rgba(12,163,12,.55); }
+.row[data-sev="warn"] { border-left-color: var(--warn); background: rgba(250,178,25,.07); }
+.row[data-sev="crit"] { border-left-color: var(--crit); background: rgba(208,59,59,.09); }
+.row[data-sev="unk"]  { border-left-color: var(--ink-4); }
+.row__glyph { width: 11px; text-align: center; font-size: 10px; flex: 0 0 auto; }
+.row[data-sev="ok"]   .row__glyph { color: var(--good-ink); }
+.row[data-sev="warn"] .row__glyph { color: var(--warn-ink); }
+.row[data-sev="crit"] .row__glyph { color: var(--crit-ink); }
+.row[data-sev="unk"]  .row__glyph { color: var(--ink-3); }
+.row__name { color: var(--ink); flex: 0 0 auto; }
+/* notes wrap rather than truncate — a clipped reason is worse than a tall row */
+.row__note { color: var(--ink-3); font-size: 10.5px; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.row__note--full { flex: 1 0 100%; padding-left: 20px; }
+.row__end { margin-left: auto; flex: 0 1 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+
+/* fan channel table */
+.chan {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  gap: 3px 10px;
+  align-items: center;
+  font-size: 11px;
+}
+.chan__id { color: var(--ink-3); }
+.chan__v  { color: var(--ink); text-align: right; min-width: 42px; }
+.chan__v--unk { color: var(--ink-3); letter-spacing: .18em; }
+.chan__v--zero { color: var(--crit-ink); }
+.chan__n  { color: var(--ink-3); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.note {
+  font-size: 9.5px; line-height: 1.4; color: var(--ink-4);
+  border-top: 1px solid var(--hairline-lo);
+  padding-top: 5px;
+}
+.note b { color: var(--ink-3); font-weight: 400; }
+
+/* ---------- charts ---------------------------------------------------- */
+
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; }
+.chart:focus-visible { outline-offset: 0; }
+
+.legend {
+  display: flex; gap: 14px; flex-wrap: wrap;
+  font-size: 10.5px; color: var(--ink-2);
+  align-items: center;
+}
+.legend__item { display: inline-flex; align-items: center; gap: 6px; }
+.legend__key { width: 16px; height: 0; border-top-width: 2px; border-top-style: solid; }
+
+.tip {
+  position: absolute; z-index: 5; pointer-events: none;
+  background: rgba(9,12,17,.96);
+  border: 1px solid var(--hairline-hi);
+  border-radius: 2px;
+  padding: 6px 8px;
+  font-size: 11px;
+  min-width: 132px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.55);
+  opacity: 0; transition: opacity .08s linear;
+}
+.tip[data-on="1"] { opacity: 1; }
+.tip__t { color: var(--ink-3); font-size: 10px; margin-bottom: 4px; letter-spacing: .04em; }
+.tip__r { display: flex; align-items: center; gap: 7px; }
+.tip__k { width: 14px; height: 0; border-top-width: 2px; border-top-style: solid; flex: 0 0 auto; }
+.tip__v { color: var(--ink); font-weight: 600; margin-left: auto; }
+.tip__n { color: var(--ink-3); }
+
+/* ---------- event log -------------------------------------------------- */
+
+.logWrap {
+  max-height: 84px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--hairline-lo);
+  border-radius: 2px;
+  background: var(--sunken);
+}
+.logTable { width: 100%; border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+.logTable td { padding: 3px 9px; border-bottom: 1px solid var(--hairline-lo); vertical-align: baseline; }
+.logTable tr:last-child td { border-bottom: 0; }
+.log__t { color: var(--ink-3); width: 1%; }
+.log__src { color: var(--ink-2); width: 1%; }
+.log__sev { width: 1%; }
+.log__m { color: var(--ink); white-space: normal; }
+.log__m em { font-style: normal; color: var(--ink-3); }
+.logTable tr[data-sev="crit"] .log__m { color: #fff; }
+.logTable tr[data-sev="crit"] { background: rgba(208,59,59,.07); }
+.logTable tr[data-sev="warn"] { background: rgba(250,178,25,.05); }
+.sevTag {
+  font-family: var(--sans); font-size: 8.5px; font-weight: 700;
+  letter-spacing: .11em; text-transform: uppercase;
+}
+.sevTag[data-sev="crit"] { color: var(--crit-ink); }
+.sevTag[data-sev="warn"] { color: var(--warn-ink); }
+.sevTag[data-sev="info"] { color: var(--ink-4); }
+
+/* ---------- footer ---------------------------------------------------- */
+
+.foot {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  font-size: 10px; color: var(--ink-4);
+  padding: 0 2px;
+}
+.foot b { color: var(--mock); font-weight: 600; letter-spacing: .1em; font-family: var(--sans); font-size: 9px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <defs>
+    <pattern id="nodata" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#4a5566" stroke-width="1.2"></line>
+    </pattern>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <div class="mockstrip" role="group" aria-label="Mock viewer — state selector">
+    <span class="mockstrip__tag">mock viewer</span>
+    <span class="mockstrip__seg">
+      <button type="button" class="mockstrip__btn" data-go="a"  aria-pressed="true">A · steady</button>
+      <button type="button" class="mockstrip__btn" data-go="ap" aria-pressed="false">A · paused</button>
+      <button type="button" class="mockstrip__btn" data-go="b"  aria-pressed="false">B · degraded</button>
+      <button type="button" class="mockstrip__btn" data-go="c"  aria-pressed="false">C · login</button>
+    </span>
+    <span class="mockstrip__note">static mock of dashboard/SPEC.md §8.2 — frozen readings, nothing polls</span>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand__host">ai-server</span>
+      <span class="brand__meta" id="hostMeta"></span>
+    </div>
+
+    <div class="topbar__spacer"></div>
+
+    <div class="agg" id="agg">
+      <span class="agg__mode" id="aggMode" hidden><i id="aggModeGlyph"></i><span id="aggModeText"></span></span>
+      <span class="agg__glyph" id="aggGlyph"></span>
+      <span class="agg__text" id="aggText"></span>
+    </div>
+
+    <div class="snap" id="snap">
+      <span>snapshot <b id="snapTs"></b> <b id="snapTz"></b> · <b id="snapAge"></b></span>
+    </div>
+
+    <div class="ctl">
+      <span class="ctl__sel" title="Poll cadence — 1 / 2 / 5 / 10 / 30 s (client-side only)">
+        <span class="ctl__k">cadence</span><span class="ctl__v">5 s</span><span class="ctl__caret">▼</span>
+      </span>
+      <span class="ctl__sel" title="Chart window — 10 min / 30 min / 2 h (client-side only)">
+        <span class="ctl__k">window</span><span class="ctl__v">30 min</span><span class="ctl__caret">▼</span>
+      </span>
+      <button type="button" class="ctl__btn" id="ctlRefresh" title="Refresh now" aria-label="Refresh now">⟳</button>
+      <button type="button" class="ctl__btn" id="ctlPause" title="Pause polling" aria-label="Pause polling">❙❙</button>
+      <span class="ctl__sep"></span>
+      <button type="button" class="ctl__btn" id="ctlLogout" title="Log out" aria-label="Log out">⏻</button>
+    </div>
+  </header>
+
+  <div id="bannerHost"></div>
+
+  <main class="grid">
+    <section class="panel p-gpu0" id="gpu0"></section>
+    <section class="panel p-gpu1" id="gpu1"></section>
+    <section class="panel p-cool"  id="cool"></section>
+    <section class="panel p-cpu"   id="cpu"></section>
+    <section class="panel p-ram"   id="ram"></section>
+    <section class="panel p-serv"  id="serv"></section>
+    <section class="panel p-safe"  id="safe"></section>
+    <section class="panel p-store" id="store"></section>
+    <section class="panel p-log"   id="log"></section>
+  </main>
+
+  <div id="loginHost"></div>
+
+  <footer class="foot">
+    <span>read-only by design — no fan, unit or model control exists anywhere in this UI</span>
+    <span>units are each source's own: VRAM MiB · RAM GiB · disk GB · net MB/s · locale en-US</span>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+"use strict";
+
+/* ==========================================================================
+   1.  Helpers
+   ========================================================================== */
+
+function el(tag, cls, text) {
+  var n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined && text !== null) n.textContent = String(text);
+  return n;
+}
+function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+function svgEl(tag, attrs) {
+  var n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (var k in attrs) if (attrs[k] !== null && attrs[k] !== undefined) n.setAttribute(k, attrs[k]);
+  return n;
+}
+function pad2(n) { return (n < 10 ? "0" : "") + n; }
+function fmtDur(sec) { var m = Math.floor(sec / 60), r = sec % 60; return m ? (m + " m " + r + " s") : (r + " s"); }
+
+/* ---- §6.6 formatting law. Locale en-US on every viewer. ---------------- */
+function fmtInt(v)   { return v.toLocaleString("en-US"); }          /* VRAM MiB, RPM, MHz */
+function fmtPct1(v)  { return v.toFixed(1) + " %"; }                /* every percentage  */
+function fmtW(v)     { return v.toFixed(1) + " W"; }                /* power.draw        */
+function fmtGiB(v)   { return v.toFixed(1); }                       /* RAM               */
+function fmtSwap(v)  { return v.toFixed(2); }                       /* 0.02 must not become 0.0 */
+function fmtGB(v)    { return v.toFixed(1); }                       /* disk              */
+function sig2(v) {                                                  /* 2 significant figures */
+  if (!isFinite(v) || v === 0) return "0";
+  var m = Math.pow(10, 1 - Math.floor(Math.log10(Math.abs(v))));
+  var r = Math.round(v * m) / m;
+  var d = Math.max(0, 1 - Math.floor(Math.log10(Math.abs(r))));
+  return r.toFixed(d);
+}
+function fmtNet(bytesPerSec) {                                      /* auto-scaled, 2 s.f. */
+  if (bytesPerSec === null || bytesPerSec === undefined) return "—";
+  return bytesPerSec >= 1e6 ? sig2(bytesPerSec / 1e6) + " MB/s"
+                            : sig2(bytesPerSec / 1e3) + " KB/s";
+}
+function tzAbbr() {                                                 /* shown once, in the header */
+  try {
+    var parts = new Intl.DateTimeFormat("en-US", { timeZoneName: "short" }).formatToParts(new Date());
+    for (var i = 0; i < parts.length; i++) if (parts[i].type === "timeZoneName") return parts[i].value;
+  } catch (e) { /* fall through */ }
+  return "local";
+}
+function tempSev(t) { return t >= 80 ? "crit" : t >= 70 ? "warn" : "ok"; }
+function minmax(vals) {
+  var mn = Infinity, mx = -Infinity;
+  for (var i = 0; i < vals.length; i++) {
+    var v = vals[i];
+    if (v === null || v === undefined) continue;
+    if (v < mn) mn = v; if (v > mx) mx = v;
+  }
+  return { mn: mn, mx: mx };
+}
+function hhmmss(d) { return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds()); }
+function hhmm(d) { return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
+
+/* deterministic LCG so the mock is byte-identical on every open */
+function rng(seed) {
+  var s = seed >>> 0;
+  return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+/* one-pole smoothed noise — reads as sensor wander, not white noise */
+function wander(n, amp, seed, alpha) {
+  var r = rng(seed), out = new Array(n), v = 0;
+  for (var i = 0; i < n; i++) { v = v * (1 - alpha) + (r() * 2 - 1) * alpha; out[i] = v * amp; }
+  return out;
+}
+
+/* ==========================================================================
+   2.  Frozen telemetry
+       Every figure below is a plausible reading from THIS box:
+       2x Tesla V100-PCIE-32GB, Xeon W-2135 6C/12T, 61 GiB, Qwen3.6-27B Q4_K_M
+       on both ports, Dell EC channel 5 driven by gpu-fan-control.sh.
+   ========================================================================== */
+
+var TICK = 5, WINDOW_S = 1800, N = WINDOW_S / TICK + 1;      /* 361 samples */
+
+function tSeries(startISO) {
+  var t0 = new Date(startISO).getTime(), a = new Array(N);
+  for (var i = 0; i < N; i++) a[i] = new Date(t0 + i * TICK * 1000);
+  return a;
+}
+
+/* --- State A: healthy steady state ------------------------------------ */
+
+function seriesA() {
+  var time = tSeries("2026-09-06T14:17:31");
+  var loadOn = 1371 / TICK;      /* 14:40:22 requests arrive          */
+  var engage = 1412 / TICK;      /* 14:41:03 ch5 EC auto -> HIGH      */
+  var spin   = 12   / TICK;      /* ~12 s spin-up                     */
+
+  var n0 = wander(N, 0.9, 20260906, 0.30);
+  var n1 = wander(N, 0.9, 77712345, 0.30);
+  var nf = wander(N, 23,  31415926, 0.55);
+  var nc = wander(N, 2.4, 27182818, 0.35);
+
+  var g0 = [], g1 = [], fan = [], cpu = [], cput = [];
+  for (var i = 0; i < N; i++) {
+    var t = i * TICK, a0, a1;
+
+    if (i < loadOn) {
+      /* idle, with two short request bursts that never reach the 55 C knee */
+      a0 = 43.6 + bump(t, 300, 7.2, 25, 95) + bump(t, 905, 5.4, 20, 80);
+      a1 = 41.4 + bump(t, 300, 6.6, 25, 95) + bump(t, 905, 4.9, 20, 80);
+    } else if (i < engage) {
+      /* EC auto, both cards loaded: measured 0.32 C/s heating rate       */
+      a0 = 43.8 + 0.315 * (t - loadOn * TICK);
+      a1 = 41.6 + 0.300 * (t - loadOn * TICK);
+    } else {
+      /* ch5 HIGH: Teq 66.6 / 63.4, tau 72 s (fit gave 65 C / 39 s on bench) */
+      var x = t - engage * TICK;
+      a0 = 66.6 - 9.9  * Math.exp(-x / 72);
+      a1 = 63.4 - 9.4  * Math.exp(-x / 72);
+    }
+    g0.push(Math.round(a0 + n0[i]));
+    g1.push(Math.round(a1 + n1[i]));
+
+    /* fan 5: EC auto 2210 -> HIGH 4308, 47 RPM spread once settled */
+    var f;
+    if (i < engage) f = 2210 + nf[i] * 1.9;
+    else if (i < engage + spin) f = 2210 + (4308 - 2210) * ((i - engage) / spin);
+    else f = 4308 + nf[i];
+    fan.push(Math.round(f));
+
+    var u = i < loadOn ? 3.4 + bump(t, 300, 9, 25, 95) * 0.5 + bump(t, 905, 7, 20, 80) * 0.5
+                       : 18.4 - 6 * Math.exp(-(t - loadOn * TICK) / 40);
+    cpu.push(Math.max(0.6, u + nc[i]));
+    cput.push(Math.round((i < loadOn ? 34.5 : 42.2 - 7 * Math.exp(-(t - loadOn * TICK) / 90)) + nc[i] * 0.4));
+  }
+  return { time: time, gpu0: g0, gpu1: g1, fan5: fan, cpu: cpu, cpuT: cput };
+}
+
+/* --- State B: degraded, same browser session, later ------------------- */
+
+function seriesB() {
+  var time = tSeries("2026-09-06T14:42:48");
+  var iDown = 1284 / TICK;   /* 15:04:12 llama-server@1 fails            */
+  var iLost = 1496 / TICK;   /* 15:07:44 pwm5/fan5 vanish, ch5 unreadable */
+
+  var n0 = wander(N, 0.9, 90210, 0.30);
+  var n1 = wander(N, 0.9, 60613, 0.30);
+  var nf = wander(N, 23,  14142, 0.55);
+  var nc = wander(N, 2.2, 17320, 0.35);
+
+  var g0 = [], g1 = [], fan = [], cpu = [], cput = [];
+  for (var i = 0; i < N; i++) {
+    var t = i * TICK, a0, a1;
+
+    /* GPU 0 holds the measured 66 C production plateau until cooling is lost,
+       then climbs toward an EC-auto equilibrium of 83.5 C with tau 110 s      */
+    a0 = i < iLost ? 66.2 : 83.5 - 17.4 * Math.exp(-(t - iLost * TICK) / 110);
+
+    /* GPU 1 unloads when its instance dies, then coasts down; chassis air
+       warms it back up ~2 C once GPU 0 starts running hot                     */
+    if (i < iDown) a1 = 63.2;
+    else {
+      a1 = 46.0 + 17.2 * Math.exp(-(t - iDown * TICK) / 165);
+      if (i >= iLost) a1 += 2.0 * (1 - Math.exp(-(t - iLost * TICK) / 150));
+    }
+    g0.push(Math.round(a0 + n0[i]));
+    g1.push(Math.round(a1 + n1[i]));
+
+    /* null, NOT zero: the channel stops being enumerated at 15:07:44 */
+    fan.push(i < iLost ? Math.round(4312 + nf[i]) : null);
+
+    var u;
+    if (i < iDown) u = 18.1;
+    else if (i < iDown + 6) u = 18.1 + 16 * ((i - iDown) / 6);          /* systemd churn */
+    else u = 11.2 + 9 * Math.exp(-(t - (iDown + 6) * TICK) / 45);
+    cpu.push(Math.max(0.6, u + nc[i]));
+    cput.push(Math.round((i < iLost ? 41.6 : 41.6 + 2.4 * (1 - Math.exp(-(t - iLost * TICK) / 200))) + nc[i] * 0.4));
+  }
+  return { time: time, gpu0: g0, gpu1: g1, fan5: fan, cpu: cpu, cpuT: cput, fanLostAt: iLost };
+}
+
+function bump(t, at, amp, rise, fall) {
+  if (t < at) return 0;
+  var d = t - at;
+  return amp * (1 - Math.exp(-d / rise)) * Math.exp(-d / fall);
+}
+
+var SERIES = { a: seriesA(), b: seriesB() };
+
+/* The last sample IS the snapshot. Pin it so a trace endpoint can never
+   disagree with the headline figure printed beside it. */
+function pinLast(key) {
+  var s = SERIES[key], d = DATA[key], n = s.gpu0.length - 1;
+  s.gpu0[n] = d.gpus[0].temp;
+  s.gpu1[n] = d.gpus[1].temp;
+  if (s.fan5[n] !== null) s.fan5[n] = d.cooling.fan5;
+  s.cpu[n] = d.cpu.util;
+}
+
+/* --- snapshots -------------------------------------------------------- */
+
+var DATA = {
+  a: {
+    key: "a",
+    ts: "14:47:31", age: "2 s ago", sessionStart: "14:09:12",
+    hostMeta: "192.168.4.71 · kernel 7.0.0-30 · up 2 d 02:01",
+    agg: { sev: "warn", glyph: "▲", text: "1 warning · 0 alarms" },
+    alarms: [],
+    gpus: [
+      { i: 0, name: "Tesla V100-PCIE-32GB", bus: "17:00.0", temp: 66, sev: "ok",
+        powerW: 247.1, capW: 250, memUsed: 26452, memTotal: 32768,
+        util: 97, clk: 1290, model: "qwen3.6-27b",
+        throttle: [{ code: "0x4", label: "sw power cap", sev: "neutral" }] },
+      { i: 1, name: "Tesla V100-PCIE-32GB", bus: "97:00.0", temp: 63, sev: "ok",
+        powerW: 241.4, capW: 250, memUsed: 26650, memTotal: 32768,
+        util: 96, clk: 1327, model: "qwen3.6-27b",
+        throttle: [{ code: "0x4", label: "sw power cap", sev: "neutral" }] }
+    ],
+    cpu: { tempC: 42, sev: "ok", util: 18.4, load: "1.24 / 1.08 / 0.91" },
+    ram: { usedGiB: 12.1, totalGiB: 61.0, sev: "ok", swapGiB: 0.00, swapTotal: 8.00, swapSev: "ok" },
+    cooling: {
+      sev: "ok",
+      fan5: 4308, fan5Sev: "ok",
+      mode: "HIGH", modeDetail: "pwm5 = 255", modeSev: "ok",
+      service: { state: "active", sev: "ok", note: "since 2026-09-04 12:46:13" },
+      channels: [
+        { id: "fan 1", rpm: 1001, note: "CPU heatsink · EC auto", sev: "ok" },
+        { id: "fan 2", rpm:  725, note: "GPU-area OEM · EC auto · not driven", sev: "ok" },
+        { id: "fan 3", rpm:  716, note: "system · EC auto", sev: "ok" },
+        { id: "fan 4", rpm: 1102, note: "system · EC auto", sev: "ok" }
+      ]
+    },
+    serving: [
+      { unit: "llama-server@0", port: 8080, state: "active", sev: "ok",
+        health: "200 ok", model: "qwen3.6-27b", ctx: "131072", note: "since 2026-09-04 12:46:18" },
+      { unit: "llama-server@1", port: 8081, state: "active", sev: "ok",
+        health: "200 ok", model: "qwen3.6-27b", ctx: "131072", note: "since 2026-09-04 12:46:18" }
+    ],
+    storage: {
+      root: { used: 87.4, total: 236.0, sev: "ok" },
+      home: { used: 402.6, total: 931.5, sev: "ok", note: "~/models 80.4 GB across 5 GGUF" },
+      net:  { state: "up", link: "1000 Mb/s full", rxBps: 1243000, txBps: 349000 }
+    },
+    safety: [
+      { name: "ufw enforcing", sev: "warn", value: "no", standing: true,
+        note: "ENABLED=no — 8080/8081 reachable from anywhere routable. Alarm severity; "
+            + "standing via STANDING= in /etc/ai-dashboard.env, so it logs once and never banners." },
+      { name: "pwm5 present", sev: "ok", value: "yes",
+        note: "hwmon4/pwm5 — 5-fan DKMS module loaded" },
+      { name: "DKMS for running kernel", sev: "ok", value: "7.0.0-30",
+        note: "updates/dkms/dell-smm-hwmon.ko.zst" },
+      { name: "gpu-fan-control.service", sev: "ok", value: "active",
+        note: "channel 5 claimed, INTERVAL=1" }
+    ],
+    events: [
+      { t: "14:41:03", src: "cooling", sev: "info", m: "fan 5  EC auto → HIGH", n: "2210 → 4308 RPM" },
+      { t: "14:40:58", src: "gpu 0",   sev: "info", m: "56 °C  crossed 55 °C", n: "engage threshold" },
+      { t: "14:40:22", src: "serving", sev: "info", m: "llama-server@0 / @1  idle → busy", n: "" },
+      { t: "14:09:18", src: "safety",  sev: "warn", m: "ufw not enforcing  (standing)", n: "ENABLED=no · logged once, no banner" },
+      { t: "14:09:17", src: "host",    sev: "info", m: "first sample — cpu % and eno1 rates now available", n: "deltas need two polls" },
+      { t: "14:09:12", src: "session", sev: "info", m: "page loaded", n: "ai-server 192.168.4.71" }
+    ]
+  },
+
+  b: {
+    key: "b",
+    ts: "15:12:48", age: "3 s ago", sessionStart: "14:09:12",
+    hostMeta: "192.168.4.71 · kernel 7.0.0-30 · up 2 d 02:26",
+    agg: { sev: "crit", glyph: "✕", text: "6 alarms · 1 warning" },
+    alarms: [
+      { m: "GPU 0 temperature", v: "82 °C", note: "alarm band ≥ 80 °C (spec 83, slowdown 87)", since: "15:10:40" },
+      { m: "GPU 0 thermal throttle", v: "0x24", note: "sw_thermal_slowdown active", since: "15:11:58" },
+      { m: "fan 5 channel", v: "unavailable", note: "pwm5 absent — DKMS 5-fan module not loaded", since: "15:07:44" },
+      { m: "gpu-fan-control.service", v: "failed", note: "start-limit 5/5", since: "15:07:49" },
+      { m: "fan 3", v: "0 RPM", note: "stalled — tach reads zero, channel present", since: "15:06:02" },
+      { m: "llama-server@1", v: "failed", note: "exit-code 1", since: "15:04:12" }
+    ],
+    gpus: [
+      { i: 0, name: "Tesla V100-PCIE-32GB", bus: "17:00.0", temp: 82, sev: "crit",
+        powerW: 213.4, capW: 250, memUsed: 26452, memTotal: 32768,
+        util: 99, clk: 1132, model: "qwen3.6-27b",
+        throttle: [{ code: "0x4", label: "sw power cap", sev: "neutral" },
+                   { code: "0x20", label: "sw thermal slowdown", sev: "crit" }] },
+      { i: 1, name: "Tesla V100-PCIE-32GB", bus: "97:00.0", temp: 48, sev: "ok",
+        powerW: 42.3, capW: 250, memUsed: 3, memTotal: 32768,
+        util: 0, clk: 135, model: null,
+        throttle: [{ code: "0x1", label: "gpu idle", sev: "neutral" }] }
+    ],
+    cpu: { tempC: 43, sev: "ok", util: 11.2, load: "0.71 / 0.94 / 1.02" },
+    ram: { usedGiB: 8.4, totalGiB: 61.0, sev: "ok", swapGiB: 0.00, swapTotal: 8.00, swapSev: "ok" },
+    cooling: {
+      sev: "crit",
+      fan5: null, fan5Sev: "unk",
+      mode: null, modeDetail: "pwm5 ENOENT — channel not enumerated", modeSev: "unk",
+      service: { state: "failed", sev: "crit", note: "start-limit hit 15:07:49 (5/5)" },
+      channels: [
+        { id: "fan 1", rpm: 1004, note: "CPU heatsink · EC auto", sev: "ok" },
+        { id: "fan 2", rpm:  728, note: "GPU-area OEM · EC auto · not driven", sev: "ok" },
+        { id: "fan 3", rpm:    0, note: "system · EC auto · tach stalled since 15:06:02", sev: "crit" },
+        { id: "fan 4", rpm: 1108, note: "system · EC auto", sev: "ok" }
+      ]
+    },
+    serving: [
+      { unit: "llama-server@0", port: 8080, state: "active", sev: "ok",
+        health: "200 ok", model: "qwen3.6-27b", ctx: "131072", note: "since 2026-09-04 12:46:18" },
+      { unit: "llama-server@1", port: 8081, state: "failed", sev: "crit",
+        health: "ECONNREFUSED", model: "qwen3.6-27b", ctx: "131072",
+        note: "exit-code · status=1/FAILURE · since 15:04:12" }
+    ],
+    storage: {
+      root: { used: 87.4, total: 236.0, sev: "ok" },
+      home: { used: 402.6, total: 931.5, sev: "ok", note: "~/models 80.4 GB across 5 GGUF" },
+      net:  { state: "up", link: "1000 Mb/s full", rxBps: 486000, txBps: 92400 }
+    },
+    safety: [
+      { name: "ufw enforcing", sev: "warn", value: "no", standing: true,
+        note: "ENABLED=no — 8080/8081 reachable from anywhere routable. Alarm severity; "
+            + "standing via STANDING= in /etc/ai-dashboard.env, so it logs once and never banners." },
+      { name: "pwm5 present", sev: "crit", value: "no",
+        note: "ENOENT — stock 4-fan driver loaded; GPU fan control is gone" },
+      { name: "DKMS for running kernel", sev: "crit", value: "absent",
+        note: "no updates/dkms module for 7.0.0-30-generic" },
+      { name: "gpu-fan-control.service", sev: "crit", value: "failed",
+        note: "died naming the missing pwm5; start-limit reached" }
+    ],
+    events: [
+      { t: "15:11:58", src: "gpu 0",   sev: "crit", m: "throttle 0x4 → 0x24", n: "sw_thermal_slowdown active" },
+      { t: "15:10:40", src: "gpu 0",   sev: "crit", m: "80 °C  crossed 80 °C", n: "alarm band" },
+      { t: "15:09:03", src: "gpu 0",   sev: "warn", m: "75 °C", n: "watch band" },
+      { t: "15:08:12", src: "gpu 0",   sev: "warn", m: "70 °C  crossed 70 °C", n: "watch band" },
+      { t: "15:07:49", src: "cooling", sev: "crit", m: "gpu-fan-control.service  active → failed", n: "start-limit 5/5" },
+      { t: "15:07:44", src: "cooling", sev: "crit", m: "ch5  HIGH pwm 255 → unavailable", n: "pwm5 ENOENT" },
+      { t: "15:07:44", src: "cooling", sev: "crit", m: "fan 5  4312 RPM → no reading", n: "channel not enumerated" },
+      { t: "15:07:41", src: "safety",  sev: "crit", m: "dkms  dell-smm-hwmon-5fan absent", n: "stock 4-fan driver loaded" },
+      { t: "15:06:02", src: "cooling", sev: "crit", m: "fan 3  716 → 0 RPM", n: "stalled" },
+      { t: "15:04:12", src: "serving", sev: "crit", m: "llama-server@1  active → failed", n: "exit-code 1" },
+      { t: "15:04:09", src: "gpu 1",   sev: "info", m: "VRAM 26650 → 3 MiB", n: "released" },
+      { t: "14:41:03", src: "cooling", sev: "info", m: "fan 5  EC auto → HIGH", n: "2210 → 4308 RPM" },
+      { t: "14:40:58", src: "gpu 0",   sev: "info", m: "56 °C  crossed 55 °C", n: "engage threshold" },
+      { t: "14:40:22", src: "serving", sev: "info", m: "llama-server@0 / @1  idle → busy", n: "" },
+      { t: "14:09:18", src: "safety",  sev: "warn", m: "ufw not enforcing  (standing)", n: "ENABLED=no · logged once, no banner" },
+      { t: "14:09:17", src: "host",    sev: "info", m: "first sample — cpu % and eno1 rates now available", n: "deltas need two polls" },
+      { t: "14:09:12", src: "session", sev: "info", m: "page loaded", n: "ai-server 192.168.4.71" }
+    ]
+  }
+};
+
+/* ==========================================================================
+   3.  Small view primitives
+   ========================================================================== */
+
+var GLYPH = { ok: "✓", warn: "▲", crit: "✕", unk: "⊘", neutral: "·", info: "·" };
+var CHIPC = { ok: "chip chip--ok", warn: "chip chip--warn", crit: "chip chip--crit",
+              unk: "chip chip--unk", neutral: "chip" };
+
+function chip(sev, text) {
+  var c = el("span", CHIPC[sev] || "chip");
+  c.appendChild(el("i", null, GLYPH[sev] || "·"));
+  c.appendChild(document.createTextNode(text));
+  return c;
+}
+
+function panelHead(host, title, sub, chipNode) {
+  var hd = el("div", "panel__hd");
+  hd.appendChild(el("span", "panel__title", title));
+  if (sub) hd.appendChild(el("span", "panel__sub", sub));
+  hd.appendChild(el("span", "sp"));
+  if (chipNode) hd.appendChild(chipNode);
+  host.appendChild(hd);
+  return hd;
+}
+
+/* meter: track is a dark step of the same ramp, fill carries severity */
+function meter(labelLeft, labelRight, pct, sev, tickPct) {
+  var wrap = el("div", "meterRow");
+  var lbl = el("div", "meterRow__lbl");
+  lbl.appendChild(el("span", null, labelLeft));
+  var r = el("b", null, labelRight); lbl.appendChild(r);
+  wrap.appendChild(lbl);
+  var m = el("div", "meter");
+  var f = el("span", "meter__fill");
+  f.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  if (sev && sev !== "ok") f.setAttribute("data-sev", sev);
+  m.appendChild(f);
+  if (tickPct) { var tk = el("span", "meter__tick"); tk.style.left = tickPct + "%"; m.appendChild(tk); }
+  wrap.appendChild(m);
+  return wrap;
+}
+
+function stripItem(k, v) {
+  var d = el("div");
+  d.appendChild(el("span", "k", k));
+  d.appendChild(el("span", "v", v));
+  return d;
+}
+
+/* ==========================================================================
+   4.  Charts  (inline SVG, drawn at real pixel size — no scaling distortion)
+   ========================================================================== */
+
+var PAL = {
+  gpu0: "#3987e5", gpu1: "#199e70", fan: "#d95926",
+  cpu:  "#7e93a9",                       /* chrome-neutral: the CPU is supporting context,
+                                            and must not borrow a GPU's identity hue */
+  grid: "#1c232c", axis: "#28313d", tick: "#6b7889",
+  crit: "#d03b3b", warn: "#fab219", surface: "#0d1116", faint: "#4a5566"
+};
+
+function pathFrom(vals, x, y) {
+  var d = "", pen = false;
+  for (var i = 0; i < vals.length; i++) {
+    var v = vals[i];
+    if (v === null || v === undefined) { pen = false; continue; }
+    d += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1) + " ";
+    pen = true;
+  }
+  return d.trim();
+}
+function areaFrom(vals, x, y, y0) {
+  var segs = [], cur = null;
+  for (var i = 0; i < vals.length; i++) {
+    if (vals[i] === null || vals[i] === undefined) { cur = null; continue; }
+    if (!cur) { cur = { s: i, pts: [] }; segs.push(cur); }
+    cur.pts.push(i);
+  }
+  var d = "";
+  segs.forEach(function (sg) {
+    var p = sg.pts;
+    d += "M" + x(p[0]).toFixed(1) + " " + y0.toFixed(1) + " ";
+    p.forEach(function (i) { d += "L" + x(i).toFixed(1) + " " + y(vals[i]).toFixed(1) + " "; });
+    d += "L" + x(p[p.length - 1]).toFixed(1) + " " + y0.toFixed(1) + " Z ";
+  });
+  return d.trim();
+}
+function lastDefined(vals) {
+  for (var i = vals.length - 1; i >= 0; i--) if (vals[i] !== null && vals[i] !== undefined) return i;
+  return -1;
+}
+
+/* --- sparkline inside a GPU / CPU card --------------------------------- */
+
+function drawSpark(host, cfg) {
+  var W = Math.max(90, host.clientWidth || 130);
+  var tall = window.innerWidth >= 1600;          /* SPEC 6.1: promoted at >=1600 */
+  var H = tall ? 50 : 38;
+  var padT = 4, padB = tall ? 10 : 4, padR = 26;
+  clear(host);
+
+  var vals = cfg.values, lo = cfg.min, hi = cfg.max;
+  var x = function (i) { return (i / (vals.length - 1)) * (W - padR); };
+  var y = function (v) { return padT + (1 - (v - lo) / (hi - lo)) * (H - padT - padB); };
+
+  var svg = svgEl("svg", { width: W, height: H, viewBox: "0 0 " + W + " " + H, "aria-hidden": "true" });
+
+  if (tall && cfg.refs) {
+    cfg.refs.forEach(function (r) {
+      svg.appendChild(svgEl("line", { x1: 0, x2: W - padR, y1: y(r.v), y2: y(r.v),
+        stroke: r.c, "stroke-width": 1, "stroke-dasharray": "3 3", opacity: .55 }));
+      var lb = svgEl("text", { x: W - padR + 3, y: y(r.v) + 3, fill: PAL.tick, "font-size": 8.5 });
+      lb.textContent = r.label; svg.appendChild(lb);
+    });
+  }
+
+  svg.appendChild(svgEl("path", { d: areaFrom(vals, x, y, H - padB), fill: cfg.color, opacity: .10 }));
+  svg.appendChild(svgEl("path", { d: pathFrom(vals, x, y), fill: "none", stroke: cfg.color,
+    "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round",
+    "stroke-dasharray": cfg.dash || null }));
+
+  var li = lastDefined(vals);
+  if (li >= 0) {
+    svg.appendChild(svgEl("circle", { cx: x(li), cy: y(vals[li]), r: 4.5,
+      fill: cfg.color, stroke: PAL.surface, "stroke-width": 2 }));
+  }
+  /* a paused client has no samples for this span — hatch it, never interpolate */
+  if (cfg.pausedFrom !== undefined && cfg.pausedFrom !== null && cfg.pausedFrom < vals.length - 1) {
+    svg.appendChild(svgEl("rect", { x: x(cfg.pausedFrom), y: padT,
+      width: (W - padR) - x(cfg.pausedFrom), height: H - padT - padB,
+      fill: "url(#nodata)", opacity: .55 }));
+  }
+  if (tall) {
+    var t0 = svgEl("text", { x: 0, y: H - 1, fill: PAL.tick, "font-size": 8.5 });
+    t0.textContent = hhmm(cfg.time[0]); svg.appendChild(t0);
+    var t1 = svgEl("text", { x: W - padR, y: H - 1, fill: PAL.tick, "font-size": 8.5, "text-anchor": "end" });
+    t1.textContent = hhmm(cfg.time[cfg.time.length - 1]); svg.appendChild(t1);
+  }
+  host.appendChild(svg);
+
+  /* hover / focus readout — writes into the card's own caption, never a
+     tooltip-only value: min / max / now stay printed in that caption */
+  if (cfg.readout) {
+    var base = cfg.readout.textContent;
+    var move = function (ev) {
+      var r = host.getBoundingClientRect();
+      var i = Math.round(((ev.clientX - r.left) / (W - padR)) * (vals.length - 1));
+      i = Math.max(0, Math.min(vals.length - 1, i));
+      var v = vals[i];
+      cfg.readout.textContent = hhmmss(cfg.time[i]) + "   " +
+        (v === null || v === undefined ? "no reading" : cfg.fmt(v));
+    };
+    host.addEventListener("pointermove", move);
+    host.addEventListener("pointerleave", function () { cfg.readout.textContent = base; });
+  }
+}
+
+/* --- the cooling panel's shared-time pair ------------------------------
+   Two stacked plots on ONE time axis (never a dual y-axis on one plot):
+   temperature above, fan RPM below, so engage/release reads at a glance. */
+
+function drawCooling(host, s, snap) {
+  var W = Math.max(260, host.clientWidth || 480);
+  var tight = W < 440;                    /* narrow: give the plot the margins back */
+  var padL = 30, padR = tight ? 42 : 78, padTop = 6, gapMid = 10, axisH = 14;
+  var hTemp = 84, hFan = 46;
+  var H = padTop + hTemp + gapMid + hFan + axisH;
+
+  clear(host);
+  var svg = svgEl("svg", { width: W, height: H, viewBox: "0 0 " + W + " " + H, role: "img",
+    "aria-label": "GPU temperature and fan 5 speed over the last 30 minutes, shared time axis" });
+
+  var n = s.gpu0.length;
+  var pf = (s.pausedFrom === undefined || s.pausedFrom === null) ? null : s.pausedFrom;
+  var plotW = W - padL - padR;
+  var fTop = padTop + hTemp + gapMid;           /* fan plot geometry, needed early  */
+  var fLo = 0, fHi = 5100;                      /* SMM nominal max                  */
+  var yF = function (v) { return fTop + (1 - (v - fLo) / (fHi - fLo)) * hFan; };
+  var x = function (i) { return padL + (i / (n - 1)) * plotW; };
+
+  /* --- temperature plot, domain fixed 30-90 C so the 80 C alarm line is
+         always on screen and both mock states share one scale ---------- */
+  var tLo = 30, tHi = 90;
+  var yT = function (v) { return padTop + (1 - (v - tLo) / (tHi - tLo)) * hTemp; };
+
+  /* 80 gets a tick label but no solid gridline — the dashed alarm threshold
+     already sits on that value and two rules on one line reads as a smudge */
+  [40, 60, 80].forEach(function (g) {
+    if (g !== 80) {
+      svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: yT(g), y2: yT(g),
+        stroke: PAL.grid, "stroke-width": 1 }));
+    }
+    var lb = svgEl("text", { x: padL - 5, y: yT(g) + 3, fill: PAL.tick, "font-size": 9, "text-anchor": "end" });
+    lb.textContent = g; svg.appendChild(lb);
+  });
+  var ylab = svgEl("text", { x: padL - 5, y: padTop + 8, fill: PAL.tick, "font-size": 9, "text-anchor": "end" });
+  ylab.textContent = "°C"; svg.appendChild(ylab);
+
+  /* thresholds are dashed on purpose — the grid stays solid hairline.
+     They label at the LEFT edge so the right margin belongs to the series
+     end-labels and the two never fight for the same strip. */
+  [{ v: 55, c: PAL.tick,  l: "engage 55" },
+   { v: 80, c: PAL.crit,  l: "alarm 80" }].forEach(function (r) {
+    svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: yT(r.v), y2: yT(r.v),
+      stroke: r.c, "stroke-width": 1, "stroke-dasharray": "4 4", opacity: .75 }));
+    if (!tight) {
+      svg.appendChild(svgEl("rect", { x: padL + 2, y: yT(r.v) - 6, width: 50, height: 11,
+        fill: PAL.surface }));
+      var lb = svgEl("text", { x: padL + 5, y: yT(r.v) + 3, fill: r.c, "font-size": 8.5, opacity: .95 });
+      lb.textContent = r.l; svg.appendChild(lb);
+    }
+  });
+
+  /* --- the paused span: same hatch a lost channel gets (§6.7) ------------- */
+  if (pf !== null && pf < n - 1) {
+    svg.appendChild(svgEl("rect", { x: x(pf), y: padTop, width: (W - padR) - x(pf),
+      height: (fTop + hFan) - padTop, fill: "url(#nodata)", opacity: .55 }));
+    svg.appendChild(svgEl("rect", { x: x(pf), y: padTop, width: (W - padR) - x(pf),
+      height: (fTop + hFan) - padTop, fill: "none", stroke: PAL.axis, "stroke-width": 1 }));
+    if ((W - padR) - x(pf) > 54) {
+      var pl = svgEl("text", { x: x(pf) + (((W - padR) - x(pf)) / 2), y: fTop - 4,
+        fill: "#98a5b4", "font-size": 9.5, "text-anchor": "middle" });
+      pl.textContent = "paused"; svg.appendChild(pl);
+    }
+  }
+
+  svg.appendChild(svgEl("path", { d: pathFrom(s.gpu1, x, yT), fill: "none", stroke: PAL.gpu1,
+    "stroke-width": 2, "stroke-dasharray": "5 3", "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  svg.appendChild(svgEl("path", { d: pathFrom(s.gpu0, x, yT), fill: "none", stroke: PAL.gpu0,
+    "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+
+  /* Direct end-labels. The two traces converge, so instead of stacking labels
+     on top of each other they are pushed to a minimum separation and joined
+     back to their own line with a leader. */
+  var ends = [{ v: s.gpu0, c: PAL.gpu0, n: "GPU 0" }, { v: s.gpu1, c: PAL.gpu1, n: "GPU 1" }]
+    .map(function (sr) {
+      var li = lastDefined(sr.v);
+      return { c: sr.c, n: sr.n, li: li, val: sr.v[li], y: yT(sr.v[li]), ly: yT(sr.v[li]) };
+    })
+    .sort(function (a, b) { return a.y - b.y; });
+  var MINSEP = 12;
+  if (ends[1].ly - ends[0].ly < MINSEP) {
+    var mid = (ends[0].ly + ends[1].ly) / 2;
+    ends[0].ly = Math.max(padTop + 6, mid - MINSEP / 2);
+    ends[1].ly = ends[0].ly + MINSEP;
+  }
+  ends.forEach(function (e) {
+    var ex = x(e.li);
+    if (Math.abs(e.ly - e.y) > 1.5) {
+      svg.appendChild(svgEl("path", {
+        d: "M" + (ex + 5).toFixed(1) + " " + e.y.toFixed(1) +
+           "L" + (ex + 10).toFixed(1) + " " + e.ly.toFixed(1) +
+           "L" + (ex + 14).toFixed(1) + " " + e.ly.toFixed(1),
+        fill: "none", stroke: e.c, "stroke-width": 1, opacity: .7 }));
+    }
+    svg.appendChild(svgEl("circle", { cx: ex, cy: e.y, r: 4.5,
+      fill: e.c, stroke: PAL.surface, "stroke-width": 2 }));
+    var lb = svgEl("text", { x: ex + (tight ? 10 : 16), y: e.ly + 3.5, fill: "#e4eaf1", "font-size": 10 });
+    lb.textContent = tight ? String(e.val) : e.n + "  " + e.val; svg.appendChild(lb);
+  });
+
+  /* --- fan plot, true zero baseline: 0 RPM is a real, meaningful value -- */
+  svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: yF(0), y2: yF(0),
+    stroke: PAL.axis, "stroke-width": 1 }));
+  var z = svgEl("text", { x: padL - 5, y: yF(0) + 3, fill: PAL.tick, "font-size": 9, "text-anchor": "end" });
+  z.textContent = "0"; svg.appendChild(z);
+  var rl = svgEl("text", { x: padL - 5, y: fTop + 8, fill: PAL.tick, "font-size": 9, "text-anchor": "end" });
+  rl.textContent = "RPM"; svg.appendChild(rl);
+
+  svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: yF(2210), y2: yF(2210),
+    stroke: PAL.tick, "stroke-width": 1, "stroke-dasharray": "4 4", opacity: .7 }));
+  if (!tight) {
+    var ecl = svgEl("text", { x: W - padR + 4, y: yF(2210) + 3, fill: PAL.tick, "font-size": 8.5 });
+    ecl.textContent = "EC auto 2210"; svg.appendChild(ecl);
+  }
+
+  svg.appendChild(svgEl("path", { d: areaFrom(s.fan5, x, yF, yF(0)), fill: PAL.fan, opacity: .10 }));
+  svg.appendChild(svgEl("path", { d: pathFrom(s.fan5, x, yF), fill: "none", stroke: PAL.fan,
+    "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+
+  var fi = lastDefined(s.fan5);
+  if (fi === n - 1) {
+    svg.appendChild(svgEl("circle", { cx: x(fi), cy: yF(s.fan5[fi]), r: 4.5,
+      fill: PAL.fan, stroke: PAL.surface, "stroke-width": 2 }));
+    var flb = svgEl("text", { x: x(fi) + 8, y: yF(s.fan5[fi]) + 3.5, fill: "#e4eaf1", "font-size": 10 });
+    flb.textContent = (tight ? "" : "fan 5  ") + fmtInt(s.fan5[fi]); svg.appendChild(flb);
+  } else if (fi >= 0) {
+    /* the trace STOPS. It is not drawn to zero — the reading is gone, the
+       fan's real speed is unknown, and the region says so. */
+    var gapEnd = (pf !== null) ? x(pf) : (W - padR);
+    if (gapEnd - x(fi) > 2) {
+      svg.appendChild(svgEl("rect", { x: x(fi), y: fTop, width: gapEnd - x(fi), height: hFan,
+        fill: "url(#nodata)", opacity: .55 }));
+      svg.appendChild(svgEl("rect", { x: x(fi), y: fTop, width: gapEnd - x(fi), height: hFan,
+        fill: "none", stroke: PAL.axis, "stroke-width": 1 }));
+      if (gapEnd - x(fi) > 60) {
+        var nl = svgEl("text", { x: x(fi) + ((gapEnd - x(fi)) / 2), y: fTop + hFan / 2 + 3.5,
+          fill: "#98a5b4", "font-size": 10, "text-anchor": "middle" });
+        nl.textContent = "no reading"; svg.appendChild(nl);
+      }
+    }
+    svg.appendChild(svgEl("circle", { cx: x(fi), cy: yF(s.fan5[fi]), r: 4,
+      fill: PAL.surface, stroke: PAL.fan, "stroke-width": 2 }));
+  }
+
+  /* --- shared time axis -------------------------------------------------- */
+  var step = plotW < 380 ? 120 : 60;            /* samples: 300 s or 600 s */
+  var axisY = fTop + hFan;
+  svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: axisY, y2: axisY,
+    stroke: PAL.axis, "stroke-width": 1 }));
+  for (var i = 0; i < n - 1; i += step) {
+    var tx = svgEl("text", { x: x(i), y: axisY + 11, fill: PAL.tick, "font-size": 9,
+      "text-anchor": i === 0 ? "start" : "middle" });
+    tx.textContent = hhmm(s.time[i]); svg.appendChild(tx);
+  }
+  var txe = svgEl("text", { x: W - padR, y: axisY + 11, fill: PAL.tick, "font-size": 9, "text-anchor": "end" });
+  txe.textContent = hhmm(s.time[n - 1]); svg.appendChild(txe);
+
+  /* crosshair + one tooltip listing every series at that time */
+  var cross = svgEl("line", { x1: 0, x2: 0, y1: padTop, y2: axisY, stroke: "#98a5b4",
+    "stroke-width": 1, opacity: 0 });
+  svg.appendChild(cross);
+  var dots = [
+    svgEl("circle", { r: 3.5, fill: PAL.gpu0, stroke: PAL.surface, "stroke-width": 2, opacity: 0 }),
+    svgEl("circle", { r: 3.5, fill: PAL.gpu1, stroke: PAL.surface, "stroke-width": 2, opacity: 0 }),
+    svgEl("circle", { r: 3.5, fill: PAL.fan,  stroke: PAL.surface, "stroke-width": 2, opacity: 0 })
+  ];
+  dots.forEach(function (d) { svg.appendChild(d); });
+
+  host.appendChild(svg);
+
+  var tip = el("div", "tip");
+  host.appendChild(tip);
+
+  var cursor = -1;
+  function show(i) {
+    if (i < 0 || i >= n) return;
+    cursor = i;
+    var px = x(i);
+    cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.setAttribute("opacity", .45);
+    var vals = [
+      { v: s.gpu0[i], c: PAL.gpu0, y: yT, name: "GPU 0", u: " °C", dash: null },
+      { v: s.gpu1[i], c: PAL.gpu1, y: yT, name: "GPU 1", u: " °C", dash: "3 2" },
+      { v: s.fan5[i], c: PAL.fan,  y: yF, name: "fan 5", u: " RPM", dash: null }
+    ];
+    vals.forEach(function (d, k) {
+      if (d.v === null || d.v === undefined) { dots[k].setAttribute("opacity", 0); return; }
+      dots[k].setAttribute("cx", px); dots[k].setAttribute("cy", d.y(d.v));
+      dots[k].setAttribute("opacity", 1);
+    });
+    clear(tip);
+    tip.appendChild(el("div", "tip__t", hhmmss(s.time[i])));
+    vals.forEach(function (d) {
+      var r = el("div", "tip__r");
+      var k = el("span", "tip__k");
+      k.style.borderTopColor = d.c;
+      if (d.dash) k.style.borderTopStyle = "dashed";
+      r.appendChild(k);
+      r.appendChild(el("span", "tip__n", d.name));
+      r.appendChild(el("span", "tip__v",
+        d.v === null || d.v === undefined ? "no reading" : d.v + d.u));
+      tip.appendChild(r);
+    });
+    tip.setAttribute("data-on", "1");
+    var tw = 152;
+    tip.style.left = Math.max(2, Math.min(W - tw - 2, px - tw / 2)) + "px";
+    tip.style.top = "2px";
+    tip.style.width = tw + "px";
+  }
+  function hide() {
+    cross.setAttribute("opacity", 0);
+    dots.forEach(function (d) { d.setAttribute("opacity", 0); });
+    tip.removeAttribute("data-on");
+  }
+  host.addEventListener("pointermove", function (ev) {
+    var r = host.getBoundingClientRect();
+    var i = Math.round(((ev.clientX - r.left - padL) / plotW) * (n - 1));
+    show(Math.max(0, Math.min(n - 1, i)));
+  });
+  host.addEventListener("pointerleave", hide);
+  host.addEventListener("keydown", function (ev) {
+    if (ev.key === "ArrowLeft")  { show(Math.max(0, (cursor < 0 ? n - 1 : cursor) - 6)); ev.preventDefault(); }
+    if (ev.key === "ArrowRight") { show(Math.min(n - 1, (cursor < 0 ? 0 : cursor) + 6)); ev.preventDefault(); }
+    if (ev.key === "Escape") hide();
+  });
+  host.addEventListener("blur", hide);
+}
+
+/* ==========================================================================
+   5.  Panel renderers
+   ========================================================================== */
+
+function pctSev(pct, watch, alarm) { return pct > alarm ? "crit" : pct >= watch ? "warn" : "ok"; }
+
+function renderGPU(host, g, s, snap) {
+  host.setAttribute("data-sev", g.sev === "crit" ? "crit" : g.sev === "warn" ? "warn" : "ok");
+  clear(host);
+
+  var chipSev = g.sev === "crit" ? "crit" : g.sev === "warn" ? "warn" : "ok";
+  var chipTxt = g.sev === "crit" ? "alarm ≥ 80 °C" : g.sev === "warn" ? "watch 70–79 °C" : "nominal";
+  panelHead(host, "GPU " + g.i, g.name + " · " + g.bus, chip(chipSev, chipTxt));
+
+  var vals = g.i === 0 ? s.gpu0 : s.gpu1;
+  var color = g.i === 0 ? PAL.gpu0 : PAL.gpu1;
+
+  var top = el("div", "gpuTop");
+  var hero = el("div", "hero" + (g.sev === "crit" ? " hero--crit" : g.sev === "warn" ? " hero--warn" : ""));
+  hero.appendChild(el("span", "hero__v", g.temp));
+  hero.appendChild(el("span", "hero__u", "°C"));
+  top.appendChild(hero);
+
+  var sparkHost = el("div", "chart gpuTop__spark");
+  top.appendChild(sparkHost);
+
+  var pw = el("div", "gpuTop__pw");
+  var pwl = el("div");
+  pwl.appendChild(el("span", "n", fmtW(g.powerW).replace(" W", "")));
+  pwl.appendChild(el("span", "u", " W"));
+  pw.appendChild(pwl);
+  pw.appendChild(el("div", "caption", "cap " + g.capW + " W"));
+  top.appendChild(pw);
+  host.appendChild(top);
+
+  var ex = minmax(vals);
+  var cap = el("div", "caption");
+  cap.textContent = "30 min · min " + ex.mn + " · max " + ex.mx + " · now " + g.temp + " °C";
+  host.appendChild(cap);
+
+  var pPct = (g.powerW / g.capW) * 100;
+  host.appendChild(meter("power", fmtW(g.powerW) + " / " + g.capW + " W", pPct, "ok"));
+
+  var vPct = (g.memUsed / g.memTotal) * 100;
+  host.appendChild(meter("VRAM",
+    fmtInt(g.memUsed) + " / " + fmtInt(g.memTotal) + " MiB · " + fmtPct1(vPct),
+    vPct, pctSev(vPct, 90, 95), 90));
+
+  var strip = el("div", "strip");
+  strip.appendChild(stripItem("util", fmtPct1(g.util)));
+  strip.appendChild(stripItem("SM clk", fmtInt(g.clk) + " MHz"));
+  strip.appendChild(stripItem("model", g.model || "— none"));
+  host.appendChild(strip);
+
+  /* 0x4 is the ordinary 250 W power cap and 0x1 is idle — neutral, never a
+     warning. Only a thermal reason is styled as an alarm. */
+  var thr = el("div", "caption");
+  thr.appendChild(el("span", null, "throttle"));
+  g.throttle.forEach(function (t) {
+    var c = chip(t.sev === "crit" ? "crit" : "neutral", t.code + "  " + t.label);
+    c.className += " chip--code";
+    thr.appendChild(c);
+  });
+  if (!g.throttle.some(function (t) { return t.sev === "crit"; })) {
+    thr.appendChild(el("span", null, "· normal, not a fault"));
+  }
+  host.appendChild(thr);
+
+  drawSpark(sparkHost, {
+    values: vals, time: s.time, color: color, dash: g.i === 1 ? "5 3" : null,
+    min: 30, max: 90, readout: cap, pausedFrom: s.pausedFrom,
+    fmt: function (v) { return v + " °C"; },
+    refs: [{ v: 80, c: PAL.crit, label: "80" }, { v: 55, c: PAL.tick, label: "55" }]
+  });
+}
+
+function renderCooling(host, snap, s) {
+  var c = snap.cooling;
+  host.setAttribute("data-sev", c.sev);
+  clear(host);
+
+  panelHead(host, "cooling", "dell_smm · channel 5 = FAN_HDD (PCIe/GPU)",
+    chip(c.sev === "crit" ? "crit" : "ok", c.sev === "crit" ? "channel lost" : "nominal"));
+
+  var top = el("div", "gpuTop");
+  var hero = el("div", "hero" + (c.fan5 === null ? " hero--unk" : ""));
+  if (c.fan5 === null) {
+    hero.appendChild(el("span", "hero__v", "—"));
+    hero.appendChild(el("span", "hero__u", "fan 5 · no reading, not zero"));
+  } else {
+    hero.appendChild(el("span", "hero__v", fmtInt(c.fan5)));
+    hero.appendChild(el("span", "hero__u", "RPM  fan 5"));
+  }
+  top.appendChild(hero);
+
+  var mode = el("div", "gpuTop__pw");
+  if (c.mode === null) {
+    mode.appendChild(chip("unk", "unavailable"));
+  } else {
+    mode.appendChild(chip("neutral", "mode  " + c.mode));
+  }
+  mode.appendChild(el("div", "caption", c.modeDetail));
+  top.appendChild(mode);
+  host.appendChild(top);
+
+  var chartHost = el("div", "chart");
+  chartHost.setAttribute("tabindex", "0");
+  chartHost.setAttribute("aria-label", "GPU temperature and fan 5 RPM on a shared 30-minute time axis");
+  host.appendChild(chartHost);
+
+  var lg = el("div", "legend");
+  [["GPU 0", PAL.gpu0, "solid"], ["GPU 1", PAL.gpu1, "dashed"], ["fan 5 RPM", PAL.fan, "solid"]]
+    .forEach(function (a) {
+      var it = el("span", "legend__item");
+      var k = el("span", "legend__key");
+      k.style.borderTopColor = a[1]; k.style.borderTopStyle = a[2];
+      it.appendChild(k); it.appendChild(document.createTextNode(a[0]));
+      lg.appendChild(it);
+    });
+  lg.appendChild(el("span", "panel__sub", "· temperature above, fan below, one time axis"));
+  host.appendChild(lg);
+
+  /* Zero and unknown are different facts and get different shapes:
+     a stalled fan prints the numeral 0 and an alarm chip; an unreadable
+     channel prints an em dash with a hatched "no reading" chip. */
+  var chans = el("div", "chan");
+  c.channels.forEach(function (ch) {
+    chans.appendChild(el("span", "chan__id", ch.id));
+    var v = el("span", "chan__v" + (ch.rpm === null ? " chan__v--unk" : ch.rpm === 0 ? " chan__v--zero" : ""));
+    v.textContent = ch.rpm === null ? "—" : fmtInt(ch.rpm);
+    chans.appendChild(v);
+    chans.appendChild(ch.rpm === 0 ? chip("crit", "0 rpm · stalled")
+      : ch.rpm === null ? chip("unk", "no reading") : el("span", "chan__n", "RPM"));
+    chans.appendChild(el("span", "chan__n", ch.note));
+  });
+  host.appendChild(chans);
+
+  var svc = el("div", "rows");
+  var r = el("div", "row"); r.setAttribute("data-sev", c.service.sev);
+  r.appendChild(el("span", "row__glyph", GLYPH[c.service.sev]));
+  r.appendChild(el("span", "row__name", "gpu-fan-control.service"));
+  r.appendChild(el("span", "row__note", c.service.note));
+  var end = el("span", "row__end"); end.appendChild(chip(c.service.sev, c.service.state));
+  r.appendChild(end);
+  svc.appendChild(r);
+  host.appendChild(svc);
+
+  var note = el("div", "note");
+  note.appendChild(el("b", null, "EC auto = pwm returns ENODATA"));
+  note.appendChild(document.createTextNode(
+    " — a normal mode, not a fault. fan 2 is reported, never driven. " +
+    "engage ≥ 55 °C · release ≤ 51 °C · dwell 30 s · nominal max 5100 RPM."));
+  host.appendChild(note);
+
+  drawCooling(chartHost, s, snap);
+}
+
+function renderCPU(host, snap, s) {
+  var c = snap.cpu;
+  host.setAttribute("data-sev", c.sev);
+  clear(host);
+  panelHead(host, "cpu", "Xeon W-2135 · 6C / 12T",
+    chip(c.sev, c.sev === "ok" ? "nominal" : "watch"));
+
+  var hero = el("div", "hero");
+  hero.appendChild(el("span", "hero__v", c.tempC));
+  hero.appendChild(el("span", "hero__u", "°C  pkg"));
+  host.appendChild(hero);
+
+  var ux = minmax(s.cpu);
+  var cap = el("div", "caption");
+  cap.textContent = "30 min util · min " + ux.mn.toFixed(1) + " · max " + ux.mx.toFixed(1)
+    + " · now " + fmtPct1(c.util);
+  host.appendChild(cap);
+
+  var sparkHost = el("div", "chart");
+  host.appendChild(sparkHost);
+
+  host.appendChild(meter("utilisation", fmtPct1(c.util), c.util, "ok"));
+
+  var strip = el("div", "strip");
+  strip.appendChild(stripItem("load", c.load));
+  strip.appendChild(stripItem("coretemp pkg", "Tjmax 100"));
+  host.appendChild(strip);
+
+  drawSpark(sparkHost, {
+    values: s.cpu, time: s.time, color: PAL.cpu, min: 0, max: 40, readout: cap, pausedFrom: s.pausedFrom,
+    fmt: function (v) { return v.toFixed(1) + " % util"; }
+  });
+}
+
+function renderRAM(host, snap) {
+  var r = snap.ram;
+  var pct = (r.usedGiB / r.totalGiB) * 100;
+  var spct = (r.swapGiB / r.swapTotal) * 100;
+  host.setAttribute("data-sev", r.sev);
+  clear(host);
+  panelHead(host, "memory", "/proc/meminfo", chip(r.sev, "nominal"));
+
+  var hero = el("div", "hero");
+  hero.appendChild(el("span", "hero__v", fmtGiB(r.usedGiB)));
+  hero.appendChild(el("span", "hero__u", "GiB used"));
+  host.appendChild(hero);
+  host.appendChild(el("div", "caption", "MemTotal − MemAvailable · " + fmtPct1(pct)));
+
+  host.appendChild(meter("RAM", fmtGiB(r.usedGiB) + " / " + fmtGiB(r.totalGiB) + " GiB",
+    pct, pctSev(pct, 85, 95), 85));
+  /* swap at 2 dp so 0.04 GiB can never render as 0.0 and read as "none" */
+  host.appendChild(meter("swap", fmtSwap(r.swapGiB) + " / " + fmtSwap(r.swapTotal) + " GiB",
+    spct, r.swapSev));
+
+  var note = el("div", "note");
+  note.textContent = "any swap in use is notable here — 2 × 12 GiB of host prompt cache is configured (--cache-ram 12288).";
+  host.appendChild(note);
+}
+
+function renderServing(host, snap) {
+  var worst = snap.serving.some(function (x) { return x.sev === "crit"; }) ? "crit" : "ok";
+  host.setAttribute("data-sev", worst);
+  clear(host);
+  panelHead(host, "serving", "one instance per GPU · /health + /v1/models",
+    chip(worst, worst === "crit" ? "1 of 2 down" : "2 of 2 up"));
+
+  var rows = el("div", "rows");
+  snap.serving.forEach(function (x) {
+    var r = el("div", "row"); r.setAttribute("data-sev", x.sev);
+    r.appendChild(el("span", "row__glyph", GLYPH[x.sev]));
+    r.appendChild(el("span", "row__name", x.unit));
+    r.appendChild(el("span", "row__name", ":" + x.port));
+    r.appendChild(el("span", "row__note",
+      x.model + " · ctx " + fmtInt(Number(x.ctx)) + " · " + x.note));
+    var end = el("span", "row__end");
+    end.appendChild(el("span", "chan__n", "/health " + x.health));
+    end.appendChild(chip(x.sev, x.state));
+    r.appendChild(end);
+    rows.appendChild(r);
+  });
+  host.appendChild(rows);
+
+  var note = el("div", "note");
+  note.textContent = "instances are discovered from /etc/llama-server/*.env, not hard-coded. "
+    + "token rates and KV depth are deliberately out of scope (decision 13) — that would need the API key.";
+  host.appendChild(note);
+}
+
+function renderSafety(host, snap) {
+  var worst = snap.safety.some(function (x) { return x.sev === "crit"; }) ? "crit"
+            : snap.safety.some(function (x) { return x.sev === "warn"; }) ? "warn" : "ok";
+  host.setAttribute("data-sev", worst);
+  clear(host);
+  var nBad = snap.safety.filter(function (x) { return x.sev !== "ok"; }).length;
+  panelHead(host, "safety", "silent failures", chip(worst, nBad + " of 4 failing"));
+
+  var rows = el("div", "rows");
+  snap.safety.forEach(function (x) {
+    var r = el("div", "row"); r.setAttribute("data-sev", x.sev);
+    r.appendChild(el("span", "row__glyph", GLYPH[x.sev]));
+    r.appendChild(el("span", "row__name", x.name));
+    var end = el("span", "row__end");
+    if (x.standing) end.appendChild(chip("neutral", "standing"));
+    end.appendChild(chip(x.sev, x.value));
+    r.appendChild(end);
+    r.appendChild(el("span", "row__note row__note--full", x.note));
+    rows.appendChild(r);
+  });
+  host.appendChild(rows);
+}
+
+function renderStorage(host, snap) {
+  var st = snap.storage;
+  var rp = (st.root.used / st.root.total) * 100;
+  var hp = (st.home.used / st.home.total) * 100;
+  host.setAttribute("data-sev", "ok");
+  clear(host);
+  panelHead(host, "storage & network", "statvfs · eno1", chip("ok", "nominal"));
+
+  host.appendChild(meter("/", fmtGB(st.root.used) + " / " + fmtGB(st.root.total) + " GB · "
+    + fmtGB(st.root.total - st.root.used) + " GB free · " + fmtPct1(rp), rp, pctSev(rp, 85, 95), 85));
+  host.appendChild(meter("/home", fmtGB(st.home.used) + " / " + fmtGB(st.home.total) + " GB · "
+    + fmtGB(st.home.total - st.home.used) + " GB free · " + fmtPct1(hp), hp, pctSev(hp, 85, 95), 85));
+
+  /* rx/tx are /proc/net/dev deltas: they render — until a second sample exists (§6.7) */
+  var strip = el("div", "strip");
+  strip.appendChild(stripItem("↓ rx", fmtNet(st.net.rxBps)));
+  strip.appendChild(stripItem("↑ tx", fmtNet(st.net.txBps)));
+  host.appendChild(strip);
+
+  var cap = el("div", "caption");
+  cap.appendChild(el("span", null, "link"));
+  cap.appendChild(chip("ok", st.net.state + " · " + st.net.link));
+  host.appendChild(cap);
+
+  host.appendChild(el("div", "note", st.home.note + " — hf-get.sh writes by source filename with no space check."));
+}
+
+function renderLog(host, snap) {
+  clear(host);
+  host.setAttribute("data-sev", "ok");
+  var n = snap.events.length;
+  panelHead(host, "session event log", n + " since " + snap.sessionStart + " · newest first · lost on reload",
+    chip("neutral", "10 s debounce"));
+
+  var wrap = el("div", "logWrap");
+  var tbl = el("table", "logTable");
+  var tb = el("tbody");
+  snap.events.forEach(function (e) {
+    var tr = el("tr");
+    tr.setAttribute("data-sev", e.sev);
+    tr.appendChild(el("td", "log__t", e.t));
+    tr.appendChild(el("td", "log__src", e.src));
+    var sv = el("td", "log__sev");
+    var tag = el("span", "sevTag", e.sev === "crit" ? "alarm" : e.sev === "warn" ? "watch" : "·");
+    tag.setAttribute("data-sev", e.sev);
+    sv.appendChild(tag);
+    tr.appendChild(sv);
+    var m = el("td", "log__m");
+    m.appendChild(document.createTextNode(e.m));
+    if (e.n) { m.appendChild(document.createTextNode("  ")); m.appendChild(el("em", null, e.n)); }
+    tr.appendChild(m);
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb);
+  wrap.appendChild(tbl);
+  host.appendChild(wrap);
+}
+
+function renderBanner(hostEl, snap) {
+  clear(hostEl);
+
+  /* A paused dashboard must announce it loudly (§6.2) — a frozen display that
+     still looks live is the exact failure the age indicator exists to prevent. */
+  if (snap.paused) {
+    var b = el("div", "banner banner--paused");
+    b.setAttribute("role", "status");
+    b.appendChild(el("span", "banner__glyph", "❙❙"));
+    var body = el("div", "banner__body");
+    var head = el("div", "banner__head");
+    head.appendChild(el("span", "banner__count", "polling paused"));
+    var lead = el("span", "banner__lead");
+    lead.appendChild(el("b", null, "Nothing on this screen has been refreshed for "
+      + fmtDur(snap.pausedGapS) + "."));
+    lead.appendChild(document.createTextNode(
+      "  Every figure is the snapshot taken at " + snap.pausedAt
+      + "; the un-sampled span is hatched on the traces."));
+    head.appendChild(lead);
+    body.appendChild(head);
+    b.appendChild(body);
+    hostEl.appendChild(b);
+    /* deliberately NOT a return: a paused client can still be sitting on six
+       alarms, and hiding them behind the pause notice is the failure this
+       whole two-channel split exists to prevent. */
+  }
+
+  if (!snap.alarms.length) return;
+  var b = el("div", "banner");
+  b.setAttribute("role", "alert");
+  b.appendChild(el("span", "banner__glyph", "✕"));
+
+  var body = el("div", "banner__body");
+  var head = el("div", "banner__head");
+  head.appendChild(el("span", "banner__count", snap.alarms.length + " active alarms"));
+  var first = snap.alarms[0];
+  var lead = el("span", "banner__lead");
+  lead.appendChild(el("b", null, first.m + "  " + first.v));
+  lead.appendChild(document.createTextNode("  —  " + first.note));
+  head.appendChild(lead);
+  head.appendChild(el("span", "banner__since", "since " + first.since));
+  body.appendChild(head);
+
+  var rest = el("div", "banner__rest");
+  snap.alarms.slice(1).forEach(function (a) {
+    var it = el("span", "banner__item");
+    it.appendChild(document.createTextNode(a.m + "  " + a.v));
+    it.appendChild(el("i", null, "since " + a.since));
+    rest.appendChild(it);
+  });
+  body.appendChild(rest);
+  b.appendChild(body);
+  hostEl.appendChild(b);
+}
+
+/* ==========================================================================
+   6.  The login screen (§5.2) — same tokens, ground and type as the panel
+   ========================================================================== */
+
+var LOGIN_STATES = [
+  { id: "idle", label: "idle", msg: null, disabled: false, value: "",
+    note: "Field focused, submit enabled. This is the route's resting state." },
+  { id: "submitting", label: "submitting", msg: null, disabled: true, value: "hunter2-correct-horse",
+    fieldDisabled: false,
+    note: "Submit disabled, field stays readable." },
+  { id: "wrong", label: "wrong password", disabled: false, value: "hunter2-correct-horse",
+    msg: { sev: "crit", glyph: "✕", text: "Password not recognised." },
+    note: "The field is NOT cleared — retyping a long password after a typo is worse "
+        + "than the marginal shoulder-surfing risk on a LAN box." },
+  { id: "limited", label: "rate-limited", disabled: true, value: "hunter2-correct-horse",
+    msg: { sev: "warn", glyph: "▲", text: "Too many attempts. Try again in 43s." },
+    note: "5 attempts per minute per source IP, then a 60 s lockout. The count "
+        + "ticks down to 0s and the submit re-enables. Held in memory; resets on container restart." },
+  { id: "expired", label: "session expired", disabled: false, value: "",
+    msg: { sev: "warn", glyph: "▲", text: "Session expired — sign in again." },
+    note: "Arrived here from a 401 on any /api/* call, rather than leaving a stale "
+        + "snapshot on screen that is no longer being refreshed." }
+];
+
+function loginCard(v) {
+  var form = el("form", "login");
+  form.setAttribute("novalidate", "novalidate");
+  form.addEventListener("submit", function (ev) { ev.preventDefault(); });
+
+  var id = el("div", "login__id");
+  id.appendChild(el("div", "login__mark", "ai-server"));
+  id.appendChild(el("div", "login__addr", "192.168.4.71:8090"));
+  form.appendChild(id);
+
+  var inputId = "pw-" + v.id;
+  var lbl = el("label", "login__lbl", "Password");
+  lbl.setAttribute("for", inputId);
+  form.appendChild(lbl);
+
+  var input = el("input", "login__in");
+  input.type = "password";
+  input.id = inputId;
+  input.name = "password";
+  input.setAttribute("autocomplete", "current-password");
+  if (v.id === "idle") input.setAttribute("autofocus", "autofocus");
+  if (v.value) input.value = v.value;
+  if (v.fieldDisabled) input.disabled = true;
+  form.appendChild(input);
+
+  var go = el("button", "login__go", "Unlock");
+  go.type = "submit";
+  if (v.disabled) go.disabled = true;
+  form.appendChild(go);
+
+  var m = el("div", "login__msg");
+  if (v.msg) {
+    m.setAttribute("data-sev", v.msg.sev);
+    m.setAttribute("role", "alert");
+    m.appendChild(el("i", null, v.msg.glyph));
+    m.appendChild(document.createTextNode(v.msg.text));
+  }
+  form.appendChild(m);
+
+  var disc = el("p", "login__disc");
+  disc.appendChild(el("i", null, "▲"));
+  disc.appendChild(document.createTextNode(
+    "Plain HTTP on the LAN — this password crosses the wire in the clear."));
+  form.appendChild(disc);
+
+  return form;
+}
+
+function renderLogin(hostEl) {
+  clear(hostEl);
+  var wrap = el("div", "loginWrap");
+
+  var lead = el("div", "loginLead");
+  lead.appendChild(el("b", null, "/login — SPEC §5.2."));
+  lead.appendChild(document.createTextNode(
+    "  The live route renders ONE card; all five states are shown side by side here so a "
+    + "reviewer can see them without driving the form. No username, no remember-me (the "
+    + "cookie is already 30 days), no reset, no account creation."));
+  wrap.appendChild(lead);
+
+  var grid = el("div", "loginGrid");
+  LOGIN_STATES.forEach(function (v) {
+    var cell = el("div", "loginVar");
+    cell.appendChild(el("div", "loginVar__lbl", v.label));
+    cell.appendChild(loginCard(v));
+    cell.appendChild(el("div", "loginVar__note", v.note));
+    grid.appendChild(cell);
+  });
+  wrap.appendChild(grid);
+  hostEl.appendChild(wrap);
+}
+
+/* ==========================================================================
+   7.  Mount
+   ========================================================================== */
+
+pinLast("a"); pinLast("b");
+
+/* Last sample before the client paused polling, per state. State B pauses after
+   the last of its six alarms has already been raised, so the paused view is a
+   true subset of what that client had actually seen. */
+var PAUSE_KEEP = { a: 327, b: 351 };
+var TZ = tzAbbr();
+
+/* A paused client's series simply stop: the tail is absent, never zero. */
+function truncSeries(src, keep) {
+  var o = { time: src.time, pausedFrom: keep };
+  ["gpu0", "gpu1", "fan5", "cpu", "cpuT"].forEach(function (k) {
+    o[k] = src[k].map(function (v, i) { return i > keep ? null : v; });
+  });
+  return o;
+}
+
+/* The displayed figures become the last snapshot actually received, not "now". */
+function pausedSnap(src, series, keep) {
+  var c = JSON.parse(JSON.stringify(src));
+  var at = hhmmss(series.time[keep]);
+  c.paused = true;
+  c.pausedAt = at;
+  c.pausedGapS = (series.time.length - 1 - keep) * TICK;
+  c.ts = at;
+  c.age = fmtDur(c.pausedGapS) + " ago";
+  c.stale = true;
+  /* c.agg is left exactly as the live snapshot had it — the severity and its
+     counts are facts about the machine and pausing the client changes neither. */
+  c.mode = { id: "paused", glyph: "❙❙", label: "paused" };
+  c.gpus[0].temp = series.gpu0[keep]; c.gpus[0].sev = tempSev(series.gpu0[keep]);
+  c.gpus[1].temp = series.gpu1[keep]; c.gpus[1].sev = tempSev(series.gpu1[keep]);
+  if (c.cooling.fan5 !== null && series.fan5[keep] !== null) c.cooling.fan5 = series.fan5[keep];
+  c.cpu.util = series.cpu[keep];
+  c.events = src.events.filter(function (e) { return e.t <= at; });
+  return c;
+}
+
+var current = "a";
+var lastView = null;
+
+function render() {
+  var isLogin = current === "c";
+  var view = isLogin ? "login" : "panel";
+  document.documentElement.setAttribute("data-view", view);
+  document.documentElement.setAttribute("data-state", current);
+
+  var lit = current === "bp" ? "b" : current;     /* B-paused is still state B */
+  [].forEach.call(document.querySelectorAll(".mockstrip__btn"), function (b) {
+    b.setAttribute("aria-pressed", b.getAttribute("data-go") === lit ? "true" : "false");
+  });
+
+  if (isLogin) {
+    renderLogin(document.getElementById("loginHost"));
+    if (lastView !== "login") {
+      var f = document.getElementById("pw-idle");
+      if (f) f.focus();
+    }
+    lastView = view;
+    return;
+  }
+  lastView = view;
+
+  var key = (current === "ap") ? "a" : (current === "bp") ? "b" : current;
+  var paused = (current === "ap" || current === "bp");
+  var keep = PAUSE_KEEP[key];
+  var s = paused ? truncSeries(SERIES[key], keep) : SERIES[key];
+  var snap = paused ? pausedSnap(DATA[key], SERIES[key], keep) : DATA[key];
+
+  document.getElementById("hostMeta").textContent = snap.hostMeta;
+  document.getElementById("snapTs").textContent = snap.ts;
+  document.getElementById("snapTz").textContent = TZ;
+  document.getElementById("snapAge").textContent = snap.age;
+  document.getElementById("snap").setAttribute("data-stale", snap.stale ? "1" : "0");
+
+  /* Two channels, side by side: mode (how current) then severity (how is it). */
+  var agg = document.getElementById("agg");
+  agg.setAttribute("data-sev", snap.agg.sev);
+  var modeEl = document.getElementById("aggMode");
+  if (snap.mode) {
+    agg.setAttribute("data-mode", snap.mode.id);
+    document.getElementById("aggModeGlyph").textContent = snap.mode.glyph;
+    document.getElementById("aggModeText").textContent = snap.mode.label;
+    modeEl.hidden = false;
+  } else {
+    agg.removeAttribute("data-mode");
+    document.getElementById("aggModeGlyph").textContent = "";
+    document.getElementById("aggModeText").textContent = "";
+    modeEl.hidden = true;
+  }
+  document.getElementById("aggGlyph").textContent = snap.agg.glyph;
+  document.getElementById("aggText").textContent = snap.agg.text;
+
+  var pb = document.getElementById("ctlPause");
+  pb.textContent = paused ? "▶" : "❙❙";
+  pb.setAttribute("data-on", paused ? "1" : "0");
+  pb.title = paused ? "Resume polling"
+    : "Pause polling";
+  pb.setAttribute("aria-label", pb.title);
+
+  renderBanner(document.getElementById("bannerHost"), snap);
+  renderGPU(document.getElementById("gpu0"), snap.gpus[0], s, snap);
+  renderGPU(document.getElementById("gpu1"), snap.gpus[1], s, snap);
+  renderCooling(document.getElementById("cool"), snap, s);
+  renderCPU(document.getElementById("cpu"), snap, s);
+  renderRAM(document.getElementById("ram"), snap);
+  renderServing(document.getElementById("serv"), snap);
+  renderSafety(document.getElementById("safe"), snap);
+  renderStorage(document.getElementById("store"), snap);
+  renderLog(document.getElementById("log"), snap);
+}
+
+[].forEach.call(document.querySelectorAll(".mockstrip__btn"), function (b) {
+  b.addEventListener("click", function () { current = b.getAttribute("data-go"); render(); });
+});
+
+/* The pause control is the one header control wired up, because it is the one
+   whose effect is a visual state a reviewer needs to see. */
+document.getElementById("ctlPause").addEventListener("click", function () {
+  var next = { a: "ap", ap: "a", b: "bp", bp: "b" }[current];
+  if (!next) return;                       /* the login route has nothing to pause */
+  current = next;
+  render();
+});
+
+var rt;
+window.addEventListener("resize", function () {
+  clearTimeout(rt);
+  rt = setTimeout(render, 120);
+});
+
+render();
+
+})();
+</script>
+</body>
+</html>

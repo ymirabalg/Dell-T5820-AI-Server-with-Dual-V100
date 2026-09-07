@@ -1,0 +1,30 @@
+{
+  "name": "ai-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only telemetry dashboard for ai-server. See SPEC.md.",
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=24.0.0 <25.0.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "verify": "rm -f tsconfig.tsbuildinfo && tsc --noEmit && vitest run"
+  },
+  "dependencies": {
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "typescript": "7.0.2",
+    "vitest": "5.0.0"
+  }
+}

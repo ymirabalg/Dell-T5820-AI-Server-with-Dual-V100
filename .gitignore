@@ -16,3 +16,9 @@
 # original photos — 9 MB of HEIC that will never diff usefully. The article
 # carries compressed copies embedded, so nothing here is lost by excluding them.
 article-sources/
+
+# dashboard build output and secrets
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+dashboard/.env*

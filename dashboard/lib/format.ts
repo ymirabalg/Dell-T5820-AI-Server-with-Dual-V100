@@ -1,0 +1,422 @@
+/**
+ * §6.6 — units, formatting and locale.
+ *
+ * Every quantity is shown in **the unit its own source reports**, so any figure on screen
+ * can be checked against the command that produced it without arithmetic. That is why
+ * there are three memory formatters here and not one: VRAM is MiB (`nvidia-smi`), RAM is
+ * GiB (`/proc/meminfo`), disk is GB (`statvfs`/`df`). The branded argument types make
+ * handing GiB to the MiB formatter a compile error rather than a plausible wrong number.
+ *
+ * **Two laws, and they are the point of this module:**
+ *
+ * 1. **`null` renders as `—`.** Never `0`, never blank, never `N/A` (§6.6).
+ * 2. **Zero renders as the numeral with its unit** — `0 RPM`, never `—` (§6.6, §6.5).
+ *    "A fan reading 0 RPM is a dead fan on a box with two passively-cooled 250 W cards. A
+ *    fan reading nothing is a driver that did not load."
+ *
+ * Everything here is pure: values in, strings out. No IO, no clock, no DOM.
+ *
+ * **Locale is pinned to `en-US` on every viewer** (§6.6) so a screenshot always reads the
+ * same. The formatters use explicit {@link Intl.NumberFormat} instances rather than
+ * `Number.prototype.toLocaleString()`, which would silently follow the host locale if the
+ * argument were ever dropped.
+ *
+ * **Non-finite readings render `—`.** `NaN`, `Infinity` and `-Infinity` are not readings;
+ * the brand constructors do not validate (`celsius(NaN)` type-checks) and a collector that
+ * failed to parse must send `null` instead (HANDOVER §3). `NaN °C` is neither of §6.6's
+ * two cases, so this is the backstop, not the contract.
+ */
+
+import type {
+  BytesPerSecond,
+  Celsius,
+  Cooling,
+  GB,
+  GiB,
+  LoadAverage,
+  MHz,
+  MiB,
+  Percent,
+  Port,
+  Pwm,
+  Rpm,
+  Seconds,
+  Tokens,
+  Watts,
+} from './types';
+
+/** §6.6: "`null` renders as an em dash `—`. Never `0`, never blank, never `N/A`." */
+export const EM_DASH = '—';
+
+// ---------------------------------------------------------------------------
+// Numeric core
+// ---------------------------------------------------------------------------
+
+const nf = (min: number, max: number): Intl.NumberFormat =>
+  new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: min,
+    maximumFractionDigits: max,
+    useGrouping: true,
+  });
+
+/** Integer with `en-US` thousands separators — `26,452`. */
+const INTEGER = nf(0, 0);
+/** One decimal place — `249.8`. */
+const ONE_DP = nf(1, 1);
+/** Two decimal places — `0.02`. §6.6 pins swap and load average at 2 dp. */
+const TWO_DP = nf(2, 2);
+
+/**
+ * `true` when a reading is a real number that can be rendered.
+ *
+ * `null` fails it (law 1) and so does `NaN`/`±Infinity`. `0` **passes** — that is law 2,
+ * and this predicate is where it would be easiest to break by writing `if (!v)`.
+ */
+const readable = (v: number | null): v is number => v !== null && Number.isFinite(v);
+
+/**
+ * Render `v` through `fmt`, or `—` when there is no reading.
+ *
+ * An **exact** `-0` is normalised to `0`: `Intl.NumberFormat` renders negative zero as
+ * `-0`, and a fan that reads `-0 RPM` looks like a different fault from one that reads
+ * `0 RPM`.
+ *
+ * ⚠ That is the whole of what this guard does. It runs on the *input*, before rounding,
+ * so a small negative still renders with its sign — `formatPercent(percent(-0.04))` is
+ * `-0.0 %`. That is deliberate: a negative `cpuPct` or network rate is a collector bug
+ * (a `/proc/stat` delta across a counter update, an NTP step), and rendering it as
+ * `0.0 %` would hide it. Clamping belongs in the collector — see HANDOVER's step-3
+ * obligation — not here.
+ */
+const render = (v: number | null, fmt: Intl.NumberFormat, unit: string): string =>
+  readable(v) ? `${fmt.format(v === 0 ? 0 : v)}${unit}` : EM_DASH;
+
+// ---------------------------------------------------------------------------
+// §6.6 rows
+// ---------------------------------------------------------------------------
+
+/** GPU temp, CPU temp — integer °C. `66 °C`, `0 °C`, `—`. */
+export const formatCelsius = (v: Celsius | null): string => render(v, INTEGER, ' °C');
+
+/** GPU power — 1 dp W, checked against `power.draw`. `249.8 W`. */
+export const formatWatts = (v: Watts | null): string => render(v, ONE_DP, ' W');
+
+/** VRAM — MiB, thousands separated. `26,452 MiB`. */
+export const formatMiB = (v: MiB | null): string => render(v, INTEGER, ' MiB');
+
+/**
+ * VRAM as §6.6 prints it: `26,452 / 32,768 MiB`.
+ *
+ * §6.6: "A pair with one side `null` renders per figure: `26,452 / — MiB`, so which half
+ * is missing survives." Law 1 is therefore applied per figure. Both `null` collapses to a
+ * single `—`, because `— / — MiB` is noise.
+ */
+export const formatMiBPair = (used: MiB | null, total: MiB | null): string => {
+  if (!readable(used) && !readable(total)) return EM_DASH;
+  const u = readable(used) ? INTEGER.format(used === 0 ? 0 : used) : EM_DASH;
+  const t = readable(total) ? INTEGER.format(total === 0 ? 0 : total) : EM_DASH;
+  return `${u} / ${t} MiB`;
+};
+
+/**
+ * SM clock — §6.6: "integer, thousands separated — `1,290 MHz`".
+ *
+ * The separator was step 2's reading of §6.6's unconditional locale bullet before the row
+ * said so; §6.6 now spells it out, matching the VRAM and fan rows.
+ */
+export const formatMHz = (v: MHz | null): string => render(v, INTEGER, ' MHz');
+
+/** RAM — 1 dp GiB. `24.3 GiB`. */
+export const formatGiB = (v: GiB | null): string => render(v, ONE_DP, ' GiB');
+
+/**
+ * Swap — **2 dp** GiB (§6.6: "small values must not round to `0.0`").
+ *
+ * Deliberately a separate function from {@link formatGiB} despite the shared unit: any
+ * swap in use is meaningful on this box, so 40 MiB of swap must read `0.04 GiB` and not
+ * `0.0 GiB`, which is indistinguishable from none.
+ */
+export const formatSwapGiB = (v: GiB | null): string => render(v, TWO_DP, ' GiB');
+
+/**
+ * Disk — 1 dp. `232.6 GB`.
+ *
+ * ⚠ **The suffix is WRONG against the current §6.6 and step 9 owns the fix.** §6.6's disk
+ * row and §1's decision 20 now both say **GiB**, and the value already is one: step 5's
+ * collector divides by `BYTES_PER_GIB` = `1024³`, which is what `df -h` and `lsblk` print
+ * (`/` is 232.6 GiB, not 249.8 GB). Only the *names* still say GB — this suffix, the brand
+ * `GB`/`gb()`, and `Filesystem.usedGB`/`totalGB`: 98 occurrences across 10 files.
+ *
+ * Step 5's review ruled the rename to step 9, the first step that renders this label to a
+ * person and the last cheap moment to change it, and renamed only `BYTES_PER_GB` →
+ * `BYTES_PER_GIB` immediately because that identifier's own doc had read *"⚠ `1024³`,
+ * despite the name"*. It is carried as an explicit obligation in HANDOVER, not left here to
+ * be rediscovered by whoever reads the panel and reaches for a calculator.
+ */
+export const formatGB = (v: GB | null): string => render(v, ONE_DP, ' GB');
+
+/** Fan speed — integer RPM, thousands separated. `4,308 RPM`, and `0 RPM` for a dead fan. */
+export const formatRpm = (v: Rpm | null): string => render(v, INTEGER, ' RPM');
+
+/** Percentages — 1 dp. `81.3 %`. */
+export const formatPercent = (v: Percent | null): string => render(v, ONE_DP, ' %');
+
+/** Context length — tokens, thousands separated, bare numeral. `131,072` (§6.6). */
+export const formatTokens = (v: Tokens | null): string => render(v, INTEGER, '');
+
+/**
+ * A TCP port — the bare number, **ungrouped**: `8080`, never `8,080`.
+ *
+ * ⚠ §6.6's table has no row for this; a port is an identifier, not a measured quantity, so
+ * the locale bullet's thousands separators would be actively wrong. §6.2 lists it in the
+ * SERVING row and `MOCK.html` renders it `:8080` — the colon is that panel's layout, not
+ * part of the figure. Recorded as a small gap in the step-2 notes.
+ *
+ * Law 1 is why it exists at all: an instance discovered from its env filename alone has a
+ * `null` port (`servingIdentityOnly`), and that must render `—`, never a blank cell.
+ */
+export const formatPort = (v: Port | null): string =>
+  readable(v) ? String(v === 0 ? 0 : v) : EM_DASH;
+
+/**
+ * Load average — three values, 2 dp, ` / `-separated: `1.24 / 1.08 / 0.91` (§6.6).
+ *
+ * Nullable as a whole, matching {@link LoadAverage}: all three come from one line of
+ * `/proc/loadavg` in a single read, so there is no half-parsed state to render.
+ */
+export const formatLoadAverage = (v: LoadAverage | null): string => {
+  if (v === null) return EM_DASH;
+  const [one, five, fifteen] = v;
+  if (!readable(one) || !readable(five) || !readable(fifteen)) return EM_DASH;
+  return [one, five, fifteen].map((n) => TWO_DP.format(n === 0 ? 0 : n)).join(' / ');
+};
+
+/**
+ * `v` rounded to two significant figures.
+ *
+ * Via `toPrecision`, which rounds the decimal representation, rather than by scaling with
+ * a power of ten and rounding — `49 / 0.1` is `489.99999999999994` in binary floating
+ * point, and the digit count is decided from this value.
+ */
+const twoSigFigsValue = (v: number): number => (v === 0 ? 0 : Number(v.toPrecision(2)));
+
+/** Two significant figures, keeping the trailing zero: `1.2`, `490`, `0`, `0.0050`. */
+const twoSigFigs = (v: number): string => {
+  if (v === 0 || !Number.isFinite(v)) return '0';
+  const rounded = twoSigFigsValue(v);
+  const decimals = Math.max(0, 1 - Math.floor(Math.log10(Math.abs(rounded))));
+  return nf(decimals, decimals).format(rounded);
+};
+
+/**
+ * Network throughput — auto-scaled KB/s or MB/s at **2 significant figures** (§6.6).
+ *
+ * `1_243_000` → `1.2 MB/s`; `486_000` → `490 KB/s`; `0` → `0 KB/s` (law 2 — an idle link
+ * is a reading). Values that round up to `1000 KB/s` are promoted to `1.0 MB/s`, so the
+ * displayed figure never carries more digits than the rule allows.
+ *
+ * Decimal KB/MB (1e3), not KiB/MiB: `/proc/net/dev` counts bytes and §6.6 spells the units
+ * `KB/s` and `MB/s`.
+ */
+export const formatBytesPerSecond = (v: BytesPerSecond | null): string => {
+  if (!readable(v)) return EM_DASH;
+  const bytes = v === 0 ? 0 : v;
+  if (Math.abs(bytes) >= 1e6) return `${twoSigFigs(bytes / 1e6)} MB/s`;
+  // 999_499 B/s is 1,000 KB/s at 2 s.f., which shows four digits for a two-figure rule.
+  // Auto-scaling means that reading is 1.0 MB/s.
+  const kb = twoSigFigsValue(bytes / 1e3);
+  return Math.abs(kb) >= 1000
+    ? `${twoSigFigs(bytes / 1e6)} MB/s`
+    : `${twoSigFigs(bytes / 1e3)} KB/s`;
+};
+
+// ---------------------------------------------------------------------------
+// Channel 5 — the row §6.6 spells "state name then raw value"
+// ---------------------------------------------------------------------------
+
+/** The three states the SMM interface can actually express. See {@link pwmStateName}. */
+export type PwmStateName = 'OFF' | 'LOW' | 'HIGH';
+
+/** The `pwm` register's range. Anything outside it is not a reading of this register. */
+const PWM_MIN = 0;
+const PWM_MAX = 255;
+/** §6.3: "the HIGH quantisation band" — the boundary engagement is defined by. */
+const PWM_HIGH_FLOOR = 192;
+/** The driver's OFF/LOW split; §6.6 names it. */
+const PWM_LOW_FLOOR = 64;
+
+/**
+ * The driver's 3-state quantisation of the 0–255 `pwm` range — **the only definition of
+ * the `≥ 192` boundary in this project.**
+ *
+ * `dell-smm-hwmon` writes `clamp(DIV_ROUND_CLOSEST(val, 128), 0, 2)` with
+ * `i8k_pwm_mult = DIV_ROUND_UP(255, 2) = 128`, so the sysfs range collapses onto three
+ * values: §6.6's **`OFF` (0–63), `LOW` (64–191), `HIGH` (192–255)**. Nothing between them
+ * exists.
+ *
+ * ⚠ `lib/severity.ts` reads engagement from **this function**, not from its own `>= 192`.
+ * §6.3 defines "engaged" as `ch5Mode === 'manual' && ch5Pwm ≥ 192`, so the boundary is one
+ * hardware fact used by both a formatter and a severity band; written twice it can drift,
+ * and a drift means the COOLING panel labels a channel `LOW` while the engaged alarm band
+ * is being applied to it.
+ *
+ * **`null` means the duty is not a reading**, which is a state §6.6 names: a non-finite
+ * value (`pwm(NaN)` type-checks — the brand constructors do not validate) or one outside
+ * the register's 0–255 range. §6.6: "When the mode is `manual` but the duty is not a
+ * reading, render `—` and give the band **no severity** rather than assuming a state."
+ * Assuming one is how a stalled fan at HIGH gets labelled `OFF` and banded `normal`.
+ */
+export const pwmStateName = (v: Pwm): PwmStateName | null => {
+  if (!Number.isFinite(v) || v < PWM_MIN || v > PWM_MAX) return null;
+  return v >= PWM_HIGH_FLOOR ? 'HIGH' : v >= PWM_LOW_FLOOR ? 'LOW' : 'OFF';
+};
+
+/**
+ * Channel-5 PWM — §6.6: "state name then raw value — `HIGH pwm 255`".
+ *
+ * Takes the whole {@link Cooling} value rather than a mode and a number, because the
+ * discriminated union is what guarantees a PWM exists exactly when the mode is `manual`;
+ * a `(mode, pwm)` signature would let `('ec-auto', 255)` be passed.
+ *
+ * | `ch5Mode` | renders |
+ * |---|---|
+ * | `'manual'`, duty readable | `HIGH pwm 255` — the commissioned configuration |
+ * | `'manual'`, duty not a reading | `—` (§6.6), and {@link module:lib/severity} gives it no severity |
+ * | `'ec-auto'` | `EC auto` — **healthy** (§6.5, invariant 3): `pwm5` returned `ENODATA` |
+ * | `null` | `unavailable` — §6.5: "the Cooling panel shows the channel as unavailable" |
+ *
+ * The `unavailable` case is the one exception to law 1 in this module, and it is spec
+ * text: an em dash there would read as a missing figure rather than a missing *channel*,
+ * and §6.5 requires "never a blank RPM that reads as zero".
+ */
+export const formatCh5Pwm = (cooling: Cooling): string => {
+  switch (cooling.ch5Mode) {
+    case 'manual': {
+      const state = pwmStateName(cooling.ch5Pwm);
+      return state === null ? EM_DASH : `${state} pwm ${INTEGER.format(cooling.ch5Pwm)}`;
+    }
+    case 'ec-auto':
+      return 'EC auto';
+    case null:
+      return 'unavailable';
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Uptime — §3.2's four forms
+// ---------------------------------------------------------------------------
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+/** Below this, the reading is `up <1 min` rather than a minute count. §3.2's fourth form. */
+const UPTIME_SUB_MINUTE = 60;
+
+/**
+ * `uptimeSec` for the header, in §3.2's **four** forms, "so a freshly rebooted box is not
+ * shown as `up 0 d 00:14`":
+ *
+ * | uptime | renders |
+ * |---|---|
+ * | ≥ 1 day | `up 2 d 02:01` |
+ * | 1 hour – 1 day | `up 02:01` |
+ * | 1 minute – 1 hour | `up 14 min` |
+ * | < 1 minute | `up <1 min` |
+ *
+ * ⚠ **The fourth form was added in step 3's reconciliation, and it is a behaviour change
+ * to step 2's file.** This function used to return `up 0 min` below a minute. §3.2 carries
+ * an `up <1 min` clause — added to answer step 2's own reported gap S2, *"§3.2's uptime
+ * forms do not cover below one minute"* — so the spec is the newer half and the code was
+ * the leftover. `up 0 min` is §3.2's stated defect (`up 0 d 00:14`) one scale down, and on
+ * a project whose step 12 is "survives a reboot" it is precisely the minute someone will be
+ * staring at the header.
+ *
+ * ⚠ **This does NOT breach §6.6's law 2** ("zero renders as the numeral with its unit").
+ * §6.6 states its own purpose — it is "the §6.5 rule expressed as a formatting law", and
+ * that rule is *"zero and unknown must never look alike"*. `up <1 min` is neither `—` nor
+ * blank, so a zero reading stays visibly distinct from an unreadable one, which is the
+ * whole point. The law table already carries per-quantity renderings: `formatCh5Pwm(0)` is
+ * `OFF pwm 0` and `formatPort(0)` is `0` with no unit at all.
+ *
+ * Law 1 still applies: an unreadable `/proc/uptime` renders `—`, never `up <1 min`.
+ *
+ * Not locale-formatted — these are clock digits and a day count, not a measured quantity,
+ * and a box up for 1,234 days should read `up 1234 d`, not `up 1,234 d`. Truncating
+ * rather than rounding, so the figure never claims a minute that has not elapsed.
+ */
+export const formatUptime = (v: Seconds | null): string => {
+  if (!readable(v) || v < 0) return EM_DASH;
+  const total = Math.floor(v);
+  const days = Math.floor(total / 86_400);
+  const hours = Math.floor((total % 86_400) / 3_600);
+  const minutes = Math.floor((total % 3_600) / 60);
+  if (days >= 1) return `up ${days} d ${pad2(hours)}:${pad2(minutes)}`;
+  if (hours >= 1) return `up ${pad2(hours)}:${pad2(minutes)}`;
+  if (total < UPTIME_SUB_MINUTE) return 'up <1 min';
+  return `up ${minutes} min`;
+};
+
+/**
+ * §6.2's age indicator — how old the newest reading is.
+ *
+ * ⚠ **A negative age never renders as a negative number** (§6.6). A `ts` ahead of the
+ * browser's clock is clock **skew**, not a reading from the future: `-4 s` would invite an
+ * operator to read it as *fresher than now*, which is the one thing it cannot be. It renders
+ * `0 s`, and §6.7's `stale` mode — which treats a negative age as not-current — is what says
+ * the rest. The two rules are a pair; neither is safe alone, because a clamp with no mode
+ * would hide the skew entirely.
+ *
+ * ⚠ `null` is not an age of zero. Before the first sample there is nothing to be old, and law
+ * 1 governs: `—`.
+ *
+ * Rendered as seconds under a minute, then `m:ss`, then `h:mm:ss` — clock digits, so not
+ * locale-formatted, on the same reasoning as {@link formatUptime}. Truncated rather than
+ * rounded, so the figure never claims a second that has not elapsed.
+ */
+export const formatAge = (ms: number | null): string => {
+  if (!readable(ms)) return EM_DASH;
+  const total = Math.floor(Math.max(0, ms) / 1000);
+  if (total < 60) return `${total} s`;
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  if (minutes < 60) return `${minutes}:${pad2(seconds)}`;
+  return `${Math.floor(minutes / 60)}:${pad2(minutes % 60)}:${pad2(seconds)}`;
+};
+
+// ---------------------------------------------------------------------------
+// Text
+// ---------------------------------------------------------------------------
+
+/**
+ * Any free-text field — model alias, kernel, hostname, GPU name, bus id.
+ *
+ * `null` **and blank** both render `—`: §6.6 forbids a blank cell as firmly as it forbids
+ * `N/A`, and a whitespace-only string from a parser is not a reading.
+ */
+export const formatText = (v: string | null): string => {
+  if (v === null) return EM_DASH;
+  const trimmed = v.trim();
+  return trimmed === '' ? EM_DASH : trimmed;
+};
+
+/**
+ * `/proc/cpuinfo`'s `model name`, trimmed for display: §3.2 shows
+ * `Intel(R) Xeon(R) W-2135 CPU @ 3.70GHz` as **`Xeon W-2135`**.
+ *
+ * The trimming is a formatter's job, not a collector's (`lib/types.ts` on `Host.cpuModel`):
+ * a snapshot that has already discarded text cannot be un-trimmed. The rule is
+ * deliberately conservative — strip trademark marks, drop the clock clause the vendor
+ * appends, drop a leading vendor token — and it **falls back to the trimmed original**
+ * rather than to an empty cell, so an unfamiliar CPU string degrades to "too long", never
+ * to a lie.
+ */
+export const formatCpuModel = (v: string | null): string => {
+  const text = formatText(v);
+  if (text === EM_DASH) return EM_DASH;
+  const trimmed = text
+    .replace(/\((?:R|TM|r|tm)\)/g, ' ')
+    .replace(/\s+(?:CPU|Processor)\s*@.*$/i, '')
+    .replace(/^(?:Genuine\s+)?(?:Intel|AMD)\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return trimmed === '' ? text : trimmed;
+};
