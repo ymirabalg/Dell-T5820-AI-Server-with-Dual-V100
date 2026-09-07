@@ -59,10 +59,23 @@ Step 8's reconciliation agent **ran out of context at roughly 60 %**. Its code w
 | `pipeline/HANDOVER.md` | **still says "after step 7, before step 8" — NOT rewritten** |
 
 **Therefore `HANDOVER.md` does not describe step 8.** Until it is rewritten, the authoritative
-record of step 8 is `steps/08-client-runtime/reconciliation-progress.md` — its **§9** lists the
-remaining work precisely, and it carries every finding's disposition. A restart brief for
-finishing it is at the end of that file's §9, and a manifest snapshot is at
-`steps/08-client-runtime/manifest-baseline.txt`.
+record is `steps/08-client-runtime/reconciliation-progress.md` (26 KB) — it carries every
+finding's disposition, the corrected surface for steps 9/10, and a restart brief. A manifest
+snapshot is at `steps/08-client-runtime/manifest-baseline.txt`.
+
+#### Exactly what is left of step 8 (its §9, summarised so this file stands alone)
+
+| | Work | Notes |
+|---|---|---|
+| **9.1** | **Re-aim 20 moved harness anchors.** `python3 pipeline/steps/08-client-runtime/regressions.py` reports **20 `ANCHOR NOT FOUND`** until done | The brief ships a script that lists them without running vitest |
+| **9.2** | **Add ~20 mutations**, and add `gaps.test.ts` + `mode.test.ts` to `LEDGER_FILES` | The brief enumerates every one. **The most important is the hidden-gap erasure the old suite missed**: mutate `observeSample`'s `anyGapReason(state) === null` to `true`, which must redden the ⚠ test of that name in *both* `gaps.test.ts` and the runtime fixture |
+| **9.3** | **Write `reconciliation.md`** | Needs the final harness numbers and the pasted verify output |
+| **9.4** | **Rewrite `HANDOVER.md` for step 9** | Currently 56 KB describing the pre-fix world. The brief lists nine things it must carry — including the corrected surface, the twelve "must not leak into 9/10" rules, the four composition gaps, and **the three `build.md` over-claims that must never be repeated in their original form** |
+| **9.5** | **Evidence** — `pnpm verify` ×10 serially, then step 8's harness last and alone, manifest diffed after | |
+
+**Do not start 9.2's `fetch` mutations casually**: one of them (`Function('return fetch')()`)
+names neither `fetch` nor `globalThis` and exists specifically to demonstrate what the text
+guard cannot catch.
 
 Two findings from the completed part worth carrying forward:
 
@@ -204,15 +217,38 @@ some `S`-prefixed ids in steps 3–5 are *harness mutation ids*, not gaps.
 A cached extract of the DEFER tables for steps 1–7 may still exist at
 `/private/tmp/claude-501/.../scratchpad/defers.md`; regenerate it if not.
 
+### Already-identified and still open — the sweep at (3) should start here, not rediscover them
+
+**Spec gaps awaiting the owner's wording** (found in step 8's reconciliation; `SPEC.md` was
+not edited, and the code's current choice is recorded beside each in that brief's §4):
+
+| # | Gap |
+|---|---|
+| **S49** | §6.7 does not say whether the 600-point decimation budget is **per series or per chart**. The review ruled per series; the sentence never reached the spec. Code draws up to 1,800 points on §6.2's stacked chart |
+| **S50** | §6.5 says a stale condition's row "names the age of the reading" but **not which clock measures it** — §6.7 splits server `ts` from browser `now`, and "the age of a reading we did not take" is cleanly neither |
+| **S51** | §6.5 does not say what a stale condition's **value** shows. Code keeps the last reading; §6.6's "`null` renders `—`" could be misread as requiring a blank |
+| **S52** | §6.4 does not say whether `loggedStanding` **survives a mid-session `STANDING` change**. Code does not reset it — it belongs to the session, not the configuration |
+| **S53** | §4 does not say what a **duplicate entry in `STANDING`** means. Echoed verbatim; harmless because the client builds a `Set`. Recorded so nobody "fixes" it server-side |
+
+**Deferred work items with owning steps** (from step 8's §9.4 list — most are 9/10 and
+therefore **out of scope**, listed only so they are not lost):
+
+- **In scope (backend):** **D8** `STANDING` env plumbing → step 11, verified step 12 · the
+  **red-test ledger retrofit for step 3's harness**, which still has none · the six ⚠ marks
+  on `severity.ts` that step 2's retrofit found unbacked (now backed — confirm) .
+- **Out of scope (UI, steps 9–12):** D1 S40's third event-log feed · D2 the independent age
+  tick · D3 rendering `unknownStanding` · D4 `errorsForPanel` · D5 `traceFor` · D6 jsdom +
+  `useTelemetry` unmount · D7 S11/G5, S19, S30 · **O19** the GB→GiB brand rename.
+
 ---
 
 ## 8. The plan from here — this is what "start 3" means
 
 The owner's instruction, numbered as given:
 
-0. **Prerequisite, not in the owner's numbering: finish step 8's reconciliation.**
-   `HANDOVER.md` cannot be trusted until it is rewritten, and roughly 40 % of step 8's
-   closing work remains. Use the restart brief in
+0. **Prerequisite, not in the owner's numbering: finish step 8's reconciliation** — §2 above
+   lists the five pieces. `HANDOVER.md` cannot be trusted until 9.4 is done, and the harness
+   is reporting 20 missing anchors until 9.1 is. Use the restart brief in
    `steps/08-client-runtime/reconciliation-progress.md` §9. **Alternatively**, fold this into
    the work-item list at (4) as its own item — but do not begin (7) with `HANDOVER.md` still
    describing a step that has since changed underneath it.
