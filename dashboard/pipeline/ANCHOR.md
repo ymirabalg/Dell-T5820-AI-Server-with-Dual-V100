@@ -1,6 +1,7 @@
 # ANCHOR — resume point for the ai-server dashboard build
 
-**Written 2026-09-07 09:10 by the session that ran steps 1–8. It is the only inheritance:
+**Written 2026-09-07 by the session that ran steps 1–8, and updated after step 8's
+reconciliation stopped part-way. It is the only inheritance:
 the next session has no memory of that conversation.** Read this file, then `PLAN.md`, then
 `HANDOVER.md`, then `SPEC.md`. Everything below is fact unless marked otherwise.
 
@@ -42,33 +43,43 @@ adversarial and review phases and fixed before they became wrong code. Several w
 | 8 | Client runtime (`lib/client/`) | **build + adversarial + review done; RECONCILIATION IN FLIGHT** |
 | 9–12 | UI primitives, panels, packaging, deploy | **not started — OUT OF SCOPE, see §8** |
 
-### ⚠ First thing the next session must do
+### Step 8 stopped part-way, and this is the exact position
 
-Step 8's reconciliation agent was **still running** when this was written. Its
-`reconciliation.md` did not exist and `HANDOVER.md` was still the step-7→8 version.
+Step 8's reconciliation agent **ran out of context at roughly 60 %**. Its code work is
+**complete and green**; its harness re-aiming and its two closing documents are **not done**.
 
-1. Check whether `pipeline/steps/08-client-runtime/reconciliation.md` now exists and whether
-   `HANDOVER.md`'s header says "before step 9". If yes, step 8 closed normally.
-2. **If not, the tree may contain a mutation left on disk** — a harness killed mid-run leaves
-   the source mutated, because its `finally` never runs.
-3. Either way, run `pnpm verify` (see §3) **two or three times** before trusting anything. A
-   *moving* failure set means a harness is running; a *stable* one means a mutation is stranded
-   and must be found and reverted.
+| Piece | State |
+|---|---|
+| All 12 MUSTs + 14 SHOULDs from `review.md` | **implemented, with tests** |
+| `pnpm verify` | **green — 1982 tests, 57 files, exit 0** (verified 6× across two sessions) |
+| `lib/client/gaps.ts`, `lib/client/mode.ts` | new, landed |
+| Harnesses 2–7 (47/64/90/127/61/116) | all exit 0, ledgers clean |
+| Step 8's own harness — **20 moved anchors to re-aim, ~20 mutations to add** | **outstanding** |
+| `steps/08-client-runtime/reconciliation.md` | **does not exist** |
+| `pipeline/HANDOVER.md` | **still says "after step 7, before step 8" — NOT rewritten** |
 
-Last observations before writing: step 8's build closed at **1865 tests / 55 files**, 7
-harnesses, **607 mutations**. During reconciliation the suite was observed at **1982 tests**
-with a moving failure set — so ~117 tests were added and a harness was mid-run.
+**Therefore `HANDOVER.md` does not describe step 8.** Until it is rewritten, the authoritative
+record of step 8 is `steps/08-client-runtime/reconciliation-progress.md` — its **§9** lists the
+remaining work precisely, and it carries every finding's disposition. A restart brief for
+finishing it is at the end of that file's §9, and a manifest snapshot is at
+`steps/08-client-runtime/manifest-baseline.txt`.
 
-### ⚠ The commit was NOT taken
+Two findings from the completed part worth carrying forward:
 
-The plan was to commit `dashboard/` first. **It was deliberately not done**, because
-committing a tree with a live harness mutation in it would capture corrupted source. `git
-status` shows only `M .gitignore` and `?? dashboard/`.
+- Retrofitting the red-test ledger to **step 2's** harness found **six pre-existing ⚠ marks
+  with no mutation behind them**, five on `severity.ts`'s fan-stopped rows — including the
+  `-0` / `Object.is` trap. All six are now backed. **Step 3's harness still has no ledger.**
+- `FakeEnv`'s two fake clocks were **in different years** (browser 2023, server 2026).
+  Invisible until `mode` became a function of `now − ts`. Now coupled.
 
-**Take the commit as soon as step 8's state is resolved and `pnpm verify` is green.** It is
-not bookkeeping — see §4.
+### The commit is taken
 
----
+```
+branch   dashboard-backend      (branched from main; main is untouched)
+commit   71a2f7d                183 files, working tree clean
+```
+
+**The next session is on `dashboard-backend`, not `main`.** Nothing has been pushed.
 
 ## 3. Toolchain
 
@@ -95,10 +106,13 @@ non-compiling test file silently drops its tests from the total. `verify` is
 `tsc --noEmit && vitest run` and now runs **cold** (it clears `tsconfig.tsbuildinfo` first,
 after a false *pass* was observed on a tree with a real `TS2305`).
 
-### Integrity procedure — needed only until the commit lands
+### Integrity procedure
 
-`git status` **cannot** verify revert integrity today: `dashboard/` is untracked, so git
-collapses it to `?? ./` and a stranded mutation is invisible. Until the commit:
+**`git status` now works** — the tree is committed (`71a2f7d`), so a stranded mutation from a
+killed harness shows as a modified file. That is the primary check; use `git diff --stat`.
+Before the commit it did not work, because an untracked `dashboard/` collapses to `?? ./`,
+and the phases used an md5 manifest instead. That manifest form still works and is what the
+step-8 progress brief references:
 
 ```bash
 find lib app proxy.ts -type f \( -name '*.ts' -o -name '*.tsx' \) | sort | xargs md5 > /tmp/manifest.before
@@ -196,8 +210,14 @@ A cached extract of the DEFER tables for steps 1–7 may still exist at
 
 The owner's instruction, numbered as given:
 
-1. ~~Commit `dashboard/`~~ — **not done, see §2. Do it first.**
-2. ~~Write this anchor~~ — done.
+0. **Prerequisite, not in the owner's numbering: finish step 8's reconciliation.**
+   `HANDOVER.md` cannot be trusted until it is rewritten, and roughly 40 % of step 8's
+   closing work remains. Use the restart brief in
+   `steps/08-client-runtime/reconciliation-progress.md` §9. **Alternatively**, fold this into
+   the work-item list at (4) as its own item — but do not begin (7) with `HANDOVER.md` still
+   describing a step that has since changed underneath it.
+1. ~~Commit `dashboard/`~~ — **done**, `71a2f7d` on `dashboard-backend`.
+2. ~~Write this anchor~~ — done, and updated.
 3. **Read `SPEC.md` and resolve remaining ambiguities in the steps 1–8 surface only.**
 4. **Create atomic work items** from those ambiguities *plus* every open finding and
    obligation recorded by the adversarial and review phases across steps 1–8.
