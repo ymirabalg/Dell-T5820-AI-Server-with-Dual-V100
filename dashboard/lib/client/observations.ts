@@ -70,7 +70,7 @@ import {
   severityUnitState,
   severityVram,
 } from '../severity';
-import type { CoolingChannels, Rpm, TelemetrySnapshot } from '../types';
+import type { CoolingChannels, ErrorSource, Rpm, TelemetryError, TelemetrySnapshot } from '../types';
 import { FAN_SERVICE_UNIT, servingUnitName } from '../units';
 
 /**
@@ -160,6 +160,198 @@ export const conditionSource = (kind: ConditionKind, subject: string | null): st
       return 'safety';
   }
 };
+
+/**
+ * Where a reading can appear on screen: §6.1's grid, plus §6.2's header.
+ *
+ * ### ⚠ This is a SECOND vocabulary, on purpose. It is not `conditionSource`'s.
+ *
+ * The handoff put the choice as (a) two vocabularies, each with one definition, or (b) one
+ * `Panel` type that the event log renders a coarser label from. **(a)**, and the argument is
+ * not "the log reads better coarse" — it is that these are two *different joins* and neither
+ * key set is a subset of the other:
+ *
+ * | | key | codomain | consumer |
+ * |---|---|---|---|
+ * | {@link conditionSource} | `ConditionKind` + subject | a **label**, `string`, with the subject interpolated (`gpu 0`) | §6.4's event-log source column |
+ * | {@link errorsForPanel} | `ErrorSource` | a **closed set of places**, switched over exhaustively | §6.5's em-dash → `errors[]` join |
+ *
+ * HANDOVER's do-not-copy list forbids *a second mapping of a join that already exists*.
+ * `ConditionKind → log label` and `ErrorSource → panel` are not the same join: they have
+ * different keys, different codomains, and — decisively — a different *granularity that is
+ * forced by the data*. Three places show that (b) cannot be made to work without inventing
+ * something:
+ *
+ * - **`conditionSource` returns `string`, not a closed type**, because `gpu ${subject}` is
+ *   interpolated per card. An exhaustive `switch` needs a closed codomain; a `string` one
+ *   would make a nineteenth source a silent blank, which is exactly what §3.7's closed
+ *   vocabulary exists to prevent.
+ * - **CPU and MEMORY are two panels in §6.1 and one `'host'` in `conditionSource`.** Under
+ *   (b) `cpu_temp` and `ram` would map to *different* members and the log would then
+ *   re-collapse them — a mapping of a mapping, and two functions where (a) has two.
+ * - **The header is not in §6.1's grid at all**, and `conditionSource` has no value for it,
+ *   so `hostname` and `proc-uptime` would have nowhere to go. (a) gives the header a member;
+ *   (b) would have to add one to the log's vocabulary that the log never renders.
+ *
+ * The cost of (a) is two vocabularies that could drift. It is paid the way this project pays
+ * for `scripts/hash-password.py`: by measurement, not by a comment — every member below is
+ * reached by a fixture on both sides, and `conditionSource` is unchanged, so there is nothing
+ * to keep in step.
+ *
+ * ### Why `'gpu'` is one member and not one per card
+ *
+ * `nvidia-smi` is the **whole enumeration**, not a card: `gpus: null` blanks GPU 0 and GPU 1
+ * together, and it is the only source either card has. A per-card member would make
+ * {@link panelsForSource} a function of *how many cards answered*, which is not a fact about
+ * a source — and there is no `errors[]` entry it could ever return for one card and not the
+ * other. Both GPU panels ask for `'gpu'` and get the same answer, which is the truth.
+ *
+ * ### What is deliberately absent
+ *
+ * **§6.1's session event log is not a `Panel`.** It renders no reading, so it has no em dash
+ * and nothing to explain; §6.5's join has no meaning there. Its feed is `state.events`.
+ */
+export type Panel =
+  /** §6.2's header — hostname and uptime. Not in §6.1's grid, and it still shows readings. */
+  | 'header'
+  /** §6.1 row 1, both cards. See above: `nvidia-smi` cannot be attributed to one of them. */
+  | 'gpu'
+  /** §6.2's CPU panel: package temperature, utilisation, load average, and its subtitle. */
+  | 'cpu'
+  /** §6.2's MEMORY panel: RAM against 61 GiB, and swap on its own row. */
+  | 'memory'
+  /** §6.1's COOLING panel, spanning rows 2–3: five channels, the derived mode, the service. */
+  | 'cooling'
+  /** §6.2's SERVING panel: one row per `llama-server` instance. */
+  | 'serving'
+  /** §6.2's STORAGE & NETWORK panel: both mounts, `eno1` throughput and link state. */
+  | 'storage'
+  /** §6.2's SAFETY panel: §3.6's four checks. */
+  | 'safety';
+
+/**
+ * Which panels one §3.7 source blanks when it fails.
+ *
+ * ⚠ **An exhaustive `switch`, and not a `Record` or a lookup object.** §3.7's eighteen
+ * sources are a closed set and `noFallthroughCasesInSwitch` is on, so a nineteenth source is
+ * a compile error here — under `strictNullChecks` a missing case makes the function able to
+ * return `undefined` against a declared `readonly Panel[]`. A `Record` with a default, or
+ * anything keyed by `string`, turns that compile error into a silently unexplained em dash,
+ * which is the one outcome §6.5 exists to prevent.
+ *
+ * ### ⚠ Three sources are not 1:1, and each is a real fan-out rather than an ambiguity
+ *
+ * - **`dbus` reaches THREE panels.** It is filed by two collectors and consumed by three
+ *   figures: `collectSafety` reads `gpu-fan-control.service` once (O9) and that one read is
+ *   written to **`cooling.serviceState`** and to **`safety.fanServiceState`**, while
+ *   `collectServing` reads the `llama-server@<i>` units into **`serving[].unitState`**. One
+ *   D-Bus failure genuinely blanks a figure on COOLING, on SERVING **and** on SAFETY.
+ * - **`dell-smm` reaches TWO.** ⚠ This one is *not* in the handoff's table and was found by
+ *   reading `lib/telemetry/snapshot.ts`: the assembly writes
+ *   `assembledSafety.pwm5Present = cooling.pwm5Present`, so the cooling collector's probe is
+ *   what stands behind §6.2's SAFETY `pwm5 present` row as well as every fan channel and the
+ *   derived mode. §3.7 requires that row to carry an explanation beside it —
+ *   *"an alarm with no explanation beside it is not actionable"* — and `dell-smm` is the only
+ *   source that can supply one.
+ * - **`hostname` and `proc-uptime` reach the HEADER**, which §6.1's grid does not contain.
+ *   Without {@link Panel}'s `'header'` member both entries would be unreachable: filed by a
+ *   collector, carried on the wire, and matched to nothing.
+ *
+ * ### And one source that looks like a fan-out and is not
+ *
+ * ⚠ **`nvidia-smi` does NOT reach COOLING**, even though §6.2 draws the GPU temperature trace
+ * and the fan RPM trace on shared time inside the COOLING panel. §6.5 is explicit: when
+ * `nvidia-smi` is absent the GPU panels say so and *"no other panel is affected"*. The
+ * cooling chart losing a trace is the GPU panel's outage rendered again, not a second fault
+ * for COOLING to explain, and duplicating the entry would state one fact twice — the thing
+ * §6.5's own exception is written to stop.
+ *
+ * Each list is in §4's field order (gpus, host, cooling, serving, storage, safety), matching
+ * `errors[]`'s own documented order so nothing here re-sorts anything.
+ */
+const panelsForSource = (source: ErrorSource): readonly Panel[] => {
+  switch (source) {
+    // ---- §3.1. The enumeration, not a card.
+    case 'nvidia-smi':
+      return ['gpu'];
+
+    // ---- §3.2, split across three panels and the header by the FIGURE each one blanks.
+    // ⚠ `collectHost` files nine sources for one crash precisely so this split is possible;
+    // folding them back onto one `'host'` panel is the mistake `conditionSource` cannot make
+    // because it is not asked this question.
+    case 'coretemp':
+    case 'proc-stat':
+    case 'proc-loadavg':
+      return ['cpu'];
+    // ⚠ The CPU panel's SUBTITLE — `<cpuModel> · 6C / 12T` (§6.2) — not a body row. It is
+    // identity rather than measurement, and a subtitle is `—` when its field is `null` like
+    // any other reading, so it owes an entry on the same terms.
+    case 'proc-cpuinfo':
+      return ['cpu'];
+    case 'proc-meminfo':
+      return ['memory'];
+    // §6.2's header carries the hostname and the uptime, and that list is exhaustive.
+    case 'hostname':
+    case 'proc-uptime':
+      return ['header'];
+    // §3.7 keeps these two apart deliberately — sysfs for the link, /proc for the counters —
+    // so that a failed link read is not attributed to the byte counters. Both land on the
+    // same panel, and separating them still buys the message beside the right figure.
+    case 'proc-net-dev':
+    case 'net-operstate':
+      return ['storage'];
+
+    // ---- §3.3 + §3.6's `pwm5Present`. See the fan-out note above.
+    case 'dell-smm':
+      return ['cooling', 'safety'];
+
+    // ---- §3.3 + §3.4 + §3.6. The three-panel fan-out. See the note above.
+    case 'dbus':
+      return ['cooling', 'serving', 'safety'];
+
+    // ---- §3.4.
+    case 'llama-env':
+    case 'llama-health':
+    case 'llama-models':
+      return ['serving'];
+
+    // ---- §3.5.
+    case 'statvfs':
+      return ['storage'];
+
+    // ---- §3.6.
+    case 'ufw':
+    case 'dkms':
+      return ['safety'];
+  }
+};
+
+/**
+ * §6.5's join: the `errors[]` entries that explain this panel's em dashes.
+ *
+ * *"A single sensor read fails → that figure shows `—`, its `errors` entry is available, the
+ * rest of the panel renders."* This is the "is available" half. It is written **once**,
+ * beside {@link conditionSource}, so no panel invents its own filter — and it is what makes
+ * §6.5's one exception (*"an `—` whose cause is already shown beside it"*, and only when the
+ * coloured neighbour is **in the same panel**) expressible at all.
+ *
+ * - **Order is `snapshot.errors`' own order**, preserved by filtering rather than rebuilt.
+ *   §4's concatenation order is a decision pinned by a test (`snapshot.ts`), and `events.ts`
+ *   reads the **last** message per source — so a panel that re-sorted would show a different
+ *   D-Bus sentence than the event log for the same fault.
+ * - **`[]`, never `null`**, for a panel with nothing to explain. `null` on this project means
+ *   *unknown*, and "no entry explains this panel" is knowledge, not a gap.
+ *
+ * ⚠ This answers *which entries exist*, not *which em dash they belong to*. A source can
+ * blank several figures on one panel — `dell-smm` blanks five channels and the mode — and
+ * §3.7's granularity is per source, not per figure. A panel showing an entry beside a row is
+ * therefore showing the entry for that row's **source**, which is the finest join §4 offers.
+ */
+export const errorsForPanel = (
+  snapshot: TelemetrySnapshot,
+  panel: Panel,
+): readonly TelemetryError[] =>
+  snapshot.errors.filter((error) => panelsForSource(error.source).includes(panel));
 
 /** §6.3's three-valued safety checks render `yes` / `no` / `—`, never `true` / `false`. */
 const yesNo = (value: boolean | null): string => (value === null ? EM_DASH : value ? 'yes' : 'no');

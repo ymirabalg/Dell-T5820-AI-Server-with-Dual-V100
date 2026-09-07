@@ -47,17 +47,37 @@ saying why — which is why the box was redeployed in the same change.
 **The dashboard now prints nothing false.** The live box reads `/ 20.7 GiB / 232.6 GiB`,
 matching §6.6's own *"`/` is 232.6 GiB, not 249.8 GB"*.
 
-### 2.2 There is no `ErrorSource → panel` selector
+### 2.2 ~~There is no `ErrorSource → panel` selector~~ — **closed 2026-09-07**
 
-**D4.** §6.5 requires every em dash to be traceable to the `errors[]` entry that explains it, and
-§6.5's one exception depends on *which panel* a neighbour is in. `conditionSource` maps
-`ConditionKind → panel` (`cooling`, `host`, `safety`, `serving`, `storage`, `gpu N`) and there is
-**no equivalent for `ErrorSource`** — verified: nothing outside `types.ts`, `wire.ts` and
-`events.ts` mentions the type at all.
+`errorsForPanel(snapshot, panel)` sits beside `conditionSource` in `lib/client/observations.ts`,
+with a closed `Panel` union — `header · gpu · cpu · memory · cooling · serving · storage ·
+safety` — and an exhaustive `switch` over §3.7's eighteen sources.
 
-Eighteen sources, closed vocabulary, so it is one exhaustive `switch`. **Write it once, beside
-`conditionSource`** — a second mapping of a join that already exists is second on HANDOVER's
-do-not-copy list, and both step 5's and step 6's reviews flagged it.
+⚠ **It is a SEPARATE vocabulary from `conditionSource`, deliberately, and the argument is
+structural rather than aesthetic.** They are two different joins and neither key set is a subset
+of the other: `conditionSource` maps `ConditionKind` + subject to a **label** (`string`, with
+the subject interpolated — `gpu 0`) for §6.4's log column; `errorsForPanel` maps `ErrorSource`
+to a **closed set of places** for §6.5's em-dash join. Unifying them is not possible without
+inventing something: a `string` codomain cannot be switched exhaustively, so a nineteenth source
+would map to a silent blank; CPU and MEMORY are two panels in §6.1 and one `'host'` in the log;
+and the header is not in §6.1's grid at all.
+
+⚠ **Three sources fan out, and two of them were wrong in this document's first draft:**
+
+| source | panels | why |
+|---|---|---|
+| **`dbus`** | `cooling` + `serving` + **`safety`** | Filed by two collectors, and `collectSafety` calls `collectUnitStates` for the fan service — so `safety.fanServiceState` is behind it too |
+| **`dell-smm`** | `cooling` + **`safety`** | ⚠ `snapshot.ts` assembles `assembledSafety.pwm5Present = cooling.pwm5Present`. The cooling probe stands behind §3.6's `pwm5 present` row — **the most safety-critical row on the panel that earns this dashboard's existence** — and `dell-smm` is the only source that can explain its em dash |
+| **`nvidia-smi`** | `gpu` only | Looks like a fan-out because §6.2's COOLING chart draws the GPU temperature trace. §6.5 settles it: when `nvidia-smi` is absent *"no other panel is affected"* |
+
+Both wrong answers are mutations (`O15`, `O17`, `O18`), so the table cannot quietly drift back.
+
+⚠ **What it does NOT do:** it answers *which entries exist for this panel*, not *which em dash
+each one belongs to*. §3.7's granularity is per source, so one `dell-smm` entry stands behind
+five fan channels and the mode. That is the finest §4 offers, and step 9's rendering has to live
+with it. **It also does not close S11/G5** — `errorsForPanel(snapshot, 'cooling')` still returns
+nothing for a `fan5` em dash with `pwm5Present: true`, because no collector files one. The
+selector makes that gap visible rather than closing it.
 
 ### 2.3 The trace incantation is three calls whose order is silently load-bearing
 

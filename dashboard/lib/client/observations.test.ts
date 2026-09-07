@@ -15,8 +15,9 @@ import type { ConditionObservation } from '../conditions';
 import { everythingZero, nothingReadable, servingInstances, servingPopulated } from '../fixtures';
 import { FAN_SERVICE_UNIT } from '../units';
 import { celsius, gib, mib, pwm, rpm, throttleMask } from '../types';
-import type { Gpu, TelemetrySnapshot } from '../types';
-import { GPU_ENUMERATION, SERVING_ENUMERATION, VALUE_IS_A_BAND, conditionSource, conditionsFrom, enumerationsRead } from './observations';
+import type { ErrorSource, Gpu, TelemetryError, TelemetrySnapshot } from '../types';
+import { GPU_ENUMERATION, SERVING_ENUMERATION, VALUE_IS_A_BAND, conditionSource, conditionsFrom, enumerationsRead, errorsForPanel } from './observations';
+import type { Panel } from './observations';
 
 const card = everythingZero.gpus?.[0];
 if (card === undefined) throw new Error('the everythingZero fixture lost its GPU');
@@ -353,5 +354,209 @@ describe('⚠ which enumerations a poll could read', () => {
     expect(find(loaded, 'ufw_enforcing')?.enumeration ?? null).toBeNull();
     expect(find(loaded, 'fan_stopped:3')?.enumeration ?? null).toBeNull();
     expect(find(loaded, 'disk_free:home')?.enumeration ?? null).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D4 — §6.5's `ErrorSource` → panel join
+// ---------------------------------------------------------------------------
+
+/**
+ * §3.7's eighteen sources, in the spec's own listing order.
+ *
+ * ⚠ Written out rather than derived, because there is nothing to derive it from: `ErrorSource`
+ * is a type and erases. The `satisfies` keeps it honest in one direction (no invented source)
+ * and the "every source reaches a panel" test below keeps the count honest in the other.
+ */
+const ALL_SOURCES = [
+  'nvidia-smi',
+  'coretemp',
+  'proc-stat',
+  'proc-meminfo',
+  'proc-loadavg',
+  'proc-uptime',
+  'proc-net-dev',
+  'net-operstate',
+  'proc-cpuinfo',
+  'hostname',
+  'dell-smm',
+  'dbus',
+  'llama-env',
+  'llama-health',
+  'llama-models',
+  'statvfs',
+  'ufw',
+  'dkms',
+] as const satisfies readonly ErrorSource[];
+
+/** §6.1's grid plus §6.2's header — the whole `Panel` union, for the symmetry table. */
+const ALL_PANELS = [
+  'header',
+  'gpu',
+  'cpu',
+  'memory',
+  'cooling',
+  'serving',
+  'storage',
+  'safety',
+] as const satisfies readonly Panel[];
+
+const withErrors = (errors: readonly TelemetryError[]): TelemetrySnapshot => ({ ...loaded, errors });
+
+/** Every source failing at once, so one snapshot exercises the whole mapping. */
+const everySourceFailed = withErrors(
+  ALL_SOURCES.map((source) => ({ source, message: `${source}: could not be read` })),
+);
+
+const sourcesOn = (panel: Panel): ErrorSource[] =>
+  errorsForPanel(everySourceFailed, panel).map((error) => error.source);
+
+/**
+ * Both sides of the boundary in one value: the panels a source reaches, and — by the panels
+ * absent from the result — the panels it does not.
+ */
+const panelsCarrying = (source: ErrorSource): Panel[] =>
+  ALL_PANELS.filter((panel) => sourcesOn(panel).includes(source));
+
+describe('⚠ §6.5: the errors[] entries that explain a panel’s em dashes', () => {
+  /**
+   * ⚠ The fan-out most likely to be got wrong and least likely to be noticed. `dbus` is filed
+   * by TWO collectors and read by THREE figures: `collectSafety` reads
+   * `gpu-fan-control.service` once (O9) and that read is written to `cooling.serviceState`
+   * **and** `safety.fanServiceState`, while `collectServing` reads the `llama-server@<i>`
+   * units into `serving[].unitState`. The handoff's own table names only cooling and serving.
+   */
+  test('⚠ dbus reaches cooling, serving AND safety, because one read lands on three panels', () => {
+    expect(panelsCarrying('dbus')).toEqual(['cooling', 'serving', 'safety']);
+  });
+
+  /**
+   * ⚠ Not in the handoff's table either, and found in `lib/telemetry/snapshot.ts`: the
+   * assembly writes `assembledSafety.pwm5Present = cooling.pwm5Present`, so the cooling
+   * collector's probe is what stands behind §6.2's SAFETY `pwm5 present` row. §3.7 requires
+   * that row to carry an explanation beside it and `dell-smm` is the only source that has one.
+   */
+  test('⚠ dell-smm reaches safety as well as cooling, because pwm5Present is the cooling probe', () => {
+    expect(panelsCarrying('dell-smm')).toEqual(['cooling', 'safety']);
+  });
+
+  /**
+   * ⚠ §6.5: when `nvidia-smi` is absent the GPU panels say so and *"no other panel is
+   * affected"* — including COOLING, whose shared-time chart draws the GPU temperature trace.
+   * That chart losing a trace is the GPU panel's outage rendered again, not a second fault.
+   */
+  test('⚠ nvidia-smi reaches the GPU panel and no other, not even the cooling chart', () => {
+    expect(panelsCarrying('nvidia-smi')).toEqual(['gpu']);
+  });
+
+  /**
+   * ⚠ §6.2's header carries the hostname and the uptime, and that list is exhaustive. Without
+   * a `'header'` member both entries would be unreachable — filed, carried on the wire, and
+   * matched to nothing.
+   */
+  test('⚠ hostname and proc-uptime reach the header, which is not in §6.1’s grid', () => {
+    expect(panelsCarrying('hostname')).toEqual(['header']);
+    expect(panelsCarrying('proc-uptime')).toEqual(['header']);
+    expect(sourcesOn('header')).toEqual(['proc-uptime', 'hostname']);
+  });
+
+  /**
+   * ⚠ The reason this is a second vocabulary. `conditionSource` answers `'host'` for both
+   * `cpu_temp` and `ram`; §6.1 draws CPU and MEMORY as two panels, so an em dash on the RAM
+   * bar and an em dash on the package temperature have different explanations.
+   */
+  test('⚠ CPU and MEMORY are two panels here, where the event log has one host', () => {
+    expect(sourcesOn('cpu')).toEqual(['coretemp', 'proc-stat', 'proc-loadavg', 'proc-cpuinfo']);
+    expect(sourcesOn('memory')).toEqual(['proc-meminfo']);
+    // The other half of the claim: the log really does collapse them, and is left alone.
+    expect(conditionSource('cpu_temp', null)).toBe('host');
+    expect(conditionSource('ram', null)).toBe('host');
+  });
+
+  /**
+   * ⚠ `proc-cpuinfo` blanks the CPU panel's SUBTITLE (`<cpuModel> · 6C / 12T`), not a body
+   * row. A subtitle is `—` when its field is `null` like any other reading, so it owes an
+   * entry on the same terms — and it belongs to CPU, not to the header where identity might
+   * otherwise seem to live.
+   */
+  test('⚠ proc-cpuinfo belongs to CPU, whose subtitle it blanks, and not to the header', () => {
+    expect(panelsCarrying('proc-cpuinfo')).toEqual(['cpu']);
+  });
+
+  /** ⚠ §3.7 keeps the link and the counters apart; both figures are on the same panel. */
+  test('⚠ the link state and the byte counters land on storage & network together', () => {
+    expect(sourcesOn('storage')).toEqual(['proc-net-dev', 'net-operstate', 'statvfs']);
+  });
+
+  /** ⚠ The remaining two panels, stated whole so the mapping is pinned in one place. */
+  test('⚠ cooling, serving and safety carry exactly the sources their figures come from', () => {
+    expect(sourcesOn('cooling')).toEqual(['dell-smm', 'dbus']);
+    expect(sourcesOn('serving')).toEqual(['dbus', 'llama-env', 'llama-health', 'llama-models']);
+    expect(sourcesOn('safety')).toEqual(['dell-smm', 'dbus', 'ufw', 'dkms']);
+  });
+
+  /**
+   * ⚠ §6.5's rule is that an em dash always has an entry behind it. A source that reaches no
+   * panel is an entry the operator can never be shown — the failure a `Record` with a default,
+   * or a lookup keyed by `string`, would produce silently.
+   */
+  test('⚠ every one of §3.7’s eighteen sources reaches at least one panel', () => {
+    const unreachable = ALL_SOURCES.filter((source) => panelsCarrying(source).length === 0);
+    expect(unreachable).toEqual([]);
+    expect(ALL_SOURCES).toHaveLength(18);
+  });
+
+  /**
+   * ⚠ Fixture symmetry: for every panel, an entry that belongs to it **and** one that does
+   * not. Written as a table so adding a `Panel` member without a mapping is a red test rather
+   * than a panel that quietly explains nothing.
+   */
+  test.each(ALL_PANELS)(
+    '⚠ each panel has both a source that belongs to it and one that does not, at %s',
+    (panel) => {
+      const mine = sourcesOn(panel);
+      expect(mine.length).toBeGreaterThan(0);
+      expect(mine.length).toBeLessThan(ALL_SOURCES.length);
+    },
+  );
+
+  /**
+   * ⚠ `errors[]`'s order is a decision pinned by `snapshot.test.ts`, and `events.ts` reads the
+   * **last** message per source — so a panel that re-sorted would show a different D-Bus
+   * sentence than the event log does for the same fault.
+   */
+  test('⚠ a panel’s entries keep snapshot.errors’ own order, including two from one source', () => {
+    const snapshot = withErrors([
+      { source: 'dbus', message: 'first: gpu-fan-control.service' },
+      { source: 'statvfs', message: 'not this panel' },
+      { source: 'llama-env', message: 'second: /etc/llama-server' },
+      { source: 'dbus', message: 'third: llama-server@1.service' },
+    ]);
+    expect(errorsForPanel(snapshot, 'serving').map((error) => error.message)).toEqual([
+      'first: gpu-fan-control.service',
+      'second: /etc/llama-server',
+      'third: llama-server@1.service',
+    ]);
+  });
+
+  /* No ⚠: `Array.prototype.filter` cannot answer `null`, so there is no wrong implementation
+     to write that this could distinguish. It is here because §6.5's caller relies on it. */
+  test('a panel with nothing to explain gets an empty array, never null', () => {
+    expect(errorsForPanel(everythingZero, 'cooling')).toEqual([]);
+    expect(errorsForPanel(everythingZero, 'gpu')).toEqual([]);
+  });
+
+  /* No ⚠: the real fixture repeats a claim the synthetic snapshot already makes. It is here
+     because `nothingReadable` is the snapshot a reader will reach for, and the entry it
+     carries is exactly the two-panel one. */
+  test('the nothingReadable fixture’s one entry explains cooling and safety, and no other panel', () => {
+    expect(errorsForPanel(nothingReadable, 'cooling').map((e) => e.message)).toEqual([
+      'no hwmon named dell_smm',
+    ]);
+    expect(errorsForPanel(nothingReadable, 'safety').map((e) => e.message)).toEqual([
+      'no hwmon named dell_smm',
+    ]);
+    expect(errorsForPanel(nothingReadable, 'cpu')).toEqual([]);
+    expect(errorsForPanel(nothingReadable, 'header')).toEqual([]);
   });
 });

@@ -931,6 +931,58 @@ REGRESSIONS = [
      "  read.add(GPU_ENUMERATION);\n  read.add(SERVING_ENUMERATION);",
      [OBS, RUNTIME]),
 
+    # ============= lib/client/observations.ts — D4, §6.5's ErrorSource -> panel join
+    # ⚠ The `dbus` fan-out is the thing most likely to be got wrong and least likely to be
+    # noticed: it is filed by TWO collectors and read by THREE figures. The handoff's own
+    # table names only cooling and serving, so O15 is the wrong implementation a careful
+    # reader would actually write.
+    ("O15 dbus loses its safety arm, so a D-Bus outage leaves the fanServiceState em dash unexplained",
+     OBS_SRC, "    case 'dbus':\n      return ['cooling', 'serving', 'safety'];",
+     "    case 'dbus':\n      return ['cooling', 'serving'];", [OBS]),
+    ("O16 dbus loses its cooling arm, so the COOLING panel's service row has no entry behind it",
+     OBS_SRC, "    case 'dbus':\n      return ['cooling', 'serving', 'safety'];",
+     "    case 'dbus':\n      return ['serving', 'safety'];", [OBS]),
+    # ⚠ Not in the handoff's table either. `snapshot.ts` assembles
+    # `assembledSafety.pwm5Present = cooling.pwm5Present`, so the cooling collector's probe is
+    # what stands behind §6.2's SAFETY `pwm5 present` row — the row §3.7 says must never be an
+    # alarm with no explanation beside it.
+    ("O17 dell-smm stops at cooling, so §3.6's pwm5 alarm loses the entry that explains it",
+     OBS_SRC, "    case 'dell-smm':\n      return ['cooling', 'safety'];",
+     "    case 'dell-smm':\n      return ['cooling'];", [OBS]),
+    # ⚠ Plausible because §6.2's cooling chart really does draw the GPU temperature trace. §6.5
+    # settles it the other way: "no other panel is affected".
+    ("O18 nvidia-smi also claims cooling, because that panel's chart plots GPU temperature",
+     OBS_SRC, "    case 'nvidia-smi':\n      return ['gpu'];",
+     "    case 'nvidia-smi':\n      return ['gpu', 'cooling'];", [OBS]),
+    # ⚠ The failure the handoff predicts: with only §6.1's grid in mind there is nowhere to put
+    # the hostname or the uptime, so both entries become unreachable — filed, carried on the
+    # wire, and matched to nothing.
+    ("O19 the header has no member, so hostname and proc-uptime explain nothing at all",
+     OBS_SRC, "    case 'hostname':\n    case 'proc-uptime':\n      return ['header'];",
+     "    case 'hostname':\n    case 'proc-uptime':\n      return [];", [OBS]),
+    # ⚠ Reusing `conditionSource`'s vocabulary, which is the trap D4 exists to avoid: the event
+    # log answers 'host' for both cpu_temp and ram, and §6.1 draws two panels.
+    ("O20 CPU and MEMORY collapse to one host panel, so a failed /proc/meminfo points at the CPU",
+     OBS_SRC, "    case 'proc-meminfo':\n      return ['memory'];",
+     "    case 'proc-meminfo':\n      return ['cpu'];", [OBS]),
+    ("O21 proc-cpuinfo is filed as identity and goes to the header beside the hostname",
+     OBS_SRC, "    case 'proc-cpuinfo':\n      return ['cpu'];",
+     "    case 'proc-cpuinfo':\n      return ['header'];", [OBS]),
+    # ⚠ §4's errors[] order is a pinned decision and `events.ts` reads the LAST message per
+    # source, so a panel that tidies its entries by source shows a different D-Bus sentence
+    # than the event log does for the same fault.
+    ("O22 a panel groups its entries by source, losing §4's pinned errors[] order",
+     OBS_SRC,
+     "  snapshot.errors.filter((error) => panelsForSource(error.source).includes(panel));",
+     "  [...snapshot.errors]\n    .sort((a, b) => a.source.localeCompare(b.source))\n"
+     "    .filter((error) => panelsForSource(error.source).includes(panel));", [OBS]),
+    # ⚠ The 1:1 assumption, written as a first-match rather than a membership test. Every
+    # fan-out keeps its first panel and silently loses the rest.
+    ("O23 the join takes a source's first panel only, so every fan-out loses its other panels",
+     OBS_SRC,
+     "  snapshot.errors.filter((error) => panelsForSource(error.source).includes(panel));",
+     "  snapshot.errors.filter((error) => panelsForSource(error.source)[0] === panel);", [OBS]),
+
     # ==================================================== lib/units.ts (new in step 8)
     ("N1 the fan service unit is renamed, so §3.6's check watches a unit that does not exist",
      UNITS_SRC, "export const FAN_SERVICE_UNIT = 'gpu-fan-control.service';",
@@ -959,6 +1011,13 @@ REGRESSIONS = [
      "types"),
     ("T4 §6.4's kind table loses a member, and a kind silently gets no band decision",
      OBS_SRC, "  link: true,\n};", "};", "types"),
+    # ⚠ §3.7's closed vocabulary is only worth having if a nineteenth source is a compile
+    # error. Under `strictNullChecks` a missing case makes `panelsForSource` able to return
+    # `undefined` against a declared `readonly Panel[]` — TS2366. A `Record` with a default,
+    # or a lookup keyed by `string`, would turn that into a silently unexplained em dash.
+    ("T5 the source switch loses a case, and a source silently maps to no panel",
+     OBS_SRC, "    case 'ufw':\n    case 'dkms':\n      return ['safety'];",
+     "    case 'ufw':\n      return ['safety'];", "types"),
     ("T3 the runtime state becomes writable, so a panel can mutate the ring it renders",
      RUNTIME_SRC, "  readonly ring: SampleRing;", "  ring: SampleRing;", "types"),
 ]
