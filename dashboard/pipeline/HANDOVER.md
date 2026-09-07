@@ -136,15 +136,18 @@ wrote it. See §5.4. When a change touches anything that consumes entropy or a c
 
 ```bash
 python3 pipeline/steps/02-format-severity/regressions.py                    #  47 mutations + ledger
-python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  68 mutations + ledger
+python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  72 mutations + ledger
 python3 pipeline/steps/04-collector-cooling/regressions.py                  #  91 mutations + ledger
 python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 127 mutations + ledger
 python3 pipeline/steps/06-telemetry-route/regressions.py                    #  63 mutations + ledger
-python3 pipeline/steps/07-auth-login/regressions.py                         # 116 mutations + ledger
-python3 pipeline/steps/08-client-runtime/regressions.py                     # 158 mutations + ledger
+python3 pipeline/steps/07-auth-login/regressions.py                         # 125 mutations + ledger
+python3 pipeline/steps/08-client-runtime/regressions.py                     # 172 mutations + ledger
 ```
 
-**679 mutations.** Each replaces one exact string in one source file with a **plausible wrong
+**697 mutations.** ⚠ **This total and the seven above it go stale on every item that adds a
+mutation, and have done four times.** Do not trust them; the authoritative number is the
+`All N regressions failed their check` line each harness prints, and all seven can be
+re-derived at once by importing each `regressions.py` and reading `len(REGRESSIONS)`. Each replaces one exact string in one source file with a **plausible wrong
 implementation** — the wrong thing someone would actually write, never a syntax error — runs
 the affected check, and restores the file. Every one must exit 1. Step 1 has no harness.
 

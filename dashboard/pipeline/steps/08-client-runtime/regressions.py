@@ -174,6 +174,13 @@ GAPS_SRC = "lib/client/gaps.ts"
 MODE_SRC = "lib/client/mode.ts"
 UNITS_SRC = "lib/units.ts"
 
+# D5's whole function body, which three mutations below replace with a different composition.
+TRACE_BODY = (
+    "  decimateSeries(\n"
+    "    seriesFrom(samplesWithin(state.ring, windowMs(state.preferences.windowMinutes)), pick),\n"
+    "  );"
+)
+
 # (name, source file, old, new, check) — or (name, source file, [(old, new), …], check)
 REGRESSIONS = [
     # ============================================== §6.7 — localStorage preferences
@@ -276,7 +283,7 @@ REGRESSIONS = [
      "  const within = ring.samples.slice(-600);", [RING]),
     ("R8 the window's old edge is exclusive, so the boundary sample is dropped",
      RING_SRC, "  const within = ring.samples.filter((sample) => sample.tsMs >= from);",
-     "  const within = ring.samples.filter((sample) => sample.tsMs > from);", [RING]),
+     "  const within = ring.samples.filter((sample) => sample.tsMs > from);", [RING, SERIES]),
     ("R9 the window is returned in arrival order, so a backwards clock doubles the line back",
      RING_SRC,
      "  return within.every((sample, i) => i === 0 || sample.tsMs >= (within[i - 1]?.tsMs ?? 0))\n"
@@ -335,6 +342,49 @@ REGRESSIONS = [
      SERIES_SRC,
      "  samples.map((sample) => ({ tMs: sample.tsMs, v: pick(sample.snapshot) }));",
      "  samples.map((sample, index) => ({ tMs: index * 1000, v: pick(sample.snapshot) }));",
+     [SERIES]),
+
+    # ============================================ D5 — traceFor, and the order that is the point
+    #
+    # ⚠ S9 is the mutation the whole wrapper exists for. It is not a syntax swap: it is the
+    # code a panel would write if it reached for `decimateSeries` first — decimate everything
+    # the ring holds, then clip the drawn points to the window. Both orders type-check, both
+    # return points, and both draw a curve. Measured under it: 151 points where 600 are owed,
+    # 23 s between drawn points instead of 6 s, and a 70 °C excursion inside the window
+    # silently absorbed by a 24-sample bucket it should never have shared.
+    ("S9 the series is decimated before it is windowed, so the budget is spent on undrawn data",
+     SERIES_SRC,
+     TRACE_BODY,
+     " {\n"
+     "  const drawn = decimateSeries(seriesFrom(state.ring.samples, pick));\n"
+     "  const newest = state.ring.newest;\n"
+     "  if (newest === null) return drawn;\n"
+     "  const from = newest.tsMs - windowMs(state.preferences.windowMinutes);\n"
+     "  return drawn.filter((point) => point.tMs >= from);\n};",
+     [SERIES]),
+    ("S10 the trace ignores §6.2's window selector and always draws the default width",
+     SERIES_SRC,
+     [("import { windowMs } from './prefs';",
+       "import { DEFAULT_WINDOW_MINUTES, windowMs } from './prefs';"),
+      ("windowMs(state.preferences.windowMinutes)", "windowMs(DEFAULT_WINDOW_MINUTES)")],
+     [SERIES]),
+    ("S11 the trace drops its null readings, so the line closes over ground nobody measured",
+     SERIES_SRC,
+     TRACE_BODY,
+     "  decimateSeries(\n"
+     "    seriesFrom(samplesWithin(state.ring, windowMs(state.preferences.windowMinutes)), pick).filter(\n"
+     "      (point) => point.v !== null,\n"
+     "    ),\n  );",
+     [SERIES]),
+    # ⚠ HANDOVER §6 rule 10, as the wrong implementation: the stacked cooling chart has three
+    # traces, so its author divides the budget between them — and GPU 0's resolution becomes a
+    # function of how many other series happen to be drawn beside it.
+    ("S12 the 600-point budget is split across a chart's traces rather than given to each",
+     SERIES_SRC,
+     TRACE_BODY,
+     "  decimateSeries(\n"
+     "    seriesFrom(samplesWithin(state.ring, windowMs(state.preferences.windowMinutes)), pick),\n"
+     "    MAX_RENDERED_POINTS / 3,\n  );",
      [SERIES]),
 
     # ================================================ O10 — validating the wire

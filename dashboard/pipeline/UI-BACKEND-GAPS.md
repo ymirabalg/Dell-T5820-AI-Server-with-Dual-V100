@@ -79,17 +79,37 @@ with it. **It also does not close S11/G5** — `errorsForPanel(snapshot, 'coolin
 nothing for a `fan5` em dash with `pwm5Present: true`, because no collector files one. The
 selector makes that gap visible rather than closing it.
 
-### 2.3 The trace incantation is three calls whose order is silently load-bearing
+### 2.3 ~~The trace incantation is three calls whose order is silently load-bearing~~ — **closed 2026-09-07**
 
-**D5.** `samplesWithin(ring, windowMs)` → `seriesFrom(samples, pick)` → `decimateSeries(points)`.
-Decimating *before* windowing spends the 600-point budget on data that is not drawn and produces
-a chart that is **subtly wrong rather than obviously broken** — the worst failure shape this
-project has. Every panel with a trace repeats it: two GPU cards, CPU, and COOLING's stacked
-chart.
+**D5 is done.** `traceFor(state, pick)` sits in `lib/client/series.ts` beside the decimation it
+closes over, and is the whole of what a panel calls:
 
-**One `traceFor(state, pick)`.** ⚠ And note `samplesWithin` takes **no `nowMs`** — it is anchored
-on the newest sample's `ts`. A call written from an older note will not compile, which is the
-safe direction, but do not re-add the parameter.
+```ts
+decimateSeries(seriesFrom(samplesWithin(state.ring, windowMs(state.preferences.windowMinutes)), pick))
+```
+
+The width comes from `state.preferences.windowMinutes` and there is **no window parameter** — a
+caller that passes its own window is a caller that can disagree with §6.2's selector. It takes
+no gaps and returns none (HANDOVER §6 rule 3), and it passes `decimateSeries` its own default,
+so the budget stays **600 per series** and §6.2's stacked chart draws up to 1,800 (rule 10).
+
+⚠ **The order IS measurably load-bearing — this was proved, not assumed.** `S9` in step 8's
+harness replaces the body with the composition a panel would write if it reached for
+`decimateSeries` first (decimate the whole ring, then clip the drawn points to the window), and
+**four tests go red**. Measured under it, on §6.7's own worst case — a full 2 h ring at 1 s with
+§6.2's default 30-minute window:
+
+| | window → decimate | decimate → window |
+|---|---|---|
+| points drawn | **600** | **151** |
+| widest gap between drawn points | ~6 s | **23 s** |
+| a 70 °C excursion inside the window | drawn | **absorbed** by a 24-sample bucket holding a 90 °C sample |
+
+That last row is the failure shape in one reading: not an empty chart, a *slightly wrong* one.
+
+⚠ And note `samplesWithin` takes **no `nowMs`** — it is anchored on the newest sample's `ts`. A
+call written from an older note will not compile, which is the safe direction, but do not
+re-add the parameter.
 
 ### 2.4 No time-of-day or timezone formatter
 

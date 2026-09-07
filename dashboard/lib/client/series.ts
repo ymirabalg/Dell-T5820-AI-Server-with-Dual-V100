@@ -60,7 +60,13 @@
  */
 
 import type { TelemetrySnapshot } from '../types';
+import { windowMs } from './prefs';
 import type { Sample } from './ring';
+import { samplesWithin } from './ring';
+// ⚠ `import type`, and it must stay one. `runtime.ts` does not import this module, so there
+// is no cycle either way — but a value import would put the whole runtime (and `wire.ts`,
+// `conditions.ts`, `events.ts`) behind any bundle that only wanted to draw a line.
+import type { RuntimeState } from './runtime';
 
 /** §6.7's threshold. Strictly *above*: 600 points render as they are, 601 are decimated. */
 export const MAX_RENDERED_POINTS = 600;
@@ -148,3 +154,54 @@ export const decimateSeries = (
 
   return out;
 };
+
+/**
+ * §6.2's trace, as **one** call: window the ring, project one reading, then decimate.
+ *
+ * Every trace on the dashboard is the same three calls in the same fixed order —
+ * {@link samplesWithin} → {@link seriesFrom} → {@link decimateSeries} — and four panels
+ * repeat it: GPU 0, GPU 1, CPU, and §6.2's stacked cooling chart, which alone draws three
+ * traces. This exists so that order is written once and cannot be got wrong from outside.
+ *
+ * ### ⚠ What the other order costs, which is why the order is the point
+ *
+ * Decimating **before** windowing spends the 600-point budget on data that is **not drawn**.
+ * At the 1 s cadence with a full 2 h ring and §6.2's default 30-minute window, three quarters
+ * of the ring lies outside the window: decimate-then-window emits 600 points across two hours
+ * and then throws away the ~450 that fall outside, leaving about 150 on a chart entitled to
+ * 600. Nothing about that failure announces itself — both orders type-check, both return
+ * points, and the result is a **slightly wrong curve at a quarter of the resolution**, with
+ * local excursions inside the window silently absorbed into 24-sample buckets they should
+ * never have shared. Subtly wrong rather than obviously broken is the worst failure shape
+ * this project has, so the composition is closed rather than documented.
+ *
+ * ### The window comes from the preferences, and from nowhere else
+ *
+ * `state.preferences.windowMinutes` through {@link windowMs}. There is deliberately **no
+ * window parameter**: a caller that passes its own window is a caller that can disagree with
+ * §6.2's selector, and two answers to "how wide is the chart" is one more than the dashboard
+ * can defend.
+ *
+ * ⚠ {@link samplesWithin} takes **no `nowMs`** — the window is anchored on the newest
+ * sample's own `ts` (§6.7), never on the browser's clock. Do not re-add the parameter: a
+ * server 31 minutes behind empties a 30-minute chart while the ring is full of good data and
+ * the header still reads `live`.
+ *
+ * ⚠ **600 points PER SERIES, not per chart.** {@link decimateSeries} is called with its own
+ * default, once per trace, so §6.2's stacked chart draws up to 1,800 points. Do not add a
+ * per-chart budget here: it would make GPU 0's resolution depend on how many other series
+ * happen to be drawn beside it.
+ *
+ * ⚠ **A `pick` that returns `null` is a hole, not a zero** (invariant 1), and this does not
+ * coerce, filter or interpolate it. It also returns **only** the trace: gaps are hatched from
+ * `state.gaps`, which carries real endpoints, and are **never** inferred from holes in a
+ * series — decimation drops a `null` inside an otherwise readable bucket, so a hole here is
+ * not evidence of anything. That is why nothing about gaps is taken or returned.
+ */
+export const traceFor = (
+  state: RuntimeState,
+  pick: (snapshot: TelemetrySnapshot) => number | null,
+): readonly SeriesPoint[] =>
+  decimateSeries(
+    seriesFrom(samplesWithin(state.ring, windowMs(state.preferences.windowMinutes)), pick),
+  );
