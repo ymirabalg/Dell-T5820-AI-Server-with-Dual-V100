@@ -14,10 +14,14 @@
  *    A fan reading `0` is a dead fan; a fan reading `null` is a driver that did not load
  *    (§6.5). Those demand different reactions, so they are different values.
  *
- * 2. **Units are part of the type.** §6.6 and decision 20 put three different memory
- *    units in one snapshot — VRAM in MiB, RAM in GiB, disk in GB. Every quantity is
- *    therefore a branded number, so `memUsedMiB` cannot be handed to a formatter that
- *    expects GiB. Branding is erased at runtime; the JSON carries plain numbers.
+ * 2. **Units are part of the type.** §6.6 and decision 20 put two different memory units
+ *    in one snapshot — VRAM in MiB, RAM and disk in GiB. Every quantity is therefore a
+ *    branded number, so `memUsedMiB` cannot be handed to a formatter that expects GiB.
+ *    Branding is erased at runtime; the JSON carries plain numbers.
+ *
+ *    ⚠ A brand names a **unit**, not a role. RAM and disk share `GiB` because they are the
+ *    same unit (O19 collapsed the old `GB` brand into it once §6.6 settled on GiB for
+ *    disk); the brand cannot tell a RAM figure from a disk figure and does not try to.
  *
  * 3. **Channel 5's mode is a discriminated union, not a pair of loose fields.** §3.3's
  *    derivation — a numeric `pwm5` read means manual, `ENODATA` means EC auto and is
@@ -64,10 +68,15 @@ export type Celsius = Brand<number, 'Celsius'>;
 export type Watts = Brand<number, 'Watts'>;
 /** Mebibytes — GPU VRAM only. §6.6: thousands separated, `26,452 / 32,768 MiB`. */
 export type MiB = Brand<number, 'MiB'>;
-/** Gibibytes — host RAM and swap. §6.6: 1 dp for RAM, 2 dp for swap. */
+/**
+ * Gibibytes — host RAM, swap **and filesystems**. §6.6: 1 dp for RAM and disk, 2 dp for swap.
+ *
+ * ⚠ Disk belongs here, not in a `GB` of its own. §6.6's disk row reads *"powers of 1024,
+ * which is what `df -h` and `lsblk` print. `/` is 232.6 GiB, not 249.8 GB"*, and the
+ * collector has always divided by `1024³` — so a separate `GB` brand named a unit nothing
+ * in this contract ever carried. O19 deleted it rather than renaming it into a collision.
+ */
 export type GiB = Brand<number, 'GiB'>;
-/** Gigabytes — filesystems, matching `df -h` and every note in CLAUDE.md. §6.6: 1 dp. */
-export type GB = Brand<number, 'GB'>;
 /** Megahertz. §6.6: integer. */
 export type MHz = Brand<number, 'MHz'>;
 /** Revolutions per minute, straight from `fanN_input`. §6.6: integer, thousands separated. */
@@ -125,7 +134,6 @@ export const celsius = (v: number): Celsius => v as Celsius;
 export const watts = (v: number): Watts => v as Watts;
 export const mib = (v: number): MiB => v as MiB;
 export const gib = (v: number): GiB => v as GiB;
-export const gb = (v: number): GB => v as GB;
 export const mhz = (v: number): MHz => v as MHz;
 export const rpm = (v: number): Rpm => v as Rpm;
 export const percent = (v: number): Percent => v as Percent;
@@ -542,8 +550,8 @@ export interface ServingInstance {
 
 /** One mount point, via `statvfs` (§3.5). §6.3: free ≥ 15 % normal, 5–15 % watch, < 5 % alarm. */
 export interface Filesystem {
-  readonly usedGB: GB | null;
-  readonly totalGB: GB | null;
+  readonly usedGiB: GiB | null;
+  readonly totalGiB: GiB | null;
 }
 
 /** `eno1` (§3.5). The interface is fixed by the spec; the dashboard is not multi-host. */

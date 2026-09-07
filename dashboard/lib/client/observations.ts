@@ -50,7 +50,7 @@
  * is tested. Recorded in the step notes as copy this step chose.
  */
 
-import { EM_DASH, formatCelsius, formatCh5Pwm, formatGB, formatGiB, formatMiBPair, formatRpm, formatSwapGiB, formatText } from '../format';
+import { EM_DASH, formatCelsius, formatCh5Pwm, formatGiB, formatMiBPair, formatRpm, formatSwapGiB, formatText } from '../format';
 import type { ConditionKind, ConditionObservation } from '../conditions';
 import { observation } from '../conditions';
 import {
@@ -297,8 +297,8 @@ export const conditionsFrom = (snapshot: TelemetrySnapshot): readonly ConditionO
       'disk_free',
       disk.subject,
       `${disk.label} free`,
-      `${formatGB(filesystem.usedGB)} of ${formatGB(filesystem.totalGB)} used`,
-      severityDiskFree(filesystem.usedGB, filesystem.totalGB),
+      `${formatGiB(filesystem.usedGiB)} of ${formatGiB(filesystem.totalGiB)} used`,
+      severityDiskFree(filesystem.usedGiB, filesystem.totalGiB),
     );
   }
   push('link', null, 'eno1 link', formatText(snapshot.storage.net.link), severityLink(snapshot.storage.net.link));

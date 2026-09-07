@@ -153,7 +153,13 @@ source files in place. Concurrency produces a plausible false `TS6133` **and** a
 falsely reports ⚠ tests as uncovered — both quotable rather than obviously broken. Serialise.
 Steps 4, 5, 7 and 8 each take several minutes, and **a harness writes nothing to stdout until
 it exits** (Python block-buffers to a file), so run it in the background and wait on
-`until ! pgrep -f regressions.py; do sleep 3; done`.
+`until ! pgrep -f "regressions[.]py" >/dev/null; do sleep 10; done`.
+⚠ **The brackets are load-bearing.** Written as `pgrep -f regressions.py`, the pattern matches
+the **waiting shell's own command line** — which contains that text — so the loop can never
+exit. Seven such shells were found spinning from earlier sessions on 2026-09-07, and every
+one of them had been abandoned after its caller gave up and read the log instead. Better
+still: run the harness in the background and use its **exit status**, which cannot be
+confused with anything.
 
 ⚠ **`ANCHOR NOT FOUND` and `DID NOT BITE` are different findings.**
 
@@ -393,7 +399,7 @@ step 9 needs a new one, that is a spec gap to **report**, not a blank to fill.
 | **O12** | A reading with no §6.3 band is invisible to §9's dot. **Do not invent a band** — report it | step 10 |
 | **O13** | `EC auto` and `unavailable` are **not** severities. `EC auto` is healthy (invariant 3) | **steps 9, 10** |
 | **O14** | Formatters return unit-inclusive strings; ask for a `parts` variant rather than splitting on whitespace | **step 9** |
-| **O19** | ⚠ **The GB → GiB rename.** §6.6 and decision 20 say **GiB**; the value already is one. The brand `GB`/`gb()`, `Filesystem.usedGB`/`totalGB` and `formatGB`'s ` GB` suffix still say GB — 98 occurrences, 10 files. **The rendered suffix is currently wrong against the spec** | **step 9** |
+| ~~O19~~ | **Closed 2026-09-07.** It was a **deletion, not a rename**: `GiB` already existed for RAM and swap, so `GB`, `gb()` and `formatGB` were removed and disk moved onto `GiB`. ⚠ **`Filesystem.usedGB`/`totalGB` were WIRE names**, so this was a §4 contract change — server and client moved together | closed |
 | **O20** | ⚠ `dashboard.sh set-password` must emit `scrypt.<log2N>.<r>.<p>.<salt>.<key>` — §4.1 | **step 11** |
 | **O21** | ⚠ `SESSION_SECRET` must be written unquoted — §4.1 | **step 11** |
 | **O22** | ⚠ **One process, one module instance.** A **security** obligation — §4.1 | **steps 11, 12** |
@@ -901,7 +907,7 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | **Panel shell, chips, meters, rows, sparkline, stacked cooling chart** | **step 9** | specified — §6.1, §6.2, §6.6 |
 | **`errorsForPanel(snapshot, panel)`** (D4) | **step 9** | §6's composition gap (b) |
 | **`traceFor(state, pick)`** (D5) | **step 9** | §6's composition gap (c) |
-| **The GB → GiB rename** (O19) | **step 9** | open, and the spec has already moved |
+| ~~The GB → GiB rename~~ (O19) | — | **closed 2026-09-07** — a deletion; `GiB` already existed |
 | **Formatter `parts` variant** (O14) | **step 9** | open |
 | **jsdom** (D6) | **step 9 or 10** | see below |
 | S11/G5's narrowed case · S19's sentence | steps 9, 10 | open — §8 |

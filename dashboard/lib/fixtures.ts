@@ -19,7 +19,6 @@
 import {
   bytesPerSecond,
   celsius,
-  gb,
   gib,
   isoTimestamp,
   mhz,
@@ -77,8 +76,8 @@ export const nothingReadable: TelemetrySnapshot = {
   },
   serving: null,
   storage: {
-    root: { usedGB: null, totalGB: null },
-    home: { usedGB: null, totalGB: null },
+    root: { usedGiB: null, totalGiB: null },
+    home: { usedGiB: null, totalGiB: null },
     net: { rxBytesPerSec: null, txBytesPerSec: null, link: null },
   },
   safety: {
@@ -136,8 +135,8 @@ export const everythingZero: TelemetrySnapshot = {
   },
   serving: [],
   storage: {
-    root: { usedGB: gb(0), totalGB: gb(238.5) },
-    home: { usedGB: gb(0), totalGB: gb(931.5) },
+    root: { usedGiB: gib(0), totalGiB: gib(238.5) },
+    home: { usedGiB: gib(0), totalGiB: gib(931.5) },
     net: { rxBytesPerSec: bytesPerSecond(0), txBytesPerSec: bytesPerSecond(0), link: 'up' },
   },
   safety: {

@@ -17,7 +17,6 @@ import {
   formatCelsius,
   formatCh5Pwm,
   formatCpuModel,
-  formatGB,
   formatGiB,
   formatLoadAverage,
   formatMHz,
@@ -44,7 +43,6 @@ import {
 import {
   bytesPerSecond,
   celsius,
-  gb,
   gib,
   mhz,
   mib,
@@ -60,7 +58,6 @@ import type {
   BytesPerSecond,
   Celsius,
   Cooling,
-  GB,
   GiB,
   LoadAverage,
   MHz,
@@ -120,8 +117,11 @@ const ROWS: readonly [string, () => string, string, () => string, string][] = [
     () => formatMHz(mhz(0)),
     '0 MHz',
   ],
+  // ⚠ §6.6's RAM row and its Disk row are the same unit at the same precision, so they
+  // are the same formatter and one row here (O19). Splitting them back into two entries
+  // would sweep `formatGiB` twice and claim two rows' worth of coverage for one call.
   [
-    'RAM',
+    'RAM & disk',
     () => formatGiB(null),
     EM_DASH,
     () => formatGiB(gib(0)),
@@ -133,13 +133,6 @@ const ROWS: readonly [string, () => string, string, () => string, string][] = [
     EM_DASH,
     () => formatSwapGiB(gib(0)),
     '0.00 GiB',
-  ],
-  [
-    'Disk',
-    () => formatGB(null),
-    EM_DASH,
-    () => formatGB(gb(0)),
-    '0.0 GB',
   ],
   [
     'Network',
@@ -303,10 +296,10 @@ describe('the two laws over the canonical fixtures', () => {
     ['cooling fan3', (s) => formatRpm(s.cooling.fan3Rpm)],
     ['cooling fan4', (s) => formatRpm(s.cooling.fan4Rpm)],
     ['cooling fan5', (s) => formatRpm(s.cooling.fan5Rpm)],
-    ['storage root used', (s) => formatGB(s.storage.root.usedGB)],
-    ['storage root total', (s) => formatGB(s.storage.root.totalGB)],
-    ['storage home used', (s) => formatGB(s.storage.home.usedGB)],
-    ['storage home total', (s) => formatGB(s.storage.home.totalGB)],
+    ['storage root used', (s) => formatGiB(s.storage.root.usedGiB)],
+    ['storage root total', (s) => formatGiB(s.storage.root.totalGiB)],
+    ['storage home used', (s) => formatGiB(s.storage.home.usedGiB)],
+    ['storage home total', (s) => formatGiB(s.storage.home.totalGiB)],
     ['net rx', (s) => formatBytesPerSecond(s.storage.net.rxBytesPerSec)],
     ['net tx', (s) => formatBytesPerSecond(s.storage.net.txBytesPerSec)],
   ];
@@ -467,14 +460,25 @@ describe('SM clock — integer MHz', () => {
   });
 });
 
-describe('RAM 1 dp vs swap 2 dp — the rounding that must not read as "none"', () => {
-  const ram: readonly [GiB | null, string][] = [
+describe('RAM and disk 1 dp vs swap 2 dp — the rounding that must not read as "none"', () => {
+  /*
+   * One table, because after O19 there is one formatter: §6.6 gives RAM and disk the same
+   * unit and the same precision, and the disk figures below are this box's real ones —
+   * `/` at 232.6 GiB and `/home` at 915.8 GiB, the numbers `df -h` rounds to `233G` and
+   * `916G`. The four-digit case is here rather than in a disk-only table because grouping
+   * is a property of the formatter, and only a filesystem on this box gets that large.
+   */
+  const oneDp: readonly [GiB | null, string][] = [
     [gib(24.34), '24.3 GiB'],
     [gib(61), '61.0 GiB'],
+    [gib(232.6371), '232.6 GiB'],
+    [gib(915.8145), '915.8 GiB'],
+    [gib(931.5), '931.5 GiB'],
+    [gib(1234.5), '1,234.5 GiB'],
     [gib(0), '0.0 GiB'],
     [null, EM_DASH],
   ];
-  test.each(ram)('RAM %s → %s', (input, expected) => {
+  test.each(oneDp)('RAM/disk %s → %s', (input, expected) => {
     expect(formatGiB(input)).toBe(expected);
   });
 
@@ -493,19 +497,6 @@ describe('RAM 1 dp vs swap 2 dp — the rounding that must not read as "none"', 
     expect(formatGiB(gib(0.02))).toBe('0.0 GiB');
     expect(formatSwapGiB(gib(0.02))).toBe('0.02 GiB');
     expect(formatSwapGiB(gib(0.02))).not.toBe(formatSwapGiB(gib(0)));
-  });
-});
-
-describe('disk — 1 dp GB', () => {
-  const cases: readonly [GB | null, string][] = [
-    [gb(238.5), '238.5 GB'],
-    [gb(931.5), '931.5 GB'],
-    [gb(1234.5), '1,234.5 GB'],
-    [gb(0), '0.0 GB'],
-    [null, EM_DASH],
-  ];
-  test.each(cases)('%s → %s', (input, expected) => {
-    expect(formatGB(input)).toBe(expected);
   });
 });
 
@@ -777,7 +768,7 @@ describe('text and the CPU model trim', () => {
 describe('locale is pinned to en-US on every viewer (§6.6)', () => {
   test('separators are commas and the decimal mark is a point, whatever the host locale', () => {
     expect(formatRpm(rpm(14451))).toBe('14,451 RPM');
-    expect(formatGB(gb(1234.5))).toBe('1,234.5 GB');
+    expect(formatGiB(gib(1234.5))).toBe('1,234.5 GiB');
     expect(formatRpm(rpm(14451))).not.toMatch(/14\.451|14 451/);
   });
 });

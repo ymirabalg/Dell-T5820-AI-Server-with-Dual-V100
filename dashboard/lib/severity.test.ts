@@ -36,7 +36,7 @@ import {
   worstSeverity,
 } from './severity';
 import type { Ch5Engagement } from './severity';
-import { celsius, gb, gib, mib, pwm, rpm, throttleMask } from './types';
+import { celsius, gib, mib, pwm, rpm, throttleMask } from './types';
 import type {
   Celsius,
   Cooling,
@@ -84,7 +84,7 @@ describe('worstSeverity — §9 aggregate dot', () => {
 describe('usedPercent / freePercent', () => {
   test('the ordinary case', () => {
     expect(usedPercent(mib(26452), mib(32768))).toBeCloseTo(80.7, 1);
-    expect(freePercent(gb(85), gb(100))).toBe(15);
+    expect(freePercent(gib(85), gib(100))).toBe(15);
   });
 
   const nulls: readonly [MiB | null, MiB | null][] = [
@@ -107,12 +107,12 @@ describe('usedPercent / freePercent', () => {
   });
 
   // R1: these two were the only functions in the module taking a bare `number`, which is
-  // the hole every other signature closes. §6.6 puts three memory units in one snapshot.
+  // the hole every other signature closes. §6.6 puts two memory units in one snapshot.
   test('the two arguments must be the same unit', () => {
     // @ts-expect-error VRAM MiB and host RAM GiB are not the same quantity.
     usedPercent(mib(26452), gib(61));
-    // @ts-expect-error and neither are GB and MiB.
-    freePercent(gb(238.5), mib(32768));
+    // @ts-expect-error and the same clash the other way round — a disk GiB against VRAM MiB.
+    freePercent(gib(238.5), mib(32768));
   });
 
   test('an unbranded number is not a reading', () => {
@@ -240,19 +240,19 @@ describe('disk — banded on FREE space: normal ≥ 15 %, watch 5–15 %, alarm 
     [95.5, 'alarm'],
     [100, 'alarm'],
   ];
-  test.each(cases)('%s of 100 GB used → %s', (used, expected) => {
-    expect(severityDiskFree(gb(used), gb(100))).toBe(expected);
+  test.each(cases)('%s of 100 GiB used → %s', (used, expected) => {
+    expect(severityDiskFree(gib(used), gib(100))).toBe(expected);
   });
 
   test('exactly 15 % free is normal and exactly 5 % free is watch', () => {
-    expect(freePercent(gb(85), gb(100))).toBe(15);
-    expect(severityDiskFree(gb(85), gb(100))).toBe('normal');
-    expect(freePercent(gb(95), gb(100))).toBe(5);
-    expect(severityDiskFree(gb(95), gb(100))).toBe('watch');
+    expect(freePercent(gib(85), gib(100))).toBe(15);
+    expect(severityDiskFree(gib(85), gib(100))).toBe('normal');
+    expect(freePercent(gib(95), gib(100))).toBe(5);
+    expect(severityDiskFree(gib(95), gib(100))).toBe('watch');
   });
 
   test('an unread filesystem has no severity', () => {
-    expect(severityDiskFree(null, gb(931.5))).toBeNull();
+    expect(severityDiskFree(null, gib(931.5))).toBeNull();
   });
 });
 

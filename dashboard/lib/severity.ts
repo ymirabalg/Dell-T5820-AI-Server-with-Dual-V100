@@ -31,7 +31,6 @@ import { decodeThrottleMask } from './throttle';
 import type {
   Celsius,
   Cooling,
-  GB,
   GiB,
   HealthState,
   Host,
@@ -182,7 +181,7 @@ export const severityMemory = (host: Host): Severity | null =>
  *
  * `/home` is the one to watch: `hf-get.sh` writes by source filename with no space check.
  */
-export const severityDiskFree = (used: GB | null, total: GB | null): Severity | null => {
+export const severityDiskFree = (used: GiB | null, total: GiB | null): Severity | null => {
   const free = freePercent(used, total);
   return free === null ? null : free < 5 ? 'alarm' : free < 15 ? 'watch' : 'normal';
 };

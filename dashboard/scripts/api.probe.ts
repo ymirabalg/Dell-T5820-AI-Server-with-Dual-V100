@@ -35,7 +35,6 @@ import {
   formatCelsius,
   formatCh5Pwm,
   formatCpuModel,
-  formatGB,
   formatGiB,
   formatLoadAverage,
   formatMHz,
@@ -141,8 +140,8 @@ describe('the live API', () => {
     if (s.serving === null) console.log('  instances could not be enumerated (serving: null)');
 
     head('storage & network', 'statvfs · eno1');
-    row('/', `${formatGB(s.storage.root.usedGB)} / ${formatGB(s.storage.root.totalGB)}`);
-    row('/home', `${formatGB(s.storage.home.usedGB)} / ${formatGB(s.storage.home.totalGB)}`);
+    row('/', `${formatGiB(s.storage.root.usedGiB)} / ${formatGiB(s.storage.root.totalGiB)}`);
+    row('/home', `${formatGiB(s.storage.home.usedGiB)} / ${formatGiB(s.storage.home.totalGiB)}`);
     row(
       'eno1',
       `rx ${formatBytesPerSecond(s.storage.net.rxBytesPerSec)}  tx ${formatBytesPerSecond(s.storage.net.txBytesPerSec)}`,

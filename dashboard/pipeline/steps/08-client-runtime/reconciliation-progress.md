@@ -53,7 +53,13 @@ than obviously broken. A harness killed mid-mutation leaves the file mutated on 
 
 Harness runs write nothing to stdout until they exit (Python block-buffers to a file), and step
 4/5/7 each take several minutes. Run them in the background and wait on
-`until ! pgrep -f regressions.py; do sleep 3; done`.
+`until ! pgrep -f "regressions[.]py" >/dev/null; do sleep 10; done`.
+⚠ **The brackets are load-bearing.** Written as `pgrep -f regressions.py`, the pattern matches
+the **waiting shell's own command line** — which contains that text — so the loop can never
+exit. Seven such shells were found spinning from earlier sessions on 2026-09-07, and every
+one of them had been abandoned after its caller gave up and read the log instead. Better
+still: run the harness in the background and use its **exit status**, which cannot be
+confused with anything.
 
 ---
 

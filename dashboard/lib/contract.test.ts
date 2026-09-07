@@ -14,7 +14,6 @@ import {
   THROTTLE_REASONS,
   bytesPerSecond,
   celsius,
-  gb,
   gib,
   isoTimestamp,
   mhz,
@@ -47,7 +46,6 @@ describe('branded units', () => {
       ['watts', watts(247.1), 247.1],
       ['mib', mib(26452), 26452],
       ['gib', gib(12.1), 12.1],
-      ['gb', gb(238.5), 238.5],
       ['mhz', mhz(1380), 1380],
       ['rpm', rpm(4308), 4308],
       ['percent', percent(18.4), 18.4],
@@ -63,7 +61,7 @@ describe('branded units', () => {
     for (const [name, actual, expected] of cases) {
       expect(actual, name).toBe(expected);
     }
-    expect(cases).toHaveLength(15);
+    expect(cases).toHaveLength(14);
   });
 
   /*
@@ -154,10 +152,10 @@ const NULLABLE_PATHS = [
   'cooling.ch5Mode',
   'cooling.ch5Pwm',
   'cooling.serviceState',
-  'storage.root.usedGB',
-  'storage.root.totalGB',
-  'storage.home.usedGB',
-  'storage.home.totalGB',
+  'storage.root.usedGiB',
+  'storage.root.totalGiB',
+  'storage.home.usedGiB',
+  'storage.home.totalGiB',
   'storage.net.rxBytesPerSec',
   'storage.net.txBytesPerSec',
   'storage.net.link',

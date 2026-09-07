@@ -145,7 +145,7 @@ describe('the assembled snapshot', () => {
   /*
    * ⚠ The census above is **exactly two objects deep** — the top level, `storage` and
    * `safety` — and step 6's adversarial found two shapes that defeat it by sitting one level
-   * lower. The live one is real: a `Filesystem` carrying `{ usedGB, totalGB, errors: [...] }`
+   * lower. The live one is real: a `Filesystem` carrying `{ usedGiB, totalGiB, errors: [...] }`
    * is what a spread-built `filesystemFrom` would produce, and it ships the collector's
    * entries inside `snapshot.storage.root` while the top-level `errors[]` already carries
    * them. `snapshot.host`, `snapshot.cooling`, `snapshot.gpus[]` and `snapshot.serving[]` are
@@ -585,8 +585,8 @@ describe('a collector that throws', () => {
   test('a throwing storage collector blanks both mounts with one statvfs entry', async () => {
     const { snapshot } = await assemble({ storage: boom('the mount is gone') });
 
-    expect(snapshot.storage.root).toEqual({ usedGB: null, totalGB: null });
-    expect(snapshot.storage.home).toEqual({ usedGB: null, totalGB: null });
+    expect(snapshot.storage.root).toEqual({ usedGiB: null, totalGiB: null });
+    expect(snapshot.storage.home).toEqual({ usedGiB: null, totalGiB: null });
     expect(snapshot.storage.net).toBe(everythingZero.storage.net);
     expect(sourcesOf(snapshot.errors)).toEqual([...STORAGE_SOURCES]);
   });

@@ -9,7 +9,7 @@
 
 import { describe, expect, test } from 'vitest';
 
-import { gb } from '../types';
+import { gib } from '../types';
 import type { Network, Storage } from '../types';
 import { DEFAULT_PATHS } from './collect';
 import { severityDiskFree } from '../severity';
@@ -39,8 +39,8 @@ const live: Readonly<Record<string, StatvfsBlocks>> = {
 
 describe('filesystemFrom', () => {
   /*
-   * ⚠ F8. This test used to read `expect((totalGB ?? 0) * BYTES_PER_GIB).toBe(249792131072)`,
-   * which **cancels the divisor**: `totalGB` is `blocks * bsize / BYTES_PER_GIB`, so
+   * ⚠ F8. This test used to read `expect((totalGiB ?? 0) * BYTES_PER_GIB).toBe(249792131072)`,
+   * which **cancels the divisor**: `totalGiB` is `blocks * bsize / BYTES_PER_GIB`, so
    * multiplying it back asserts only `blocks * bsize === 249792131072`, true for any
    * divisor at all. The ⚠ marker and the name both claim a property about the *published
    * figure*, and the body checked the block arithmetic.
@@ -55,8 +55,8 @@ describe('filesystemFrom', () => {
     expect(parsed.problems).toEqual([]);
     // `df -B1 /` printed 249792131072 total and 22153736192 used, 2026-09-06. Divided by
     // 1024³ — which is what `df -h`'s `233G` is — those are these two figures.
-    expect(parsed.value.totalGB).toBeCloseTo(232.6371, 4);
-    expect(parsed.value.usedGB).toBeCloseTo(20.6323, 4);
+    expect(parsed.value.totalGiB).toBeCloseTo(232.6371, 4);
+    expect(parsed.value.usedGiB).toBeCloseTo(20.6323, 4);
     // The block arithmetic, kept as its own claim rather than smuggled into the one above.
     expect(BYTES_PER_GIB).toBe(1024 ** 3);
     expect(CAPTURED_STATVFS_ROOT.blocks * CAPTURED_STATVFS_ROOT.bsize).toBe(249792131072);
@@ -64,19 +64,19 @@ describe('filesystemFrom', () => {
 
   test('the live home filesystem does too — the one §3.5 says to watch', () => {
     const parsed = filesystemFrom(CAPTURED_STATVFS_HOME);
-    expect(parsed.value.totalGB).toBeCloseTo(915.8145, 4);
-    expect(parsed.value.usedGB).toBeCloseTo(127.0372, 4);
+    expect(parsed.value.totalGiB).toBeCloseTo(915.8145, 4);
+    expect(parsed.value.usedGiB).toBeCloseTo(127.0372, 4);
     expect(CAPTURED_STATVFS_HOME.blocks * CAPTURED_STATVFS_HOME.bsize).toBe(983348297728);
   });
 
   test('⚠ the figures match what `df -h` prints, which is what §6.6 says to check against', () => {
-    // `df -h` printed `233G` for `/` and `916G` for `/home`. §6.6's disk row now says
-    // **GiB** and names `df -h` as the check, so the two agree and the divisor is `1024³`.
-    // ⚠ The remaining lie is in the NAMES — `usedGB`, `formatGB`'s ` GB` suffix — which
-    // step 9 owns; the values here are GiB and are right. §6.3's band is a ratio and is
+    // `df -h` printed `233G` for `/` and `916G` for `/home`. §6.6's disk row says **GiB**
+    // and names `df -h` as the check, so the two agree and the divisor is `1024³`.
+    // O19 closed the last gap: the names and the printed suffix now say GiB too, so no
+    // part of this figure claims a unit it does not have. §6.3's band is a ratio and was
     // unaffected either way.
-    expect(Math.round(filesystemFrom(CAPTURED_STATVFS_ROOT).value.totalGB ?? 0)).toBe(233);
-    expect(Math.round(filesystemFrom(CAPTURED_STATVFS_HOME).value.totalGB ?? 0)).toBe(916);
+    expect(Math.round(filesystemFrom(CAPTURED_STATVFS_ROOT).value.totalGiB ?? 0)).toBe(233);
+    expect(Math.round(filesystemFrom(CAPTURED_STATVFS_HOME).value.totalGiB ?? 0)).toBe(916);
   });
 
   test('a genuinely empty filesystem is 0 used, which is a reading', () => {
@@ -84,30 +84,30 @@ describe('filesystemFrom', () => {
     // cases below become null.
     const parsed = filesystemFrom({ bsize: 4096, blocks: 1000, bfree: 1000 });
     expect(parsed.problems).toEqual([]);
-    expect(parsed.value.usedGB).toBe(0);
-    expect(parsed.value.totalGB).toBeGreaterThan(0);
+    expect(parsed.value.usedGiB).toBe(0);
+    expect(parsed.value.totalGiB).toBeGreaterThan(0);
   });
 
   test('a full filesystem is used === total, and bands alarm', () => {
     const parsed = filesystemFrom({ bsize: 4096, blocks: 1000, bfree: 0 });
-    expect(parsed.value.usedGB).toBe(parsed.value.totalGB);
-    expect(severityDiskFree(parsed.value.usedGB, parsed.value.totalGB)).toBe('alarm');
+    expect(parsed.value.usedGiB).toBe(parsed.value.totalGiB);
+    expect(severityDiskFree(parsed.value.usedGiB, parsed.value.totalGiB)).toBe('alarm');
   });
 
-  test('⚠ a zero `bsize` is null with an entry, NOT a 0.0 / 0.0 GB filesystem', () => {
+  test('⚠ a zero `bsize` is null with an entry, NOT a 0.0 / 0.0 GiB filesystem', () => {
     // This is the invariant-1 trap for this source. A pseudo-filesystem and a failed
     // syscall wrapper both produce it, and `freePercent` guards `total === 0` by returning
     // null — so without this the row would show two credible zeros with no colour and
     // nothing in `errors[]` to say anything was wrong.
     const parsed = filesystemFrom({ bsize: 0, blocks: 60984407, bfree: 55575780 });
     // ⚠ Literal nulls, NOT `toEqual(NO_FILESYSTEM)`. Comparing against the constant makes
-    // the test agree with any redefinition of it — including `{ usedGB: gb(0), totalGB:
-    // gb(0) }`, which is invariant 1 inverted. The regression harness found this.
-    expect(parsed.value).toEqual({ usedGB: null, totalGB: null });
-    expect(parsed.value.usedGB).toBeNull();
-    expect(parsed.value.totalGB).toBeNull();
+    // the test agree with any redefinition of it — including `{ usedGiB: gib(0), totalGiB:
+    // gib(0) }`, which is invariant 1 inverted. The regression harness found this.
+    expect(parsed.value).toEqual({ usedGiB: null, totalGiB: null });
+    expect(parsed.value.usedGiB).toBeNull();
+    expect(parsed.value.totalGiB).toBeNull();
     expect(parsed.problems).toHaveLength(1);
-    expect(severityDiskFree(parsed.value.usedGB, parsed.value.totalGB)).toBeNull();
+    expect(severityDiskFree(parsed.value.usedGiB, parsed.value.totalGiB)).toBeNull();
   });
 
   test('a zero block count is null with an entry, for the same reason', () => {
@@ -147,8 +147,8 @@ describe('collectStorage', () => {
     const { root, home } = filesystems;
     expect(errors).toEqual([]);
     expect(asked.sort()).toEqual([DEFAULT_PATHS.homeMount, DEFAULT_PATHS.rootMount].sort());
-    expect(root.totalGB).toBeGreaterThan(200);
-    expect(home.totalGB).toBeGreaterThan(900);
+    expect(root.totalGiB).toBeGreaterThan(200);
+    expect(home.totalGiB).toBeGreaterThan(900);
   });
 
   test('⚠ the mounts are §2.2’s `/host/root` and `/host/home`, not `/` and `/home`', async () => {
@@ -168,7 +168,7 @@ describe('collectStorage', () => {
     });
     const { root, home } = filesystems;
     expect(root).toEqual(NO_FILESYSTEM);
-    expect(home.totalGB).not.toBeNull();
+    expect(home.totalGiB).not.toBeNull();
     expect(errors).toHaveLength(1);
     expect(errors[0]?.source).toBe('statvfs');
     expect(errors[0]?.message).toContain(DEFAULT_PATHS.rootMount);
@@ -179,8 +179,8 @@ describe('collectStorage', () => {
     // 4 settled the same question the same way for its six blanked channels.
     const { filesystems, errors } = await collectStorage({ statvfs: fakeStatvfs({}) });
     const { root, home } = filesystems;
-    expect(root).toEqual({ usedGB: null, totalGB: null });
-    expect(home).toEqual({ usedGB: null, totalGB: null });
+    expect(root).toEqual({ usedGiB: null, totalGiB: null });
+    expect(home).toEqual({ usedGiB: null, totalGiB: null });
     expect(errors).toHaveLength(2);
     expect(errors.every((e) => e.source === 'statvfs')).toBe(true);
   });
@@ -209,7 +209,7 @@ describe('collectStorage', () => {
     });
     const root = filesystems.root;
     expect(errors).toEqual([]);
-    expect(root.totalGB).not.toBeNull();
+    expect(root.totalGiB).not.toBeNull();
   });
 
   test('a parser that throws would still be one entry, not a 500', async () => {
@@ -225,12 +225,15 @@ describe('collectStorage', () => {
     expect(errors).toHaveLength(2);
   });
 
-  test('the branded unit is GB, and severity flows from it', () => {
-    // A compile-time fact made visible: `severityDiskFree` takes `GB`, so a GiB/GB mix-up
-    // in a later step is a type error rather than a wrong colour.
-    expect(severityDiskFree(gb(90), gb(100))).toBe('watch');
-    expect(severityDiskFree(gb(96), gb(100))).toBe('alarm');
-    expect(severityDiskFree(gb(10), gb(100))).toBe('normal');
+  test('the branded unit is GiB, and severity flows from it', () => {
+    // A compile-time fact made visible: `severityDiskFree` takes `GiB`, so a panel that
+    // reached for VRAM MiB or a bare number gets a type error rather than a wrong colour.
+    // ⚠ It no longer separates disk from host RAM — after O19 both are genuinely `GiB`,
+    // and a brand names a unit, not a role. That distinction was never real: the collector
+    // has always divided by `1024³`, so the old `GB` brand asserted a unit nothing carried.
+    expect(severityDiskFree(gib(90), gib(100))).toBe('watch');
+    expect(severityDiskFree(gib(96), gib(100))).toBe('alarm');
+    expect(severityDiskFree(gib(10), gib(100))).toBe('normal');
   });
 
   /*

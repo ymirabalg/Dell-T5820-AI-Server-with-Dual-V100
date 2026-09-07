@@ -32,16 +32,20 @@ both implemented.
 
 ## 2. The gaps, in the order step 9 will hit them
 
-### 2.1 ⚠ `formatGB` renders ` GB` and §6.6 says **GiB** — the only wrong figure on screen
+### 2.1 ~~`formatGB` renders ` GB`~~ — **closed 2026-09-07**
 
-**O19**, and it is the only item here that makes the dashboard *print something false*. The
-value is already a GiB (`1024³`, matching `df -h`, measured in step 5); only the brand, the
-field names and the suffix say GB. **98 occurrences across 10 files**: the `GB` brand and `gb()`,
-`Filesystem.usedGB`/`totalGB`, `formatGB`.
+**O19 is done.** It turned out to be a **deletion, not a rename**: `GiB` already existed as a
+brand for RAM and swap, and `formatGiB` was byte-identical to `formatGB` but for the suffix — so
+a literal rename would have collided with the existing type. `GB`, `gb()` and `formatGB` are
+gone and disk uses `GiB`.
 
-Do it **first and mechanically**, before any component reads those names, and in one commit —
-it is a rename, it is compiler-checked end to end, and it gets more expensive with every file
-that touches storage.
+⚠ **`Filesystem.usedGB`/`totalGB` were WIRE field names**, so this was a §4 contract change:
+`wire.ts`'s validator, the fixtures and the assembly tests all moved together. An old server
+against this client yields a snapshot the browser refuses, and a failed poll with no field
+saying why — which is why the box was redeployed in the same change.
+
+**The dashboard now prints nothing false.** The live box reads `/ 20.7 GiB / 232.6 GiB`,
+matching §6.6's own *"`/` is 232.6 GiB, not 249.8 GB"*.
 
 ### 2.2 There is no `ErrorSource → panel` selector
 

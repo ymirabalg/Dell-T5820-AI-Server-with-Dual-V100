@@ -145,9 +145,21 @@ ERRORS[]   ·  0 entries
 *"the **915.8 GiB** `/home` filesystem"* — and `df -h` agrees at its own resolution (`233G`,
 `916G`). The collector reproduces `df` because it uses `bfree`, not `bavail`.
 
-⚠ **And this is the first time O19 is visible on screen.** Those figures read ` GB` while §6.6
-says **GiB**, and §6.6's own row says *"`/` is 232.6 GiB, not 249.8 GB"* — the number is right
-and the label is wrong. It is the only false thing the dashboard currently prints.
+⚠ **This run is what made O19 concrete, and O19 is now closed.** The figures above read ` GB`
+while §6.6 says **GiB** — the number right, the label wrong, and the only false thing the
+dashboard printed. Closed the same day by *deleting* the `GB` brand rather than renaming it
+(`GiB` already existed), which made `Filesystem.usedGB`/`totalGB` a **wire** change. The box was
+redeployed in the same change, because an old server against the new client yields a snapshot
+the browser refuses. It now reads:
+
+```
+/        20.7 GiB / 232.6 GiB
+/home    127.9 GiB / 915.8 GiB
+ERRORS[]  ·  0 entries
+```
+
+⚠ **The payload quoted earlier in this file uses the OLD field names.** It is kept as the
+historical record of the first deploy; the client in this tree can no longer parse it.
 
 ## 5. Two small defects the run found
 

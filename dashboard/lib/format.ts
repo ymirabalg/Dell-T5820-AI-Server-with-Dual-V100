@@ -3,9 +3,10 @@
  *
  * Every quantity is shown in **the unit its own source reports**, so any figure on screen
  * can be checked against the command that produced it without arithmetic. That is why
- * there are three memory formatters here and not one: VRAM is MiB (`nvidia-smi`), RAM is
- * GiB (`/proc/meminfo`), disk is GB (`statvfs`/`df`). The branded argument types make
- * handing GiB to the MiB formatter a compile error rather than a plausible wrong number.
+ * there are three memory formatters here and not one: VRAM is MiB (`nvidia-smi`), RAM and
+ * disk are GiB (`/proc/meminfo`, `statvfs`/`df -h`), and swap is GiB at a different
+ * precision. The branded argument types make handing GiB to the MiB formatter a compile
+ * error rather than a plausible wrong number.
  *
  * **Two laws, and they are the point of this module:**
  *
@@ -31,7 +32,6 @@ import type {
   BytesPerSecond,
   Celsius,
   Cooling,
-  GB,
   GiB,
   LoadAverage,
   MHz,
@@ -126,7 +126,15 @@ export const formatMiBPair = (used: MiB | null, total: MiB | null): string => {
  */
 export const formatMHz = (v: MHz | null): string => render(v, INTEGER, ' MHz');
 
-/** RAM — 1 dp GiB. `24.3 GiB`. */
+/**
+ * RAM **and disk** — 1 dp GiB. `24.3 GiB`, `232.6 GiB`.
+ *
+ * §6.6 gives RAM and disk the same unit and the same precision, so they are the same
+ * function. There is no `formatGB`: O19 deleted the `GB` brand and its formatter rather
+ * than keeping two identical renderers apart by name. The disk figure was always GiB —
+ * `statvfs.ts` divides by `BYTES_PER_GIB` = `1024³`, which is what `df -h` and `lsblk`
+ * print (`/` is 232.6 GiB, not 249.8 GB) — and until O19 only the printed suffix lied.
+ */
 export const formatGiB = (v: GiB | null): string => render(v, ONE_DP, ' GiB');
 
 /**
@@ -137,23 +145,6 @@ export const formatGiB = (v: GiB | null): string => render(v, ONE_DP, ' GiB');
  * `0.0 GiB`, which is indistinguishable from none.
  */
 export const formatSwapGiB = (v: GiB | null): string => render(v, TWO_DP, ' GiB');
-
-/**
- * Disk — 1 dp. `232.6 GB`.
- *
- * ⚠ **The suffix is WRONG against the current §6.6 and step 9 owns the fix.** §6.6's disk
- * row and §1's decision 20 now both say **GiB**, and the value already is one: step 5's
- * collector divides by `BYTES_PER_GIB` = `1024³`, which is what `df -h` and `lsblk` print
- * (`/` is 232.6 GiB, not 249.8 GB). Only the *names* still say GB — this suffix, the brand
- * `GB`/`gb()`, and `Filesystem.usedGB`/`totalGB`: 98 occurrences across 10 files.
- *
- * Step 5's review ruled the rename to step 9, the first step that renders this label to a
- * person and the last cheap moment to change it, and renamed only `BYTES_PER_GB` →
- * `BYTES_PER_GIB` immediately because that identifier's own doc had read *"⚠ `1024³`,
- * despite the name"*. It is carried as an explicit obligation in HANDOVER, not left here to
- * be rediscovered by whoever reads the panel and reaches for a calculator.
- */
-export const formatGB = (v: GB | null): string => render(v, ONE_DP, ' GB');
 
 /** Fan speed — integer RPM, thousands separated. `4,308 RPM`, and `0 RPM` for a dead fan. */
 export const formatRpm = (v: Rpm | null): string => render(v, INTEGER, ' RPM');

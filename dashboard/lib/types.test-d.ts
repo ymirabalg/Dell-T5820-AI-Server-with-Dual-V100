@@ -11,7 +11,6 @@ import type {
   CoolingUnavailable,
   ErrorSource,
   Filesystem,
-  GB,
   GiB,
   Gpu,
   HealthState,
@@ -248,7 +247,6 @@ describe('the brands are nominal, not aliases', () => {
       Assert<IsNominal<Watts, number>>,
       Assert<IsNominal<MiB, number>>,
       Assert<IsNominal<GiB, number>>,
-      Assert<IsNominal<GB, number>>,
       Assert<IsNominal<MHz, number>>,
       Assert<IsNominal<Rpm, number>>,
       Assert<IsNominal<Percent, number>>,
@@ -266,7 +264,6 @@ describe('the brands are nominal, not aliases', () => {
   test('the brands do not collapse into each other', () => {
     type BrandsAreDistinct = [
       Assert<Equals<Equals<MiB, GiB>, false>>,
-      Assert<Equals<Equals<GiB, GB>, false>>,
       Assert<Equals<Equals<Celsius, Watts>, false>>,
       Assert<Equals<Equals<Rpm, Pwm>, false>>,
       Assert<Equals<Equals<IsoTimestamp, ThrottleMask>, false>>,
@@ -374,8 +371,8 @@ describe('the field census', () => {
 
   test('every storage and network field', () => {
     type StorageFields = [
-      Assert<Equals<Filesystem['usedGB'], GB | null>>,
-      Assert<Equals<Filesystem['totalGB'], GB | null>>,
+      Assert<Equals<Filesystem['usedGiB'], GiB | null>>,
+      Assert<Equals<Filesystem['totalGiB'], GiB | null>>,
       Assert<Equals<Network['rxBytesPerSec'], BytesPerSecond | null>>,
       Assert<Equals<Network['txBytesPerSec'], BytesPerSecond | null>>,
       Assert<Equals<Network['link'], LinkState | null>>,
@@ -594,8 +591,8 @@ describe('a reading cannot be reached without confronting null', () => {
   test('a nullable disk figure cannot go straight into arithmetic', () => {
     declareSnapshot((snapshot) => {
       // @ts-expect-error both operands are possibly `null`.
-      const freeGB: number = snapshot.storage.root.totalGB - snapshot.storage.root.usedGB;
-      void freeGB;
+      const freeGiB: number = snapshot.storage.root.totalGiB - snapshot.storage.root.usedGiB;
+      void freeGiB;
     });
   });
 

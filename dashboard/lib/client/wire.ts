@@ -59,7 +59,6 @@ import type {
 import {
   bytesPerSecond,
   celsius,
-  gb,
   gib,
   isoTimestamp,
   mhz,
@@ -423,10 +422,10 @@ const servingInstanceOf = (value: unknown): Checked<ServingInstance> => {
 
 const filesystemOf = (value: unknown): Checked<Filesystem> => {
   if (!isRecord(value)) return undefined;
-  const usedGB = branded(numberOrNull(field(value, 'usedGB')), gb);
-  const totalGB = branded(numberOrNull(field(value, 'totalGB')), gb);
-  if (usedGB === undefined || totalGB === undefined) return undefined;
-  return { usedGB, totalGB };
+  const usedGiB = branded(numberOrNull(field(value, 'usedGiB')), gib);
+  const totalGiB = branded(numberOrNull(field(value, 'totalGiB')), gib);
+  if (usedGiB === undefined || totalGiB === undefined) return undefined;
+  return { usedGiB, totalGiB };
 };
 
 const networkOf = (value: unknown): Checked<Network> => {

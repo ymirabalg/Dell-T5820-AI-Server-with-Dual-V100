@@ -246,7 +246,7 @@ therefore **out of scope**, listed only so they are not lost):
   unbacked~~ — **backed and confirmed**, `R51`–`R55` in step 2 and `T51` in step 4.
 - **Out of scope (UI, steps 9–12):** D1 S40's third event-log feed · D2 the independent age
   tick · D3 rendering `unknownStanding` · D4 `errorsForPanel` · D5 `traceFor` · D6 jsdom +
-  `useTelemetry` unmount · D7 S11/G5, S19, S30 · **O19** the GB→GiB brand rename.
+  `useTelemetry` unmount · D7 S11/G5, S19, S30 · ~~O19~~ **closed 2026-09-07**.
 
 ---
 

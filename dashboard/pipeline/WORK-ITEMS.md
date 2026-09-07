@@ -208,7 +208,7 @@ again. Re-verified against the spec text on 2026-09-07:
 
 **Steps 9–12.** None of these is work here.
 
-- **Step 9:** D4 `errorsForPanel` · D5 `traceFor` · **O19 the GB→GiB rename** (98 occurrences,
+- **Step 9:** D4 `errorsForPanel` · D5 `traceFor` · ~~O19~~ **closed 2026-09-07** (was 98 occurrences,
   10 files; the rendered suffix is currently wrong against §6.6) · O14 the formatter `parts`
   variant · §3.2's *"trimmed to `Xeon W-2135` for display"*, which has no §6.6 row and no
   formatter.

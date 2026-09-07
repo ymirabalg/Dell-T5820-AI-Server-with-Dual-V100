@@ -108,7 +108,8 @@ import { mintSession } from './session';
  * ⚠ One constant, one unit. It used to be compared against `content-length` (bytes) and then
  * against `text.length` (**UTF-16 code units**), so a 4 096-character body of three-byte
  * characters was 12 KiB and passed. Harmless at these magnitudes, and exactly the kind of
- * quiet unit mismatch this project renamed 98 occurrences of `GB` to `GiB` to avoid.
+ * quiet unit mismatch O19 removed from the disk figures by collapsing the `GB` brand into
+ * `GiB` — the unit the collector had always computed.
  */
 export const MAX_BODY_BYTES = 4096;
 
