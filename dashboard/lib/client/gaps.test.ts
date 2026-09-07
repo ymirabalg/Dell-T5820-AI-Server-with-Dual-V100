@@ -157,4 +157,30 @@ describe('gapIsOpen', () => {
     expect(gapIsOpen([{ fromMs: T(0), toMs: T(5), reason: 'failed' }])).toBe(false);
     expect(gapIsOpen([{ fromMs: T(0), toMs: null, reason: 'failed' }])).toBe(true);
   });
+
+  /*
+   * ⚠ Every other fixture in this file holds **at most one** gap, and in a one-element list
+   * `at(-1)` and `at(0)` are the same element — so nothing here could tell the newest gap from
+   * the first one the session opened. A session that hides twice holds two, and reading the
+   * first one makes `openGap` believe nothing is open: it appends a second gap over a live one,
+   * and from then on `gapIsOpen` answers about a span that closed hours ago. Both things that
+   * consult it — the hatch, and `afterGap`'s restart of §6.4's pending runs — are then wrong in
+   * the reassuring direction.
+   */
+  test('⚠ it reads the NEWEST gap, not the first one the session opened', () => {
+    const closedThenOpen: readonly Gap[] = [
+      { fromMs: T(0), toMs: T(5), reason: 'hidden' },
+      { fromMs: T(10), toMs: null, reason: 'paused' },
+    ];
+    expect(gapIsOpen(closedThenOpen)).toBe(true);
+    // …and in the other direction, so the assertion is not satisfied by always answering true.
+    expect(
+      gapIsOpen([
+        { fromMs: T(0), toMs: null, reason: 'hidden' },
+        { fromMs: T(10), toMs: T(15), reason: 'paused' },
+      ]),
+    ).toBe(false);
+    // `openGap` is the caller that matters: a second gap must never open over an open one.
+    expect(openGap(closedThenOpen, 'failed', T(20))).toBe(closedThenOpen);
+  });
 });

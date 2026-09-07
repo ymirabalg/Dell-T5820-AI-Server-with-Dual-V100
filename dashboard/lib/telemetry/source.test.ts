@@ -509,7 +509,24 @@ describe('no background work', () => {
    * Two independent observations, because neither sees what the other does: a spy on the
    * global scheduling functions (which any unqualified `setInterval(…)` call resolves
    * through, however it is spelled) and `process.getActiveResourcesInfo()`, which sees a
-   * timer created through `node:timers` as well.
+   * timer created through `node:timers` as well — a module holding
+   * `import { setInterval } from 'node:timers'` captured the reference before the spy and is
+   * invisible to it.
+   *
+   * ⚠ **The resource count is one-sided, and the equality it replaced was a flake.**
+   * `process.getActiveResourcesInfo()` is **process-wide**: it counts the test runner's own
+   * pending timers exactly as readily as ours. Measured 2026-09-07 while gathering step 8's
+   * closing evidence, `expect(after).toBe(before)` failed **3 runs in 20** with
+   * `expected +0 to be 1` — one of the runner's timers had **expired** during the dynamic
+   * import, and the test reported a violation of a property that held. That is HANDOVER §5.4's
+   * rule in a clock-shaped form, and it is the same species as step 8's globals guard, which
+   * attributes calls **by stack frame** rather than counting them for exactly this reason.
+   *
+   * What "importing creates no timer" forbids is an **increase**, so that is what is asserted.
+   * The residual is small and stated rather than eliminated: a timer created by the import
+   * would have to be spelled through `node:timers` (invisible to the spies) *and* be masked by
+   * an unrelated expiry inside the same few milliseconds. Twenty runs produced three decreases
+   * and no increase.
    */
   test('⚠ importing the route’s modules creates no timer at module load', async () => {
     const timers = ['setTimeout', 'setInterval', 'setImmediate'] as const;
@@ -522,7 +539,7 @@ describe('no background work', () => {
 
     const after = process.getActiveResourcesInfo().filter(isTimer).length;
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
-    expect(after).toBe(before);
+    expect(after).toBeLessThanOrEqual(before);
 
     for (const spy of spies) spy.mockRestore();
   });

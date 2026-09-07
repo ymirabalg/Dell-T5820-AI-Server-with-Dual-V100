@@ -27,6 +27,28 @@ comparisons it is aimed at the surrounding block rather than at the comparison i
 site; it was re-aimed there in the same change. Ledger ownership follows the FILE
 (HANDOVER §5.2), and ``lib/units.ts`` is new, so its mutations live here.
 
+⚠ **Re-aimed and extended by step 8's reconciliation.** Twenty anchors moved when the twelve
+MUSTs landed — `gaps.ts` and `mode.ts` were extracted out of `runtime.ts`, the arrival path
+moved inside a `try`, and `standing` became per-poll — and thirty-one mutations were added.
+Three things that cost time and are worth inheriting:
+
+* **Mutation ids must be unique.** Nine of the new ones collided with existing ids and made the
+  ``DID NOT BITE`` list ambiguous about which entry had failed. Check with
+  ``grep -oE '^ +[(]"[A-Z]+[0-9]+' regressions.py | sort | uniq -d``.
+* ⚠ **A fix that adds a second, independent defence silently voids the first one's mutation.**
+  ``W4`` removes ``wire.ts``'s ISO-shape guard and had bitten since the build. F13 then added a
+  calendar round-trip that independently refuses every row the test table held, so the mutation
+  applied, the property stayed true, and the shape guard's coverage went to zero without a word.
+  The round-trip compares **19 characters**, so the region only the shape guard can see is a
+  non-canonical *spelling* of a correct instant — and that matters because §6.7's dedupe is
+  keyed on the ``ts`` **string**. Two rows were added to ``wire.test.ts`` for it, and ``W4`` was
+  renamed, since its original name described a case the round-trip had taken over.
+* ⚠ **Five of the six ``DID NOT BITE`` results were missing fixtures, not bad mutations**, and
+  the ledger then named six more ⚠ marks with nothing behind them. Every one was a real hole;
+  they are listed in ``reconciliation.md`` §3. The most valuable was
+  ``a stale condition does not re-log its band on every poll``, whose guard is **invisible for a
+  continuous metric and load-bearing for a value-band one**.
+
 ⚠ Properties with **no mutation**, recorded rather than papered over:
 
 * ``use-telemetry.ts``. Every rule is in ``runtime.ts`` behind the ``RuntimeEnv`` seam; what
@@ -48,6 +70,13 @@ site; it was re-aimed there in the same change. Ledger ownership follows the FIL
 * **"the client never writes to the server"** (invariant 2). There is no write to remove:
   ``env.ts`` issues one ``GET`` and nothing else, and a mutation that *added* a write would be
   testing that a test exists rather than that the code is right.
+* **"a stale condition does not re-log its band on every poll"** — ⚠ **the ⚠ mark was DROPPED
+  from that test rather than backed, per HANDOVER §5.2 rule 1.** For a continuous metric the
+  property is defended twice: ``E19`` removes the ``condition.stale`` short-circuit and ``E21``
+  removes the ``previousBand === band`` early-out, and the test is green under each. Removing
+  both at once is not an implementation anybody would write. The singly-defended half of the
+  same rule — a **value-band** condition carrying a pending run across an outage — is now a ⚠
+  test of its own, and ``E19`` backs it.
 
 Run from ``dashboard/`` with pnpm on PATH, and **never concurrently with `pnpm verify`**:
 
@@ -72,6 +101,8 @@ OBS = "lib/client/observations.test.ts"
 EVENTS = "lib/client/events.test.ts"
 ENV = "lib/client/env.test.ts"
 RUNTIME = "lib/client/runtime.test.ts"
+GAPS = "lib/client/gaps.test.ts"
+MODE = "lib/client/mode.test.ts"
 GUARD8 = "lib/client/guardrails.test.ts"
 
 # ---------------------------------------------------------------------------
@@ -101,7 +132,9 @@ GUARD8 = "lib/client/guardrails.test.ts"
 # lines, so it can never cover a ⚠ test". Its two ⚠ names are covered instead by `types`
 # mutations `T1`–`T3`, which are listed below and must still exit 1 — the ledger just cannot
 # see them.
-LEDGER_FILES = [PREFS, BACKOFF, RING, SERIES, WIRE, OBS, EVENTS, ENV, RUNTIME, GUARD8]
+LEDGER_FILES = [
+    PREFS, BACKOFF, RING, SERIES, WIRE, OBS, EVENTS, ENV, RUNTIME, GUARD8, GAPS, MODE,
+]
 
 # `test('…')`, `it('…')` and `test.each(…)('…')`, single- or double-quoted.
 MARKED = re.compile(
@@ -137,6 +170,8 @@ OBS_SRC = "lib/client/observations.ts"
 EVENTS_SRC = "lib/client/events.ts"
 ENV_SRC = "lib/client/env.ts"
 RUNTIME_SRC = "lib/client/runtime.ts"
+GAPS_SRC = "lib/client/gaps.ts"
+MODE_SRC = "lib/client/mode.ts"
 UNITS_SRC = "lib/units.ts"
 
 # (name, source file, old, new, check) — or (name, source file, [(old, new), …], check)
@@ -229,10 +264,10 @@ REGRESSIONS = [
      RING_SRC,
      "  const evicted = ring.samples.slice(0, ring.samples.length - MAX_SAMPLES + 1);\n"
      "  for (const gone of evicted) heldTs.delete(gone.ts);\n"
-     "  return { samples: [...ring.samples.slice(evicted.length), sample], heldTs };",
+     "  const samples = [...ring.samples.slice(evicted.length), sample];",
      "  const evicted = ring.samples.slice(ring.samples.length - 1);\n"
      "  for (const gone of evicted) heldTs.delete(gone.ts);\n"
-     "  return { samples: [...ring.samples.slice(0, ring.samples.length - 1), sample], heldTs };",
+     "  const samples = [...ring.samples.slice(0, ring.samples.length - 1), sample];",
      [RING]),
     ("R6 an evicted ts stays in the key set, so the ring leaks one key per poll for ever",
      RING_SRC, "  for (const gone of evicted) heldTs.delete(gone.ts);\n", "", [RING]),
@@ -317,14 +352,25 @@ REGRESSIONS = [
      "const numberOrNull = (value: unknown): Checked<number | null> => {\n"
      "  if (value === null || value === undefined) return null;",
      [WIRE]),
-    ("W4 ts is validated with Date.parse alone, which accepts '5' as a date",
+    # ⚠ Re-named in reconciliation, because F13's calendar round-trip took its original case
+    # away. `'5'` parses to 2001-05-01 and the round-trip refuses it, so "accepts '5' as a date"
+    # stopped being true of the mutated code and this entry stopped biting on every fixture the
+    # table then held. The shape guard is still load-bearing, but only over what the round-trip
+    # structurally cannot see: it compares **19 characters**, so a non-canonical *spelling* of a
+    # correct instant — a written-out zero offset, a fourth fractional digit — passes it. That
+    # matters because §6.7's dedupe is keyed on the `ts` string, and one instant under two
+    # spellings enters the ring twice. Two rows were added to `wire.test.ts` for exactly those.
+    ("W4 the ts shape is not checked, so one instant spelled two ways enters the ring twice",
      WIRE_SRC, "  if (typeof rawTs !== 'string' || !ISO_UTC.test(rawTs)) return null;",
      "  if (typeof rawTs !== 'string') return null;", [WIRE]),
     ("W5 manual with no duty is accepted, and the missing duty becomes OFF",
      WIRE_SRC,
-     "  if (mode === 'manual') {\n    if (typeof duty !== 'number' || !Number.isFinite(duty)) return undefined;\n"
+     "  if (mode === 'manual') {\n"
+     "    if (typeof duty !== 'number' || !Number.isInteger(duty)) return undefined;\n"
+     "    if (duty < PWM_MIN || duty > PWM_MAX) return undefined;\n"
      "    return { ...channels, ch5Mode: 'manual', ch5Pwm: pwm(duty) };\n  }",
-     "  if (mode === 'manual') {\n    return { ...channels, ch5Mode: 'manual', ch5Pwm: pwm(typeof duty === 'number' ? duty : 0) };\n  }",
+     "  if (mode === 'manual') {\n"
+     "    return { ...channels, ch5Mode: 'manual', ch5Pwm: pwm(typeof duty === 'number' ? duty : 0) };\n  }",
      [WIRE]),
     ("W6 ec-auto is allowed to carry a duty, which ENODATA means it cannot have",
      WIRE_SRC, "  if (duty !== null) return undefined;\n", "", [WIRE]),
@@ -354,8 +400,8 @@ REGRESSIONS = [
      WIRE_SRC, "  if (mode === null) return { ...channels, ch5Mode: null, ch5Pwm: null };\n", "",
      [WIRE]),
     ("W14 the duty is checked for truthiness, so OFF (pwm 0) reads as no reading at all",
-     WIRE_SRC, "    if (typeof duty !== 'number' || !Number.isFinite(duty)) return undefined;",
-     "    if (!duty) return undefined;", [WIRE]),
+     WIRE_SRC, "    if (typeof duty !== 'number' || !Number.isInteger(duty)) return undefined;",
+     "    if (typeof duty !== 'number' || !duty) return undefined;", [WIRE]),
     ("W15 a reading is coerced with Number(), so a string temperature becomes a temperature",
      WIRE_SRC,
      "  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;\n  return value;",
@@ -377,8 +423,8 @@ REGRESSIONS = [
     ("O1 a row with no §6.3 band is given normal, so a failed read reads as health",
      OBS_SRC,
      "    // O12: no band, no condition. Never invent one.\n    if (rawSeverity === null) return;\n"
-     "    out.push(observation({ kind, subject, label, value, rawSeverity }));",
-     "    out.push(observation({ kind, subject, label, value, rawSeverity: rawSeverity ?? 'normal' }));",
+     "    out.push(observation({ kind, subject, label, value, rawSeverity, enumeration }));",
+     "    out.push(observation({ kind, subject, label, value, rawSeverity: rawSeverity ?? 'normal', enumeration }));",
      [OBS]),
     ("O2 channel 5 joins the fan_stopped row, so one tach produces two conditions",
      OBS_SRC, "  [4, (c) => c.fan4Rpm],\n];", "  [4, (c) => c.fan4Rpm],\n  [5, (c) => c.fan5Rpm],\n];",
@@ -532,20 +578,18 @@ REGRESSIONS = [
     # ======================================================== the runtime itself
     ("U1 a repeated ts engages the backoff, so a healthy 1 s dashboard backs off to 30 s",
      RUNTIME_SRC,
-     "    if (ring === this.state.ring) {\n      this.patch({\n        consecutiveFailures: 0,\n"
-     "        lastFailure: null,\n        mode: modeOf(false, this.state.paused, 0),\n      });\n      return;\n    }",
-     "    if (ring === this.state.ring) {\n      this.fail('repeated ts');\n      return;\n    }",
+     "      this.applyMode({ consecutiveFailures: 0, lastFailure: null });\n      return;\n    }",
+     "      this.fail('repeated ts');\n      return;\n    }",
      [RUNTIME]),
     ("U2 the runtime ignores the ring's verdict, so a repeat re-runs every pipeline",
      RUNTIME_SRC,
-     "    if (ring === this.state.ring) {\n      this.patch({\n        consecutiveFailures: 0,\n"
-     "        lastFailure: null,\n        mode: modeOf(false, this.state.paused, 0),\n      });\n      return;\n    }\n\n",
-     "",
+     "      this.applyMode({ consecutiveFailures: 0, lastFailure: null });\n      return;\n    }",
+     "      this.applyMode({ consecutiveFailures: 0, lastFailure: null });\n    }",
      [RUNTIME]),
     ("U3 a 401 goes down the failed-poll path, so the session never gets renewed",
      RUNTIME_SRC,
-     "      case 'unauthorized':\n        this.expire();\n        return;",
-     "      case 'unauthorized':\n        this.fail('unauthorized');\n        break;",
+     "        case 'unauthorized':\n          this.expire();\n          return;",
+     "        case 'unauthorized':\n          this.fail('unauthorized');\n          break;",
      [RUNTIME]),
     ("U4 the expired hand-off loses its parameter, so §5.2 shows the idle screen",
      RUNTIME_SRC, "export const expiredLoginUrl = (): string => `${LOGIN_PATH}?${EXPIRED_PARAM}=1`;",
@@ -573,16 +617,20 @@ REGRESSIONS = [
      [RUNTIME]),
     ("U8 the un-sampled span starts when polling stopped, not at the last reading",
      RUNTIME_SRC,
-     "    return [...this.state.gaps, { fromMs: newest?.tsMs ?? this.env.nowMs(), toMs: null, reason }];",
-     "    return [...this.state.gaps, { fromMs: this.env.nowMs(), toMs: null, reason }];",
+     "  private newestTsMs(): number | null {\n    return newestSample(this.state.ring)?.tsMs ?? null;\n  }",
+     "  private newestTsMs(): number | null {\n    return this.env.nowMs();\n  }",
      [RUNTIME]),
     ("U9 the gap closes at the arrival time rather than at the sample's own ts",
-     RUNTIME_SRC, "      gaps: this.closeGap(wire.tsMs, nowMs),", "      gaps: this.closeGap(nowMs, nowMs),",
+     RUNTIME_SRC,
+     "      gaps: observeSample(\n        this.state.gaps,\n        wire.tsMs,",
+     "      gaps: observeSample(\n        this.state.gaps,\n        nowMs,",
      [RUNTIME]),
     ("U10 a successful poll does not reset the backoff, so one outage slows the page for ever",
      RUNTIME_SRC,
-     "      gaps: this.closeGap(wire.tsMs, nowMs),\n      consecutiveFailures: 0,",
-     "      gaps: this.closeGap(wire.tsMs, nowMs),\n      consecutiveFailures: this.state.consecutiveFailures,",
+     "      consecutiveFailures: 0,\n      lastFailure: null,\n"
+     "      severity: aggregateSeverity(poll.displayed),",
+     "      consecutiveFailures: this.state.consecutiveFailures,\n      lastFailure: null,\n"
+     "      severity: aggregateSeverity(poll.displayed),",
      [RUNTIME]),
     ("U11 stop() leaves the visibility listener attached, so every unmount leaks one",
      RUNTIME_SRC,
@@ -601,26 +649,33 @@ REGRESSIONS = [
     ("U14 the state is replaced on every poll, so a repeat re-renders the whole dashboard",
      RUNTIME_SRC, "    if (!changed) return;\n", "", [RUNTIME]),
     ("U15 refresh now silently resumes, so the mode the operator chose is undone by their click",
-     RUNTIME_SRC, "  refreshNow(): void {\n    void this.poll(true);\n  }",
-     "  refreshNow(): void {\n    this.resume();\n    void this.poll(true);\n  }", [RUNTIME]),
+     RUNTIME_SRC,
+     "  refreshNow(): void {\n    if (this.state.hidden) return;\n    void this.poll(true);\n  }",
+     "  refreshNow(): void {\n    if (this.state.hidden) return;\n    this.resume();\n"
+     "    void this.poll(true);\n  }",
+     [RUNTIME]),
     ("U16 refresh now respects the pause, so an explicit request for a reading does nothing",
-     RUNTIME_SRC, "  refreshNow(): void {\n    void this.poll(true);\n  }",
-     "  refreshNow(): void {\n    void this.poll();\n  }", [RUNTIME]),
+     RUNTIME_SRC,
+     "  refreshNow(): void {\n    if (this.state.hidden) return;\n    void this.poll(true);\n  }",
+     "  refreshNow(): void {\n    if (this.state.hidden) return;\n    void this.poll();\n  }",
+     [RUNTIME]),
     ("U17 changing the cadence clears the ring, throwing away the window being watched",
      RUNTIME_SRC,
-     "    this.patch({ preferences: { ...this.state.preferences, cadenceSeconds: seconds } });\n    this.reschedule();",
-     "    this.patch({ preferences: { ...this.state.preferences, cadenceSeconds: seconds }, ring: EMPTY_RING });\n"
+     "    this.applyMode({ preferences: { ...this.state.preferences, cadenceSeconds: seconds } });\n"
      "    this.reschedule();",
+     "    this.applyMode({\n      preferences: { ...this.state.preferences, cadenceSeconds: seconds },\n"
+     "      ring: EMPTY_RING,\n    });\n    this.reschedule();",
      [RUNTIME]),
     ("U18 STANDING defaults to suppressing a real alarm rather than to suppressing nothing",
-     RUNTIME_SRC, "    this.standing = options.standing ?? parseStandingIds(null);",
-     "    this.standing = options.standing ?? parseStandingIds('ufw_enforcing');", [RUNTIME]),
+     RUNTIME_SRC,
+     "    const standing = standingIdsFrom(wire.snapshot.standing);",
+     "    const standing = standingIdsFrom(\n"
+     "      wire.snapshot.standing.length > 0 ? wire.snapshot.standing : ['ufw_enforcing'],\n    );",
+     [RUNTIME]),
     ("U19 the paused mode is dropped, so a frozen dashboard looks live",
-     RUNTIME_SRC, "  expired ? 'expired' : paused ? 'paused' : failures > 0 ? 'stale' : 'live';",
-     "  expired ? 'expired' : failures > 0 ? 'stale' : 'live';", [RUNTIME]),
+     MODE_SRC, "  if (input.paused) return 'paused';\n", "", [MODE, RUNTIME]),
     ("U20 the stale mode is dropped, so a failing poll never says so",
-     RUNTIME_SRC, "  expired ? 'expired' : paused ? 'paused' : failures > 0 ? 'stale' : 'live';",
-     "  expired ? 'expired' : paused ? 'paused' : 'live';", [RUNTIME]),
+     MODE_SRC, "  return isStale(input) ? 'stale' : 'live';", "  return 'live';", [MODE, RUNTIME]),
     ("U35 a rejecting seam escapes, so the runtime stops polling with nothing on screen to say so",
      RUNTIME_SRC,
      "    let response: TelemetryResponse;\n    try {\n      response = await this.env.fetchTelemetry();\n"
@@ -628,10 +683,11 @@ REGRESSIONS = [
      "    const response: TelemetryResponse = await this.env.fetchTelemetry();",
      [RUNTIME]),
     ("U21 a malformed snapshot is treated as a partial one, so the dashboard renders nothing",
-     RUNTIME_SRC, "          this.fail('malformed snapshot');\n          break;", "          break;",
+     RUNTIME_SRC, "            this.fail('malformed snapshot');\n            break;",
+     "            break;",
      [RUNTIME]),
     ("U22 the malformed STANDING entries are dropped, so a typo silently suppresses nothing",
-     RUNTIME_SRC, "      unknownStanding: this.standing.unknown,", "      unknownStanding: [],",
+     RUNTIME_SRC, "      unknownStanding: standing.unknown,", "      unknownStanding: [],",
      [RUNTIME]),
     ("U23 §9's count is the number of conditions rather than the number that banner",
      RUNTIME_SRC, "      alarms: alarmCount(poll.displayed),", "      alarms: poll.displayed.length,",
@@ -645,19 +701,19 @@ REGRESSIONS = [
      "    const ring = appendSample(this.state.ring, { ...wire, tsMs: this.env.nowMs() });",
      [RUNTIME]),
     ("U32 a partial snapshot is treated as a failed poll — invariant 5, inverted",
-     RUNTIME_SRC, "        this.accept(wire);\n        break;",
-     "        if (wire.snapshot.errors.length > 0) {\n          this.fail('partial snapshot');\n"
-     "          break;\n        }\n        this.accept(wire);\n        break;",
+     RUNTIME_SRC, "          this.accept(wire);\n          break;",
+     "          if (wire.snapshot.errors.length > 0) {\n            this.fail('partial snapshot');\n"
+     "            break;\n          }\n          this.accept(wire);\n          break;",
      [RUNTIME]),
     # ⚠ "Carry the last reading forward so the chart does not break" is the tempting fix and the
     # one §6.7 forbids: "traces freeze rather than plotting zeros" means the trace **stops**.
     ("U33 a failed poll re-appends the last sample, so a dead server draws a flat live line",
      RUNTIME_SRC,
-     "  private fail(detail: string): void {\n    const failures = this.state.consecutiveFailures + 1;",
+     "  private fail(detail: string): void {\n    this.applyMode({",
      "  private fail(detail: string): void {\n    const carried = newestSample(this.state.ring);\n"
-     "    if (carried !== null) {\n      this.patch({\n        ring: {\n"
-     "          samples: [...this.state.ring.samples, carried],\n          heldTs: this.state.ring.heldTs,\n"
-     "        },\n      });\n    }\n    const failures = this.state.consecutiveFailures + 1;",
+     "    if (carried !== null) {\n      this.patch({\n"
+     "        ring: { ...this.state.ring, samples: [...this.state.ring.samples, carried] },\n"
+     "      });\n    }\n    this.applyMode({",
      [RUNTIME]),
     # ⚠ Hiding a "misleading" growing age while paused is exactly the failure §6.2 wrote the
     # indicator to prevent: "A frozen display that looks live".
@@ -702,6 +758,178 @@ REGRESSIONS = [
      RUNTIME_SRC, "export const expiredLoginUrl = (): string =>",
      "export const TELEMETRY = '/api/telemetry';\n\nexport const expiredLoginUrl = (): string =>",
      [GUARD8]),
+
+    # ============== the six ⚠ marks the retrofitted ledger found with nothing behind them
+    # ⚠ Every one of these was a test whose name stated a property no mutation in the harness
+    # could take away. They are grouped here rather than filed under their sections so that the
+    # cost of the ledger is visible: 153 mutations, and six inert marks still got through until
+    # `LEDGER_FILES` grew `gaps.test.ts` and `mode.test.ts` and the union was recomputed.
+    # ⚠ The other half of "the transition, not the poll", and the guard that makes the
+    # `condition.stale` short-circuit invisible for a continuous metric — see `E19`. Removing it
+    # restates every condition's band on every poll, which is §6.7's forbidden shape and what
+    # `⚠ a stale condition does not re-log its band on every poll` is really resting on.
+    ("E21 a band is re-logged on every poll even when it has not changed",
+     EVENTS_SRC, "    if (!first && previousBand === band) continue;\n", "", [EVENTS, RUNTIME]),
+    ("E19 a stale condition re-logs its band on every poll, so one outage fills the log",
+     EVENTS_SRC, "    if (condition.stale) continue;\n", "", [EVENTS, RUNTIME]),
+    # ⚠ §6.7's "the transition, not the poll", in the one feed that is deliberately NOT
+    # debounced — so the early-out is the only thing standing between it and a line per poll.
+    ("E20 the mode is logged on every poll rather than at the crossing",
+     EVENTS_SRC, "  const previous = state.logged.get(MODE_KEY);\n  if (previous === band) return state;",
+     "  const previous = state.logged.get(MODE_KEY);", [EVENTS]),
+    # ⚠ The complement of `G2`: that one keeps `hidden` and drops the other two, so a fixture
+    # whose reason IS `hidden` cannot tell it from the real thing. Dropping `hidden` is what
+    # `pause() → hide → resume()` needs, and it is the seam neither earlier phase reached.
+    ("G6 a hidden tab is not a reason to have a gap, so resuming closes one on a hidden tab",
+     GAPS_SRC, "  if (state.hidden) return 'hidden';\n", "", [GAPS, RUNTIME]),
+    # ⚠ HANDOVER's very first warning, written as code: "do not re-stamp on arrival". §4 stamps
+    # `ts` when the poll BEGAN, so the age can only over-state — and a repeat is not evidence of
+    # currency. Re-stamping makes a server whose clock stepped backwards look permanently fresh,
+    # which is F4 arriving through the ring instead of through the mode.
+    ("U42 a repeated ts re-stamps the newest sample, so a repeat refreshes the age",
+     RUNTIME_SRC,
+     "      this.applyMode({ consecutiveFailures: 0, lastFailure: null });\n      return;\n    }",
+     "      this.applyMode({\n        consecutiveFailures: 0,\n        lastFailure: null,\n"
+     "        ring: {\n          ...ring,\n"
+     "          newest: ring.newest === null ? null : { ...ring.newest, tsMs: this.env.nowMs() },\n"
+     "        },\n      });\n      return;\n    }",
+     [RUNTIME]),
+
+    # ============================ lib/client/gaps.ts — §6.7's un-sampled spans (F1/F2/F7)
+    # ⚠ Extracted out of `runtime.ts` in reconciliation, so every mutation here is new. The
+    # first is the one the old suite could not have caught: a gap closed by a *sample* rather
+    # than by a *reason* erases an hour of hidden time and draws a straight line across it.
+    ("G1 the gap closes on any arriving sample, so an hour of hidden time is erased",
+     GAPS_SRC,
+     "  const closing = open !== undefined && open.toMs === null && anyGapReason(state) === null;",
+     "  const closing = open !== undefined && open.toMs === null;",
+     [GAPS, RUNTIME]),
+    ("G2 only the reason that opened the gap is consulted, so pause → hide → resume closes it",
+     GAPS_SRC,
+     "  if (state.hidden) return 'hidden';\n  if (state.paused) return 'paused';\n"
+     "  if (state.consecutiveFailures > 0) return 'failed';\n  return null;",
+     "  if (state.hidden) return 'hidden';\n  return null;",
+     [GAPS, RUNTIME]),
+    # ⚠ `Date.now()` rather than a literal, because the wrong implementation here is not
+    # "some other number" but "the other clock" — §6.7's rule is which clock, and a gap
+    # opened before the first sample has no `ts` to be hatched back to.
+    ("G3 a gap opened before the first sample falls back to the browser's clock",
+     GAPS_SRC, "  if (fromMs === null) return gaps;",
+     "  if (fromMs === null) return [...gaps, { fromMs: Date.now(), toMs: null, reason }];",
+     [GAPS, RUNTIME]),
+    ("G4 the prune horizon drops the OPEN gap, so a long absence stops being hatched",
+     GAPS_SRC,
+     "  const live = next.filter((gap) => gap.toMs === null || gap.toMs >= horizonMs);",
+     "  const live = next.filter((gap) => gap.toMs !== null && gap.toMs >= horizonMs);",
+     [GAPS]),
+    ("G5 openness is read off the FIRST gap, so every gap after the first stays open for ever",
+     GAPS_SRC, "gaps.at(-1)?.toMs === null;", "gaps.at(0)?.toMs === null;", [GAPS, RUNTIME]),
+
+    # ================================= lib/client/mode.ts — §6.2's mode (F4/F11), extracted
+    ("M1 the negative age is not stale, so a server clock ahead of the browser reads live",
+     MODE_SRC, "  if (input.ageMs < 0) return true;\n", "", [MODE, RUNTIME]),
+    ("M2 staleAfterMs loses its floor, so a healthy 1 s dashboard flickers stale",
+     MODE_SRC,
+     "  Math.max(MIN_STALE_AGE_MS, STALE_CADENCE_MULTIPLE * cadenceMs);",
+     "  STALE_CADENCE_MULTIPLE * cadenceMs;",
+     [MODE, RUNTIME]),
+    ("M3 no sample yet is treated as stale, so the dashboard is grey before its first poll",
+     MODE_SRC, "  if (input.ageMs === null) return false;", "  if (input.ageMs === null) return true;",
+     [MODE, RUNTIME]),
+    # ⚠ F4 reintroduced in its exact original form — the narrow fix the module doc warns
+    # about. The failure counter is kept, the age term is dropped, and a run of repeats from a
+    # server whose clock stepped backwards is green and frozen again.
+    ("M4 stale is the failure counter alone, so a run of repeated ts stays green and frozen",
+     MODE_SRC, "  return input.ageMs > staleAfterMs(input.cadenceMs);", "  return false;",
+     [MODE, RUNTIME]),
+
+    # ============================= lib/client/ring.ts — the two selectors reconciliation moved
+    ("R14 the newest sample is newest by ARRIVAL, so the cell and the trace disagree",
+     RING_SRC, "export const newestSample = (ring: SampleRing): Sample | null => ring.newest;",
+     "export const newestSample = (ring: SampleRing): Sample | null => ring.samples.at(-1) ?? null;",
+     [RING, RUNTIME]),
+    ("R15 the window is anchored on the browser's clock, so a slow server empties the chart",
+     RING_SRC, "  const from = ring.newest.tsMs - windowMs;", "  const from = Date.now() - windowMs;",
+     [RING]),
+
+    # ================================== lib/client/runtime.ts — the rest of reconciliation's
+    ("U40 afterGap is never computed, so the first reading after a gap is debounced as usual",
+     RUNTIME_SRC, "    const afterGap = gapIsOpen(this.state.gaps);", "    const afterGap = false;",
+     [RUNTIME]),
+    ("U41 refresh now loses its hidden guard, so a hidden tab takes a reading inside its gap",
+     RUNTIME_SRC,
+     "  refreshNow(): void {\n    if (this.state.hidden) return;\n    void this.poll(true);\n  }",
+     "  refreshNow(): void {\n    void this.poll(true);\n  }",
+     [RUNTIME]),
+    # ⚠ C1. `reschedule()` is the last statement, so a throw anywhere on the arrival path
+    # leaves `inFlight` false, no timer pending and the mode still `live`: polling stops in
+    # silence, which is the one failure §6.2's age indicator cannot describe.
+    ("U36 the arrival path sits outside the try, so a throw while reading a body wedges the poll loop",
+     RUNTIME_SRC,
+     [("    try {\n      switch (response.kind) {", "    {\n      switch (response.kind) {"),
+      ("    } catch {\n      this.fail('the client could not read the response');\n    }\n"
+       "    this.reschedule();",
+       "    }\n    this.reschedule();")],
+     [RUNTIME]),
+    ("U37 the prune horizon is measured from the browser's clock rather than the newest ts",
+     RUNTIME_SRC,
+     "        (ring.newest?.tsMs ?? wire.tsMs) - LONGEST_WINDOW_MS,",
+     "        nowMs - LONGEST_WINDOW_MS,",
+     [RUNTIME]),
+    # ⚠ F9's pair, and the two halves are here to show they are NOT the same guard.
+    #
+    # `U38` is a plain alias. The text guard sees it; the runtime guard does not, because an
+    # alias that is never called reaches nothing. This is the exact line `build.md` claimed
+    # was covered and was not.
+    #
+    # `U39` is the mirror, and it is written with a **split literal** on purpose:
+    # `'return fet' + 'ch'` names neither `fetch` nor `globalThis` anywhere in the source, so
+    # `codeOnly` — which blanks comments but keeps string contents — hands the text guard
+    # nothing to match. Only the runtime wrapper sees it, and only because the call is made
+    # from `runtime.ts`'s own frame, which is what `CLIENT_FRAME` attributes on.
+    ("U38 a client module aliases fetch without calling it — the TEXT guard's half of F9",
+     RUNTIME_SRC, "  private cancelTimer(): void {",
+     "  private cancelTimer(): void {\n    const go = fetch;\n    void go;",
+     [GUARD8]),
+    ("U39 a client module reaches the network by a spelling no text can match — the RUNTIME guard's half",
+     RUNTIME_SRC, "  private cancelTimer(): void {",
+     "  private cancelTimer(): void {\n"
+     "    const reach = Function('return fet' + 'ch')() as (u: string) => Promise<unknown>;\n"
+     "    void reach('/api/telemetry').catch(() => undefined);",
+     [GUARD8]),
+
+    # ============================== lib/client/wire.ts — §4's `standing`, required since S34
+    ("W19 standing is not required, so a server that omits it validates and the list is undefined",
+     WIRE_SRC, "    standing === undefined ||\n", "", [WIRE]),
+    ("W20 standing is coerced to empty, so a malformed list silently suppresses nothing",
+     WIRE_SRC, "  const standing = arrayOf(field(value, 'standing'), plainString);",
+     "  const standing = arrayOf(field(value, 'standing'), plainString) ?? [];", [WIRE]),
+
+    # ================================ lib/client/events.ts — §6.5's edges and §6.7's sources
+    ("E14 the FIRST errors[] message per source wins, so the assembly's verdict is lost",
+     EVENTS_SRC, "  for (const error of errors) present.set(error.source, error.message);",
+     "  for (const error of errors)\n    if (!present.has(error.source)) present.set(error.source, error.message);",
+     [EVENTS]),
+    ("E15 the stale feed reads the retired list, so a condition we stopped seeing is never logged",
+     EVENTS_SRC, "  for (const condition of poll.wentStale) {", "  for (const condition of poll.retired) {",
+     [EVENTS, RUNTIME]),
+    ("E16 a retirement leaves the ledger behind, so a card that comes back logs a band change",
+     EVENTS_SRC, "    logged.delete(condition.id);\n    valueHolds.delete(condition.id);\n", "",
+     [EVENTS]),
+    ("E17 a reading that returns in a new band is logged twice, where §6.5 asks for one entry",
+     EVENTS_SRC, "    if (emittedIds.has(condition.id)) continue;\n", "", [EVENTS]),
+    ("E18 the dedupe conflict is logged on every poll rather than once per session",
+     EVENTS_SRC, "    if (loggedConflicts.has(conflict.id)) continue;\n", "", [EVENTS]),
+
+    # ================== lib/client/observations.ts — which enumerations this snapshot READ
+    # ⚠ `gpus: null` is "nvidia-smi failed", not "there are no cards". Treating it as a read
+    # enumeration retires every card the moment the collector fails — F3's whole point.
+    ("O14 a null enumeration counts as read, so a failed nvidia-smi retires every card",
+     OBS_SRC,
+     "  if (snapshot.gpus !== null) read.add(GPU_ENUMERATION);\n"
+     "  if (snapshot.serving !== null) read.add(SERVING_ENUMERATION);",
+     "  read.add(GPU_ENUMERATION);\n  read.add(SERVING_ENUMERATION);",
+     [OBS, RUNTIME]),
 
     # ==================================================== lib/units.ts (new in step 8)
     ("N1 the fan service unit is renamed, so §3.6's check watches a unit that does not exist",

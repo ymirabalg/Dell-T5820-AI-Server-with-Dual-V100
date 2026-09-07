@@ -816,15 +816,111 @@ describe('⚠ §6.7: a gap stays open while any reason to have one is in force',
   test('⚠ pause → hide → resume leaves the gap open, because hidden is still in force', async () => {
     const env = new FakeEnv();
     const runtime = await started(env, 1);
+    // ⚠ A poll must be IN FLIGHT across the whole sequence, and the ledger is what found that
+    // it was not. Without one, the gap survives `resume()` for a reason that has nothing to do
+    // with the predicate this test is named after: a hidden tab schedules nothing and
+    // `refreshNow` is a no-op there, so **no sample arrives to close it either way**. The test
+    // read green under an `anyGapReason` that had lost its `hidden` arm entirely.
+    const held = heldFetch(env);
+    await env.advance(5_000); // poll 2 leaves, and does not answer
+
     runtime.pause();
     await env.setHidden(true);
     runtime.resume();
+
+    // The gap's recorded reason is `paused` — why it BEGAN — while the reason actually in force
+    // is now `hidden`. A rule phrased as "the reason that opened it" closes this gap here, on a
+    // tab that is still hidden.
+    held.settle(snap(5));
     await env.advance(0);
 
+    expect(runtime.getState().ring.samples).toHaveLength(2);
     expect(runtime.getState().gaps).toEqual([
       { fromMs: Date.parse(tsAt(0)), toMs: null, reason: 'paused' },
     ]);
     expect(env.pending).toEqual([]);
+    runtime.stop();
+  });
+
+  /*
+   * ⚠ **F7, end to end — and only the runtime can be asked this question.** §6.4's ten seconds
+   * are ten seconds the client was **sampling**, and the hold is measured on the browser's
+   * clock. A tab hidden for a minute in the middle of a pending run therefore comes back with
+   * `nowMs − pendingSinceMs` far past ten seconds, and the first reading after the gap would
+   * confirm a band on the strength of a minute nobody measured — dating an alarm to ground the
+   * chart draws hatched. `runtime.ts` reads `gapIsOpen` **before** folding the sample in and
+   * hands the answer to `observePoll`, which restarts every pending run.
+   *
+   * `gaps.test.ts` owns "was a gap open" and `conditions.test.ts` owns "a gap restarts the
+   * run". Neither can see that the runtime joins them, and `const afterGap = false` passed both
+   * suites until this fixture existed.
+   */
+  test('⚠ a gap restarts §6.4’s pending run, so a hidden minute confirms nothing', async () => {
+    const env = new FakeEnv(new MemoryStorage({ 'aid.cadence': '1' }));
+    const bandOf = (): string | undefined =>
+      runtime.getState().displayed.find((d) => d.id === 'gpu_temp:0')?.severity;
+
+    env.replySnapshot(snap(0, 60));
+    const runtime = new TelemetryRuntime(env);
+    runtime.start();
+    await env.advance(0);
+
+    // Five seconds of alarming readings: a pending run, half-way to confirmation.
+    for (let i = 1; i <= 5; i += 1) {
+      env.replySnapshot(snap(i, 84));
+      await env.advance(1_000);
+    }
+    expect(bandOf()).toBe('normal');
+
+    // A minute hidden. The browser's clock runs; nothing is sampled.
+    // ⚠ Queued BEFORE the tab comes back. `FakeEnv` repeats its last answer once the queue
+    // runs dry, and that answer carries a `ts` the ring already holds — so resuming without a
+    // fresh snapshot takes the repeat branch, which returns before `afterGap` is even computed
+    // and would make this fixture pass under either implementation.
+    await env.setHidden(true);
+    await env.advance(60_000);
+    env.replySnapshot(snap(66, 84));
+    await env.setHidden(false);
+
+    // The first reading back closes the gap and RESTARTS the run. It must not confirm it.
+    await env.advance(0);
+    expect(bandOf()).toBe('normal');
+
+    // Ten more sampled seconds, and now it is earned.
+    for (let i = 67; i <= 77; i += 1) {
+      env.replySnapshot(snap(i, 84));
+      await env.advance(1_000);
+    }
+    expect(bandOf()).toBe('alarm');
+    runtime.stop();
+  });
+
+  /*
+   * ⚠ **The prune horizon is a server `ts`, and this is the fixture that can tell.** Every
+   * other gap fixture runs a server and a browser whose clocks agree, where `nowMs` and the
+   * newest `ts` are the same number and the two horizons are indistinguishable. Here the server
+   * is three hours behind — the same backwards-clock condition §6.7 writes `stale` for — so a
+   * horizon anchored on the browser's clock lands **past every reading the ring holds** and
+   * prunes the whole gap list on the first successful poll. The hatching disappears in one
+   * frame and the chart silently claims it measured ground it did not.
+   */
+  test('⚠ a closed gap survives a server three hours behind the browser', async () => {
+    const behind = -10_800; // three hours, half again the two-hour longest window
+    const env = new FakeEnv();
+    env.replySnapshot(snap(behind));
+    const runtime = new TelemetryRuntime(env);
+    runtime.start();
+    await env.advance(0);
+
+    await env.setHidden(true);
+    await env.advance(30_000);
+    env.replySnapshot(snap(behind + 30));
+    await env.setHidden(false);
+    await env.advance(0);
+
+    expect(runtime.getState().gaps).toEqual([
+      { fromMs: Date.parse(tsAt(behind)), toMs: Date.parse(tsAt(behind + 30)), reason: 'hidden' },
+    ]);
     runtime.stop();
   });
 
@@ -835,6 +931,8 @@ describe('⚠ §6.7: a gap stays open while any reason to have one is in force',
    * nothing for a hatch to meet.
    */
   test('⚠ no gap is opened before the first sample lands', async () => {
+    // A tab that was already hidden at construction: `syncHidden` sees no change, so this half
+    // asserts that nothing opens a gap on a path that never calls `openGap` at all.
     const env = new FakeEnv();
     env.hidden = true;
     const runtime = new TelemetryRuntime(env);
@@ -842,6 +940,20 @@ describe('⚠ §6.7: a gap stays open while any reason to have one is in force',
     await env.advance(60_000);
     expect(runtime.getState().gaps).toEqual([]);
     runtime.stop();
+
+    // ⚠ …and the half that actually reaches `openGap` with no `ts` to hatch back to. A first
+    // poll that FAILS calls it with `fromMs === null`, and the fallback the previous
+    // implementation had — the browser's clock — put one number from each of §6.7's two clocks
+    // into the same list, for a span with nothing drawn at either end. Without this fixture the
+    // test's own name was inert: the half above exercises no code path that could get it wrong.
+    const failing = new FakeEnv();
+    failing.reply({ kind: 'error', detail: 'down' });
+    const second = new TelemetryRuntime(failing);
+    second.start();
+    await failing.advance(0);
+    expect(second.getState().consecutiveFailures).toBe(1);
+    expect(second.getState().gaps).toEqual([]);
+    second.stop();
   });
 });
 

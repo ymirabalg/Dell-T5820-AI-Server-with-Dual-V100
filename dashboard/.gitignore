@@ -21,3 +21,7 @@ coverage/
 # A blanket `CLAUDE.md` pattern here would additionally swallow a hand-written
 # dashboard/CLAUDE.md if anyone ever adds one, on a project whose §2.4 talks about
 # CLAUDE.md files. Ruled at step-1 reconciliation; see pipeline/steps/01-scaffold/.
+
+# python bytecode from the regression harnesses — regenerated on every run
+__pycache__/
+*.pyc

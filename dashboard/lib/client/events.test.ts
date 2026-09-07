@@ -442,12 +442,120 @@ describe('⚠ §6.5: a reading that stopped and a subject that left do not look 
   });
 
   /*
-   * ⚠ §6.4: "A poll in which a condition does not appear steps nothing." A stale condition is
+   * ⚠ **The reachable case for "one entry, not two", which the fixture above does not reach.**
+   *
+   * `observePoll` does not touch a condition's band hold while its subject is absent, so a
+   * **pending run started before the outage survives it**. Here the card drops to 40 °C, going
+   * pending `normal` at 20 s; the collector then fails for long enough to be confirmed absent;
+   * and when the reading comes back at 50 s the hold sees the same pending band with thirty
+   * seconds behind it and confirms `normal` **on the same poll the condition returns**. Both
+   * the band loop and §6.5's returned feed have something to say about `gpu_temp:0` in that one
+   * poll, and §6.5 asks for one line.
+   *
+   * The fixture above cannot reach it: it returns and settles in two separate polls, so the two
+   * feeds never coincide and the guard is never consulted.
+   */
+  test('⚠ a band confirmed by the very poll that ends the outage still logs one line', () => {
+    const session = new Session();
+    session.poll(withGpuTemp(90), 0);
+    session.poll(withGpuTemp(90), 11_000);
+    // A cooler reading: pending `normal`, not yet confirmed, so nothing is logged.
+    expect(session.poll(withGpuTemp(40), 20_000).filter((e) => e.id === 'gpu_temp:0')).toEqual([]);
+
+    session.poll(blind(withGpuTemp(40)), 25_000);
+    session.poll(blind(withGpuTemp(40)), 36_000);
+
+    const back = session.poll(withGpuTemp(40), 50_000).filter((e) => e.id === 'gpu_temp:0');
+    expect(back).toHaveLength(1);
+    expect(back[0]).toMatchObject({ kind: 'band', to: 'normal' });
+  });
+
+  /*
+   * ⚠ **A retirement clears the ledger, so a subject that comes back is a FIRST sighting.**
+   * `observePoll` drops a retired condition's hold, its ledger entry and its presence — it has
+   * left the machine — so when the card returns it is confirmed at once at whatever it reads.
+   * The event log has to forget it in the same breath. If it does not, the returning card's
+   * band equals the band still recorded against it, the `previousBand === band` early-out
+   * fires, and **a card that left at 90 °C and came back at 90 °C is logged nowhere at all** —
+   * §6.5's "never a silent removal", failing on the return leg instead of the departure.
+   */
+  test('⚠ a card that is retired and comes back is logged again, as a first sighting', () => {
+    const session = new Session();
+    session.poll(withGpuTemp(90), 0);
+    session.poll(withGpuTemp(90), 11_000);
+
+    session.poll(noCards(withGpuTemp(90)), 20_000);
+    const retired = session.poll(noCards(withGpuTemp(90)), 32_000).filter((e) => e.kind === 'retired');
+    expect(retired.map((e) => e.id)).toContain('gpu_temp:0');
+
+    const returned = session.poll(withGpuTemp(90), 40_000).filter((e) => e.id === 'gpu_temp:0');
+    expect(returned).toHaveLength(1);
+    // `from: null` is what "first sighting" reads as — not a transition out of a band nobody
+    // has measured since the card left.
+    expect(returned[0]).toMatchObject({ kind: 'band', from: null, to: 'alarm' });
+  });
+
+  /*
+   * ⚠ **The reachable case for "a poll in which a condition does not appear steps nothing",
+   * which a `gpu_temp` fixture cannot reach.** For a continuous metric the band is
+   * `displaySeverity`, which is frozen while stale and therefore always equals the band
+   * already logged — so the `condition.stale` guard is invisible there, defended a second time
+   * by the `previousBand === band` early-out below it.
+   *
+   * A **value-band** condition (§6.4's closed vocabularies — a unit state) is different: its
+   * band comes from `valueHolds`, which lives here and is stepped by this loop. A unit that
+   * goes `active → failed` and then becomes unreadable **five seconds into its ten-second
+   * run** carries a pending value across the outage. Without the guard the loop keeps stepping
+   * it against the browser's clock, confirms `failed` on the strength of time nobody was
+   * sampling, and logs a state transition for a unit the dashboard has not been able to read
+   * since before the transition would have been confirmed.
+   *
+   * That is §6.4's ten seconds of *sampled* time (F7) and §6.5's stale rule meeting in the one
+   * place they overlap, and the ledger found it: the mutation that removes the guard passed
+   * every other fixture in this file.
+   */
+  test('⚠ a value-band condition that went stale mid-run does not confirm across the outage', () => {
+    const unreadable: TelemetrySnapshot = {
+      ...everythingZero,
+      cooling: { ...everythingZero.cooling, serviceState: null },
+      safety: { ...everythingZero.safety, fanServiceState: null },
+    };
+    const session = new Session();
+    session.poll(withFanService('active'), 0);
+    // The change starts a pending run. Five seconds is half of §6.4's hold, so nothing logs.
+    expect(session.poll(withFanService('failed'), 5_000).filter((e) => e.kind === 'band')).toEqual([]);
+
+    // Both panels lose the reading, so the condition leaves the poll and is confirmed absent.
+    session.poll(unreadable, 8_000);
+    const stale = session.poll(unreadable, 20_000);
+    // Fifteen seconds after the pending run began — the poll on which an unguarded loop
+    // confirms it — so this is the assertion that matters, not the ones after it.
+    expect(stale.map((e) => e.kind)).toContain('stale');
+    expect(stale.filter((e) => e.kind === 'band')).toEqual([]);
+
+    // Well past ten seconds of wall time, and none of it sampled.
+    for (let i = 1; i <= 5; i += 1) {
+      expect(session.poll(unreadable, 20_000 + i * 5_000).filter((e) => e.kind === 'band')).toEqual([]);
+    }
+  });
+
+  /*
+   * §6.4: "A poll in which a condition does not appear steps nothing." A stale condition is
    * carried in `displayed` so it keeps counting toward §9's dot — and if the log treated that
    * as a fresh sighting it would restate the same band on every poll for as long as the
    * collector stayed down, which is exactly what §6.7's "the transition, not the poll" forbids.
+   *
+   * ⚠ **The mark was dropped from this test, deliberately, and the property it was claiming
+   * lives on the value-band fixture above.** For a continuous metric this is defended **twice**
+   * — the `condition.stale` short-circuit skips the loop, and even without it the frozen band
+   * equals the band already logged, so the `previousBand === band` early-out fires. `E19` and
+   * `E21` each remove one guard and this test stays green under both; removing both at once is
+   * not an implementation anybody would write. HANDOVER §5.2 rule 1: where a property has no
+   * plausible wrong implementation, **drop the ⚠ rather than the standard**. The test stays —
+   * it is a true statement about the log, and it is the fixture that would catch a third guard
+   * being added and then removed.
    */
-  test('⚠ a stale condition does not re-log its band on every poll', () => {
+  test('a stale condition produces no log entry on any poll, however long it lasts', () => {
     const session = new Session();
     session.poll(withGpuTemp(90), 0);
     session.poll(withGpuTemp(90), 11_000);

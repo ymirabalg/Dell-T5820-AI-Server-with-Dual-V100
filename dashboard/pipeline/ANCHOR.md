@@ -1,9 +1,9 @@
 # ANCHOR — resume point for the ai-server dashboard build
 
-**Written 2026-09-07 by the session that ran steps 1–8, and updated after step 8's
-reconciliation stopped part-way. It is the only inheritance:
-the next session has no memory of that conversation.** Read this file, then `PLAN.md`, then
-`HANDOVER.md`, then `SPEC.md`. Everything below is fact unless marked otherwise.
+**Written 2026-09-07 by the session that ran steps 1–8, and updated when step 8 closed. It is
+the only inheritance: the next session has no memory of that conversation.** Read this file,
+then `PLAN.md`, then `HANDOVER.md`, then `SPEC.md`. Everything below is fact unless marked
+otherwise.
 
 ---
 
@@ -29,7 +29,7 @@ adversarial and review phases and fixed before they became wrong code. Several w
 
 ## 2. State at the moment of writing — READ CAREFULLY
 
-**Steps 1–7 are closed and verified.** Step 8 is **not**.
+**Steps 1–8 are closed and verified.** Steps 9–12 have not started.
 
 | Step | Scope | State |
 |---|---|---|
@@ -40,50 +40,56 @@ adversarial and review phases and fixed before they became wrong code. Several w
 | 5 | Serving / storage / safety collectors | **closed** |
 | 6 | Telemetry route (`/api/telemetry`, cache, gate, ceiling) | **closed** |
 | 7 | Auth & login (scrypt, cookie, limiter, `/login`, `proxy.ts`) | **closed** |
-| 8 | Client runtime (`lib/client/`) | **build + adversarial + review done; RECONCILIATION IN FLIGHT** |
+| 8 | Client runtime (`lib/client/`) | **closed** |
 | 9–12 | UI primitives, panels, packaging, deploy | **not started — OUT OF SCOPE, see §8** |
 
-### Step 8 stopped part-way, and this is the exact position
+### Step 8 closed 2026-09-07 — what the close-out did
 
-Step 8's reconciliation agent **ran out of context at roughly 60 %**. Its code work is
-**complete and green**; its harness re-aiming and its two closing documents are **not done**.
+Step 8's reconciliation ran across **three contexts**. The first two are recorded in
+`steps/08-client-runtime/reconciliation-progress.md`, which remains the detailed record of
+*what changed and why*. **`steps/08-client-runtime/reconciliation.md` is the close-out and the
+authoritative summary**, and `pipeline/HANDOVER.md` is rewritten for step 9.
 
 | Piece | State |
 |---|---|
 | All 12 MUSTs + 14 SHOULDs from `review.md` | **implemented, with tests** |
-| `pnpm verify` | **green — 1982 tests, 57 files, exit 0** (verified 6× across two sessions) |
-| `lib/client/gaps.ts`, `lib/client/mode.ts` | new, landed |
-| Harnesses 2–7 (47/64/90/127/61/116) | all exit 0, ledgers clean |
-| Step 8's own harness — **20 moved anchors to re-aim, ~20 mutations to add** | **outstanding** |
-| `steps/08-client-runtime/reconciliation.md` | **does not exist** |
-| `pipeline/HANDOVER.md` | **still says "after step 7, before step 8" — NOT rewritten** |
+| `pnpm verify` | **green — 1990 tests, 57 files, exit 0**, ten consecutive runs |
+| Step 8's harness | **158 mutations, all bite; ledger clean, 191 ⚠ tests checked** |
+| Harnesses 2–7 | pass. Step 6's was re-run in the last context; see `reconciliation.md` §5 for why the other five did not need to be |
+| `steps/08-client-runtime/reconciliation.md` | **written** |
+| `pipeline/HANDOVER.md` | **rewritten — "after step 8, before step 9"** |
+| `SPEC.md` | **untouched** (md5 unchanged). Five new gaps recorded for the owner |
 
-**Therefore `HANDOVER.md` does not describe step 8.** Until it is rewritten, the authoritative
-record is `steps/08-client-runtime/reconciliation-progress.md` (26 KB) — it carries every
-finding's disposition, the corrected surface for steps 9/10, and a restart brief. A manifest
-snapshot is at `steps/08-client-runtime/manifest-baseline.txt`.
+#### ⚠ Three findings from the close-out worth carrying, because none is step-8-specific
 
-#### Exactly what is left of step 8 (its §9, summarised so this file stands alone)
+1. **A fix that adds a second, independent defence silently voids the first one's mutation.**
+   `W4` removes `wire.ts`'s ISO-shape guard and had bitten for three phases. F13 then added a
+   calendar round-trip that independently refuses every row the test table held — so the
+   mutation applied, the property stayed true, and the shape guard's coverage went to **zero**
+   with no signal. **Whenever a fix adds a defence, re-run the harness and read what stopped
+   biting.**
+2. **A guard can be invisible under one kind of input and load-bearing under another.**
+   `events.ts`'s `if (condition.stale) continue;` changes nothing for a continuous metric — the
+   frozen band always equals the logged one, so a second guard covers it — and is load-bearing
+   for a **value-band** condition, which can carry a pending run across an outage and confirm it
+   on time nobody sampled. Every fixture in that file used `gpu_temp`. The ⚠ mark was moved to a
+   value-band fixture and the old one dropped per HANDOVER §5.2 rule 1.
+3. **A process-wide measurement must be attributed, not counted.** The ten-run evidence
+   requirement caught a **pre-existing 15 % flake** in step 6's suite:
+   `process.getActiveResourcesInfo()` counts the test runner's own timers, and one expiring
+   during a dynamic import failed an assertion about a property that held. Fixed one-sided, with
+   the residual stated. **Six earlier `pnpm verify` runs had missed it** — which is the whole
+   argument for running ten.
 
-| | Work | Notes |
-|---|---|---|
-| **9.1** | **Re-aim 20 moved harness anchors.** `python3 pipeline/steps/08-client-runtime/regressions.py` reports **20 `ANCHOR NOT FOUND`** until done | The brief ships a script that lists them without running vitest |
-| **9.2** | **Add ~20 mutations**, and add `gaps.test.ts` + `mode.test.ts` to `LEDGER_FILES` | The brief enumerates every one. **The most important is the hidden-gap erasure the old suite missed**: mutate `observeSample`'s `anyGapReason(state) === null` to `true`, which must redden the ⚠ test of that name in *both* `gaps.test.ts` and the runtime fixture |
-| **9.3** | **Write `reconciliation.md`** | Needs the final harness numbers and the pasted verify output |
-| **9.4** | **Rewrite `HANDOVER.md` for step 9** | Currently 56 KB describing the pre-fix world. The brief lists nine things it must carry — including the corrected surface, the twelve "must not leak into 9/10" rules, the four composition gaps, and **the three `build.md` over-claims that must never be repeated in their original form** |
-| **9.5** | **Evidence** — `pnpm verify` ×10 serially, then step 8's harness last and alone, manifest diffed after | |
-
-**Do not start 9.2's `fetch` mutations casually**: one of them (`Function('return fetch')()`)
-names neither `fetch` nor `globalThis` and exists specifically to demonstrate what the text
-guard cannot catch.
-
-Two findings from the completed part worth carrying forward:
+Two findings from the earlier contexts still worth carrying forward:
 
 - Retrofitting the red-test ledger to **step 2's** harness found **six pre-existing ⚠ marks
   with no mutation behind them**, five on `severity.ts`'s fan-stopped rows — including the
-  `-0` / `Object.is` trap. All six are now backed. **Step 3's harness still has no ledger.**
-- `FakeEnv`'s two fake clocks were **in different years** (browser 2023, server 2026).
-  Invisible until `mode` became a function of `now − ts`. Now coupled.
+  `-0` / `Object.is` trap. All six are now backed. **Step 3's harness still has no ledger**, and
+  it is the only one without.
+- **`FakeEnv`'s two fake clocks were in different years** (browser 2023, server 2026).
+  Invisible until `mode` became a function of `now − ts`. Now coupled, and a test that wants
+  skew has to ask for it.
 
 ### The commit is taken
 
@@ -220,7 +226,8 @@ A cached extract of the DEFER tables for steps 1–7 may still exist at
 ### Already-identified and still open — the sweep at (3) should start here, not rediscover them
 
 **Spec gaps awaiting the owner's wording** (found in step 8's reconciliation; `SPEC.md` was
-not edited, and the code's current choice is recorded beside each in that brief's §4):
+not edited, and the code's current choice is recorded beside each in `reconciliation.md` §4 and
+in `HANDOVER.md` §8):
 
 | # | Gap |
 |---|---|
@@ -234,8 +241,9 @@ not edited, and the code's current choice is recorded beside each in that brief'
 therefore **out of scope**, listed only so they are not lost):
 
 - **In scope (backend):** **D8** `STANDING` env plumbing → step 11, verified step 12 · the
-  **red-test ledger retrofit for step 3's harness**, which still has none · the six ⚠ marks
-  on `severity.ts` that step 2's retrofit found unbacked (now backed — confirm) .
+  **red-test ledger retrofit for step 3's harness**, which still has none and is the only
+  harness without one · ~~the six ⚠ marks on `severity.ts` that step 2's retrofit found
+  unbacked~~ — **backed and confirmed**, `R51`–`R55` in step 2 and `T51` in step 4.
 - **Out of scope (UI, steps 9–12):** D1 S40's third event-log feed · D2 the independent age
   tick · D3 rendering `unknownStanding` · D4 `errorsForPanel` · D5 `traceFor` · D6 jsdom +
   `useTelemetry` unmount · D7 S11/G5, S19, S30 · **O19** the GB→GiB brand rename.
@@ -246,12 +254,9 @@ therefore **out of scope**, listed only so they are not lost):
 
 The owner's instruction, numbered as given:
 
-0. **Prerequisite, not in the owner's numbering: finish step 8's reconciliation** — §2 above
-   lists the five pieces. `HANDOVER.md` cannot be trusted until 9.4 is done, and the harness
-   is reporting 20 missing anchors until 9.1 is. Use the restart brief in
-   `steps/08-client-runtime/reconciliation-progress.md` §9. **Alternatively**, fold this into
-   the work-item list at (4) as its own item — but do not begin (7) with `HANDOVER.md` still
-   describing a step that has since changed underneath it.
+0. ~~Prerequisite: finish step 8's reconciliation~~ — **done 2026-09-07.** `HANDOVER.md` now
+   describes the world as it is, and step 8's harness re-aims and ledger are clean, so (3)–(7)
+   can proceed against a document that can be trusted.
 1. ~~Commit `dashboard/`~~ — **done**, `71a2f7d` on `dashboard-backend`.
 2. ~~Write this anchor~~ — done, and updated.
 3. **Read `SPEC.md` and resolve remaining ambiguities in the steps 1–8 surface only.**

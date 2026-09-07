@@ -100,6 +100,15 @@ describe('⚠ ts is the axis, so it has to be a time', () => {
     ['prose', 'just now'],
     ['empty', ''],
     ['an impossible month', '2026-13-01T00:00:00Z'],
+    // ⚠ The last two rows are the only ones the SHAPE guard catches ALONE. Every row above is
+    // also refused by F13's calendar round-trip, which compares 19 characters — so it cannot
+    // see a non-canonical *spelling* of a correct instant, and without `ISO_UTC` both of these
+    // would validate. They are not cosmetic: §6.7's dedupe is keyed on the `ts` **string**, so
+    // one instant arriving under two spellings enters the ring twice, which is exactly the
+    // duplicate point, flattened decimation bucket and double-counted event the dedupe exists
+    // to prevent.
+    ['a zero offset written out rather than Z', '2026-09-06T14:02:11.000+00:00'],
+    ['more fractional digits than toISOString writes', '2026-09-06T14:02:11.4821Z'],
   ])('⚠ a ts that is not ISO-8601 UTC is refused — %s', (_name, ts) => {
     expect(parseSnapshot(withField('ts', ts))).toBeNull();
   });

@@ -1,7 +1,16 @@
-# Step 8 — reconciliation · **progress brief for a fresh context**
+# Step 8 — reconciliation · **progress brief** (contexts 1–2)
 
-The reconciliation was split across two contexts. **Everything below is done and green**; the
-remaining work is listed in §9 and is precise enough to execute cold.
+> ⚠ **SUPERSEDED FOR THE CLOSE-OUT.** A third context finished §9 on 2026-09-07 and
+> **`reconciliation.md` is now the authoritative summary** — read that first. This file remains
+> the detailed record of *what changed and why* in contexts 1 and 2: every finding's disposition
+> is here and is not repeated there. **§0's counters and §9's remaining-work list are stale by
+> design** — `pnpm verify` is now 1990 tests over 57 files, the harness is 158 mutations with a
+> clean ledger, and `HANDOVER.md` has been rewritten for step 9. §9 is kept verbatim as the
+> brief the close-out actually executed against, including the two places it turned out to be
+> wrong (`reconciliation.md` §3).
+
+The reconciliation was split across three contexts. **Everything below is done and green**; the
+work that was remaining when this file was written is listed in §9.
 
 **Read this file, then `SPEC.md`, then `review.md`. `build.md` and `adversarial.md` are only
 needed for a finding's original wording — every disposition is recorded here.**
