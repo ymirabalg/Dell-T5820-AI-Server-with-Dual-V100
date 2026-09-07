@@ -739,9 +739,9 @@ REGRESSIONS = [
     # the project's third guard — "a call that should exist and does not" — which neither the
     # ledger nor fixture symmetry can see, because one takes a ⚠ test as input and the other
     # a comparison a parser already contains.
-    ("T56 the nvidia-smi seam's setTimeout takes the raw argument again — Infinity clamps to 1 ms",
+    ("T85 the nvidia-smi seam's setTimeout takes the raw argument again — Infinity clamps to 1 ms",
      "lib/collectors/io.ts", "      }, bound);", "      }, timeoutMs);", GUARD),
-    ("T57 a second boundedTimeoutMs is defined at a seam, so 'validated' stops meaning one thing",
+    ("T86 a second boundedTimeoutMs is defined at a seam, so 'validated' stops meaning one thing",
      "lib/collectors/http.ts",
      "import { boundedTimeoutMs } from './deadline';",
      "export const boundedTimeoutMs = (timeoutMs: number, fallbackMs: number): number =>\n"
@@ -810,7 +810,7 @@ REGRESSIONS = [
     case 'ec-auto':
       return null;""",
      [SMM, COOL]),
-    ("T67 a `dell_smm` tempN_input is read for chassis ambient — §3.2 forbids it",
+    ("T87 a `dell_smm` tempN_input is read for chassis ambient — §3.2 forbids it",
      "lib/collectors/cooling.ts",
      "  const files: Record<string, string> = {};\n  for (const channel of FAN_CHANNELS) {",
      """  const files: Record<string, string> = {};
@@ -823,7 +823,7 @@ REGRESSIONS = [
   }
   for (const channel of FAN_CHANNELS) {""",
      COOL),
-    ("T68 readDir returns Dirents, so every `listed.has(...)` presence check silently fails",
+    ("T88 readDir returns Dirents, so every `listed.has(...)` presence check silently fails",
      "lib/collectors/io.ts",
      "  readDir: (path) => readdir(path),",
      "  readDir: (path) => readdir(path, { withFileTypes: true }) as unknown as Promise<string[]>,",
@@ -860,6 +860,29 @@ REGRESSIONS = [
      "      return { ...channels, ch5Mode: 'ec-auto', ch5Pwm: null };",
      "      return { ...channels, ch5Mode: 'ec-auto', ch5Pwm: pwm(0) };", "types"),
 ]
+
+
+# ---------------------------------------------------------------------------
+# ⚠ Mutation ids must be unique. Added 2026-09-07, after NINE duplicates were found
+#    across three harnesses — every one of them pre-existing and invisible.
+# ---------------------------------------------------------------------------
+#
+# HANDOVER §1 has warned about this since step 8 and the warning was never enforced, which is
+# the whole lesson: a rule that is written down and not checked is a rule that has already been
+# broken somewhere you have not looked. A duplicate is not a crash — it makes the
+# `DID NOT BITE` and `ANCHORS MOVED` lists ambiguous about WHICH entry failed, so the one
+# output that matters when something is wrong is the output that stops being readable.
+def _assert_unique_ids() -> None:
+    seen: dict[str, int] = {}
+    for entry in REGRESSIONS:
+        eid = entry[0].split()[0]
+        seen[eid] = seen.get(eid, 0) + 1
+    dupes = sorted(k for k, n in seen.items() if n > 1)
+    if dupes:
+        raise SystemExit(f"!!! duplicate mutation ids, which make the failure lists ambiguous: {', '.join(dupes)}")
+
+
+_assert_unique_ids()
 
 
 def main() -> int:

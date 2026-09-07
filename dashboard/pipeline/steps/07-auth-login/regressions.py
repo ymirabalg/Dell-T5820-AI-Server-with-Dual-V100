@@ -899,6 +899,29 @@ REGRESSIONS += [
 ]
 
 
+# ---------------------------------------------------------------------------
+# ⚠ Mutation ids must be unique. Added 2026-09-07, after NINE duplicates were found
+#    across three harnesses — every one of them pre-existing and invisible.
+# ---------------------------------------------------------------------------
+#
+# HANDOVER §1 has warned about this since step 8 and the warning was never enforced, which is
+# the whole lesson: a rule that is written down and not checked is a rule that has already been
+# broken somewhere you have not looked. A duplicate is not a crash — it makes the
+# `DID NOT BITE` and `ANCHORS MOVED` lists ambiguous about WHICH entry failed, so the one
+# output that matters when something is wrong is the output that stops being readable.
+def _assert_unique_ids() -> None:
+    seen: dict[str, int] = {}
+    for entry in REGRESSIONS:
+        eid = entry[0].split()[0]
+        seen[eid] = seen.get(eid, 0) + 1
+    dupes = sorted(k for k, n in seen.items() if n > 1)
+    if dupes:
+        raise SystemExit(f"!!! duplicate mutation ids, which make the failure lists ambiguous: {', '.join(dupes)}")
+
+
+_assert_unique_ids()
+
+
 def main() -> int:
     os.chdir(ROOT)
     bad = []

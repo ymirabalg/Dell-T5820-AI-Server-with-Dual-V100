@@ -770,12 +770,12 @@ REGRESSIONS = [
     # three ⚠ tests in this file; see `reconciliation.md`.
 
     # ============================ ⚠ R3 — the seam that abandoned its handle
-    ("D10 the connect timer is never cleared, so it destroys a LIVE socket mid-conversation",
+    ("D12 the connect timer is never cleared, so it destroys a LIVE socket mid-conversation",
      DBUS_SRC,
      "        clearTimeout(timer);\n        outcome();\n      };\n      const timer = setTimeout(() => {",
      "        outcome();\n      };\n      const timer = setTimeout(() => {",
      DBUS),
-    ("D11 the connect bound skips boundedTimeoutMs, so Infinity clamps to 1 ms",
+    ("D13 the connect bound skips boundedTimeoutMs, so Infinity clamps to 1 ms",
      DBUS_SRC,
      "      const bound = boundedTimeoutMs(timeoutMs, DBUS_TIMEOUT_MS);",
      "      const bound = timeoutMs;",
@@ -825,7 +825,7 @@ REGRESSIONS = [
      WIRE),
 
     # ============================ ⚠ F11 — two different problems, one message
-    ("L15 a `data` list whose first entry is junk is reported as an EMPTY list",
+    ("L21 a `data` list whose first entry is junk is reported as an EMPTY list",
      LLAMA_SRC,
      "    problems.push(data.length === 0 ? '`data` is empty' : '`data[0]` is not an object');",
      "    problems.push('`data` is empty');",
@@ -873,6 +873,29 @@ REGRESSIONS = [
     ("T5 ufwEnforcing is stringified, and the contract's boolean|null stops being enforced",
      SAFETY_SRC, "    ufwEnforcing: ufw.value,", "    ufwEnforcing: `${String(ufw.value)}`,", "types"),
 ]
+
+
+# ---------------------------------------------------------------------------
+# ⚠ Mutation ids must be unique. Added 2026-09-07, after NINE duplicates were found
+#    across three harnesses — every one of them pre-existing and invisible.
+# ---------------------------------------------------------------------------
+#
+# HANDOVER §1 has warned about this since step 8 and the warning was never enforced, which is
+# the whole lesson: a rule that is written down and not checked is a rule that has already been
+# broken somewhere you have not looked. A duplicate is not a crash — it makes the
+# `DID NOT BITE` and `ANCHORS MOVED` lists ambiguous about WHICH entry failed, so the one
+# output that matters when something is wrong is the output that stops being readable.
+def _assert_unique_ids() -> None:
+    seen: dict[str, int] = {}
+    for entry in REGRESSIONS:
+        eid = entry[0].split()[0]
+        seen[eid] = seen.get(eid, 0) + 1
+    dupes = sorted(k for k, n in seen.items() if n > 1)
+    if dupes:
+        raise SystemExit(f"!!! duplicate mutation ids, which make the failure lists ambiguous: {', '.join(dupes)}")
+
+
+_assert_unique_ids()
 
 
 def main() -> int:

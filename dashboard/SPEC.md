@@ -1237,6 +1237,13 @@ be checked against the command that produced it without arithmetic.
 - **Locale `en-US`** for separators, on every viewer, so a screenshot always reads the same.
 - **Times are rendered in the browser's local timezone**, with the zone abbreviation shown
   once in the header. The server sends ISO-8601 UTC in `ts`.
+- ⚠ **The clock is 24-hour, with seconds** — `14:47:31`, never `2:47:31 PM`. Stated because
+  **`en-US` defaults to 12-hour**, so a formatter written from the locale bullet alone is wrong
+  by default, and until 2026-09-07 the only place 24-hour appeared anywhere in this document was
+  §6.2's *example*. Seconds are shown because a 5 s cadence with a minute-resolution clock looks
+  frozen. ⚠ In `Intl` terms this is **`hourCycle: 'h23'`**, not `hour12: false`: the two are not
+  synonyms, `hour12` wins when both are given, and `hour12: false` has resolved to `h24` on
+  `en-US` — which renders midnight as **`24:00:00`**, the same bug from the other side.
 - **`null` renders as an em dash `—`. Never `0`, never blank, never `N/A`.**
 - **A negative age never renders as a negative number.** A `ts` ahead of the browser's clock is
   clock skew, not a reading from the future: the age reads `0 s`, and §6.7's `stale` mode says

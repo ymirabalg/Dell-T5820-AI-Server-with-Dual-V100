@@ -17,6 +17,12 @@
  *
  * Everything here is pure: values in, strings out. No IO, no clock, no DOM.
  *
+ * ⚠ **One ambient input, and it is spec text.** {@link formatTimeOfDay} and
+ * {@link formatZoneAbbreviation} read the **host's timezone**, because §6.6 says times
+ * render "in the browser's local timezone". They still take their instant as an argument —
+ * nothing here reads a clock — but the zone is environment, so both carry an explicit
+ * `timeZone` override that exists so a test can pin one. See HANDOVER §5.4.
+ *
  * **Locale is pinned to `en-US` on every viewer** (§6.6) so a screenshot always reads the
  * same. The formatters use explicit {@link Intl.NumberFormat} instances rather than
  * `Number.prototype.toLocaleString()`, which would silently follow the host locale if the
@@ -33,6 +39,7 @@ import type {
   Celsius,
   Cooling,
   GiB,
+  IsoTimestamp,
   LoadAverage,
   MHz,
   MiB,
@@ -410,4 +417,151 @@ export const formatCpuModel = (v: string | null): string => {
     .replace(/\s+/g, ' ')
     .trim();
   return trimmed === '' ? text : trimmed;
+};
+
+// ---------------------------------------------------------------------------
+// Time of day — §6.2's `14:47:31 EDT`, and §6.6's timezone bullet
+// ---------------------------------------------------------------------------
+
+/**
+ * §6.6's time options, in one place because {@link formatTimeOfDay} and
+ * {@link formatZoneAbbreviation} must describe the **same instant in the same zone** —
+ * the header prints them side by side and a disagreement between them is unreadable.
+ *
+ * ⚠ **`hourCycle: 'h23'`, and it is load bearing.** `en-US` defaults to **12-hour**, so
+ * without it §6.2's `14:47:31` renders `02:47:31 PM`. That looks plausible in a mock and
+ * is wrong on a wall panel, which is the failure mode this project keeps paying for.
+ *
+ * ⚠ **`h23`, not `h24`.** They differ at exactly one instant per day: midnight is
+ * `00:00:00` under `h23` and `24:00:00` under `h24`. `24:00:00` is a legal ISO spelling of
+ * the *end* of a day and reads on a header as a clock that has failed.
+ *
+ * ⚠ **`hourCycle` rather than `hour12: false`.** `hour12` wins over `hourCycle` when both
+ * are given, and `hour12: false` has historically resolved to `h24` on `en-US` — the
+ * midnight bug above, arrived at from the other direction. One option, stated once.
+ *
+ * `'2-digit'` on all three fields so an early-morning reading is `04:07:03` and the header
+ * does not change width as the hour rolls over.
+ *
+ * ⚠ **The widths are intent, not the mechanism.** Measured on Node 24.16.0: under
+ * `hourCycle: 'h23'` ICU resolves the hour field to `2-digit` whatever width is asked for
+ * (`resolvedOptions().hour` reads `'2-digit'` even when `'numeric'` was passed), so
+ * weakening them changes nothing observable. Step 2's harness carries that measurement
+ * instead of a mutation, because an equivalent mutation is not evidence of anything.
+ */
+const TIME_OF_DAY_OPTIONS = {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+} as const satisfies Intl.DateTimeFormatOptions;
+
+/**
+ * The same options plus the abbreviation, written **once** so the two formatters cannot
+ * drift into describing different clocks.
+ *
+ * ⚠ **`'short'`, and none of the four alternatives.** `long` is `Eastern Daylight Time`,
+ * which does not fit a header. `shortGeneric`/`longGeneric` are `ET`/`Eastern Time` — they
+ * are **DST-blind**, so the header would read the same all year and be wrong for eight
+ * months of it. `shortOffset` is `GMT-4`, which throws away the `EDT` §6.2 asks for.
+ */
+const ZONE_OPTIONS = {
+  ...TIME_OF_DAY_OPTIONS,
+  timeZoneName: 'short',
+} as const satisfies Intl.DateTimeFormatOptions;
+
+/**
+ * The viewer's own zone, resolved once at module load.
+ *
+ * §6.6 pins the **locale** on every viewer and deliberately does not pin the zone: "Times
+ * are rendered in the browser's local timezone". **Omitting `timeZone` is how that is
+ * spelled** — `Intl` then resolves the host's. A browser's zone does not change under a
+ * running page, so these two are built once rather than per render.
+ */
+const LOCAL_TIME = new Intl.DateTimeFormat('en-US', TIME_OF_DAY_OPTIONS);
+const LOCAL_ZONE = new Intl.DateTimeFormat('en-US', ZONE_OPTIONS);
+
+const timeFormatter = (timeZone: string | undefined): Intl.DateTimeFormat =>
+  timeZone === undefined
+    ? LOCAL_TIME
+    : new Intl.DateTimeFormat('en-US', { ...TIME_OF_DAY_OPTIONS, timeZone });
+
+const zoneFormatter = (timeZone: string | undefined): Intl.DateTimeFormat =>
+  timeZone === undefined
+    ? LOCAL_ZONE
+    : new Intl.DateTimeFormat('en-US', { ...ZONE_OPTIONS, timeZone });
+
+/**
+ * The instant a `ts` names, or `null` when it does not name one.
+ *
+ * ⚠ **This guard is not defensive decoration.** `Intl.DateTimeFormat.prototype.format`
+ * **throws a `RangeError: Invalid time value`** on an invalid `Date` — measured on this
+ * toolchain, Node 24.16.0. So the failure mode without it is not a cell reading
+ * `Invalid Date`; it is the header throwing and React unmounting the page. Law 1 says `—`.
+ *
+ * ⚠ It deliberately does **not** re-validate the ISO shape. `lib/client/wire.ts` already
+ * refuses a `ts` that is not a canonical ISO-8601 instant before it can reach a renderer,
+ * and a second, differently-worded validator of the same format is second on HANDOVER §7's
+ * do-not-copy list. This asks `Date` only the question a formatter has to ask: *is there an
+ * instant here at all?*
+ */
+const instantOf = (ts: IsoTimestamp | null): Date | null => {
+  if (ts === null) return null;
+  const at = new Date(ts);
+  return Number.isNaN(at.getTime()) ? null : at;
+};
+
+/**
+ * §6.2's header clock — `14:47:31`.
+ *
+ * The server sends ISO-8601 **UTC** in `ts` (§6.6); this renders it **in the viewer's own
+ * timezone**, 24-hour, with seconds, because the default cadence is 5 s and a clock with no
+ * seconds looks frozen.
+ *
+ * `null` renders `—` (law 1), and so does a `ts` that names no instant — see
+ * {@link instantOf} for why that path exists at all.
+ *
+ * ⚠ **The zone is a separate function, not a suffix on this string.** §6.6 shows the
+ * abbreviation "once in the header" while the time sits beside it, and O14 forbids a caller
+ * splitting a formatter's output on whitespace to get at half of it. See
+ * {@link formatZoneAbbreviation}.
+ *
+ * @param timeZone An IANA zone name. **Omit it in the app** — §6.6's rule is the *viewer's*
+ *   zone, and omitting it is how that is expressed. It exists because the host's timezone
+ *   is ambient state that a test cannot assert against (HANDOVER §5.4: a test may consume
+ *   entropy only for an assertion that holds for every value it could draw), so the tests
+ *   pin a zone through it. An unknown zone name throws, as `Intl` does — a mistyped zone is
+ *   a programming error and must not degrade into an em dash that reads as a lost reading.
+ */
+export const formatTimeOfDay = (ts: IsoTimestamp | null, timeZone?: string): string => {
+  const at = instantOf(ts);
+  return at === null ? EM_DASH : timeFormatter(timeZone).format(at);
+};
+
+/**
+ * The zone abbreviation §6.2's header shows once beside the clock — `EDT`.
+ *
+ * ⚠ **It is a function of the instant, not of the machine.** The same viewer in the same
+ * zone reads `EDT` in September and `EST` in January, so this takes the `ts` rather than
+ * reading a zone name once at startup. A header that said `EST` all summer would be wrong
+ * for eight months of the year, and silently.
+ *
+ * ⚠ **It is not always three letters and not always alphabetic.** `timeZoneName: 'short'`
+ * yields `EDT` in New York, `GMT+2` in Berlin, `GMT+5:30` in Kolkata and `UTC` in UTC.
+ * Nothing may assume a shape — not a caller, not a layout, not a test.
+ *
+ * Read out of `formatToParts`, **never** by splitting a formatted string on whitespace
+ * (O14): `GMT+5:30` would survive that and `Eastern Daylight Time` would not, so the bug
+ * would be invisible in the zone this box actually sits in.
+ *
+ * `null` — and a `ts` naming no instant — render `—` (law 1). Before the first poll there
+ * is no instant, so there is no abbreviation to be right about.
+ */
+export const formatZoneAbbreviation = (ts: IsoTimestamp | null, timeZone?: string): string => {
+  const at = instantOf(ts);
+  if (at === null) return EM_DASH;
+  const part = zoneFormatter(timeZone)
+    .formatToParts(at)
+    .find((p) => p.type === 'timeZoneName');
+  return part === undefined ? EM_DASH : part.value;
 };

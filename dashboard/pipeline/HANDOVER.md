@@ -135,7 +135,7 @@ wrote it. See §5.4. When a change touches anything that consumes entropy or a c
 ### The deliberate-regression harnesses — run all seven after any change in `lib/` or `app/`
 
 ```bash
-python3 pipeline/steps/02-format-severity/regressions.py                    #  47 mutations + ledger
+python3 pipeline/steps/02-format-severity/regressions.py                    #  55 mutations + ledger
 python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  72 mutations + ledger
 python3 pipeline/steps/04-collector-cooling/regressions.py                  #  91 mutations + ledger
 python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 127 mutations + ledger
@@ -144,7 +144,7 @@ python3 pipeline/steps/07-auth-login/regressions.py                         # 12
 python3 pipeline/steps/08-client-runtime/regressions.py                     # 172 mutations + ledger
 ```
 
-**697 mutations.** ⚠ **This total and the seven above it go stale on every item that adds a
+**705 mutations.** ⚠ **This total and the seven above it go stale on every item that adds a
 mutation, and have done four times.** Do not trust them; the authoritative number is the
 `All N regressions failed their check` line each harness prints, and all seven can be
 re-derived at once by importing each `regressions.py` and reading `len(REGRESSIONS)`. Each replaces one exact string in one source file with a **plausible wrong
@@ -218,10 +218,15 @@ in step 8. **Trust the ledger's verdict, never the printed excerpt.**
 ⚠ **A `test.each` name whose first `%` falls early is unmatchable by the ledger**, and the
 harness now warns (`⚠ test name is unmatchably short`).
 
-⚠ **Mutation ids must be unique within a harness.** Step 8's reconciliation added nine that
-collided with existing ids (`E1`–`E5`, `W15`, `W16`, `U34`, `U35`), which makes the
-`DID NOT BITE` list ambiguous about which entry failed. Check before adding:
-`grep -oE '^    \("[A-Z]+[0-9]+' regressions.py | sort | uniq -d`.
+⚠ **Mutation ids must be unique within a harness — and this is now ENFORCED, because writing
+it down did not work.** Step 8's reconciliation added nine colliding ids; when the rule was
+finally checked across all seven harnesses on 2026-09-07 it found **nine more, pre-existing and
+invisible** — `R30`/`R31` in step 2, `T56`/`T57`/`T67`/`T68` in step 4, `D10`/`D11`/`L15` in
+step 5. A duplicate does not crash: it makes the `DID NOT BITE` and `ANCHORS MOVED` lists
+ambiguous about *which* entry failed, so the one output that matters when something is wrong is
+the output that stops being readable. **Every harness now calls `_assert_unique_ids()` at import
+and exits naming the offending ids.** The lesson is the general one: *a rule that is written
+down and not checked has already been broken somewhere you have not looked.*
 
 ---
 

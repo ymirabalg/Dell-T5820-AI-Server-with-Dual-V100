@@ -11,6 +11,18 @@ Two kinds of check:
   Vitest's ``typecheck`` block only covers ``*.test-d.ts``, so a loosened brand shows up
   as an **unused** ``@ts-expect-error`` in a ``.test.ts`` and only ``tsc`` sees it.
 
+⚠ **One mutation was written, measured and dropped** (2026-09-07, the time-of-day item),
+per HANDOVER §5.2 rule 1 — "the property has no plausible wrong implementation, in which
+case drop the ⚠ rather than the standard", here in its mutation-side form. Weakening
+``hour: '2-digit'`` to ``hour: 'numeric'`` in ``lib/format.ts``'s ``TIME_OF_DAY_OPTIONS``
+is an **equivalent** mutation, not a wrong one: under ``hourCycle: 'h23'`` ICU resolves the
+hour field to ``2-digit`` whatever was asked for — measured on Node 24.16.0, all four
+``hour``/``minute`` width combinations render ``04:07:03`` and ``resolvedOptions().hour``
+comes back ``"2-digit"``. No test can separate the two implementations because there is no
+behavioural difference to see, so ``DID NOT BITE`` there was the harness being right. The
+zero-padding is still asserted (``04:07:03``); what is *not* claimed anywhere is that the
+explicit width is what produces it.
+
 Run from ``dashboard/`` with pnpm on PATH:
 
     export PATH="$HOME/.local/bin:$PATH"
@@ -210,12 +222,12 @@ REGRESSIONS = [
     ("R29 the aggregate reduces the TRUE severity, so a standing alarm turns the dot red",
      "lib/conditions.ts", "worstSeverity(...displayed.map((d) => d.displaySeverity));",
      "worstSeverity(...displayed.map((d) => d.severity));", "lib/conditions.test.ts"),
-    ("R30 a backwards clock breaks the identity contract (A14)", "lib/conditions.ts",
+    ("R37 a backwards clock breaks the identity contract (A14)", "lib/conditions.ts",
      "    return settled ? state : { ...state, pendingSinceMs: nowMs };",
      "    return { ...state, pendingSinceMs: nowMs };", "lib/conditions.test.ts"),
 
     # ------------------------------------------------------- §6.4 the STANDING vocabulary
-    ("R31 a bare `unit` in STANDING is accepted, silencing gpu-fan-control (A10)",
+    ("R38 a bare `unit` in STANDING is accepted, silencing gpu-fan-control (A10)",
      "lib/conditions.ts", "      if (rule.bareKindAllowedInStanding) ids.add(trimmed);\n      else unknown.push(trimmed);",
      "      ids.add(trimmed);", "lib/conditions.test.ts"),
     ("R32 a subject on a singleton kind is silently accepted (A9)", "lib/conditions.ts",
@@ -314,7 +326,73 @@ REGRESSIONS = [
      "  if (!readable(v) || v <= 0) return EM_DASH;",
      "lib/format.test.ts"),
 
+    # ------------------------------------------ §6.6's time of day, and §6.2's `14:47:31 EDT`
+    # ⚠ The one that ships wrong: `en-US` defaults to 12-hour, so dropping `hourCycle`
+    # renders §6.2's header `02:47:31 PM`. Midnight is the fixture that catches every
+    # version of this — noon is `12:00:00` under h12, h23 and h24 alike.
+    ("R56 the hour cycle is left to en-US, which is 12-hour", "lib/format.ts",
+     "  hourCycle: 'h23',\n} as const",
+     "} as const", "lib/format.test.ts"),
+    # ⚠ The other 24-hour spelling. `h24` differs from `h23` at exactly one instant a day:
+    # midnight reads `24:00:00`, which on a header looks like a clock that has failed.
+    ("R57 h24 instead of h23 - midnight reads 24:00:00", "lib/format.ts",
+     "  hourCycle: 'h23',\n} as const",
+     "  hourCycle: 'h24',\n} as const", "lib/format.test.ts"),
+    # §6.2's header is `14:47:31`, not `14:47`. At a 5 s cadence a minute-resolution clock
+    # is indistinguishable from a page that has stopped polling.
+    ("R58 seconds dropped from the header clock", "lib/format.ts",
+     "  second: '2-digit',\n  hourCycle",
+     "  hourCycle", "lib/format.test.ts"),
+    # ⚠ `shortGeneric` is the plausible wrong reading of "the short zone name": it is
+    # DST-BLIND (`ET` in both July and January), so the header would be silently wrong for
+    # eight months of the year.
+    ("R60 the zone abbreviation uses the generic form and stops tracking DST", "lib/format.ts",
+     "  timeZoneName: 'short',\n} as const",
+     "  timeZoneName: 'shortGeneric',\n} as const", "lib/format.test.ts"),
+    ("R61 the zone abbreviation is the long name - `Eastern Daylight Time`", "lib/format.ts",
+     "  timeZoneName: 'short',\n} as const",
+     "  timeZoneName: 'long',\n} as const", "lib/format.test.ts"),
+    # ⚠ `Intl.DateTimeFormat.prototype.format` THROWS `RangeError: Invalid time value` on an
+    # invalid Date, so this guard's absence is not a bad-looking cell - it is the header
+    # throwing and taking the page with it. `IsoTimestamp` is an unvalidated brand, so an
+    # unparsable value is reachable by construction.
+    ("R62 the unparsable-ts guard is dropped, so the formatter throws", "lib/format.ts",
+     "  return Number.isNaN(at.getTime()) ? null : at;",
+     "  return at;", "lib/format.test.ts"),
+    # The pinned-zone seam is accepted and ignored. ⚠ WHICH rows go red depends on the
+    # machine's own zone, but at least one always does: the tables pin four different zones
+    # and no single host zone satisfies more than one of them.
+    ("R63 the pinned timeZone is ignored by the clock", "lib/format.ts",
+     "{ ...TIME_OF_DAY_OPTIONS, timeZone });",
+     "{ ...TIME_OF_DAY_OPTIONS });", "lib/format.test.ts"),
+    ("R64 the pinned timeZone is ignored by the zone abbreviation", "lib/format.ts",
+     "{ ...ZONE_OPTIONS, timeZone });",
+     "{ ...ZONE_OPTIONS });", "lib/format.test.ts"),
+
 ]
+
+
+# ---------------------------------------------------------------------------
+# ⚠ Mutation ids must be unique. Added 2026-09-07, after NINE duplicates were found
+#    across three harnesses — every one of them pre-existing and invisible.
+# ---------------------------------------------------------------------------
+#
+# HANDOVER §1 has warned about this since step 8 and the warning was never enforced, which is
+# the whole lesson: a rule that is written down and not checked is a rule that has already been
+# broken somewhere you have not looked. A duplicate is not a crash — it makes the
+# `DID NOT BITE` and `ANCHORS MOVED` lists ambiguous about WHICH entry failed, so the one
+# output that matters when something is wrong is the output that stops being readable.
+def _assert_unique_ids() -> None:
+    seen: dict[str, int] = {}
+    for entry in REGRESSIONS:
+        eid = entry[0].split()[0]
+        seen[eid] = seen.get(eid, 0) + 1
+    dupes = sorted(k for k, n in seen.items() if n > 1)
+    if dupes:
+        raise SystemExit(f"!!! duplicate mutation ids, which make the failure lists ambiguous: {', '.join(dupes)}")
+
+
+_assert_unique_ids()
 
 
 def main() -> int:

@@ -27,9 +27,11 @@ import {
   formatRpm,
   formatSwapGiB,
   formatText,
+  formatTimeOfDay,
   formatTokens,
   formatUptime,
   formatWatts,
+  formatZoneAbbreviation,
   pwmStateName,
 } from './format';
 import {
@@ -44,6 +46,7 @@ import {
   bytesPerSecond,
   celsius,
   gib,
+  isoTimestamp,
   mhz,
   mib,
   percent,
@@ -826,5 +829,197 @@ describe('the age indicator', () => {
     expect(formatAge(null)).toBe(EM_DASH);
     expect(formatAge(Number.NaN)).toBe(EM_DASH);
     expect(formatAge(Number.POSITIVE_INFINITY)).toBe(EM_DASH);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §6.2's header clock — `14:47:31 EDT`
+// ---------------------------------------------------------------------------
+
+/*
+ * ⚠ **Every test below pins `timeZone` explicitly, and that is not a skipped assertion.**
+ *
+ * HANDOVER §5.4: *a test may consume entropy only for an assertion that holds for every
+ * value it could draw.* §6.6 leaves the zone to the viewer, so the **machine's timezone is
+ * entropy** — and `formatTimeOfDay(ts) === '14:47:31'` is an assertion whose truth depends
+ * on which value was drawn. It is green on this box (`America/New_York`) and red in Berlin.
+ * By §5.4 that makes the zone a **fixture**, and a fixture must be constructed in the test.
+ * This project has already shipped one test whose truth depended on a value it drew; it
+ * failed 1 run in 16 and demonstrated the opposite of its own name.
+ *
+ * Nothing is given up by pinning. The property under test is *"an instant, in a zone,
+ * renders these digits"* — the zone is an **input** to it, not a variable it should be
+ * quantified over. What §6.6 additionally requires is that the *default* input is the
+ * host's zone, and that is asserted separately, further down, by a comparison that holds in
+ * every zone the machine could be in.
+ */
+
+/** A zone whose abbreviation is alphabetic, and whose DST changes it. */
+const NEW_YORK = 'America/New_York';
+/** A zone whose abbreviation is **not** alphabetic — `GMT+2` (§6.6 assumes no shape). */
+const BERLIN = 'Europe/Berlin';
+/** A half-hour offset, so `GMT+5:30` carries a colon as well as a sign. */
+const KOLKATA = 'Asia/Kolkata';
+/** The zone the wire uses. Its abbreviation is `UTC` — neither a DST pair nor an offset. */
+const UTC = 'UTC';
+
+/** §6.2's header instant. 18:47:31Z is 14:47:31 in New York, where this box sits. */
+const SUMMER = isoTimestamp('2026-09-07T18:47:31Z');
+/** The same wall-clock hour in January — the zone abbreviation must change with it. */
+const WINTER = isoTimestamp('2026-01-15T18:47:31Z');
+
+describe("§6.2's header clock (§6.6)", () => {
+  test.each([
+    // §6.6's example, exactly as §6.2 prints it. 12-hour would say `02:47:31 PM`.
+    [SUMMER, NEW_YORK, '14:47:31'],
+    [WINTER, NEW_YORK, '13:47:31'],
+    // A single-digit hour is padded, so the header does not change width on the hour.
+    [isoTimestamp('2026-09-07T08:07:03Z'), NEW_YORK, '04:07:03'],
+    // The same instant, three other zones — the digits are the viewer's, not the server's.
+    [SUMMER, BERLIN, '20:47:31'],
+    [SUMMER, KOLKATA, '00:17:31'],
+    [SUMMER, UTC, '18:47:31'],
+  ])('the header clock renders %s in %s as %s', (ts, zone, expected) => {
+    expect(formatTimeOfDay(ts, zone)).toBe(expected);
+  });
+
+  /*
+   * ⚠ **The 12/24-hour trap, at the only instant that catches every version of it.**
+   *
+   * `en-US` defaults to 12-hour, so an unpinned `hourCycle` renders midnight `12:00:00 AM`
+   * — which is not merely a different format, it is the *wrong hour digits*. And `h24`,
+   * the other way of asking for a 24-hour clock, spells midnight `24:00:00`.
+   *
+   * Noon is in the table below because it is the case that looks like it tests this and
+   * does not: `12:00:00` under h12, h23 and h24 alike. Midnight is the fixture that bites.
+   */
+  test.each([
+    [isoTimestamp('2026-09-08T04:00:00Z'), NEW_YORK, '00:00:00'],
+    [isoTimestamp('2026-09-07T22:00:00Z'), BERLIN, '00:00:00'],
+    [SUMMER, KOLKATA, '00:17:31'],
+  ])(
+    '⚠ midnight renders 00, never 12:00:00 AM and never 24:00:00 — %s in %s is %s',
+    (ts, zone, expected) => {
+      expect(formatTimeOfDay(ts, zone)).toBe(expected);
+      expect(formatTimeOfDay(ts, zone)).not.toMatch(/AM|PM/);
+    },
+  );
+
+  test.each([
+    [isoTimestamp('2026-09-07T16:00:00Z'), NEW_YORK, '12:00:00'],
+    [isoTimestamp('2026-09-07T10:00:00Z'), BERLIN, '12:00:00'],
+  ])('noon is the case that looks decisive and is not — %s in %s is %s', (ts, zone, expected) => {
+    expect(formatTimeOfDay(ts, zone)).toBe(expected);
+  });
+
+  /*
+   * ⚠ §6.6's cadence default is 5 s and §6.2's header prints `14:47:31`, not `14:47`. A
+   * clock with no seconds updates once a minute, which on a wall panel is indistinguishable
+   * from a page that has stopped polling — the exact failure the age indicator exists to
+   * prevent, reintroduced beside it.
+   */
+  test('⚠ seconds are rendered, so a 5 s cadence does not read as a frozen page', () => {
+    expect(formatTimeOfDay(SUMMER, NEW_YORK)).toBe('14:47:31');
+    expect(formatTimeOfDay(isoTimestamp('2026-09-07T18:47:32Z'), NEW_YORK)).toBe('14:47:32');
+    expect(formatTimeOfDay(SUMMER, NEW_YORK)).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+  });
+
+  test('the clock carries no zone — the abbreviation is a separate figure (O14)', () => {
+    expect(formatTimeOfDay(SUMMER, NEW_YORK)).toBe('14:47:31');
+    expect(formatTimeOfDay(SUMMER, KOLKATA)).not.toMatch(/GMT/);
+  });
+});
+
+describe('the zone abbreviation, shown once in the header (§6.6)', () => {
+  test.each([
+    [SUMMER, NEW_YORK, 'EDT'],
+    [SUMMER, BERLIN, 'GMT+2'],
+    [SUMMER, KOLKATA, 'GMT+5:30'],
+    [SUMMER, UTC, 'UTC'],
+    [WINTER, BERLIN, 'GMT+1'],
+  ])('the zone abbreviation for %s in %s is %s', (ts, zone, expected) => {
+    expect(formatZoneAbbreviation(ts, zone)).toBe(expected);
+  });
+
+  /*
+   * ⚠ **The abbreviation is a function of the INSTANT, not of the machine.** The generic
+   * forms `Intl` also offers (`shortGeneric` → `ET`, `longGeneric` → `Eastern Time`) are
+   * DST-independent and would be a plausible choice for "the short zone name"; they would
+   * make the header read the same all year, and be silently wrong for eight months of it.
+   */
+  test('⚠ the abbreviation follows the instant across DST, not the machine', () => {
+    expect(formatZoneAbbreviation(SUMMER, NEW_YORK)).toBe('EDT');
+    expect(formatZoneAbbreviation(WINTER, NEW_YORK)).toBe('EST');
+    expect(formatZoneAbbreviation(SUMMER, NEW_YORK)).not.toBe(
+      formatZoneAbbreviation(WINTER, NEW_YORK),
+    );
+  });
+
+  /*
+   * ⚠ It is **not always three letters and not always alphabetic**, so nothing — no
+   * caller, no layout, no test — may assume a shape. `long` would be a plausible wrong
+   * choice here and reads `Eastern Daylight Time`, which does not fit a header.
+   */
+  test('⚠ the abbreviation has no fixed shape — letters, an offset, or an offset with a colon', () => {
+    expect(formatZoneAbbreviation(SUMMER, NEW_YORK)).toBe('EDT');
+    expect(formatZoneAbbreviation(SUMMER, BERLIN)).toBe('GMT+2');
+    expect(formatZoneAbbreviation(SUMMER, KOLKATA)).toBe('GMT+5:30');
+    expect(formatZoneAbbreviation(SUMMER, UTC)).toBe('UTC');
+  });
+});
+
+/*
+ * The default — no `timeZone` argument — is §6.6's actual rule, and the assertions here are
+ * written so they hold **in every zone this machine could be in**. That is what §5.4 asks
+ * of a test that consumes entropy, and it is why the tables above pin a zone instead: they
+ * assert digits, which no unpinned test can.
+ *
+ * Deliberately **not** ⚠-marked. The obvious wrong implementation — pinning the zone the
+ * way §6.6 pins the locale — is a mutation whose redness depends on the host's zone (pin it
+ * to `UTC` and a UTC machine sees nothing), and HANDOVER §5.2 rule 3 says a mutation like
+ * that cannot be told from a sound one. The property is still worth asserting; the ⚠ would
+ * be a claim the ledger cannot honestly back.
+ */
+describe('with no zone argument, the host zone is the one used (§6.6)', () => {
+  const hostZone = new Intl.DateTimeFormat('en-US').resolvedOptions().timeZone;
+
+  test('the default rendering equals the host zone rendering, whatever that zone is', () => {
+    expect(formatTimeOfDay(SUMMER)).toBe(formatTimeOfDay(SUMMER, hostZone));
+    expect(formatZoneAbbreviation(SUMMER)).toBe(formatZoneAbbreviation(SUMMER, hostZone));
+  });
+
+  test('the shape holds in every zone: two digits, two digits, two digits', () => {
+    expect(formatTimeOfDay(SUMMER)).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    expect(formatTimeOfDay(WINTER)).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    expect(formatZoneAbbreviation(SUMMER)).not.toBe(EM_DASH);
+    expect(formatZoneAbbreviation(SUMMER).length).toBeGreaterThan(0);
+  });
+});
+
+describe('law 1 over the time of day (§6.6)', () => {
+  test('null renders the em dash, for both halves of the header', () => {
+    expect(formatTimeOfDay(null)).toBe(EM_DASH);
+    expect(formatTimeOfDay(null, NEW_YORK)).toBe(EM_DASH);
+    expect(formatZoneAbbreviation(null)).toBe(EM_DASH);
+    expect(formatZoneAbbreviation(null, NEW_YORK)).toBe(EM_DASH);
+  });
+
+  /*
+   * ⚠ **`Intl.DateTimeFormat.prototype.format` THROWS on an invalid `Date`** —
+   * `RangeError: Invalid time value`, measured on Node 24.16.0. So the missing guard here
+   * does not render `Invalid Date` in a cell; it throws out of the header and takes the
+   * page with it. `IsoTimestamp` is a brand over `string` and brands do not validate
+   * (HANDOVER §3.4), so an unparsable value is reachable by construction.
+   */
+  test.each([
+    isoTimestamp('not a timestamp'),
+    isoTimestamp(''),
+    isoTimestamp('   '),
+    isoTimestamp('2026-13-45T99:99:99Z'),
+  ])('⚠ a ts naming no instant renders the em dash and never throws — %s', (ts) => {
+    expect(() => formatTimeOfDay(ts, NEW_YORK)).not.toThrow();
+    expect(formatTimeOfDay(ts, NEW_YORK)).toBe(EM_DASH);
+    expect(() => formatZoneAbbreviation(ts, NEW_YORK)).not.toThrow();
+    expect(formatZoneAbbreviation(ts, NEW_YORK)).toBe(EM_DASH);
   });
 });
