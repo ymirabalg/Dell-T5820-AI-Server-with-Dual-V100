@@ -125,11 +125,23 @@ describe('collectGpus (§3.1)', () => {
     expect(errors[0]?.message).toContain('ENOENT');
   });
 
+  /*
+   * ⚠ **And `[]` is never silent** (§3.1: "always carries an `errors[]` entry"). This
+   * assertion changed on 2026-09-07: the empty-parse branch used to return `errors: []`, so
+   * the one shape that produced `[]` with nothing to explain it contradicted the sentence.
+   *
+   * Unreachable — step 3's adversarial measured `nvidia-smi` exiting **6** with no devices,
+   * so exit 0 with no output is not a state the real binary reaches. Filed anyway, because an
+   * entry mints no verdict and no severity: it can only ever say *why* a figure is blank, and
+   * `[]` with no explanation is the one reading here that says nothing at all.
+   */
   test('⚠ it ran and printed nothing is `gpus: []` — a different state, and not null', async () => {
     const { gpus, errors } = await collectGpus({ io: fakeIo({ stdout: EMPTY }) });
     expect(gpus).toEqual([]);
     expect(gpus).not.toBeNull();
-    expect(errors).toEqual([]);
+    // Not `null`, and not silent either.
+    expect(sources(errors)).toEqual(['nvidia-smi']);
+    expect(errors[0]?.message).toContain('printed nothing');
   });
 
   test('null and [] are genuinely distinguishable at the call site', async () => {

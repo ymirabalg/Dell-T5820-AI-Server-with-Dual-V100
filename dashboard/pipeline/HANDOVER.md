@@ -136,7 +136,7 @@ wrote it. See §5.4. When a change touches anything that consumes entropy or a c
 
 ```bash
 python3 pipeline/steps/02-format-severity/regressions.py                    #  47 mutations + ledger
-python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  67 mutations + ledger
+python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  68 mutations + ledger
 python3 pipeline/steps/04-collector-cooling/regressions.py                  #  91 mutations + ledger
 python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 127 mutations + ledger
 python3 pipeline/steps/06-telemetry-route/regressions.py                    #  63 mutations + ledger
@@ -144,7 +144,7 @@ python3 pipeline/steps/07-auth-login/regressions.py                         # 11
 python3 pipeline/steps/08-client-runtime/regressions.py                     # 158 mutations + ledger
 ```
 
-**669 mutations.** Each replaces one exact string in one source file with a **plausible wrong
+**670 mutations.** Each replaces one exact string in one source file with a **plausible wrong
 implementation** — the wrong thing someone would actually write, never a syntax error — runs
 the affected check, and restores the file. Every one must exit 1. Step 1 has no harness.
 
@@ -848,13 +848,19 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 
 ## 9. Deferred work, with owners
 
-⚠ **`pipeline/WORK-ITEMS.md` is new** (2026-09-07). It carries the steps 1–8 sweep the owner
-asked for: what it found, an adversarial review of its own findings, what was executed, and the
-`SPEC.md` wording still owed. **Read it alongside §8.** One new finding there has no owner yet
-— **A15**: §3.1 says `gpus: []` *"always carries an `errors[]` entry, so it is never silent"*,
-which is false for the one branch where the parse is empty (exit 0, no output). Unreachable —
-`nvidia-smi` exits 6 with no devices — so the live `[]` always does carry entries. Either file
-an entry for the empty parse or qualify the sentence; the second is the owner's.
+⚠ **Two new documents, both 2026-09-07:**
+
+- **`pipeline/WORK-ITEMS.md`** — the steps 1–8 sweep: what it found, an adversarial review of
+  its own findings, the execution log, and §9's record of the **ten `SPEC.md` edits taken**.
+  ⚠ **`SPEC.md` was edited for the first time in this project's history** (1290 → 1362 lines),
+  by the owner's delegation. Every gap listed as "awaiting the owner's wording" in earlier
+  handovers is now **in the spec**; §8's table below is the residue, not the whole story.
+- **`pipeline/UI-BACKEND-GAPS.md`** — ⚠ **read this before starting step 9.** §6.1 and §6.2's
+  panel list checked against `lib/`, row by row. The finding is that **the data is all there**
+  and what is missing is a thin seam layer: the GB→GiB rename first and mechanically, an
+  `ErrorSource → panel` selector, `traceFor`, a time-of-day formatter, a `state === null`
+  wrapper, and the age tick. It also carries the twelve do-not-leak rules, because that is the
+  document step 9 will actually open.
 
 | Work | Owner | Status |
 |---|---|---|

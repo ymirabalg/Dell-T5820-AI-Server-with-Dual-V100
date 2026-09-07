@@ -219,6 +219,7 @@ Fixed values, so nothing here is a judgement call at implementation time.
 | Port | **8090** |
 | Container user | non-root, uid/gid 10001, no shell |
 | libuv thread pool | **`UV_THREADPOOL_SIZE=16`**, via `docker run -e` | `readFile`, `readdir` and `statfs` all run on it and an in-flight one cannot be cancelled; the default of **4** is below `collectHost`'s own nine concurrent reads on a healthy poll. **Margin behind §4's outstanding-call rule, not a substitute for it** — measured, raising the size moves the saturation threshold and does not remove it |
+| Credentials & config | **`--env-file /etc/ai-dashboard.env`** | ⚠ Docker reads this file **once, at container creation**, and copies the values into the environment. `PASSWORD_HASH`, `SESSION_SECRET` and `STANDING` (§5.1) arrive as `process.env` and nothing tracks the file afterwards — which is why §4 says a `STANDING` change needs a restart. **Docker's grammar is not a shell's**: it splits on the first `=`, takes the rest of the line verbatim, expands nothing and **keeps quotes**, so every value must be single-line, unquoted, and free of surrounding whitespace |
 | Logging | `json-file`, `max-size=10m`, `max-file=3` |
 | Unit | `ai-dashboard.service`, `ExecStart` runs `docker run` in the foreground |
 
@@ -580,7 +581,22 @@ and one malformed entry cannot fail a poll. Unset `STANDING` sends `[]` — the 
 since a missing list can only make the dashboard **louder**. **The key is required, like every
 other key in this contract.** **It is never rendered on the server-side shell** — §5 leaves `/`
 reachable with a revoked cookie, and the list of alarms an operator has chosen to silence is not
-something to hand an unauthenticated caller. A change takes effect on the next poll.
+something to hand an unauthenticated caller.
+
+**⚠ A change to `STANDING` takes effect on the next container RESTART, not on the next poll.**
+This paragraph said "the next poll" until 2026-09-07, and it was not achievable: §2.5 passes the
+env file with `docker run --env-file`, which reads `/etc/ai-dashboard.env` **once, at container
+creation**, and copies the values into the container's environment. A running process does not
+track the host file afterwards, so a server that re-read the value on every sample would answer
+the same value every time while implying it might not — which is exactly what the implementation
+did, with a comment saying otherwise. The value is now read **once, at construction**.
+
+The client half is unchanged and *is* per-poll: `standing` rides every snapshot and the browser
+judges the ids on each one, so a *changed snapshot* changes the suppression immediately. Only
+the server cannot produce a changed snapshot without a restart. **If a live edit is ever wanted,
+the mechanism has to change** — bind-mount the file and read it per sample, with its own
+monotonic budget and a place in this section's outstanding-call rule — **not merely re-read
+`process.env`, which would still be a snapshot.**
 
 **`errors` is part of the contract, not an afterthought.** A partial snapshot is the normal
 case on this machine, and the UI must be able to say *which* reading failed rather than
@@ -724,8 +740,15 @@ Deliberately minimal — one shared password, matching how this box is actually 
 ### 5.1 Credentials are set by the install script, never by hand
 
 - `dashboard.sh set-password` **prompts** (never takes the password as an argument, which
-  would land in shell history and `ps`), hashes with argon2id, and writes the hash to
+  would land in shell history and `ps`), hashes with **scrypt**, and writes the hash to
   `/etc/ai-dashboard.env`.
+  **⚠ Use `hashPassword()` from `lib/auth/scrypt.ts` as the producer; do not reimplement the
+  encoder.** §5 permits scrypt *or* argon2id and the server implements **scrypt**, in the
+  exact six-field encoding §5.1's sibling paragraph describes. `parseScryptHash` returns
+  `null` for anything else — **including a perfectly correct argon2id hash** — and `null` is
+  not an error: it is a clean, empty 401 on every login attempt, with nothing logged anywhere,
+  because §5 deliberately logs nothing about authentication. The symptom is *a dashboard that
+  will not open and will not say why*, and this sentence used to point straight at it.
 - `dashboard.sh install` generates a 32-byte random `SESSION_SECRET` into the same file if
   one is not already present, and **never overwrites an existing one** — rotating it would
   log out every open session. Same principle as `install` never repointing a live
@@ -855,6 +878,22 @@ the model currently served on that card (joined from the serving data by instanc
 Throttle reasons appear only when something other than `0x4` is active; the normal power
 cap is not news and must not be styled as a warning.
 
+**⚠ The GPU↔instance join is `gpu.index === serving.instance`, and it is a fact about the
+deployment that the dashboard cannot verify.** `llama-server@.service` carries
+`Environment=CUDA_VISIBLE_DEVICES=%i`, so instance N is pinned to GPU N by the unit template
+itself (verified read-only on the box, 2026-09-07). Nothing the dashboard reads says so: it
+reads `/etc/llama-server/<i>.env`, which carries `PORT`, `MODEL`, `ALIAS`, `CTX`, `FA` and
+`SPEC` and **no device**, and §2.2 mounts no unit files. So the join is correct here and is
+**not derivable from the snapshot** — which matters because getting it wrong prints the wrong
+model name on a card rather than failing visibly.
+
+Two consequences. **The GPU card labels the model as served by instance N, not as "on this
+card"** — the honest claim, and the one the data supports. And **if a third card or a
+`CUDA_VISIBLE_DEVICES` that is not `%i` ever appears, this join breaks silently**; closing it
+would mean either collecting `nvidia-smi --query-compute-apps` (a new field list, and decision
+13 keeps the dashboard out of the inference process) or mounting the unit file. Neither is
+worth it today; the assumption is written down here so it is a decision rather than a habit.
+
 **CPU** — package temperature, aggregate utilisation with a trace, core/thread count, load
 average.
 
@@ -972,6 +1011,17 @@ once per session, and never raises the banner. It returns to full alarm behaviou
 moment it *changes* — including when it clears and later regresses. Nothing becomes
 standing implicitly; each one is an explicit entry, so the list is short and auditable.
 
+**⚠ "Once per session" is a fact about the SESSION, not about the configuration.** The record
+of what has already been logged belongs to the page load and is **not reset** when the
+`STANDING` list changes: a condition that has already spent its one line does not get a second
+one because an unrelated id was added or removed. §4 makes a `STANDING` change require a
+container restart, so in practice the list is fixed for the life of a page — but the rule is
+stated for the case where that stops being true, because "reset the ledger when the config
+changes" is the plausible wrong reading and it would hand back one extra log line per standing
+condition on every edit. A condition that *gains* standing mid-session begins logging once from
+then on; one that *loses* it returns to full alarm behaviour, which is already this section's
+rule for a standing condition that changes.
+
 **Session event log.** A compact scrolling list of state transitions observed since page
 load, newest first:
 
@@ -1046,6 +1096,9 @@ Rules, each of which closes a real hole:
 - **Subjects that are indices are written as bare integers** — `gpu_temp:0`, `health:1`,
   `fan_stopped:3` — no padding, no prefix. All three share one `STANDING` namespace, so the
   kind alone distinguishes them.
+- **A duplicate entry means nothing.** `STANDING=ufw_enforcing,ufw_enforcing` declares
+  exactly what one entry declares. The list is a set once read, and the server echoes it
+  verbatim without collapsing it — so nobody should "fix" a duplicate server-side.
 - **Channel 5's zero is NOT a `fan_stopped` subject.** It is carried by `fan5_absolute`,
   whose row now has two sides. One tach must never produce two conditions, and
   `fan5_absolute` is already in `STANDING`'s vocabulary.
@@ -1070,7 +1123,7 @@ These are the normal operating states of this machine, not edge cases:
 | `pwm5` returns `ENODATA` | Renders as **"EC auto"**, healthy. Never as an error |
 | An `llama-server` instance is down | Its row shows the unit state and the reason; **the other instance is unaffected, and that is a structural requirement, not an observation about current scheduling.** No instance's probe may spend another's budget, and no collector-wide bound may blank a per-instance verdict |
 | A single sensor read fails | That figure shows `—`, its `errors` entry is available, the rest of the panel renders |
-| A condition's subject stops being reported, and the collection it belongs to could **not** be read | **Stale.** It keeps its last confirmed band and its "since", still counts (§9), and its row and the banner name the age of the reading. One `watch`-toned event-log entry when it goes stale — after the same ten seconds of **sampled** wall time §6.4 requires — and one when a reading returns. Never a silent removal |
+| A condition's subject stops being reported, and the collection it belongs to could **not** be read | **Stale.** It keeps its last confirmed band and its "since", still counts (§9), and its row and the banner name the age of the reading. **It also keeps its last VALUE, rendered unchanged** — see below. One `watch`-toned event-log entry when it goes stale — after the same ten seconds of **sampled** wall time §6.4 requires — and one when a reading returns. Never a silent removal |
 | A condition's subject is absent from a collection that **was** read | **Retired.** The subject has left the machine, and that is an answer: the condition leaves the ledger, the dot and the count, and one `normal`-toned entry records it. Confirmed over the same ten seconds, so one flickering enumeration cannot retire a card |
 | An `—` whose cause is already shown beside it | **No second explanation.** When a coloured neighbour in the same panel already names the cause — a red *channel unavailable* chip next to a `—` fan reading — the em dash needs no entry of its own and no separate treatment. One fact, stated once. This is the only exception to the rule above, and it applies only when the neighbour is in the same panel and carries a severity |
 
@@ -1082,6 +1135,22 @@ on this page an operator reads from across the room.
 **Zero and unknown must never look alike.** A fan reading 0 RPM is a dead fan on a box with
 two passively-cooled 250 W cards. A fan reading nothing is a driver that did not load.
 Those demand different reactions and must be visually unambiguous.
+
+**⚠ A stale condition's age is measured by the BROWSER's clock, not the server's `ts`.** §6.7
+splits the two — a reading's *position in time* is the server's `ts`, the *session* is the
+browser's — and "the age of a reading we did not take" is cleanly neither. It is the elapsed
+time since the last poll that still carried the condition, which is a fact about **this
+session's ability to see**, in the same family as the banner's "since" and an event-log line's
+time. It is not the age of the reading on the axis; that reading is still positioned by its own
+`ts` and the trace still stops where it stopped.
+
+**⚠ A stale condition shows its LAST VALUE, unchanged — not an em dash.** §6.6's law that
+`null` renders `—` governs *a reading that is absent*; a stale condition's reading is not
+absent, it is **old**, and blanking it would throw away the only number an operator has while
+telling them nothing new. The figure stands, the staleness is what the row and the banner name,
+and the two together say *this is what it was, and this is how long ago*. Blanking it would also
+contradict the row above, which keeps the band and the "since" — a value hidden beside a
+severity that is still counted would be the worst of both.
 
 ### 6.6 Units, formatting and locale
 
@@ -1161,9 +1230,12 @@ be checked against the command that produced it without arithmetic.
   `pwm5Present: false` (§3.6) and the `NoSuchUnit` entry (§3.7). **The event log records the
   transition, not the poll**: one entry when a collector stops answering and one when it
   resumes, never one every five seconds.
-- **Downsample above 600 rendered points**, using min/max decimation per bucket so a
-  one-sample spike survives rather than being averaged away. A thermal spike that vanishes
-  because of rendering is a lie.
+- **Downsample above 600 rendered points, PER SERIES**, using min/max decimation per bucket so
+  a one-sample spike survives rather than being averaged away. A thermal spike that vanishes
+  because of rendering is a lie. **Per series, not per chart**: §6.2's stacked cooling chart
+  carries three traces and may therefore draw up to 1,800 points. A per-chart budget would
+  silently coarsen a two-card temperature plot to 300 points each the moment a third trace was
+  added, which is a rendering decision disguised as a constant.
 - **Background tab:** pause polling on `document.hidden`, resume on visibility. The
   un-sampled span is drawn with the same hatched "no reading" treatment a lost channel
   gets — the data genuinely is absent, and it must not be interpolated across.
@@ -1275,8 +1347,8 @@ raised, not assumed.
 | Question | Resolution | Because |
 |---|---|---|
 | Aggregate status dot **and count** | **One reduction over each condition's `displaySeverity`** (§6.4), which is the debounced band after standing suppression. A suppressed standing condition is therefore neither red nor counted — its truth is named in its SAFETY row instead. The count is **omitted when zero**, so the header reads `● all healthy`, never `0 alarms`. **Paused/stale is a mode shown alongside it, never instead of it** | Reducing over `displaySeverity` is what keeps the dot, the count and the banner from ever disagreeing. A mode that hid the count would be a lying dashboard |
-| One reading shown in two panels | **One condition, counted once.** Deduplicate by condition id, **taking the WORST severity, not the first** — otherwise the panel that happens to be assembled first decides, and a `failed` service behind an `active` reading renders a red cell under a green dot |
-| A condition whose subject stops being reported | **The reduction runs over every condition the session has confirmed, not only those in this poll.** A condition absent from a poll is **stale**: it keeps its last confirmed `displaySeverity`, keeps its "since", keeps counting toward the dot and the count, and shows the age of the reading behind it. It leaves the reduction only when **retired** — the collection that would have contained it was read successfully and it was not in it (`gpus: [{index:0}]` for GPU 1, `serving: []`). A collection that could **not** be read (`gpus: null`) retires nothing. Staleness never raises a severity and never lowers one | An unobservable alarm is **unknown**, not resolved. Without this, a card at 90 °C whose `nvidia-smi` then fails takes the header from `● 1 alarm` to `● all healthy` with no log line — the dashboard turns green at the moment it loses the ability to look. The `null` ≠ `[]` distinction §3.1 already carries is exactly what separates *not read* from *not there* | `gpu-fan-control.service` appears in both COOLING and SAFETY; it is one fact about the machine and must not inflate the header count to two |
+| One reading shown in two panels | **One condition, counted once.** Deduplicate by condition id, **taking the WORST severity, not the first** — otherwise the panel that happens to be assembled first decides, and a `failed` service behind an `active` reading renders a red cell under a green dot | `gpu-fan-control.service` appears in both COOLING and SAFETY; it is one fact about the machine and must not inflate the header count to two |
+| A condition whose subject stops being reported | **The reduction runs over every condition the session has confirmed, not only those in this poll.** A condition absent from a poll is **stale**: it keeps its last confirmed `displaySeverity`, keeps its "since", keeps counting toward the dot and the count, and shows the age of the reading behind it. It leaves the reduction only when **retired** — the collection that would have contained it was read successfully and it was not in it (`gpus: [{index:0}]` for GPU 1, `serving: []`). A collection that could **not** be read (`gpus: null`) retires nothing. Staleness never raises a severity and never lowers one | An unobservable alarm is **unknown**, not resolved. Without this, a card at 90 °C whose `nvidia-smi` then fails takes the header from `● 1 alarm` to `● all healthy` with no log line — the dashboard turns green at the moment it loses the ability to look. The `null` ≠ `[]` distinction §3.1 already carries is exactly what separates *not read* from *not there* |
 | Event log cap | 500 entries | §6.4 said "a few hundred" |
 | `fan1`–`fan4` when the 5-fan module is absent | They survive; only channel 5 disappears | CLAUDE.md: a DKMS failure means "you silently drop to four fans" |
 | A channel lost mid-session | Same rule as a failed poll — the trace stops, the gap is hatched, nothing is drawn to zero | §6.5's intent, extended |

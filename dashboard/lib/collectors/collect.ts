@@ -229,7 +229,22 @@ export const collectGpus = async ({
     return { gpus: null, errors: tag('nvidia-smi', [reason(e)]) };
   }
   const parsed = parseNvidiaSmiCsv(stdout);
-  return { gpus: parsed.value, errors: tag('nvidia-smi', parsed.problems) };
+  // ⚠ §3.1: "`gpus: []` = the command succeeded and produced no parseable rows, and **always
+  // carries an `errors[]` entry**, so it is never silent." The realistic `[]` — a driver
+  // answering a different field list — already carries one problem per unparseable row. The
+  // one branch that did not was **exit 0 with no output at all**, which produced `[]` and an
+  // empty `errors[]`: silent, against a sentence that says never.
+  //
+  // Unreachable on this box, and filed anyway. Step 3's adversarial measured that
+  // `nvidia-smi` exits **6** when it finds no devices, so a zero exit with nothing on stdout
+  // is not a state the real binary produces — which makes it exactly the kind of impossible
+  // reading this project files an entry for rather than renders as an ordinary empty result.
+  // An entry mints no verdict and no severity; it can only ever say *why* a figure is blank.
+  const problems =
+    parsed.value.length === 0 && parsed.problems.length === 0
+      ? ['nvidia-smi exited 0 and printed nothing — no rows to parse, and no reason given']
+      : parsed.problems;
+  return { gpus: parsed.value, errors: tag('nvidia-smi', problems) };
 };
 
 // ---------------------------------------------------------------------------

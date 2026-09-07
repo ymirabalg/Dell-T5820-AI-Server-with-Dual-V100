@@ -597,3 +597,31 @@ restart"*, and §2.2 or §2.5 must name `--env-file` as how the values reach the
 false in one unreachable branch. File an entry, or qualify the sentence.
 
 Everything else on the executable queue is done.
+
+
+---
+
+# 9. `SPEC.md` — the wordings, taken 2026-09-07
+
+The owner delegated §7.3's queue. **`SPEC.md` was edited for the first time in this project's
+history**; every other phase recorded gaps and left the text alone. 1290 → 1362 lines.
+
+| # | § | What changed |
+|---|---|---|
+| **A2** | §5.1 | *"hashes with argon2id"* → **scrypt**, with `hashPassword()` named as the producer and the silent-401 consequence spelled out. This was O20 with the spec pointing straight at it |
+| **A1a** | §4 | *"A change takes effect on the next poll"* → **on the next container restart**, with why the old sentence was unachievable, that the client half is still per-poll, and what changing the mechanism would actually require |
+| **A1b** | §2.5 | A new row: **`--env-file /etc/ai-dashboard.env`**, that Docker reads it once at creation, and that its grammar keeps quotes — O21's hazard now stated where step 11 will look |
+| **A8** | §6.7 | 600 rendered points **per series, not per chart**, with what a per-chart budget would silently do to a third trace |
+| **A9** | §6.5 | A stale condition's age is measured by the **browser's** clock, and why that is neither of §6.7's two clocks cleanly |
+| **A10** | §6.5 | A stale condition shows its **last value, unchanged** — §6.6's `null` → `—` law governs an *absent* reading, and a stale one is *old*, not absent |
+| **A11** | §6.4 | *"Once per session"* belongs to the **session, not the configuration**, and is not reset when `STANDING` changes |
+| **A12** | §6.4 | A **duplicate** `STANDING` entry declares what one entry declares; nobody should collapse it server-side |
+| **A4** | §9 | The mis-rowed table fixed — the dedupe rationale was attached to the staleness row, which left the dedupe decision with no reason at all. Verified: every row of §9 now has exactly three cells |
+| **new** | §6.2 | ⚠ **The GPU↔instance join is `gpu.index === serving.instance`, and the dashboard cannot verify it.** Found while assessing the UI gaps and settled read-only on the box: `llama-server@.service` carries `Environment=CUDA_VISIBLE_DEVICES=%i`, so instance N *is* GPU N — but the dashboard reads only `<i>.env`, which carries no device, and §2.2 mounts no unit files. Written down with what would break it |
+
+**A15 was closed in code rather than in the spec.** §3.1 promises `gpus: []` *"always carries an
+`errors[]` entry, so it is never silent"*, and the empty-parse branch carried none. The sentence
+is right; the code was wrong. `collectGpus` now files an entry naming the impossible reading —
+exit 0 with no output — and step 3's `S68` backs it, with `S67` re-aimed onto the new return.
+
+**Everything in §7.3 is now done, and §7.1's queue is empty.**

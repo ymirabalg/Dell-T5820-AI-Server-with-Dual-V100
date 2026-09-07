@@ -409,11 +409,19 @@ REGRESSIONS += [
     # and it destroys the distinction steps 1 and 2 spent a decision on.
     ("S67 an empty parse collapses to null, so `it ran and found nothing` reads as `we could not look`",
      "lib/collectors/collect.ts",
-     "  const parsed = parseNvidiaSmiCsv(stdout);\n"
-     "  return { gpus: parsed.value, errors: tag('nvidia-smi', parsed.problems) };",
-     "  const parsed = parseNvidiaSmiCsv(stdout);\n  return {\n"
-     "    gpus: parsed.value.length === 0 ? null : parsed.value,\n"
-     "    errors: tag('nvidia-smi', parsed.problems),\n  };",
+     "  return { gpus: parsed.value, errors: tag('nvidia-smi', problems) };",
+     "  return {\n    gpus: parsed.value.length === 0 ? null : parsed.value,\n"
+     "    errors: tag('nvidia-smi', problems),\n  };",
+     COL),
+    # ⚠ §3.1: "`gpus: []` … **always carries an `errors[]` entry**, so it is never silent."
+    # The realistic `[]` carries one problem per unparseable row; the branch that produced `[]`
+    # from no output at all carried none until 2026-09-07.
+    ("S68 an empty parse with no output is silent, against §3.1's `never silent`",
+     "lib/collectors/collect.ts",
+     "  const problems =\n    parsed.value.length === 0 && parsed.problems.length === 0\n"
+     "      ? ['nvidia-smi exited 0 and printed nothing — no rows to parse, and no reason given']\n"
+     "      : parsed.problems;",
+     "  const problems = parsed.problems;",
      COL),
 ]
 
