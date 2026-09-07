@@ -13,7 +13,8 @@
     "start": "next start",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "verify": "rm -f tsconfig.tsbuildinfo && tsc --noEmit && vitest run"
+    "verify": "rm -f tsconfig.tsbuildinfo && tsc --noEmit && vitest run",
+    "probe": "vitest run --config vitest.probe.mts --reporter=verbose --silent=false"
   },
   "dependencies": {
     "next": "16.3.4",
