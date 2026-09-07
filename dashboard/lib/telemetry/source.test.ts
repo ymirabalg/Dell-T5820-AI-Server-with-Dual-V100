@@ -226,6 +226,45 @@ describe('the telemetry source', () => {
   });
 
   /*
+   * ⚠ **`STANDING` is captured ONCE, at construction, and this test is the correction of a
+   * claim rather than the pinning of a preference.**
+   *
+   * §4 says *"A change takes effect on the next poll"*, and this file used to read
+   * `readStandingList(env)` inside every sample to honour it. **That could not work.** In
+   * production the values reach `process.env` through Docker's `--env-file`, which reads
+   * `/etc/ai-dashboard.env` **once, at `docker run`**, and copies the values into the
+   * container's environment — a running Node process does not track the host file. So the
+   * per-sample read re-read a value that could not have changed, while the code's own
+   * comment told the next reader it could.
+   *
+   * Settled by the owner 2026-09-07: keep `--env-file`, amend §4 to *"on the next container
+   * restart"*, and read once. This asserts the honest behaviour — a mutated environment does
+   * **not** reach the second poll — so the day someone re-adds the per-sample read believing
+   * §4's old sentence, it goes red and points at this comment.
+   *
+   * ⚠ The client half is unaffected and still per-poll: `standing` rides every snapshot, and
+   * `runtime.test.ts` pins that a *changed snapshot* changes the client's suppression.
+   */
+  test('⚠ STANDING is captured once — editing the environment does not reach the next poll', async () => {
+    const spy = spyCollectors([]);
+    const { clock, advance } = fakeClock();
+    const env: Record<string, string | undefined> = { STANDING: 'ufw_enforcing' };
+    const source = createTelemetrySource({ collectors: spy.collectors, clock, env });
+
+    const first = await source.snapshot();
+    expect(first.standing).toEqual(['ufw_enforcing']);
+
+    env['STANDING'] = 'cpu_temp,ram';
+    advance(TELEMETRY_CACHE_MS + 1);
+    const second = await source.snapshot();
+
+    // A genuinely new sample — the collectors ran a second time, so this is not the cached
+    // snapshot — and it still carries the value read at construction.
+    expect(spy.calls.gpus).toBe(2);
+    expect(second.standing).toEqual(['ufw_enforcing']);
+  });
+
+  /*
    * ⚠ §4's cache, at the level a route sees it: ten tabs, one sample. The proof is the call
    * count on every collector, not the identity of the snapshot.
    */

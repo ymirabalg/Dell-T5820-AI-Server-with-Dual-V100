@@ -277,12 +277,13 @@ export interface SampleSnapshotOptions {
    * forward, silently halve a real rate. It never leaves the process: {@link ts} is the
    * only clock on the wire.
    *
-   * HANDOVER §9 lists "`netRatesBetween` and a monotonic `nowMs`" as step 6's to resolve;
-   * this is the resolution. ⚠ `DeltaSample.atMs`'s own doc comment in
-   * `lib/collectors/deltas.ts` still says `Date.now()` and now under-describes it — the
-   * field is only ever paired with itself, so the change is safe, but the comment should be
-   * corrected. Recorded in this step's notes rather than edited here, since `deltas.ts` is
-   * step 3's file.
+   * HANDOVER §9 listed "`netRatesBetween` and a monotonic `nowMs`" as step 6's to resolve;
+   * this is the resolution. ⚠ This paragraph used to end by noting that
+   * `DeltaSample.atMs`'s doc comment in `lib/collectors/deltas.ts` "still says `Date.now()`
+   * … and should be corrected". **It was corrected** — that file now reads *"Never
+   * `Date.now()`"* — and the note outlived the thing it described, which is the species this
+   * project keeps shipping in prose: a comment naming a property the code does not have.
+   * Cleaned up 2026-09-07.
    */
   readonly nowMs: number;
   /** §4's `ts`: wall clock, ISO-8601 UTC. The only clock the client sees. */
@@ -400,9 +401,21 @@ export const sampleSnapshot = async ({
       serving: serving.serving,
       storage: assembledStorage,
       safety: assembledSafety,
-      // Concatenated in the snapshot's own field order. §4 fixes no order for `errors[]`
-      // and §6.5 matches an entry to a figure by `source`, so any order satisfies the
-      // spec; this one is stable and needs no rule of its own to remember.
+      // ⚠ **Concatenated in the snapshot's own field order, and that is a DECISION, not an
+      // accident.** §4 fixes no order for `errors[]` — grep the spec, the sentence is not
+      // there — and §6.5 matches an entry to a figure by `source`, so any order satisfies
+      // the contract. It does not follow that nothing depends on it.
+      //
+      // **`dbus` is filed by two collectors**: `collectSafety` for
+      // `gpu-fan-control.service` and `collectServing` for the llama units. So when both
+      // fail, which `dbus` message is *last* in this array is decided here and nowhere
+      // else — and §6.7's client rule (`events.ts`, S11) shows the **last** message per
+      // source in the event log. Reordering the destructuring above would silently change
+      // the sentence an operator reads for a D-Bus failure.
+      //
+      // Safety is last on purpose: `gpu-fan-control.service` is the reading this dashboard
+      // exists for, and a bus that is answering for one unit and not another is better
+      // described by the safety-critical one. `snapshot.test.ts` pins it.
       errors: [
         ...gpus.errors,
         ...host.errors,

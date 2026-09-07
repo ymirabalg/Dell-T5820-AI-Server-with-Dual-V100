@@ -320,13 +320,14 @@ REGRESSIONS = [
 def main() -> int:
     os.chdir(ROOT)
     bad = []
+    moved = []
     covered = set()
     for name, src, old, new, check in REGRESSIONS:
         path = pathlib.Path(src)
         original = path.read_text()
         if old not in original:
             print(f"--- {name}\n    ANCHOR NOT FOUND in {src} — the implementation moved")
-            bad.append(name)
+            moved.append(name)
             continue
         path.write_text(original.replace(old, new, 1))
         cmd = ["pnpm", "typecheck"] if check == "types" else ["pnpm", "vitest", "run", check]
@@ -351,8 +352,17 @@ def main() -> int:
         if run.returncode == 0:
             bad.append(name)
 
+    # ⚠ HANDOVER §1: `ANCHOR NOT FOUND` and `DID NOT BITE` are different findings with
+    # different first hypotheses — one means the implementation moved and the mutation needs
+    # re-aiming, the other means the mutation applied and no test noticed. This summary used
+    # to print both under "DID NOT BITE", which is the more alarming of the two labels and
+    # sends a reader hunting for a missing test that is not missing. Found 2026-09-07, when
+    # an edit to `cooling.ts` moved `T31`'s anchor and the run reported it as inert.
+    if moved:
+        print("\nANCHORS MOVED — re-aim these, they did not run:", ", ".join(moved))
     if bad:
         print("\nDID NOT BITE:", ", ".join(bad))
+    if moved or bad:
         return 1
 
     # ------------------------------------------------------------------ the ledger

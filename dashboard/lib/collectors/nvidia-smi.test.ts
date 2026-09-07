@@ -220,18 +220,43 @@ describe('rows that are not cards', () => {
     expect(problems[0]).toContain('expected 11 columns, got 12');
   });
 
-  test('⚠ and the shift it prevents is what would have been reported', () => {
+  /*
+   * ⚠ **The mark was dropped here 2026-09-07, when the red-test ledger was retrofitted to
+   * step 3's harness.** This test asserts properties of the FIXTURE — that the wide row has
+   * twelve cells and that its columns land one place left — plus one fact about
+   * `lib/throttle.ts`, which is step 2's file. It depends on nothing in `lib/collectors/`,
+   * so no step-3 mutation can redden it, and the guard it documents is the test above,
+   * which is backed. HANDOVER §5.2 rule 1: where a property has no plausible wrong
+   * implementation in the files the harness owns, drop the ⚠ rather than the standard.
+   * The body stays — it is what puts the cost of losing the guard in the suite rather than
+   * in a comment.
+   */
+  test('and the shift it prevents is what would have been reported', () => {
     // Named explicitly so the cost of losing the guard is in the suite, not only in a note.
-    // Under `< 11` this row yields a card at 38 °C whose throttle mask decodes to
-    // `0x20 sw thermal slowdown | 0x40 hw thermal slowdown` — an alarm, fabricated from a
-    // clock reading, with `problems: []` to explain it.
     const cells = NVIDIA_SMI_WIDE_ROW.trim().split(',').map((c) => c.trim());
     expect(cells).toHaveLength(12);
     // Every field one place left: the parser's throttle column (10) holds the SM clock,
     // and its temperature column (3) holds the bus id.
     expect(cells[10]).toBe('1260');
     expect(cells[3]).toBe('00000000:17:00.0');
-    expect(decodeThrottleMask(throttleMask('1260'))?.severity).toBe('alarm');
+
+    /*
+     * ⚠ **This assertion changed on 2026-09-07, and the change is the point.** Under `< 11`
+     * this row used to yield a card at 38 °C whose throttle mask decoded to
+     * `0x20 sw thermal slowdown | 0x40 hw thermal slowdown` — an **alarm, fabricated from a
+     * clock reading**, with `problems: []` to explain it. That was possible only because
+     * `lib/throttle.ts`'s `HEX` made the `0x` prefix optional, so the SM clock `1260` read
+     * as `0x1260`.
+     *
+     * The prefix is now required (step 3's deferred A2, taken after measuring the box), so
+     * the second half of that blast radius is gone: a shifted clock is **not a mask**, and
+     * the column reads `—` with an `errors[]` entry rather than an alarm nobody can explain.
+     * The column-count guard above is still what stops the shift; this is the belt behind it.
+     */
+    expect(decodeThrottleMask(throttleMask('1260'))).toBeNull();
+    // …and with the prefix it would still have been the fabricated alarm, which is why the
+    // column-count guard is the primary defence and not this one.
+    expect(decodeThrottleMask(throttleMask('0x1260'))?.severity).toBe('alarm');
   });
 
   test('a row whose index will not parse is an errors[] entry, not a GPU', () => {

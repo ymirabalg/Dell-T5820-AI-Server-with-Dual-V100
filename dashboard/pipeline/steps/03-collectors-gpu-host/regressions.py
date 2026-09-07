@@ -26,6 +26,7 @@ Run from ``dashboard/`` with pnpm on PATH:
 
 import os
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -37,6 +38,62 @@ PROC = "lib/collectors/proc.test.ts"
 DELTA = "lib/collectors/deltas.test.ts"
 COL = "lib/collectors/collect.test.ts"
 IO = "lib/collectors/io.test.ts"
+
+# ---------------------------------------------------------------------------
+# ⚠ The per-mutation red-test ledger  (copied from steps 4–8; only LEDGER_FILES changes)
+# ---------------------------------------------------------------------------
+#
+# ⚠ **RETROFITTED 2026-09-07, and it was the last harness without one.** Steps 4–8 shipped
+# with the ledger; steps 2 and 3 pre-dated it. Step 2's retrofit — done during step 8 —
+# immediately found **six ⚠-marked tests with no mutation behind them**, five of them on
+# `severity.ts`'s fan-stopped rows, the most safety-critical table in the project. This is
+# the same retrofit against the collectors.
+#
+# Eight consecutive steps shipped a test that NAMES a property it does not check. So:
+#
+#     Every ⚠-marked test must appear in at least one mutation's RED set.
+#
+# The harness runs each mutation, records which test names went red, unions those sets, and
+# fails if a ⚠-marked test never appears. A test that no mutation can distinguish is a test
+# that cannot fail for any wrong implementation anyone was willing to write.
+#
+# ⚠ What this CANNOT catch, and the limit is irreducible: a test that goes red for the WRONG
+# reason. Mechanise the necessary condition; keep reading each test against its own name for
+# the sufficient one.
+#
+# ⚠ A failure here is NOT "add a mutation until it goes green". The first hypothesis is that
+# the test is inert and should be given a body matching its name, or renamed to what it
+# actually checks. The second is that the property has no plausible wrong implementation, in
+# which case drop the ⚠ rather than the standard — and record it in this docstring.
+#
+# ⚠ A `types`-kind mutation contributes NO red-test lines, so it can never cover a ⚠ test.
+# Ship a second mutation whose check is the vitest file.
+LEDGER_FILES = [NUM, NV, PROC, DELTA, COL, IO]
+
+# `test('…')`, `it('…')` and `test.each(…)('…')`, single- or double-quoted.
+MARKED = re.compile(
+    r"""(?:^|\s)(?:test|it)(?:\.each\([^\n]*\))?\(\s*(['"])((?:(?!\1).)*⚠(?:(?!\1).)*)\1"""
+)
+
+
+def marked_tests():
+    """Every ⚠-marked test name, as (file, name, matchable-prefix) triples."""
+    found = []
+    for rel in LEDGER_FILES:
+        text = pathlib.Path(rel).read_text()
+        for m in MARKED.finditer(text):
+            name = m.group(2)
+            prefix = name.split("%")[0].strip()
+            if len(prefix) < 12:
+                print(f"!!! {rel}: ⚠ test name is unmatchably short: {name!r}")
+            found.append((rel, name, prefix))
+    return found
+
+
+def red_test_lines(out):
+    """The `FAIL <file> > <suite> > <test>` lines vitest prints, one per failing test."""
+    return [l.strip() for l in out.splitlines() if l.strip().startswith("FAIL ")]
+
 
 # (name, source file, old, new, check)  — or, where one hazard is guarded in two places,
 # (name, source file, [(old, new), …], check).
@@ -315,9 +372,57 @@ REGRESSIONS = [
 ]
 
 
+
+# ---------------------------------------------------------------------------
+# ⚠ Added 2026-09-07 by the ledger retrofit. Each of these backs a ⚠-marked test that no
+#   existing mutation could redden — the retrofit found four, and this is three of them.
+#   (The fourth, `and the shift it prevents is what would have been reported`, had its ⚠
+#   dropped instead: it asserts properties of the fixture plus one fact about
+#   `lib/throttle.ts`, which is step 2's file, so no step-3 mutation can reach it.)
+# ---------------------------------------------------------------------------
+
+REGRESSIONS += [
+    # ⚠ Step 3's review, A7: "no invented ranges for GPU temperature, power, memory or
+    # clock. No measured basis, and a wrong bound silently discards a real reading."
+    # `utilPct` alone is range-checked, because 0–100 *is* its unit. This mutation is the
+    # plausible wrong move a later reader makes on seeing that one range and generalising it.
+    ("S65 temperature gains a plausibility range, so a real reading is discarded as absurd",
+     "lib/collectors/nvidia-smi.ts",
+     "      tempC: reading(cells[COL.tempC], celsius),",
+     "      tempC: ((v) => (v === null || (v >= 0 && v <= 150) ? v : null))(\n"
+     "        reading(cells[COL.tempC], celsius),\n      ),",
+     NV),
+    # ⚠ Fixture symmetry (HANDOVER §5.1). O7's guard has two halves — a backwards **busy**
+    # counter and a backwards **total** — and only the busy half was mutated. Note the
+    # obvious mutation does NOT work: dropping `total === null` still yields `null`, because
+    # `busy / null` is `Infinity` and the `Number.isFinite` guard below catches it. The
+    # distinguishing wrong implementation is the one that makes a backwards delta into a
+    # *number*, which is the clamping O7 exists to forbid.
+    ("S66 a backwards total counter is made positive, so a reboot forges a CPU percentage",
+     "lib/collectors/deltas.ts",
+     "  const total = safeDelta(prev.total, next.total);",
+     "  const total = Math.abs(Number(next.total - prev.total));",
+     DELTA),
+    # ⚠ §3.1: "`gpus: null` = the enumeration could not be performed … `gpus: []` = the
+    # command succeeded and produced no parseable rows." Collapsing the two is the wrong
+    # implementation someone writes on the reasoning "no rows means no cards means null" —
+    # and it destroys the distinction steps 1 and 2 spent a decision on.
+    ("S67 an empty parse collapses to null, so `it ran and found nothing` reads as `we could not look`",
+     "lib/collectors/collect.ts",
+     "  const parsed = parseNvidiaSmiCsv(stdout);\n"
+     "  return { gpus: parsed.value, errors: tag('nvidia-smi', parsed.problems) };",
+     "  const parsed = parseNvidiaSmiCsv(stdout);\n  return {\n"
+     "    gpus: parsed.value.length === 0 ? null : parsed.value,\n"
+     "    errors: tag('nvidia-smi', parsed.problems),\n  };",
+     COL),
+]
+
+
 def main() -> int:
     os.chdir(ROOT)
     bad = []
+    moved = []
+    covered = set()
     for entry in REGRESSIONS:
         # Most entries are (name, src, old, new, check); the few that need to break two
         # guards at once are (name, src, [(old, new), …], check).
@@ -332,18 +437,23 @@ def main() -> int:
         missing = [old for old, _ in pairs if old not in mutated]
         if missing:
             print(f"--- {name}\n    ANCHOR NOT FOUND in {src} — the implementation moved")
-            bad.append(name)
+            moved.append(name)
             continue
         for old, new in pairs:
             mutated = mutated.replace(old, new, 1)
         path.write_text(mutated)
-        cmd = ["pnpm", "typecheck"] if check == "types" else ["pnpm", "vitest", "run", check]
+        checks = check if isinstance(check, list) else [check]
+        cmd = (
+            ["pnpm", "typecheck"]
+            if checks == ["types"]
+            else ["pnpm", "vitest", "run", *checks]
+        )
         try:
             run = subprocess.run(cmd, capture_output=True, text=True)
         finally:
             path.write_text(original)
         out = run.stdout + run.stderr
-        if check == "types":
+        if checks == ["types"]:
             tally = next(
                 (l.strip() for l in out.splitlines() if ".ts(" in l and "error TS" in l), "?"
             )[:150]
@@ -351,16 +461,42 @@ def main() -> int:
             tally = next(
                 (l.strip() for l in out.splitlines() if l.strip().startswith("Tests ")), "?"
             )
-        fails = [l.strip() for l in out.splitlines() if l.strip().startswith("FAIL ")]
-        print(f"--- {name}\n    exit={run.returncode}  {tally}")
+        fails = red_test_lines(out)
+        covered.update(fails)
+        print(f"--- {name}\n    exit={run.returncode}  {tally}  red={len(fails)}")
         for f in fails[:3]:
-            print("     ", f[:150])
+            print("     ", f[:260])
         if run.returncode == 0:
             bad.append(name)
 
+    # ⚠ HANDOVER §1: `ANCHOR NOT FOUND` and `DID NOT BITE` are different findings with
+    # different first hypotheses — one means the implementation moved and the mutation needs
+    # re-aiming, the other means the mutation applied and no test noticed. This summary used
+    # to print both under "DID NOT BITE", which is the more alarming of the two labels and
+    # sends a reader hunting for a missing test that is not missing. Found 2026-09-07, when
+    # an edit to `cooling.ts` moved `T31`'s anchor and the run reported it as inert.
+    if moved:
+        print("\nANCHORS MOVED — re-aim these, they did not run:", ", ".join(moved))
     if bad:
         print("\nDID NOT BITE:", ", ".join(bad))
+    if moved or bad:
         return 1
+
+    # ------------------------------------------------------------------ the ledger
+    marked = marked_tests()
+    joined = "\n".join(covered)
+    uncovered = [(rel, nm) for rel, nm, prefix in marked if prefix not in joined]
+    print(
+        f"\nRed-test ledger: {len(covered)} distinct failing tests across "
+        f"{len(REGRESSIONS)} mutations; {len(marked)} ⚠-marked tests checked."
+    )
+    if uncovered:
+        print("\nNO MUTATION REDDENS THESE ⚠ TESTS — each one is inert until it does:")
+        for rel, nm in uncovered:
+            print(f"  {rel}\n    {nm}")
+        return 1
+    print("Every ⚠-marked test went red under at least one mutation.")
+
     print(f"\nAll {len(REGRESSIONS)} regressions failed their check, as they must.")
     return 0
 

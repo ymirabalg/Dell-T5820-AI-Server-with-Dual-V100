@@ -33,14 +33,27 @@ describe('parsing a mask', () => {
     ['0x2c', 0x2cn],
     ['0x2C', 0x2cn],
     [' 0x4 ', 4n],
-    ['4', 4n],
     ['0x8000000000000000', 0x8000000000000000n],
   ];
   test.each(good)('%s parses to %s', (input, expected) => {
     expect(parseThrottleMask(throttleMask(input))).toBe(expected);
   });
 
-  const bad: readonly string[] = ['', '   ', '[N/A]', 'banana', '0x', '0xzz', '-0x4', '0x4 0x8'];
+  /*
+   * ⚠ **The `0x` prefix is REQUIRED, and `'4'` is on the refused side of that boundary.**
+   * It used to be on the accepted side, and that made a prefix-less reading fabricate an
+   * alarm out of nothing: a bare `8` parsed as `0x8` — *HW slowdown*, one of §6.3's four
+   * alarm bits. Step 3's A2 is the precedent, where a column shift fabricated a
+   * thermal-throttle alarm on a card at 38 °C.
+   *
+   * Measured read-only on the box before requiring it (2026-09-07): driver 580.173.02 emits
+   * `0x0000000000000000` on both cards, prefix included. The trade is a lost reading — `—`
+   * plus an `errors[]` entry — on a hypothetical driver that omits it, against a fabricated
+   * alarm on the real one, and §6.3's posture is that the fabricated alarm is worse.
+   *
+   * Both sides of the boundary are here (HANDOVER §5.1): `'0x4'` above, `'4'` below.
+   */
+  const bad: readonly string[] = ['', '   ', '[N/A]', 'banana', '0x', '0xzz', '-0x4', '0x4 0x8', '4', '20'];
   test.each(bad)('%s is not a mask and decodes to null, never to 0', (input) => {
     expect(parseThrottleMask(throttleMask(input))).toBeNull();
     expect(decode(input)).toBeNull();

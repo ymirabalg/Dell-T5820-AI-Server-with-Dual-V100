@@ -424,6 +424,43 @@ describe('the top-level errors list', () => {
     ]);
   });
 
+  /*
+   * ⚠ **The order above is not decoration, and this is the fixture that shows why.**
+   * Every source in that test is filed by exactly one collector, so nothing there depends
+   * on the six blocks being concatenated in any particular order. **`dbus` is different:
+   * it is filed by two collectors** — `collectSafety` for `gpu-fan-control.service` and
+   * `collectServing` for the llama units — so when both fail, which `dbus` entry is *last*
+   * is decided by this concatenation and nowhere else.
+   *
+   * That matters off this file: §6.7's client rule (`lib/client/events.ts`, S11) shows the
+   * **last** message per source in the event log. Without this fixture, "last wins" was a
+   * client-side choice resting on a server-side order nothing exercised — the two halves
+   * were each tested and the seam between them was not.
+   *
+   * Safety is last on purpose: `gpu-fan-control.service` is the reading this dashboard
+   * exists for, so a bus that is answering for one unit and not another is better described
+   * by the safety-critical one. `snapshot.ts` states the reason at the concatenation.
+   */
+  test('⚠ dbus is filed by two collectors, and safety’s entry is the one that lands last', async () => {
+    const { snapshot } = await assemble({
+      serving: async () => ({
+        serving: null,
+        errors: [{ source: 'dbus', message: 'llama-server@1.service: NoSuchUnit' }],
+      }),
+      safety: async () => ({
+        checks: NO_CHECKS,
+        errors: [{ source: 'dbus', message: 'gpu-fan-control.service: NoSuchUnit' }],
+      }),
+    });
+
+    const dbus = snapshot.errors.filter((e) => e.source === 'dbus');
+    expect(dbus).toHaveLength(2);
+    expect(dbus[0]?.message).toContain('llama-server@1.service');
+    expect(dbus[1]?.message).toContain('gpu-fan-control.service');
+    // …and that is what `events.ts` reads as the source's current verdict.
+    expect(dbus.at(-1)?.message).toContain('gpu-fan-control.service');
+  });
+
   test('a snapshot with nothing wrong carries an empty list, never null', async () => {
     const { snapshot } = await assemble();
     expect(snapshot.errors).toEqual([]);

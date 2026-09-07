@@ -119,9 +119,22 @@ export interface TelemetrySourceOptions {
    * Where `STANDING` comes from. Production: `process.env`, filled by Docker's `--env-file`
    * from `/etc/ai-dashboard.env` (`lib/auth/config.ts`).
    *
-   * ⚠ It is read **inside the sample**, not captured here, so an operator who edits the env
-   * file and restarts the container is not the only way to change it — §4: "A change takes
-   * effect on the next poll." The 2 s cache is the only delay.
+   * ⚠ **Read ONCE, here, at construction — and that is a correction, not a shortcut.**
+   * This used to be read inside every sample, on the strength of §4's sentence *"A change
+   * takes effect on the next poll."* **That sentence could not be true as deployed.**
+   * `docker run --env-file` reads the file once, at container creation, and copies the
+   * values into the container's environment; `process.env` in a running Node process does
+   * not track the host file afterwards. So the per-sample read re-read a value that could
+   * not have changed — tested, exported machinery that could not fire, which is HANDOVER's
+   * do-not-copy #9 — while the spec promised a behaviour the deployment cannot deliver.
+   *
+   * Found 2026-09-07 by the steps 1–8 sweep and settled by the owner: keep `--env-file`,
+   * amend §4 to *"takes effect on the next container restart"*, and read once. **A change
+   * to `STANDING` now requires a restart, and nothing here pretends otherwise.**
+   *
+   * If the mechanism ever becomes a bind mount, this becomes a per-sample **file** read with
+   * its own monotonic budget and a place in §4's outstanding-call rule — not a re-read of
+   * `process.env`, which would still be a snapshot.
    */
   readonly env?: Environment;
 }
@@ -170,6 +183,11 @@ export const createTelemetrySource = ({
 }: TelemetrySourceOptions = {}): TelemetrySource => {
   let previous: DeltaSample | null = null;
 
+  // ⚠ Read once. See {@link TelemetrySourceOptions.env}: under `--env-file` the environment
+  // is fixed at container creation, so re-reading it per sample answered the same value
+  // every time while implying it might not.
+  const standing = readStandingList(env);
+
   // ⚠ §4's two halves, in the one order that is correct — see the module doc. Built once
   // per source, because the gate's slots must span polls; building them inside the sample
   // would give every poll a fresh, empty set of slots and the rule would do nothing.
@@ -190,10 +208,10 @@ export const createTelemetrySource = ({
         nowMs: startedMs,
         ts: clock.isoNow(),
         previous: taken,
-        // ⚠ Per sample, deliberately. §4's `standing` is configuration and the only field on
-        // the wire that is not a reading; reading it here rather than at construction is what
-        // makes "a change takes effect on the next poll" true without a reload path.
-        standing: readStandingList(env),
+        // §4's `standing` — configuration, and the only field on the wire that is not a
+        // reading. Captured at construction; see the option's doc for why per-sample was
+        // wrong rather than merely unnecessary.
+        standing,
       });
       previous = mergePrevious(taken, sample);
       return snapshot;

@@ -259,14 +259,28 @@ The owner's instruction, numbered as given:
    can proceed against a document that can be trusted.
 1. ~~Commit `dashboard/`~~ — **done**, `71a2f7d` on `dashboard-backend`.
 2. ~~Write this anchor~~ — done, and updated.
-3. **Read `SPEC.md` and resolve remaining ambiguities in the steps 1–8 surface only.**
-4. **Create atomic work items** from those ambiguities *plus* every open finding and
+3. ~~Read `SPEC.md` and resolve remaining ambiguities in the steps 1–8 surface only.~~
+4. ~~Create atomic work items~~ from those ambiguities *plus* every open finding and
    obligation recorded by the adversarial and review phases across steps 1–8.
-5. **Run an adversarial review of the work-item list itself** — complete? genuinely atomic?
+5. ~~Run an adversarial review of the work-item list itself~~ — complete? genuinely atomic?
    anything wrong, unnecessary, or missing?
-6. **Reconcile** those findings into the final list.
-7. **Execute one item at a time**, each in a **fresh context with a hand-off from the
+6. ~~Reconcile those findings into the final list.~~
+7. ~~Execute one item at a time~~, each in a **fresh context with a hand-off from the
    previous**, in the loop: **build → test → adversarial review → reconciliation**.
+
+**Items (3)–(7) were done on 2026-09-07 and are recorded in `pipeline/WORK-ITEMS.md`:** the
+sweep, the list, an adversarial review of the list, the reconciled queues, and the execution
+log. **Seven items executed, one owner decision taken (A1 — `STANDING` is captured once; a
+change needs a container restart), and seven `SPEC.md` wordings are still owed to the owner**
+(WORK-ITEMS §7.3). Three findings worth carrying:
+
+- **§4 promised a live `STANDING` change the deployment cannot make.** `--env-file` is read
+  once at `docker run`, so the per-sample re-read answered the same value every time while the
+  code's own comment said otherwise. Fixed in `source.ts`, pinned, and backed by a mutation.
+- **Step 3's harness got its ledger** and it immediately found four ⚠ marks with nothing behind
+  them — the same result step 2's retrofit produced. All seven harnesses now carry one.
+- **All seven harnesses reported an anchor miss under the label `DID NOT BITE`**, which
+  HANDOVER §1 says is a different finding with a different first hypothesis. Now two lines.
 
 ### ⚠ Scope constraint — absolute
 

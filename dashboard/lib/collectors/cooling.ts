@@ -194,7 +194,27 @@ export const collectCooling = async ({
   const files: Record<string, string> = {};
   for (const channel of FAN_CHANNELS) {
     const file = fanInputFile(channel);
-    if (!listed.has(file)) continue;
+    if (!listed.has(file)) {
+      // ⚠ §6.3, the `fan1`–`fan4` row: "An em dash on channels 1–4 **always** has an
+      // `errors[]` entry behind it; one on channel 5 may not, because channel 5 has a
+      // documented absent state and these do not." That asymmetry is the whole of this
+      // branch. Channel 5 legitimately vanishes on the stock 4-fan driver and is explained
+      // by `pwm5Present: false` a few lines below, so it stays silent. Channels 1–4 have no
+      // such state: the driver exposes them unconditionally, so one going missing is news,
+      // and without an entry it would render as a bare `—` that §6.5's one exception cannot
+      // reach — the neighbour that would explain it reads `unavailable`, which O13 says is
+      // not a severity.
+      //
+      // Unreachable on this board, and kept anyway: it costs one comparison, it can
+      // fabricate nothing (an `errors[]` entry mints no verdict and no severity), and it is
+      // the difference between §6.3's sentence being true and being true by luck.
+      if (channel !== 5) {
+        problems.push(
+          `${dir}: no \`${file}\` in the listing — channel ${channel} did not enumerate`,
+        );
+      }
+      continue;
+    }
     try {
       files[file] = await reader.readFile(`${dir}/${file}`);
     } catch (e) {

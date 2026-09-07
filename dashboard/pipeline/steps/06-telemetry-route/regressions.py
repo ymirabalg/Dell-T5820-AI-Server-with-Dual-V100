@@ -213,6 +213,29 @@ REGRESSIONS = [
     ("A6 serving: null is coerced to [], turning 'unknown' into 'none configured'",
      SNAPSHOT_SRC, "      serving: serving.serving,", "      serving: serving.serving ?? [],",
      [SNAPSHOT]),
+    # ⚠ Added 2026-09-07. `A7`/`A8` prove every collector's entries REACH `errors[]`; nothing
+    # proved they arrive in a particular ORDER, so the "in field order" clause of that test's
+    # name was unbacked — the ledger cannot tell an order assertion from decoration. It is
+    # load-bearing off this file: `dbus` is filed by two collectors, and §6.7's client rule
+    # (S11) shows the **last** message per source in the event log, so reordering these six
+    # changes the sentence an operator reads for a D-Bus failure.
+    # ⚠ Added 2026-09-07 with A1. `STANDING` is captured once, at construction, because
+    # `--env-file` fixes `process.env` at container creation — a per-sample read answers the
+    # same value every time while implying it might not. This mutation is the code that was
+    # there until A1, so the day someone restores it believing §4's old "takes effect on the
+    # next poll", the suite says why it cannot.
+    ("A20 STANDING is re-read inside every sample, promising a live change the deployment cannot make",
+     SOURCE_SRC,
+     [("  const standing = readStandingList(env);\n", ""),
+      ("        standing,\n", "        standing: readStandingList(env),\n")],
+     [SOURCE]),
+    ("A19 the six collections are concatenated in a different order",
+     SNAPSHOT_SRC,
+     "      errors: [\n        ...gpus.errors,\n        ...host.errors,\n        ...cooling.errors,\n"
+     "        ...serving.errors,\n        ...storage.errors,\n        ...safety.errors,",
+     "      errors: [\n        ...safety.errors,\n        ...storage.errors,\n        ...serving.errors,\n"
+     "        ...cooling.errors,\n        ...host.errors,\n        ...gpus.errors,",
+     [SNAPSHOT]),
     ("A7 the cooling collector's entries are dropped from errors[]",
      SNAPSHOT_SRC, "        ...cooling.errors,\n", "", [SNAPSHOT]),
     ("A8 the host collector's entries are dropped from errors[]",
@@ -496,6 +519,7 @@ REGRESSIONS = [
 def main() -> int:
     os.chdir(ROOT)
     bad = []
+    moved = []
     covered = set()
     for entry in REGRESSIONS:
         if len(entry) == 5:
@@ -510,7 +534,7 @@ def main() -> int:
         missing = [old for old, _ in pairs if old not in mutated]
         if missing:
             print(f"--- {name}\n    ANCHOR NOT FOUND in {src} — the implementation moved")
-            bad.append(name)
+            moved.append(name)
             continue
         for old, new in pairs:
             mutated = mutated.replace(old, new, 1)
@@ -540,8 +564,17 @@ def main() -> int:
         if run.returncode == 0:
             bad.append(name)
 
+    # ⚠ HANDOVER §1: `ANCHOR NOT FOUND` and `DID NOT BITE` are different findings with
+    # different first hypotheses — one means the implementation moved and the mutation needs
+    # re-aiming, the other means the mutation applied and no test noticed. This summary used
+    # to print both under "DID NOT BITE", which is the more alarming of the two labels and
+    # sends a reader hunting for a missing test that is not missing. Found 2026-09-07, when
+    # an edit to `cooling.ts` moved `T31`'s anchor and the run reported it as inert.
+    if moved:
+        print("\nANCHORS MOVED — re-aim these, they did not run:", ", ".join(moved))
     if bad:
         print("\nDID NOT BITE:", ", ".join(bad))
+    if moved or bad:
         return 1
 
     # ------------------------------------------------------------------ the ledger

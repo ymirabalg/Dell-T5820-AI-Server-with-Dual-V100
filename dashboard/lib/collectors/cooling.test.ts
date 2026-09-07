@@ -253,6 +253,41 @@ describe('§3.7 outcome 2 — the DKMS 5-fan module did not load', () => {
     expect(cooling.fan5Rpm).toBeNull();
   });
 
+  /*
+   * ⚠ **And channel 5's silence is an exception, not the rule.** §6.3's `fan1`–`fan4` row:
+   * "An em dash on channels 1–4 **always** has an `errors[]` entry behind it; one on channel
+   * 5 may not, because channel 5 has a documented absent state and these do not." The test
+   * above is the second half — `fan5Rpm: null` with only the `pwm5` entry beside it. This is
+   * the first half, and it was unguarded until 2026-09-07: a channel missing from the
+   * listing simply `continue`d, so a `fan2` that stopped enumerating rendered a bare `—`
+   * that nothing explained.
+   *
+   * §6.5's one exception cannot rescue it — the neighbour that would explain it reads
+   * `unavailable`, and O13 says `unavailable` is not a severity, so the exception does not
+   * reach it. That is S11/G5 seen from the collector's side.
+   *
+   * Unreachable on this board: `dell_smm` exposes `fan1`–`fan4` unconditionally. Kept
+   * because an `errors[]` entry mints no verdict and no severity — it can only ever say
+   * *why* a figure is blank — so the cost of being wrong about reachability is one line of
+   * text, and the cost of being right is a silent dead fan on a box with two passively
+   * cooled 250 W cards.
+   */
+  test('⚠ a channel 1–4 missing from the listing is explained; channel 5 is not', async () => {
+    const withoutFan2 = DELL_SMM_STOCK_ENTRIES.filter((e) => e !== 'fan2_input');
+    const { cooling, errors } = await collectCooling({
+      io: fake({ entries: withoutFan2, files: DELL_SMM_STOCK, readFails: {} }).io,
+    });
+
+    expect(cooling.fan2Rpm).toBeNull();
+    expect(sources(errors)).toEqual(['dell-smm', 'dell-smm']);
+    const messages = errors.map((e) => e.message);
+    expect(messages.some((m) => m.includes('fan2_input') && m.includes('channel 2'))).toBe(true);
+    // Channel 5 is missing from this listing too, and is still explained only by `pwm5`.
+    expect(cooling.fan5Rpm).toBeNull();
+    expect(messages.some((m) => m.includes('fan5_input'))).toBe(false);
+    expect(messages.some((m) => m.includes('no `pwm5` node'))).toBe(true);
+  });
+
   test('it reproduces `pwm5NodeAbsent`’s cooling and safety row', async () => {
     const { cooling, pwm5Present } = await collectCooling({
       io: fake({

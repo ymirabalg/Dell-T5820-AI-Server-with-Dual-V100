@@ -87,13 +87,36 @@ const BY_BIT: ReadonlyMap<bigint, ThrottleReason> = new Map(
 const SW_POWER_CAP = 0x4n;
 
 /**
- * Hex, with or without the `0x` prefix `nvidia-smi` actually emits.
+ * Hex, and the **`0x` prefix is required** — step 3's deferred A2, taken 2026-09-07.
  *
  * Hex is the only interpretation: `clocks_throttle_reasons.active` is documented and
- * observed as `0x0000000000000000`, and reading a bare `20` as decimal would silently
- * turn `0x20 sw thermal slowdown` into two different bits.
+ * observed as `0x0000000000000000`, and reading a bare `20` as decimal would silently turn
+ * `0x20 sw thermal slowdown` into two different bits.
+ *
+ * ⚠ **The prefix used to be optional, and that made a decimal reading FABRICATE AN ALARM.**
+ * A bare `8` parsed as `0x8` — *HW slowdown*, one of §6.3's four alarm bits — from a column
+ * that never said any such thing. Step 3's A2 is the precedent for how bad that is: a
+ * column shift fabricated a thermal-throttle alarm on a card at 38 °C, and the whole reason
+ * this mask is decoded rather than displayed raw is to stop exactly that.
+ *
+ * **Measured before requiring it** (read-only, `ssh ai-server`, 2026-09-07):
+ *
+ * ```
+ * $ nvidia-smi --query-gpu=index,clocks_throttle_reasons.active --format=csv,noheader
+ * 0, 0x0000000000000000
+ * 1, 0x0000000000000000
+ * $ nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1
+ * 580.173.02
+ * ```
+ *
+ * The only driver in scope emits the prefix. The trade this makes is a **lost reading** on a
+ * hypothetical driver that omits it — `null`, rendered `—`, with an `errors[]` entry from
+ * `collectGpus`, because `nvidia-smi.ts` treats an unparseable cell as no reading — against
+ * a **fabricated alarm** on a real one. §6.3's whole posture is that the fabricated alarm is
+ * worse, and an em dash says "we could not read this" while `0x8` says "this card is in
+ * hardware slowdown".
  */
-const HEX = /^\s*(?:0[xX])?([0-9a-fA-F]+)\s*$/;
+const HEX = /^\s*0[xX]([0-9a-fA-F]+)\s*$/;
 
 /**
  * Parse a {@link ThrottleMask}. `null` for no reading **and** for a string that is not a

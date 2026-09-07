@@ -637,8 +637,15 @@ describe('⚠ §6.7: which errors[] message reaches the log', () => {
    * failed call must not read alike … it is the only signal that a source is wedged rather
    * than merely broken" — and §4 contemplates a collector filing its own entry *plus* the
    * assembly's ceiling entry for the same source. The assembly appends after the collector, so
-   * the **last** entry is the outer, more recent verdict. Keeping the first inherited a
-   * concatenation order §4 explicitly declines to fix.
+   * the **last** entry is the outer, more recent verdict.
+   *
+   * ⚠ **Corrected 2026-09-07.** This comment used to end *"keeping the first inherited a
+   * concatenation order §4 explicitly declines to fix"*, which was wrong in a way worth
+   * keeping: **last inherits that order exactly as much as first does.** Neither choice is
+   * more principled than the other unless the order is fixed somewhere, and §4 does not fix
+   * it. It is fixed in `lib/telemetry/snapshot.ts`, deliberately and with a test, because
+   * `dbus` is filed by two collectors — so "last" now means something. This test pins the
+   * client half; `snapshot.test.ts` pins the server half.
    */
   test('⚠ the last message per source wins, so the outer verdict is the one shown', () => {
     const twice: readonly TelemetryError[] = [

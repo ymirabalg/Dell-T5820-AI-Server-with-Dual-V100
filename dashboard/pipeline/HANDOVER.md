@@ -136,15 +136,15 @@ wrote it. See §5.4. When a change touches anything that consumes entropy or a c
 
 ```bash
 python3 pipeline/steps/02-format-severity/regressions.py                    #  47 mutations + ledger
-python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  64 mutations, NO ledger
-python3 pipeline/steps/04-collector-cooling/regressions.py                  #  90 mutations + ledger
+python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  67 mutations + ledger
+python3 pipeline/steps/04-collector-cooling/regressions.py                  #  91 mutations + ledger
 python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 127 mutations + ledger
-python3 pipeline/steps/06-telemetry-route/regressions.py                    #  61 mutations + ledger
+python3 pipeline/steps/06-telemetry-route/regressions.py                    #  63 mutations + ledger
 python3 pipeline/steps/07-auth-login/regressions.py                         # 116 mutations + ledger
 python3 pipeline/steps/08-client-runtime/regressions.py                     # 158 mutations + ledger
 ```
 
-**663 mutations.** Each replaces one exact string in one source file with a **plausible wrong
+**669 mutations.** Each replaces one exact string in one source file with a **plausible wrong
 implementation** — the wrong thing someone would actually write, never a syntax error — runs
 the affected check, and restores the file. Every one must exit 1. Step 1 has no harness.
 
@@ -180,13 +180,22 @@ it exits** (Python block-buffers to a file), so run it in the background and wai
    is keyed on the `ts` **string**, so one instant under two spellings enters the ring twice.
    **Whenever a fix adds a defence, re-run the harness and read what stopped biting.**
 
+⚠ **`ANCHORS MOVED` and `DID NOT BITE` are now printed as separate summary lines.** Until
+2026-09-07 all seven harnesses appended an anchor miss to the same list and reported it under
+`DID NOT BITE` — the more alarming of the two labels, sending a reader to hunt for a missing
+test that is not missing. Found when an edit to `cooling.ts` moved step 4's `T31`.
+
 ⚠ **Ledger ownership follows the FILE, not the step.** A ⚠ test added to a file already in an
 earlier step's `LEDGER_FILES` needs its mutation in **that** step's harness. Step 8 added ⚠
 marks to `lib/conditions.ts` and `lib/format.ts`, so the ledger was **retrofitted to step 2's
 harness** — and immediately found **six pre-existing ⚠ marks with no mutation behind them**,
 five of them on `severity.ts`'s fan-stopped rows, including the `-0` / `Object.is` trap. All
-six are now backed (`R51`–`R55`, and `T51` in step 4). ⚠ **Step 3's harness still has no
-ledger** — it is the only one without, and it is an open obligation.
+six are now backed (`R51`–`R55`, and `T51` in step 4). ⚠ **Step 3's harness gained its ledger on
+2026-09-07, and all seven now have one.** That retrofit found **four ⚠ marks with no mutation
+behind them** — a temperature that must not gain a plausibility range, the *total* half of O7's
+backwards-counter guard (fixture symmetry: only the *busy* half had a mutation), and `gpus: []`
+collapsing to `null`. The fourth had its ⚠ dropped: it depends on nothing under
+`lib/collectors/`, so no step-3 mutation can reach it.
 
 ⚠ **A ⚠ mark with two owners is a mark neither owner has to back.** `lib/conditions.test.ts`
 was in step 4's `LEDGER_FILES` *and* was about to be added to step 2's. Step 2's ledger was
@@ -295,12 +304,25 @@ GET /api/telemetry
 - **`ts` is the poll's start**, so an age computed from it can only over-state.
 - **A partial snapshot is a 200 with `errors[]`** — the normal case on this machine
   (invariant 5).
-- **`errors[]` is in the snapshot's own field order** (gpus, host, cooling, serving, storage,
-  safety), and §6.5 matches by `source`. Eighteen sources, closed (§3.7).
+- ⚠ **`errors[]` is in the snapshot's own field order** (gpus, host, cooling, serving,
+  storage, safety) — but that is **this project's decision, pinned by a test, not §4's
+  contract.** `grep -n "field order" SPEC.md` is empty. The earlier handovers stated it as
+  contract; it is stated correctly here. It is load-bearing anyway, and that is why it is
+  pinned: **`dbus` is filed by two collectors** (`collectSafety` for the fan service,
+  `collectServing` for the llama units), and §6.7's client rule shows the **last** message
+  per source, so the order decides which D-Bus sentence an operator reads. `snapshot.ts`
+  states the reason, `snapshot.test.ts` pins it, and step 6's `A19` mutation backs it.
+  §6.5 matches an entry to a figure by `source`. Eighteen sources, closed (§3.7).
 - **`serving: null` is not `[]`**, on the wire and after any validation.
 - ⚠ **`standing: string[]` is required and echoed verbatim** (S34). It is configuration, not a
-  reading, so `null` is not one of its values, and the client reads it from **every** accepted
-  sample — an operator's edit to `/etc/ai-dashboard.env` lands on the next poll.
+  reading, so `null` is not one of its values, and the **client** reads it from every accepted
+  sample. ⚠ **The SERVER does not.** `createTelemetrySource` captures it **once, at
+  construction**: in production the value reaches `process.env` through Docker's `--env-file`,
+  which reads `/etc/ai-dashboard.env` at `docker run` and never again, so a per-sample re-read
+  answered the same value every time while implying it might not. **Changing `STANDING`
+  requires a container restart.** §4 still says *"a change takes effect on the next poll"* and
+  is owed a correction (§8). Settled by the owner 2026-09-07; `source.test.ts` pins it and step
+  6's `A20` backs it.
 
 ### 3.3 ⚠ The auth surface — exactly one module of it is client-safe
 
@@ -390,7 +412,7 @@ O6–O9, O15–O18 are closed (steps 3–6).
 | **D6** | jsdom, and the first assertion it buys: unmounting `useTelemetry` calls `stop()` | **step 9 or 10**, whichever first needs an interaction test |
 | **D7** | S11/G5, S19, S30 — inherited and untouched by step 8 | **steps 9, 10** |
 | **D8** | The `STANDING` env plumbing, and its place on §4.1's silent-failure list | **step 11**, verified **step 12** |
-| — | ⚠ **The red-test ledger retrofit for step 3's harness.** It is the only one of the seven without a ledger, and step 2's retrofit found six unbacked ⚠ marks the moment it got one | **whoever next touches `lib/collectors/`** |
+| — | ~~The red-test ledger retrofit for step 3's harness~~ — **done 2026-09-07.** All seven harnesses now carry a ledger | closed |
 | — | **A commit point** — `71a2f7d` was taken before step 9. The next is the owner's call | **owner** |
 
 ### 4.1 ⚠ The three step-11 obligations that fail **silently**, stated in full
@@ -652,6 +674,17 @@ the assumption that a quiet poll is free.**
 - **`ENODATA` from `pwm5` is EC auto and healthy**, matched on `error.code` by exact equality.
 - **No dependency for D-Bus**, and **`LoadUnit` is never called** — it *loads* the unit.
 - **`node:http`, not `fetch`**, and **`statvfs` uses `bfree`, not `bavail`**.
+- ⚠ **`lib/throttle.ts` REQUIRES the `0x` prefix** (2026-09-07). It used to be optional, which
+  made a decimal reading *fabricate an alarm*: a bare `8` parsed as `0x8`, HW slowdown. Measured
+  read-only before requiring it — driver 580.173.02 emits `0x0000000000000000` on both cards.
+  The trade is a lost reading (`—` plus an entry) on a hypothetical driver that omits it against
+  a fabricated alarm on the real one, and §6.3's posture is that the fabricated alarm is worse.
+- ⚠ **`errors[]`'s concatenation order is a decision, pinned by a test**, because `dbus` is
+  filed by two collectors and §6.7's client rule reads the **last** message per source. See §3.2.
+- ⚠ **A fan channel 1–4 missing from the hwmon listing files an `errors[]` entry**; channel 5
+  does not, because it has a documented absent state and `pwm5Present: false` explains it. §6.3's
+  *"an em dash on channels 1–4 always has an entry behind it"* is true because of this branch,
+  not because the board happens to enumerate them.
 
 ### The telemetry route (step 6)
 
@@ -766,8 +799,15 @@ stands: if the spec is silent, **report it — do not assume**.
 | **S11 / G5** | §6.5's exception to *"an em dash always has an `errors[]` entry behind it"* applies **only when the coloured neighbour is in the same panel and carries a severity**. For channel 5 the neighbour reads **`unavailable`**, and O13 says `unavailable` is not a severity — so the exception does not reach it, and an em dash on `fan5` with `pwm5Present: true` still owes an entry no collector files | **steps 9, 10** |
 | **S19** | A *skipped* collector and a *failed* one are indistinguishable to §6.5's rendering rules. The message text carries the distinction; §6.5 has one bucket. **Steps 9/10 must choose a sentence** | **steps 9, 10** |
 | **S30** | **§5.2's sixth row has no tone.** *Could not reach the dashboard.* has fixed copy and a fixed submit state but no `data-sev`. `warn` was chosen; `MOCK.html`'s state C predates the row | step 10 |
-| **S32** | §5.2 does not say what the login screen does while it cannot reach the dashboard. One attempt per click today | step 9/10 if either touches `/login` |
-| **S20 · S31 · S33** | The generalising rule for collector budgets; whether a refused `Content-Type` counts against the rate limit; whether `application/json; charset=utf-8` is allowed | — |
+
+⚠ **S20, S31, S32 and S33 were on this table when step 8 closed and are NOT open** — all four
+are answered by the current spec text (§4's *"a rule, not a census"*; §5's *"This check runs
+FIRST, before the rate limit"*; §5.2's *"The screen never retries on its own"*; §5's *"compared
+ignoring parameters and case"*). Removed 2026-09-07 after re-reading each against `SPEC.md`.
+**That is the fourth time this table has been stale in the safe direction. Re-verify before
+trusting any row.** Also closed and no longer worth raising: step 2's DEFER 15 and 16 —
+`lib/severity.ts` exports a function for all fifteen of §6.3's rows, and `lib/conditions.ts`
+carries `singleton` and `bareKindAllowedInStanding` per kind.
 
 **⚠ New in step 8, and the owner has not yet put any of them into `SPEC.md`.** The code's
 current choice is recorded beside each; **none was filled by assumption**, and a step that
@@ -808,6 +848,14 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 
 ## 9. Deferred work, with owners
 
+⚠ **`pipeline/WORK-ITEMS.md` is new** (2026-09-07). It carries the steps 1–8 sweep the owner
+asked for: what it found, an adversarial review of its own findings, what was executed, and the
+`SPEC.md` wording still owed. **Read it alongside §8.** One new finding there has no owner yet
+— **A15**: §3.1 says `gpus: []` *"always carries an `errors[]` entry, so it is never silent"*,
+which is false for the one branch where the parse is empty (exit 0, no output). Unreachable —
+`nvidia-smi` exits 6 with no devices — so the live `[]` always does carry entries. Either file
+an entry for the empty parse or qualify the sentence; the second is the owner's.
+
 | Work | Owner | Status |
 |---|---|---|
 | **Panel shell, chips, meters, rows, sparkline, stacked cooling chart** | **step 9** | specified — §6.1, §6.2, §6.6 |
@@ -822,7 +870,7 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | A `state === null` wrapper written once (composition gap (d)) | step 10 | open |
 | Render "duty unreadable" vs "channel 5 absent" distinctly | step 10 | open |
 | **Keep the server-rendered shell free of telemetry and secrets** | **step 10** | §3.3 — the standing condition under which the gate asymmetry is acceptable |
-| **The red-test ledger retrofit for step 3's harness** | whoever next touches `lib/collectors/` | **open — the only harness without one** |
+| ~~The red-test ledger retrofit for step 3's harness~~ | — | **closed 2026-09-07** — all seven carry one |
 | **O20 · O21 · O22 · D8** — the four silent-failure obligations | **step 11** | §4.1 |
 | **`dashboard.sh check`**: an unparseable `PASSWORD_HASH`; a `SESSION_SECRET` short or quoted; a `STANDING` entry matching nothing; the env file's mode and owner | **step 11** | the only place any of them can be caught, because nothing is logged |
 | **F7 — `LIMITS` bounds scrypt's memory but not its time** (measured 1 720 ms vs 58 ms at the worst accepted parameters) | **step 11** | with `check` |
