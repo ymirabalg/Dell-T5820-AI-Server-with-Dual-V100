@@ -99,6 +99,7 @@ REVOKE = "lib/auth/revocations.test.ts"
 AUTHZ = "lib/auth/authorize.test.ts"
 LOGIN = "lib/auth/handler.test.ts"
 VIEW = "lib/auth/login-view.test.ts"
+PYHASH = "lib/auth/hash-password-script.test.ts"
 ROUTE = "app/api/session/route.test.ts"
 FORM = "app/login/login-form.test.tsx"
 PAGE = "app/login/page.test.tsx"
@@ -134,7 +135,7 @@ GUARD = "lib/guardrails.test.ts"
 # at them from this side, proving the *widening* rather than the rule.
 LEDGER_FILES = [
     SCRYPT, COOKIE, CONFIG, SESSION, LIMIT, REVOKE, AUTHZ, LOGIN, VIEW, ROUTE, FORM, PAGE,
-    PROXY,
+    PROXY, PYHASH
 ]
 
 # `test('…')`, `it('…')` and `test.each(…)('…')`, single- or double-quoted.
@@ -836,6 +837,65 @@ REGRESSIONS = [
      "export interface ScryptHash {\n  readonly params: ScryptParams;",
      "export interface ScryptHash {\n  readonly params: Partial<ScryptParams>;",
      "types"),
+]
+
+
+
+# ---------------------------------------------------------------------------
+# ⚠ `scripts/hash-password.py` — the host-side producer, added 2026-09-07
+# ---------------------------------------------------------------------------
+#
+# The box has python3 and **no Node**, so nothing there can call `hashPassword()`. The install
+# script produces `PASSWORD_HASH` with a python implementation of the same encoding, and that
+# is a second producer of a format whose only failure mode is a **silent 401**. The defence is
+# `lib/auth/hash-password-script.test.ts`, which runs the real file and asserts this module's
+# own verifier accepts what it wrote.
+#
+# These mutations are what make that defence load-bearing rather than decorative: each is a
+# plausible divergence between the two implementations, and every one of them produces a hash
+# that LOOKS fine.
+
+REGRESSIONS += [
+    # ⚠ The one that does not fail a login: a weaker cost parameter parses, verifies, and is
+    # simply not what §5.1 specifies. Only reading the parameters back can catch it.
+    ("Y1 the python producer drops a cost parameter, so the hash is weaker and still verifies",
+     "scripts/hash-password.py", "LOG_N = 15", "LOG_N = 14", [PYHASH]),
+    ("Y2 the salt shrinks, so every hash is cheaper to attack and nothing rejects it",
+     "scripts/hash-password.py", "SALT_BYTES = 16", "SALT_BYTES = 8", [PYHASH]),
+    # ⚠ Node's `Buffer.toString('base64url')` is UNPADDED. Keeping the `=` is the single most
+    # likely divergence, and it fails at the parser — a clean, empty, unlogged 401.
+    ("Y3 base64url keeps its padding, and every login is refused with nothing logged",
+     "scripts/hash-password.py",
+     'return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")',
+     'return base64.urlsafe_b64encode(raw).decode("ascii")', [PYHASH]),
+    ("Y4 standard base64 instead of the URL alphabet — `+` and `/` are outside the alphabet",
+     "scripts/hash-password.py",
+     'return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")',
+     'return base64.b64encode(raw).rstrip(b"=").decode("ascii")', [PYHASH]),
+    ("Y5 the salt is reused across runs, so two identical passwords hash identically",
+     "scripts/hash-password.py",
+     "    print(hash_password(password, os.urandom(SALT_BYTES)))",
+     "    print(hash_password(password, b'0123456789abcdef'))", [PYHASH]),
+    # ⚠ §5.1's policy, both sides. It is enforced here and nowhere else: the server is handed a
+    # hash and can never afterwards tell whether the policy was met.
+    ("Y6 the length floor is dropped, so a two-character password is accepted",
+     "scripts/hash-password.py", "MIN_LENGTH = 6", "MIN_LENGTH = 0", [PYHASH]),
+    ("Y7 the letter rule is dropped, so an all-digit password passes",
+     "scripts/hash-password.py",
+     '    if not any(c.isalpha() for c in password):\n        return "at least one letter"\n',
+     "", [PYHASH]),
+    ("Y8 the digit rule is dropped, so an all-letter password passes",
+     "scripts/hash-password.py",
+     '    if not any(c.isdigit() for c in password):\n        return "at least one digit"\n',
+     "", [PYHASH]),
+    # ⚠ A rejected password must produce NO hash. Printing one anyway would write a credential
+    # the operator was told was refused.
+    ("Y9 a refused password still prints a hash, which the script then writes",
+     "scripts/hash-password.py",
+     '        print(f"password rejected: needs {failure}", file=sys.stderr)\n        return 2',
+     '        print(f"password rejected: needs {failure}", file=sys.stderr)\n'
+     '        print(hash_password(password, os.urandom(SALT_BYTES)))\n        return 2',
+     [PYHASH]),
 ]
 
 

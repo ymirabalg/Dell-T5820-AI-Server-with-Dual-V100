@@ -144,7 +144,7 @@ python3 pipeline/steps/07-auth-login/regressions.py                         # 11
 python3 pipeline/steps/08-client-runtime/regressions.py                     # 158 mutations + ledger
 ```
 
-**670 mutations.** Each replaces one exact string in one source file with a **plausible wrong
+**679 mutations.** Each replaces one exact string in one source file with a **plausible wrong
 implementation** — the wrong thing someone would actually write, never a syntax error — runs
 the affected check, and restores the file. Every one must exit 1. Step 1 has no harness.
 
@@ -397,7 +397,7 @@ step 9 needs a new one, that is a spec gap to **report**, not a blank to fill.
 | **O20** | ⚠ `dashboard.sh set-password` must emit `scrypt.<log2N>.<r>.<p>.<salt>.<key>` — §4.1 | **step 11** |
 | **O21** | ⚠ `SESSION_SECRET` must be written unquoted — §4.1 | **step 11** |
 | **O22** | ⚠ **One process, one module instance.** A **security** obligation — §4.1 | **steps 11, 12** |
-| **O23** | ⚠ **`set-password` has no runtime on the host and the image may not ship the hasher** — §4.1 | **step 11** |
+| ~~O23~~ | **Closed 2026-09-07** — the hasher moved to `scripts/hash-password.py` on the host. See §4.1 for what it cost and how that is paid | closed |
 
 O6–O9, O15–O18 are closed (steps 3–6).
 
@@ -449,40 +449,30 @@ Nothing in the suite can see any of this, because the suite runs one process by 
 This is the shape of the ufw incident in the repo's own `CLAUDE.md` (`is-active` green on a
 disabled firewall). **Step 11 must assert one process; step 12 must verify it on the box.**
 
-### ⚠ O23 — `set-password` has nothing to run the hasher with, and the image may not ship it
+### ~~O23~~ — closed 2026-09-07 by moving the hasher to the host
 
-**New 2026-09-07, and it is an ordering trap plus a bundling trap.** Measured on the box:
+**It was:** the box has **no Node** (measured), so `dashboard.sh set-password` had to run
+`hashPassword()` inside the image — which forced `set-password` to happen after `build`, and
+which would probably have failed anyway, because `output: 'standalone'` traces only what the app
+imports and **`hashPassword` is imported by nothing**.
 
-```
-$ ssh ai-server 'command -v node; command -v docker; command -v python3'
-node: ABSENT      docker: ABSENT      python3: /usr/bin/python3
-```
+**It is now:** `scripts/hash-password.py`, run on the host with the password on **stdin**. The
+ordering constraint and the tracing dependency are both gone.
 
-**The host cannot run `hashPassword()`.** There is no Node, and §2.2 already records Docker as a
-prerequisite task rather than a fact. So `dashboard.sh set-password` must go **through the
-image**, and that creates an ordering constraint nobody has written down: **install Docker →
-build the image → `set-password` → `install` → start.** Attempting `set-password` before the
-image exists leaves the operator with no way to produce a hash at all.
+⚠ **The cost, and it is the one thing to keep an eye on:** that is a **second producer of a
+format whose only failure mode is a silent 401**, which is on the do-not-copy list for a reason
+— this project shipped it once when two base64url decoders diverged. **It is paid for by
+measurement, not by a comment.** `lib/auth/hash-password-script.test.ts` runs the real file and
+asserts the server's own `verifyPassword` accepts what it wrote, reads the parameters back out
+of the encoded form (a weaker `logN` parses, verifies, and is simply wrong), and pins §5.1's
+policy on both sides of each boundary. **Nine mutations back it — `Y1`–`Y9` in step 7's
+harness.** The two implementations share six constants and nothing in either language holds them
+equal; that test does. **If `scripts/hash-password.py` is ever edited, it is the thing that must
+stay green.**
 
-**And the obvious invocation will probably fail.** `output: 'standalone'` traces only what the
-app actually imports. **`hashPassword` is exported, tested, and called by nothing in the running
-server** — its own doc says so, and `grep -rn hashPassword lib/ app/ proxy.ts` outside
-`scrypt.ts` and the tests is **empty**. `next.config.mjs` sets no `outputFileTracingIncludes`.
-So `docker run --rm ai-dashboard node -e '…hashPassword…'` is likely a module-not-found, at
-exactly the moment an operator is trying to set a password on a machine they cannot yet log in
-to.
-
-**The shape that works:** a small CLI entry the image genuinely contains — kept by
-`outputFileTracingIncludes`, or by being imported from something the app already pulls in — with
-the password arriving on **stdin**, never argv and never the environment. `dashboard.sh` prompts
-on the host and pipes.
-
-⚠ **Do not reimplement the encoding in bash or in the host's `python3`.** `hashlib.scrypt` is in
-the stdlib and would work, and it is a **second producer of a format whose only failure mode is
-a silent 401** — the same class as the two base64url decoders that diverged in step 7, on the
-one value that cannot be checked by looking at it. If a pre-Docker path is genuinely wanted,
-that is a decision to take deliberately, with `dashboard.sh check` verifying the result through
-`parseScryptHash`.
+⚠ **`python3` is now a hard requirement of the test suite**, deliberately un-skipped: a skipped
+test is the inert test the ledger exists to catch, and a host without python3 cannot deploy this
+anyway.
 
 ⚠ **D8 belongs on this list too.** With `STANDING` absent or misspelled in
 `/etc/ai-dashboard.env`, nothing is suppressed and the banner is nailed open by a condition the

@@ -24,7 +24,9 @@ Taken by the owner, 2026-09-07, after the facts were measured on the box.
 | **GPU in the container** | **Add NVIDIA's apt repo** and install `nvidia-container-toolkit` | `docker.io` 29.1.3 **is** in Ubuntu 26.04's archive; `nvidia-container-toolkit` is **not**, and `apt-cache search nvidia-container` is empty. Without it every poll is `gpus: null` and both headline panels are permanently blank |
 | **Source delivery** | **rsync from the Mac** | §2.3 requires the build on `ai-server` (arm64 Mac, x86_64 box). There is **no checkout on the box** — only loose `.sh` copies in `~` — and `dashboard-backend` has never been pushed |
 | **ufw** | **The script adds the rule, defensively** | ufw reads `ENABLED=yes` and 8090 has no rule, so the container would start, bind, log nothing and answer nobody — which §8 notes looks exactly like a broken build |
-| **Shape** | **Subcommands, with `install` orchestrating** | Matches `serve-llm.sh` and `gpu-fan-control.sh`, and it solves **O23's ordering trap by construction** |
+| **Shape** | **Subcommands, with `install` orchestrating**, and **`install` fails on a failed `check`** | Matches `serve-llm.sh` and `gpu-fan-control.sh`. Every row of `check` detects something that produces no diagnostic anywhere else, so a warning at the end of a long run is a warning nobody reads |
+| **The password hash** | **`python3` on the host**, via `scripts/hash-password.py` | The box has python3 and no Node. **This closes O23 entirely** — no CLI entry in the image, no `outputFileTracingIncludes`, no ordering constraint — at the price of a second producer, which is paid for by a cross-check test and nine mutations rather than by a warning |
+| **Password policy** | **≥ 6 characters, at least one letter and one digit** | Enforced at `set-password` and unverifiable afterwards |
 
 ⚠ **`sudo` on this box requires a password** (measured). Nothing here can be driven
 non-interactively from the Mac; the script is run **on the box, by a person**. That is also why
@@ -61,12 +63,17 @@ root on their only inference box.
 5. configure          §6   ── env file, SESSION_SECRET, STANDING
 6. unit               §7   ── ai-dashboard.service
 7. firewall           §8   ── ufw, defensively
-8. start + verify     §9
+8. start              §7
+9. check              §9   ── ⚠ install FAILS if any row fails
 ```
 
-⚠ **`set-password` cannot come before `build`.** The box has **no Node** (measured: `node
-ABSENT`), so the only thing that can run `hashPassword()` is the image. O23. An `install` that
-prompted first would leave the operator holding a password it had no way to hash.
+⚠ **The order is a convenience, not a constraint — and that is a change.** It was a
+constraint while the hasher lived in the image: the box has **no Node** (measured: `node
+ABSENT`), so `set-password` could not run until `build` had produced something to run it in.
+**`scripts/hash-password.py` removes that** (§5). `set-password` now works on a box with
+nothing installed but python3, so it can be run first, alone, or long before any image exists.
+`install` keeps this order because deps-then-build-then-credential reads correctly and fails
+early, not because anything forces it.
 
 **Idempotent throughout.** Re-running `install` on a working deployment must be a no-op plus a
 `check`. Specifically: an existing `PASSWORD_HASH` is **kept, not re-prompted**; an existing
@@ -89,6 +96,7 @@ timing out generically (repo convention). Every check prints what it found.
 | disk | `/var/lib` has < 10 GB free — the build plus the image needs room (201 GB free today) |
 | **NVIDIA driver** | `nvidia-smi` absent or non-zero **and** the toolkit is wanted. Warn, do not refuse: §3.1's "no compute GPU" is a documented state of this box |
 | **ufw** | `ufw status` is enforcing **and** no rule covers port 22 — see §8. **Hard refusal** |
+| **python3** | absent, and the subcommand is `set-password` or `install`. §5's producer is python; there is no fallback and no reimplementation in bash |
 | conflicting listener | something already bound on 8090 that is not our container |
 
 ⚠ **It does not check the BIOS, the DKMS module or the fan service.** Those are
@@ -157,52 +165,74 @@ rsync -a --delete \
 
 ---
 
-## 5. `set-password` — and the two traps
+## 5. `set-password` — python3 on the host, cross-checked by the suite
+
+**Decided 2026-09-07: the hash is produced by `python3` on the box, not inside the image.**
+`scripts/hash-password.py` is the producer and it is version-controlled beside the app.
 
 **The flow:**
 
 1. Prompt twice with `read -rs`, no echo, and compare. **Never an argument** — it would land in
    shell history and `ps` (§5.1, the same reasoning as `--api-key-file`).
-2. Refuse an empty password.
-3. Pipe it **on stdin** into the image, which prints the encoded hash on stdout:
-   `printf '%s' "$pw" | docker run --rm -i ai-dashboard:latest node dashboard-cli.js hash-password`
-4. Verify the result **round-trips** before writing it — feed it back through the image's
-   `verify-password` mode with the same password. A hash that does not verify is never written.
-5. Write `PASSWORD_HASH=<hash>` into `/etc/ai-dashboard.env`, mode `0600`, owner `root:root`.
+2. Pipe it **on stdin** into the script, which validates the policy and prints one line:
+   `printf '%s' "$pw" | python3 scripts/hash-password.py`
+3. **Exit 2 means the policy refused it** — reprompt, printing the script's own message, which
+   names the rule that failed.
+4. Write `PASSWORD_HASH=<hash>` into `/etc/ai-dashboard.env`, `install -m 0600 -o root -g root`.
 
-### ⚠ Trap 1 — the password must never reach argv or the environment
+### What this buys, and it is not small
 
-Stdin only. Not `-e PASSWORD=…` (visible in `docker inspect` and in the daemon's logs), not
-`node -e "…$pw…"` (visible in `ps` inside the container and in the host's process table under
-`--pid host`).
+**O23 dissolves.** Running the hasher inside the image needed a `dashboard-cli.js` kept in
+`.next/standalone` by `outputFileTracingIncludes`, and it forced `set-password` to happen
+*after* `build` — so an operator could not set a password until an image existed. **Neither
+constraint survives.** `set-password` now works on a box with nothing installed but python3,
+and `install`'s ordering is a convenience rather than a requirement.
 
-### ⚠ Trap 2 — the image probably does not contain the hasher yet
+### ⚠ What it costs, and how that cost is paid
 
-**O23, and this is a prerequisite on the dashboard code, not on the script.**
-`output: 'standalone'` traces only what the app imports, and **`hashPassword` is exported,
-tested, and called by nothing in the running server** — `grep -rn hashPassword lib/ app/
-proxy.ts` outside `scrypt.ts` and its tests is empty, and `next.config.mjs` sets no
-`outputFileTracingIncludes`. So `docker run … node dashboard-cli.js` is a module-not-found
-unless step 11 **also**:
+**A second producer of a format whose only failure mode is a silent 401.** `parseScryptHash`
+returns `null` for anything it does not recognise — including a hash that is correct but
+spelled differently — and `null` is not an error: §5 logs nothing about authentication, so the
+entire symptom is a clean empty 401 on every attempt and *a dashboard that will not open and
+will not say why*.
 
-- adds `dashboard-cli.js` (or `.ts`) with `hash-password` / `verify-password` / `check-hash`
-  modes, reading the password from stdin; **and**
-- keeps it in the standalone output — `outputFileTracingIncludes`, or by importing it from
-  something the app already pulls in.
+This project has shipped that exact shape once: two base64url decoders diverged, and 1 tag in
+16 had four accepted spellings. The lesson on HANDOVER's do-not-copy list is **never a second
+implementation of a canonical format**.
 
-**`build` must verify this and fail loudly if the entry is missing**, rather than letting
-`set-password` discover it at the moment an operator is locked out of a machine they have not
-logged into yet.
+**So the rule is kept by measurement rather than by discipline.**
+`lib/auth/hash-password-script.test.ts` **runs the real file** and asserts that
+`verifyPassword` — the server's own consumer — accepts what it produced. It also reads the
+parameters back out of the encoded form, because a weaker `logN` is the divergence that *does
+not* fail a login: it parses, it verifies, and it is simply not what §5.1 specifies.
 
-### ⚠ Do not reimplement the encoding
+**Nine mutations back it** (`Y1`–`Y9` in step 7's harness), each a plausible divergence that
+produces a hash which looks fine: a dropped cost parameter, a shorter salt, base64url keeping
+its padding, the standard alphabet instead of the URL one, a reused salt, each of the three
+policy rules, and a refused password that prints a hash anyway.
 
-The host has `python3` and `hashlib.scrypt` would produce the same six fields. **It would be a
-second producer of a format whose only failure mode is a silent 401** — the same class as the
-two base64url decoders that diverged in step 7, on the one value nobody can check by looking at
-it. `parseScryptHash` returns `null` for anything malformed, and `null` is a clean empty 401
-with **nothing logged anywhere**: *a dashboard that will not open and will not say why*.
+⚠ **The two implementations share five constants** — `LOG_N`, `R`, `P`, `KEY_BYTES`,
+`SALT_BYTES` — plus `MAXMEM`, and **nothing in either language holds them equal**. The
+cross-check is what holds them equal. If `scripts/hash-password.py` is ever edited, that test
+is the thing that must stay green.
 
----
+⚠ **`MAXMEM` is not a tuning knob.** At these parameters the allocation is
+`128 · 2^15 · 8` = **32 MiB exactly**, and OpenSSL's default ceiling is also 32 MiB — under
+which `hashlib.scrypt` raises, exactly as `crypto.scrypt` does. Node hit it first;
+`SCRYPT_MAXMEM` in `scrypt.ts` and `MAXMEM` here exist for the same reason and must agree.
+
+### §5.1's password policy
+
+**At least 6 characters, containing at least one letter and at least one digit.**
+
+Enforced in `scripts/hash-password.py` and **nowhere else**, because that is the only moment
+anyone sees the password. ⚠ **A policy applied at set time is unverifiable at every later
+time**: `dashboard.sh check` is handed a *hash*, so it can confirm the hash parses and can
+never confirm the password behind it met the rule. Said plainly here because "check validates
+the password" is the natural wrong assumption.
+
+The script exits **2** and names the failing rule on stderr; it prints **no hash at all**, so a
+refused password can never be written by a caller that ignored the exit code.
 
 ## 6. `configure` — the env file
 
@@ -335,7 +365,8 @@ with **no diagnostic anywhere**. `check` is the only place any of them can be no
 | **O20** | `PASSWORD_HASH` parses as `scrypt.<log2N>.<r>.<p>.<salt>.<key>` — verified by running it through the image, not by a regex here | A correct **argon2id** hash is refused by the server and produces a clean empty 401 on every attempt, with nothing logged. *A dashboard that will not open and will not say why* |
 | **O21** | `SESSION_SECRET` is ≥ 32 chars **and contains no quote character** and no `$` | A quoted 32-char secret **passes** the floor as a different secret, works, and dies the moment the file is rewritten unquoted |
 | **O22** | **Exactly one** container and one node process serves every request — `docker ps` and `docker top ai-dashboard` | Three process-global objects depend on it and two fail **open**: `DELETE /api/session` stops working for requests landing on the other instance, and §5's global rate limit becomes N× looser. **Nothing in the test suite can see this**, because the suite runs one process by construction |
-| **O23** | The image contains the CLI entry | Otherwise `set-password` fails at the worst possible moment |
+| **O23** | ~~The image contains the CLI entry~~ — **closed.** `scripts/hash-password.py` needs nothing from the image | — |
+| **new** | `scripts/hash-password.py` is present and executable on the host, and `python3 --version` answers | §5's producer is the only way to set a password; its absence is discovered at the moment someone needs it |
 | **D8** | Every `STANDING` entry matches a condition kind or id | A typo suppresses **nothing** and the banner stays nailed open, with no error. The client already computes this list as `state.unknownStanding` |
 | — | env file is `root:root 0600`, single-line, unquoted values | |
 | — | `journalctl -b \| grep "ordering cycle"` is empty | Only observable on a real boot |
@@ -343,6 +374,11 @@ with **no diagnostic anywhere**. `check` is the only place any of them can be no
 | — | ufw enforcing, and a rule covers 8090 and 22 | |
 | — | toolkit version **and** driver version, side by side | They are coupled; a driver upgrade can take the GPU panels |
 | — | `GET /api/telemetry` without a cookie is **401** | The gate is `proxy.ts`; a file left at `middleware.ts` **simply never runs** and every route is open with nothing in any log |
+
+⚠ **What `check` structurally cannot do: validate the password.** It is handed a *hash*. It
+confirms the hash parses as §5.1's encoding and that the server would accept its shape; it can
+never confirm the password behind it was six characters with a letter and a digit. §5.1's policy
+is enforced once, at `set-password`, and is unverifiable at every later time.
 
 **The standing rule from this repo applies to every row: writing the config is not evidence it
 took. Ask the system what it actually ended up with.**
@@ -371,10 +407,15 @@ runtime from under whatever else may have started using it is not this script's 
 
 Two prerequisites that are **not** script work and must land in step 11 alongside it:
 
-1. **`dashboard-cli.js`** with `hash-password`, `verify-password` and `check-hash` modes,
-   password on **stdin**, plus whatever `next.config.mjs` needs (`outputFileTracingIncludes`)
-   to keep it in `.next/standalone`. Without it §5 cannot work at all.
+1. ~~`dashboard-cli.js` and `outputFileTracingIncludes`~~ — **no longer needed.** §5's producer
+   is `scripts/hash-password.py`, which needs nothing from the image. **O23 is closed**, and
+   with it the tracing dependency and the ordering constraint.
 2. **`.dockerignore`** excluding `node_modules`, `.next`, `out`, `*.test.ts`.
+3. ⚠ **`scripts/hash-password.py` must ship to the box** alongside `dashboard.sh`. It is
+   excluded from the *image* (nothing in the container hashes a password) but it is **required
+   on the host**, so the rsync in §4 must carry it — a `--exclude` that dropped `scripts/`
+   would leave `set-password` broken with a clear error rather than a silent one, which is the
+   right failure but still a failure.
 
 And one that is already recorded and unblocked: **D8**, the `STANDING` plumbing, verified in
 step 12.
@@ -385,13 +426,17 @@ step 12.
 
 Recorded rather than guessed (invariant 7).
 
-1. **Is there a minimum password length?** §5 does not name one, and nothing in `lib/auth/`
-   enforces one — `verifyPassword` accepts a password of any length. The script currently only
-   refuses **empty**. A floor is a policy decision, and on a LAN box behind a 5-attempts-per-
-   minute global limit the case for one is weaker than usual.
-2. **Should `install` run `check` and fail, or run `check` and warn?** Failing means a box with
-   a pre-existing `STANDING` typo cannot be installed onto; warning means the loudest signal is
-   printed at the end of a long run, where it is easiest to miss.
+1. ~~Is there a minimum password length?~~ **Answered 2026-09-07: at least 6 characters, with
+   at least one letter and at least one digit.** Implemented in `scripts/hash-password.py`,
+   tested on both sides of each boundary, and backed by `Y6`–`Y8`. ⚠ It is unverifiable
+   afterwards — see §5.
+2. ~~Should `install` run `check` and fail, or warn?~~ **Answered: `install` FAILS on a failed
+   `check`.** It runs `check` as its last step and exits non-zero if any row fails, leaving the
+   unit installed and running so the operator can read `status` and `logs`. The reasoning is
+   §9's: every row of `check` detects something that produces **no diagnostic anywhere else**,
+   so a warning printed at the end of a long run is a warning nobody reads. ⚠ **Consequence to
+   accept:** a box with a pre-existing `STANDING` typo, or a second container someone started
+   by hand, cannot be installed onto until that is fixed — which is the point.
 3. **`--lan-cidr` default.** `192.168.4.0/22` matches `serve-llm.sh`. Worth confirming it is
    still right at deploy time — the box's address has already drifted once, when the reinstall
    regenerated `/etc/machine-id` and the DHCP reservation stopped binding.
