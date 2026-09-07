@@ -203,3 +203,44 @@ PATH="$HOME/.local/node24/bin:$PATH" PORT=8090 HOSTNAME=127.0.0.1 UV_THREADPOOL_
 
 ⚠ **`pnpm probe` is a separate vitest config** (`vitest.probe.mts`), so a network probe can
 never be swept into `pnpm test`. It is allowed to fail because the box is off.
+
+
+---
+
+## 7. Redeploy at `b3969cd` — the three backend items, on the box
+
+**2026-09-07, after O19, D4 and D5.** Deployed from **`git archive HEAD:dashboard`** rather than
+by rsyncing the working tree: a build agent was mid-edit on `lib/format.ts`, and rsync would
+have shipped a half-written file. ⚠ **Deploy a commit, not a working tree** — the box then holds
+something with a name, and `git rev-parse` says exactly what is running.
+
+```
+unauthenticated /api/telemetry = 401     ← proxy.ts runs
+POST /api/session               = 302
+```
+
+```
+GPU 0 · Tesla PG500-216 · 00000000:17:00.0     38 °C   39.2 W / 250.0 W   26,650 / 32,768 MiB
+CPU   · Xeon W-2135 · 6C / 12T                 43 °C   1.7 %   0.48 / 0.19 / 0.08
+COOLING  fan 5 2,201 RPM  EC auto  ·  fan 1·2·3·4  1,029 / 718 / 658 / 1,038 RPM
+SERVING  llama-server@0 :8080 active qwen3.6-27b ctx 131,072 health ok
+STORAGE  /  20.7 GiB / 232.6 GiB   ·   /home  128.3 GiB / 915.8 GiB   ·   rx 3.1 KB/s tx 2.2 KB/s
+SAFETY   ufw true · pwm5 true · dkms true · fan service active
+§6.3     25 conditions — every one bands normal
+ERRORS[] 0 entries
+```
+
+**What this run confirms that the earlier ones could not:**
+
+1. ⚠ **O19's contract change works end to end.** The server serves `usedGiB`/`totalGiB`, the
+   client's own `parseSnapshot` accepts it, and the figures render **`232.6 GiB`** — §6.6's own
+   *"`/` is 232.6 GiB, not 249.8 GB"*, on the machine. The dashboard now prints nothing false.
+2. **Zero `errors[]`**, twice in a row. Every collector on this box reads.
+3. **§6.7's delta rule, again on a fresh process**: first poll `cpuPct —` and `rx/tx —`, second
+   poll `1.7 %` and `3.1 / 2.2 KB/s`.
+4. **§4's cache**: three rapid polls, one identical `ts`.
+
+⚠ **`errorsForPanel` and `traceFor` are not exercised by this probe**, and cannot be: the probe
+consumes the API, and both are client-side selectors with no server half. They are covered by
+their own suites and harness mutations. Said here so the green above is not read as evidence
+about them.
