@@ -145,3 +145,62 @@ first three are the ones a panel undoes by accident.
 
 **And `MOCK.html` is a reference, never a source.** It predates several spec decisions — S30's
 sixth login row is the recorded example — and where it disagrees with `SPEC.md`, the spec wins.
+
+
+---
+
+# 5. ⚠ The contract-vs-spec alignment, done 2026-09-07
+
+The gaps above are **missing seam helpers**. This section is a different question, asked and
+answered separately: **does §4's snapshot carry everything §6.1 and §6.2 say to render, and does
+§6.2 place everything §4 carries?** Checked field by field, both directions.
+
+## 5.1 One gap in each direction, and a structural one underneath
+
+**§6.2 → §4 — one item.** The GPU card shows *"the model currently served on that card (joined
+from the serving data by instance index)"*, and **nothing in the snapshot expresses that join**.
+Settled read-only on the box — `llama-server@.service` carries `Environment=CUDA_VISIBLE_DEVICES=%i`,
+so instance N *is* GPU N — and written into §6.2 with what would break it. The dashboard reads
+`<i>.env`, which carries no device, so it cannot verify the join and must not pretend to.
+
+**§4 → §6.2 — four fields with nowhere to go:** `gpus[].name`, `gpus[].bus`, `host.cpuModel`,
+`host.kernel`. §3.1 insists the first two be carried raw and §3.2 says `cpuModel` is trimmed
+*"for display"* — while §6.2's panel list named none of them.
+
+**The structural cause: §6.2 described only panel BODIES.** `MOCK.html` gives every panel a
+`panelHead(title, subtitle, chip)` and three subtitles are live telemetry — and §6.2 never
+mentioned a subtitle at all. Step 9 building the shell from §6.2 alone would have produced a
+panel with no subtitle slot and then found four fields with nowhere to put them.
+
+## 5.2 What §6.2 and §6.6 now say
+
+| decision | |
+|---|---|
+| **The panel head is `title · subtitle · chip`** | The subtitle is **identity, never measurement** — it answers *what am I looking at*, so it must not move on a poll. GPU takes `<name> · <bus>`, CPU takes `<cpuModel> · <cores>C / <threads>T`, the rest take a fixed source label |
+| **The GPU name is the driver's string, raw** | `Tesla PG500-216` — the board code, not the marketing name. No lookup table, so the panel cannot go stale against an unknown card and an unexpected driver report stays visible. ⚠ `MOCK.html` shows `Tesla V100-PCIE-32GB`, **a string this box never produces** |
+| **The bus id renders raw, full domain form** | `00000000:17:00.0`, never `17:00.0`. §3.1 forbade trimming on the wire; §6.6 now forbids it in the rendering too, so the figure can be compared against `nvidia-smi` and `lspci` without arithmetic. ⚠ `MOCK.html` renders the short form |
+| **The header is exhaustive**, and carries `uptimeSec` | hostname · uptime · dot · time+zone · age · four controls · logout. **No IP address, no kernel.** Four sources described this header and none agreed; §6.1's ASCII now matches §6.2's prose and §3.2's promise |
+| **SAFETY rows carry their `errors[]` explanation** | §3.7 already required it — *"an alarm with no explanation beside it is not actionable"* — and the DKMS entry **names the running kernel**, which is where that string belongs |
+
+## 5.3 ⚠ `host.kernel` is carried and rendered nowhere, on purpose
+
+It is the **only** field with that status. Nothing reads it — the DKMS collector reads the
+running release itself, and its `errors[]` entry already names it. The justification is §1's own
+sentence: long-term trending is *"Prometheus scraping the same JSON endpoint, not a feature
+bolted onto this"*, so §4's snapshot is a contract for consumers beyond this UI and provenance
+in a raw response is worth one string.
+
+**A second such field is a defect, not a precedent.** Do-not-copy #9 is about exactly this.
+
+## 5.4 ⚠ Two traps `MOCK.html` sets for step 9
+
+The mock is a **reference, never a source**, and it disagrees with the spec in three places now
+recorded above. One more is worth stating on its own:
+
+**The mock's header renders `1 warning · 0 alarms`. §9 forbids that string in as many words** —
+*"the count is omitted when zero, so the header reads `● all healthy`, never `● 0 alarms`"*.
+The mock contains the literal string the spec rules out. Where they disagree, the spec wins.
+
+**No code changed for any of this.** The contract already carried every field raw, and
+`formatCpuModel` already implements §3.2's trim, tested. The defect was entirely in what §6.2
+failed to say.

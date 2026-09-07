@@ -809,7 +809,7 @@ it is the authoritative placement and maps 1:1 onto CSS grid columns and rows.
 
 ```
 header ┌──────────────────────────────────────────────────────────────────────┐
-       │ ai-server  ● 1 warning  14:47:31 EDT · 2 s ago                       │
+       │ ai-server · up 2 d 02:01    ● 1 warning   14:47:31 EDT · 2 s ago     │
        │                     5 s ▾   30 min ▾   ⟳   ❙❙   │   ⏻ logout        │
        └──────────────────────────────────────────────────────────────────────┘
 
@@ -847,11 +847,25 @@ mock, the panel is ~1026px tall at 1280 wide, so a 1280×800 display does scroll
 
 ### 6.2 Panels
 
-**Header** — hostname, an aggregate status dot, the snapshot timestamp and the age of the
-last successful snapshot, then four controls: the **cadence selector** (1/2/5/10/30 s,
-default 5), the **window selector** (10 min / 30 min / 2 h, default 30), **refresh now**,
-and **pause/resume**. A **logout** control sits at the end, visually separated from the
-four.
+**Header** — hostname, **`uptimeSec` beside it** in §3.2's four forms, an aggregate status
+dot, the snapshot timestamp and the age of the last successful snapshot, then four controls:
+the **cadence selector** (1/2/5/10/30 s, default 5), the **window selector**
+(10 min / 30 min / 2 h, default 30), **refresh now**, and **pause/resume**. A **logout**
+control sits at the end, visually separated from the four.
+
+**⚠ That is the whole header, and the list is exhaustive** (settled 2026-09-07, because four
+places described it and none agreed). In particular it carries **no IP address** and **no
+kernel release**. `MOCK.html`'s meta line — `192.168.4.71 · kernel 7.0.0-30 · up 2 d 02:01` —
+is a mock-only rendering; the mock is a reference, never a source. The address is not on §4's
+snapshot at all and would have to come from `window.location.host`, and the kernel has a better
+home: the `dkms` `errors[]` entry already names the running release, so §6.5 puts it beside the
+SAFETY row that is actually about it.
+
+⚠ **`host.kernel` is therefore carried on the wire and rendered nowhere, deliberately.** §1
+says long-term trending is *"Prometheus scraping the same JSON endpoint, not a feature bolted
+onto this"* — so §4's snapshot is a contract for consumers beyond this UI, and provenance in a
+raw `/api/telemetry` response is worth one string. It is **the only field with that
+justification**; a second one is a defect, not a precedent.
 
 Two rules on those controls:
 
@@ -872,11 +886,46 @@ of them.
 The age indicator is not decoration: when polling fails, the page must visibly stop
 claiming to be live.
 
+**Every panel is `title · subtitle · chip`.** Added 2026-09-07: the panel list below describes
+panel **bodies**, and until now said nothing about the head — which left four fields §3 insists
+on carrying with nowhere to be rendered.
+
+- **title** — the panel's name, lower case: `GPU 0`, `cpu`, `cooling`, `serving`.
+- **subtitle** — **identity, never measurement.** It answers *what am I looking at*, not *how is
+  it doing*, so it must not change on a poll except when the machine itself changes. Two panels
+  take live telemetry here and the rest take a fixed source label:
+
+  | panel | subtitle |
+  |---|---|
+  | **GPU 0 / GPU 1** | **`<name> · <bus>`** — the two §3.1 fields, both **raw** |
+  | **CPU** | **`<cpuModel> · <cores>C / <threads>T`** — `cpuModel` trimmed per §3.2 |
+  | cooling | `dell_smm · channel 5 = FAN_HDD (PCIe/GPU)` |
+  | memory · serving · safety · storage & network | a fixed source label — `/proc/meminfo`, `statvfs · eno1` |
+
+- **chip** — the panel's own severity, from §6.3 on the current reading (§6.4: a cell's colour
+  is not debounced).
+
+⚠ **A subtitle is `—` when its field is `null`, like any other reading** (invariant 1). A GPU
+whose `name` failed to parse does not lose its subtitle; it shows what it has.
+
 **GPU card ×2** — temperature as the dominant figure with a 30-minute trace behind it,
 power against the 250 W cap, VRAM as a bar with absolute MiB, utilisation, SM clock, and
 the model currently served on that card (joined from the serving data by instance index).
 Throttle reasons appear only when something other than `0x4` is active; the normal power
 cap is not news and must not be styled as a warning.
+
+**⚠ The card's name is the driver's own string, and it is not prettified.** `nvidia-smi`
+returns **`Tesla PG500-216`** on this hardware — the board code, not the marketing name — and
+§3.1 says carry it raw. The subtitle shows exactly that. It will not say "V100" anywhere, and
+that is deliberate: there is no lookup table, so the panel cannot go stale against a card the
+table does not know, and a driver reporting something unexpected is visible rather than
+laundered. ⚠ `MOCK.html` shows `Tesla V100-PCIE-32GB`, **a string this box never produces**.
+
+**⚠ The bus id is rendered RAW, in the full domain form** — `00000000:17:00.0`, not `17:00.0`.
+§3.1 already forbids trimming it on the wire; this says the rendering does not trim it either,
+so the figure on screen can be compared with `nvidia-smi` and `lspci` without arithmetic, which
+is §6.6's whole principle. ⚠ `MOCK.html` renders the short form; it is a reference, not a
+source. §6.6 carries the formatting row.
 
 **⚠ The GPU↔instance join is `gpu.index === serving.instance`, and it is a fact about the
 deployment that the dashboard cannot verify.** `llama-server@.service` carries
@@ -894,8 +943,9 @@ would mean either collecting `nvidia-smi --query-compute-apps` (a new field list
 13 keeps the dashboard out of the inference process) or mounting the unit file. Neither is
 worth it today; the assumption is written down here so it is a decision rather than a habit.
 
-**CPU** — package temperature, aggregate utilisation with a trace, core/thread count, load
-average.
+**CPU** — package temperature, aggregate utilisation with a trace, and load average. **The
+model and the core/thread count are the subtitle**, not body rows: they are identity, they
+never change while the box is up, and the panel is short.
 
 **RAM** — used against 61 GiB as a bar, plus swap. Swap gets its own row because any swap
 in use is meaningful here, where 12 GiB × 2 of host RAM prompt cache is configured.
@@ -913,6 +963,13 @@ with direction, link state.
 
 **SAFETY** — the four checks from §3.6 as a compact list with pass/warn/fail glyphs. This
 is the panel that earns the dashboard's existence, so it does not get hidden behind a tab.
+
+**⚠ Each row carries its `errors[]` explanation beside it, and that is not decoration.** §3.7
+requires it in as many words — *"`pwm5Present: false` carries an `errors[]` entry naming the
+missing node … an alarm with no explanation beside it is not actionable"* — and the same is
+true of the `NoSuchUnit` entry and of the DKMS check, whose entry **names the running kernel
+release**, which is where that string belongs. The text comes from §6.5's `source` match, not
+from copy written here.
 
 ### 6.3 Colour and thresholds
 
@@ -1172,6 +1229,9 @@ be checked against the command that produced it without arithmetic.
 | Load average | — | three values, 2 dp, ` / `-separated — `1.24 / 1.08 / 0.91` | `/proc/loadavg` |
 | Context length | tokens | thousands separated — `131,072` | `CTX=` in the env file |
 | TCP port | — | bare integer, **never** thousands separated — `8080`, not `8,080` | `PORT=` in the env file |
+| **GPU name** | — | **the driver's string, verbatim** — `Tesla PG500-216`. No lookup table, no marketing name, no truncation | `nvidia-smi --query-gpu=name` |
+| **PCI bus id** | — | **raw, full domain form** — `00000000:17:00.0`. Never trimmed to `17:00.0`, never thousands separated. It is an identifier, so the locale bullet below does not govern it, exactly as for a TCP port | `nvidia-smi --query-gpu=pci.bus_id`, `lspci` |
+| **CPU model** | — | trimmed to the marketing name — `Intel(R) Xeon(R) W-2135` renders `Xeon W-2135` (§3.2) | `/proc/cpuinfo` |
 | Channel-5 PWM | — | state name then raw value — `HIGH pwm 255`. States are `OFF` (0–63), `LOW` (64–191), `HIGH` (192–255), per the driver's 3-state quantisation. **A duty that is not a reading leaves the MODE undetermined, not merely the duty** — the contract cannot represent `manual` with an absent duty, so the probe yields `ch5Mode: null` and the cell renders `unavailable`, not `—` | `pwm5` |
 
 - **Locale `en-US`** for separators, on every viewer, so a screenshot always reads the same.
