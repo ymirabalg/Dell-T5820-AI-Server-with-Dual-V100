@@ -112,8 +112,13 @@ export const readAuthConfig = (env: Environment): AuthConfig | null => {
  * ⚠ Unset **and** empty both give `[]`, per §4. `''.split(',')` is `['']`, and an empty id
  * is not an entry an operator wrote; it is the absence of the key spelled differently.
  *
- * Read **per call**, like {@link readAuthConfig}, so an operator's edit takes effect on the
- * next poll rather than on the next container restart.
+ * ⚠ Read **per call**, like {@link readAuthConfig} — but that no longer buys a live change,
+ * and the comment here used to claim it did. `--env-file` is read once at `docker run`, so
+ * `process.env` is fixed for the life of the container and re-reading it answers the same
+ * value every time. §4 now says a `STANDING` change takes effect **on the next container
+ * restart**, and `createTelemetrySource` captures the list once. This function stays a pure
+ * read of whatever environment it is handed, which is what makes it testable and what would
+ * make a bind-mounted, per-sample file read a small change rather than a rewrite.
  */
 export const readStandingList = (env: Environment): readonly string[] => {
   const raw = env[STANDING_KEY];

@@ -891,6 +891,14 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
   ⚠ **`SPEC.md` was edited for the first time in this project's history** (1290 → 1362 lines),
   by the owner's delegation. Every gap listed as "awaiting the owner's wording" in earlier
   handovers is now **in the spec**; §8's table below is the residue, not the whole story.
+- **`pipeline/INSTALL-SPEC.md`** — ⚠ **step 11's `dashboard.sh`, specified before it is
+  written**, with the four decisions the owner took on 2026-09-07 (NVIDIA's apt repo in; rsync
+  for source delivery; the script adds the ufw rule defensively; subcommands with `install`
+  orchestrating). It carries every system change the script makes, the `docker run` line flag
+  by flag, the unit with its three traps, and `check` as the silent-failure detector for
+  O20–O23 and D8. **It also names two prerequisites on the dashboard code** — a
+  `dashboard-cli.js` kept in the standalone output, and `.dockerignore` — without which
+  `set-password` cannot work at all.
 - **`pipeline/UI-BACKEND-GAPS.md`** — ⚠ **read this before starting step 9.** §6.1 and §6.2's
   panel list checked against `lib/`, row by row. The finding is that **the data is all there**
   and what is missing is a thin seam layer: the GB→GiB rename first and mechanically, an
