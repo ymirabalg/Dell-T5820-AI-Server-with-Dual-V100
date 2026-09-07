@@ -17,6 +17,7 @@ import {
   CORETEMP_NAME,
   DEFAULT_INTERFACE,
   DEFAULT_PATHS,
+  pathsFrom,
   collectCpuTemp,
   collectGpus,
   collectHost,
@@ -106,6 +107,51 @@ const sources = (errors: readonly { source: ErrorSource }[]): ErrorSource[] =>
 // ---------------------------------------------------------------------------
 // §3.1 collectGpus
 // ---------------------------------------------------------------------------
+
+/*
+ * ⚠ `ROOT_MOUNT` / `HOME_MOUNT` — the only two paths that differ between the container and the
+ * host, and the only two that are overridable.
+ *
+ * §2.2 mounts `/` and `/home` at `/host/root` and `/host/home`, so the defaults are correct in
+ * the container and a **native** run reads `ENOENT` on both. Measured on the box 2026-09-07:
+ * every other collector read correctly natively and exactly these two failed — which is the
+ * evidence for overriding these and nothing else.
+ */
+describe('⚠ pathsFrom — the container/host mount override', () => {
+  test('⚠ with no override it is DEFAULT_PATHS, so the container is untouched', () => {
+    expect(pathsFrom({})).toEqual(DEFAULT_PATHS);
+    expect(pathsFrom({}).rootMount).toBe('/host/root');
+    expect(pathsFrom({}).homeMount).toBe('/host/home');
+  });
+
+  test('⚠ each key overrides only its own mount', () => {
+    expect(pathsFrom({ ROOT_MOUNT: '/' })).toEqual({ ...DEFAULT_PATHS, rootMount: '/' });
+    expect(pathsFrom({ HOME_MOUNT: '/home' })).toEqual({ ...DEFAULT_PATHS, homeMount: '/home' });
+  });
+
+  test('⚠ a native run overrides both, and NOTHING else moves', () => {
+    const native = pathsFrom({ ROOT_MOUNT: '/', HOME_MOUNT: '/home' });
+    expect(native.rootMount).toBe('/');
+    expect(native.homeMount).toBe('/home');
+    // Every other path is §2.2's own name and must be identical — /proc arrives via
+    // `--pid host`, /sys and the rest are mounted at their own paths.
+    const { rootMount: _r, homeMount: _h, ...rest } = native;
+    const { rootMount: _dr, homeMount: _dh, ...defaults } = DEFAULT_PATHS;
+    expect(rest).toEqual(defaults);
+  });
+
+  /*
+   * ⚠ Empty and whitespace are the ABSENCE of the key spelled differently, exactly as
+   * `readStandingList` treats `STANDING`. An empty `ROOT_MOUNT` that overrode the default
+   * would make `statvfs('')` the reading, which fails with a message naming nothing.
+   */
+  test.each([
+    ['empty', ''],
+    ['whitespace', '   '],
+  ])('⚠ an %s value is not an override', (_name, value) => {
+    expect(pathsFrom({ ROOT_MOUNT: value, HOME_MOUNT: value })).toEqual(DEFAULT_PATHS);
+  });
+});
 
 describe('collectGpus (§3.1)', () => {
   test('the healthy box: two cards, no errors', async () => {

@@ -19,6 +19,7 @@
  *    link read to the byte counters and point the UI at the wrong figure".
  */
 
+import type { Environment } from '../auth/config';
 import type { ErrorSource, Gpu, Host, Network, TelemetryError } from '../types';
 // ⚠ `tag` and `reason` moved to `./errors` in step 4, unchanged, so that `cooling.ts` and
 // `hwmon.ts` share one definition instead of carrying a second copy. Every call site here
@@ -96,10 +97,48 @@ export const DEFAULT_PATHS: CollectorPaths = {
   // ⚠ §2.2 mounts these two at `/host/root` and `/host/home`, NOT at `/` and `/home` —
   // `statvfs('/')` inside a container measures the container's own overlay, which is a
   // plausible-looking number about the wrong filesystem.
+  //
+  // ⚠ **They are the ONLY two paths that differ between the container and the host**, which
+  // is why {@link pathsFrom} overrides these and nothing else. Everything above is mounted at
+  // its own name (`-v /sys:/sys:ro`, `/etc/llama-server`, `/etc/ufw/ufw.conf`, `/lib/modules`,
+  // the D-Bus socket) or comes through `--pid host` (`/proc`), so it is already correct
+  // natively. Measured 2026-09-07: a native run read every collector correctly and failed on
+  // exactly these two.
   rootMount: '/host/root',
   homeMount: '/host/home',
   dbusSystemSocket: '/run/dbus/system_bus_socket',
 };
+
+/** Override for {@link CollectorPaths.rootMount}. See {@link pathsFrom}. */
+export const ROOT_MOUNT_KEY = 'ROOT_MOUNT';
+
+/** Override for {@link CollectorPaths.homeMount}. See {@link pathsFrom}. */
+export const HOME_MOUNT_KEY = 'HOME_MOUNT';
+
+/**
+ * {@link DEFAULT_PATHS}, with the two filesystem mounts overridable from the environment.
+ *
+ * ⚠ **This exists so the app can run OUTSIDE a container, and for nothing else.** §2.2 mounts
+ * `/` and `/home` at `/host/root` and `/host/home`, so the defaults are correct in the
+ * container and a native run reads `ENOENT` on both — which is what it did on 2026-09-07's
+ * first deploy, correctly, with one `errors[]` entry per filesystem and a 200 (invariant 5).
+ * A native run is a debugging arrangement, not §2.5's deployment, and this is what makes it
+ * complete rather than two permanent em dashes.
+ *
+ * ⚠ **Setting these INSIDE the container is a way to measure the wrong filesystem.**
+ * `statvfs('/')` there reports the container's own overlay: a plausible number about something
+ * nobody asked about, which is this project's least favourite kind of wrong. The container
+ * sets neither key and gets the defaults.
+ *
+ * Only these two are overridable, because only these two are remapped — see the ⚠ at
+ * {@link DEFAULT_PATHS}. An empty or whitespace-only value is **not** an override: it is the
+ * absence of the key spelled differently, exactly as `readStandingList` treats `STANDING`.
+ */
+export const pathsFrom = (env: Environment): CollectorPaths => ({
+  ...DEFAULT_PATHS,
+  rootMount: env[ROOT_MOUNT_KEY]?.trim() || DEFAULT_PATHS.rootMount,
+  homeMount: env[HOME_MOUNT_KEY]?.trim() || DEFAULT_PATHS.homeMount,
+});
 
 /** §3.5 fixes the interface; the dashboard is not multi-host. */
 export const DEFAULT_INTERFACE = 'eno1';

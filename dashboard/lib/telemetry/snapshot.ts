@@ -82,6 +82,7 @@ import {
   withServiceState,
 } from '@/lib/collectors';
 import type {
+  CollectorPaths,
   CoolingCollection,
   DeltaSample,
   Filesystems,
@@ -138,6 +139,20 @@ export const DEFAULT_COLLECTORS: SnapshotCollectors = {
   storage: collectStorage,
   safety: collectSafety,
 };
+
+/**
+ * {@link DEFAULT_COLLECTORS}, bound to a `paths` object.
+ *
+ * ⚠ **Only `storage` is rebound, and that is not an optimisation — it is the whole truth.**
+ * `rootMount` and `homeMount` are the only two entries in `CollectorPaths` that differ between
+ * the container and the host (see the ⚠ at `DEFAULT_PATHS`), and `collectStorage` is the only
+ * collector that reads them. Rebinding the other five would compile, do nothing, and imply
+ * that any of their paths might move — which would be a false claim about §2.2's mounts.
+ */
+export const collectorsFor = (paths: CollectorPaths): SnapshotCollectors => ({
+  ...DEFAULT_COLLECTORS,
+  storage: () => collectStorage({ paths }),
+});
 
 // ---------------------------------------------------------------------------
 // "The collector could not report" — one collection per collector

@@ -426,6 +426,43 @@ REGRESSIONS += [
 ]
 
 
+
+# ---------------------------------------------------------------------------
+# ⚠ `pathsFrom` — the container/host mount override, added 2026-09-07
+# ---------------------------------------------------------------------------
+#
+# The first native deploy read every collector correctly and failed on exactly two paths:
+# §2.2 mounts `/` and `/home` at `/host/root` and `/host/home`, so the defaults are right in
+# the container and wrong outside it. These mutations hold the override to what it is for.
+
+REGRESSIONS += [
+    # ⚠ The dangerous direction. Defaulting to the HOST paths means that inside the container
+    # `statvfs('/')` measures the container's own overlay — a plausible-looking number about a
+    # filesystem nobody asked about, reported with no error at all.
+    ("S69 the mount defaults become the host paths, so the container measures its own overlay",
+     "lib/collectors/collect.ts",
+     "  rootMount: '/host/root',\n  homeMount: '/host/home',",
+     "  rootMount: '/',\n  homeMount: '/home',",
+     COL),
+    ("S70 an empty ROOT_MOUNT overrides the default, so statvfs is handed nothing",
+     "lib/collectors/collect.ts",
+     "  rootMount: env[ROOT_MOUNT_KEY]?.trim() || DEFAULT_PATHS.rootMount,",
+     "  rootMount: env[ROOT_MOUNT_KEY]?.trim() ?? DEFAULT_PATHS.rootMount,",
+     COL),
+    ("S71 ROOT_MOUNT silently drives the HOME mount too, so both figures describe one filesystem",
+     "lib/collectors/collect.ts",
+     "  homeMount: env[HOME_MOUNT_KEY]?.trim() || DEFAULT_PATHS.homeMount,",
+     "  homeMount: env[ROOT_MOUNT_KEY]?.trim() || DEFAULT_PATHS.homeMount,",
+     COL),
+    ("S72 the override reaches every path, not only the two that are remapped",
+     "lib/collectors/collect.ts",
+     "export const pathsFrom = (env: Environment): CollectorPaths => ({\n  ...DEFAULT_PATHS,",
+     "export const pathsFrom = (env: Environment): CollectorPaths => ({\n  ...DEFAULT_PATHS,\n"
+     "  procStat: env[ROOT_MOUNT_KEY]?.trim() || DEFAULT_PATHS.procStat,",
+     COL),
+]
+
+
 def main() -> int:
     os.chdir(ROOT)
     bad = []

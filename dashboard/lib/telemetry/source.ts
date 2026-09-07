@@ -58,6 +58,7 @@
  */
 
 import { readStandingList } from '@/lib/auth/config';
+import { pathsFrom } from '@/lib/collectors';
 import type { Environment } from '@/lib/auth/config';
 import { isoTimestamp } from '@/lib/types';
 import type { IsoTimestamp, TelemetrySnapshot } from '@/lib/types';
@@ -66,7 +67,7 @@ import type { DeltaSample } from '@/lib/collectors';
 import { createInFlightCache } from './cache';
 import { HOST_CEILING_MS, withHostCeiling } from './ceiling';
 import { oneAtATime } from './gate';
-import { DEFAULT_COLLECTORS, sampleSnapshot } from './snapshot';
+import { collectorsFor, sampleSnapshot } from './snapshot';
 import type { SnapshotCollectors } from './snapshot';
 
 /**
@@ -175,7 +176,7 @@ export const mergePrevious = (prev: DeltaSample | null, next: DeltaSample): Delt
  * no timer of any kind; the first collector call happens inside the first `snapshot()`.
  */
 export const createTelemetrySource = ({
-  collectors = DEFAULT_COLLECTORS,
+  collectors,
   clock = systemClock,
   ttlMs = TELEMETRY_CACHE_MS,
   hostCeilingMs = HOST_CEILING_MS,
@@ -188,10 +189,16 @@ export const createTelemetrySource = ({
   // every time while implying it might not.
   const standing = readStandingList(env);
 
+  // ⚠ Also read once, and for the same reason. `ROOT_MOUNT`/`HOME_MOUNT` exist only so the app
+  // can run OUTSIDE a container — §2.2 mounts the two filesystems at `/host/root` and
+  // `/host/home`, so the defaults are right in the container and a native run reads `ENOENT`
+  // on both. An explicit `collectors` (every test) bypasses this entirely.
+  const wired = collectors ?? collectorsFor(pathsFrom(env));
+
   // ⚠ §4's two halves, in the one order that is correct — see the module doc. Built once
   // per source, because the gate's slots must span polls; building them inside the sample
   // would give every poll a fresh, empty set of slots and the rule would do nothing.
-  const guarded = withHostCeiling(oneAtATime(collectors), hostCeilingMs);
+  const guarded = withHostCeiling(oneAtATime(wired), hostCeilingMs);
 
   const cache = createInFlightCache<TelemetrySnapshot>({
     ttlMs,

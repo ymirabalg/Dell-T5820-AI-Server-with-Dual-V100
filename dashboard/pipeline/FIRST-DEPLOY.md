@@ -99,37 +99,74 @@ second poll arrives, never `0`."*
 
 ---
 
-## 4. ⚠ The one real finding: `DEFAULT_PATHS` are CONTAINER paths, with no override
+## 4. The one real finding, and the fix — `ROOT_MOUNT` / `HOME_MOUNT`
+
+The first run returned:
 
 ```
 "root": { "usedGB": null, "totalGB": null },
-"home": { "usedGB": null, "totalGB": null },
-"errors": [
-  { "source": "statvfs", "message": "/host/root: ENOENT: no such file or directory, statfs '/host/root'" },
-  { "source": "statvfs", "message": "/host/home: ENOENT: no such file or directory, statfs '/host/home'" }
-]
+"errors": [ { "source": "statvfs", "message": "/host/root: ENOENT: … statfs '/host/root'" }, … ]
 ```
 
 `collect.ts` fixes `rootMount: '/host/root'` and `homeMount: '/host/home'`, because §2.2 mounts
-them there — `-v /:/host/root:ro -v /home:/host/home:ro`. **Nothing reads an environment
-variable for them**, so outside a container the two filesystems cannot be read at all.
+them there — `statvfs('/')` **inside a container measures the container's own overlay**, a
+plausible-looking number about the wrong filesystem. Outside a container those paths do not
+exist, and nothing read an environment variable for them.
 
-**This is correct behaviour for an unsupported configuration, and it is not being "fixed".**
-The app is specified to run in a container with those mounts; running it natively is this
-deploy's choice, not a supported mode. What matters is *how* it failed:
+⚠ **How it failed is the point: a partial snapshot, one `errors[]` entry per filesystem, and a
+200.** Invariant 5 exactly, with the em dash on screen having an entry behind it (§6.5). The
+two `—` were the system working.
 
-⚠ **It reported a partial snapshot with an `errors[]` entry per filesystem and a 200 —
-invariant 5, exactly.** No 500, no fabricated zero, and the em dash on screen has an entry
-behind it (§6.5). **The two `—` in STORAGE are the system working, not failing.**
+**The fix is `pathsFrom(env)`, and it is deliberately narrow.** `ROOT_MOUNT` and `HOME_MOUNT`
+override those two paths and **nothing else**, because they are the only two entries in
+`CollectorPaths` that differ between the container and the host — everything else is mounted at
+its own name (`-v /sys:/sys:ro`, `/etc/llama-server`, `/etc/ufw/ufw.conf`, `/lib/modules`, the
+D-Bus socket) or arrives via `--pid host`. **The native run proved that**: every other collector
+read correctly and exactly these two failed.
 
-**Recorded for step 11/12:** a non-container run cannot see disks, so any future native
-debugging run will show those two em dashes, and that is expected. If a native mode is ever
-wanted, `CollectorPaths` is already threaded through every collector — it needs a source, not a
-redesign.
+⚠ **The container sets neither key and gets the defaults.** Setting them *inside* the container
+is a way to measure the wrong filesystem, and `S69` mutates the defaults to the host paths to
+keep that from being an easy mistake. An empty or whitespace value is **not** an override — it
+is the absence of the key spelled differently, exactly as `readStandingList` treats `STANDING`.
 
----
+### The native run, with the mounts set
 
-## 5. A small defect the run found in nothing but itself
+```
+STORAGE & NETWORK  ·  statvfs · eno1
+  /                    20.7 GB / 232.6 GB
+  /home                127.9 GB / 915.8 GB
+  eno1                 rx 3.0 KB/s  tx 2.2 KB/s     link up
+
+§6.3 BANDS  ·  25 conditions projected — every one bands normal
+ERRORS[]   ·  0 entries
+```
+
+⚠ **The totals match `SPEC.md` §3.5 to the decimal** — *"the **232.6 GiB** root filesystem"* and
+*"the **915.8 GiB** `/home` filesystem"* — and `df -h` agrees at its own resolution (`233G`,
+`916G`). The collector reproduces `df` because it uses `bfree`, not `bavail`.
+
+⚠ **And this is the first time O19 is visible on screen.** Those figures read ` GB` while §6.6
+says **GiB**, and §6.6's own row says *"`/` is 232.6 GiB, not 249.8 GB"* — the number is right
+and the label is wrong. It is the only false thing the dashboard currently prints.
+
+## 5. Two small defects the run found
+
+### 5.1 ⚠ The standalone server renames its process, so `pkill -f "node server.js"` misses it
+
+Restarting it appeared to work and did nothing: the old process was still serving, and the probe
+still showed the old paths. `ss -ltnp` explains it —
+
+```
+LISTEN 127.0.0.1:8090   users:(("next-server (v",pid=1490802,...))
+```
+
+Next's standalone server **sets its own process title** to `next-server (v16.3.4)`. Any restart
+that matches on `node server.js` silently no-ops. Irrelevant to §2.5's deployment, where
+`ExecStartPre=-/usr/bin/docker rm -f ai-dashboard` handles it — **recorded because it is exactly
+the shape of a `dashboard.sh restart` that reports success and changes nothing**, which is this
+repo's most-repeated failure mode.
+
+### 5.2 A defect the run found in nothing but itself
 
 The probe first printed **`up up 1 d 21:45`**. `formatUptime` already carries the word — §3.2's
 four forms are `up 2 d 02:01`, `up 02:01`, `up 14 min`, `up <1 min` — and the probe added its

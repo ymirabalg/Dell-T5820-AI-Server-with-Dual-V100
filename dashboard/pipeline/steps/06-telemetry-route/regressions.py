@@ -457,8 +457,8 @@ REGRESSIONS = [
     # behavioural test in the project stays green under it.
     ("P5 the gate is composed OUTSIDE the ceiling, so a wedged source is re-issued every poll",
      SOURCE_SRC,
-     "  const guarded = withHostCeiling(oneAtATime(collectors), hostCeilingMs);",
-     "  const guarded = oneAtATime(withHostCeiling(collectors, hostCeilingMs));",
+     "  const guarded = withHostCeiling(oneAtATime(wired), hostCeilingMs);",
+     "  const guarded = oneAtATime(withHostCeiling(wired, hostCeilingMs));",
      [SOURCE]),
 
     # ============================ §4 / §6.5 — the fixes step 6's review ruled MUST
