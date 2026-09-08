@@ -311,6 +311,30 @@ context** receiving a written handoff:
 | **test** | **Sonnet 5, high effort** | subagent | reads every test name against its body; fixture symmetry; hunts equivalent and probabilistic mutations |
 | **adversarial** | default | subagent | tries to break it, **fixes nothing**, writes findings with concrete failure scenarios |
 | **reconcile** | default | **background subagent** — changed 2026-09-07 | adjudicates every finding ACCEPTED/REJECTED/DEFERRED **with reasons**, applies what survives, re-runs everything, writes `reconciliation.md` and rewrites `HANDOVER.md` |
+| **review** | — | **the parent, always** — added 2026-09-08 | re-runs `pnpm verify` itself, **audits the reconciliation's adjudication table**, spot-checks its headline claims against the tree, then commits. **The loop is not closed until this runs.** |
+
+### ⚠ PROJECT RULE — the parent reviews every reconciliation. Added 2026-09-08, owner's instruction.
+
+**A reconciliation is not finished when the agent reports. It is finished when the parent has
+reviewed it.** This is a fifth phase, it is never delegated, and it is the counterweight to
+having moved the reconcile seat into an agent at all.
+
+What the review must actually do — all four, every time:
+
+1. **Re-run `pnpm verify` yourself** on the tree the agent left. Its green is not the green.
+2. **Read the adjudication table in full** — every ACCEPTED, REJECTED and DEFERRED row with its
+   reason. **Rejections and deferrals are the priority**: an accepted fix leaves a diff you can
+   see, a rejected finding leaves nothing at all. A run with *zero* rejections gets the same
+   scrutiny, not less — zero is the shape a rubber-stamp makes, so audit the deferrals instead.
+3. **Spot-check the headline claims against the tree**, not against the report. Q1's review
+   checked the generic-`test.each` syntax at the named line numbers and the duplicate test name
+   in both files before believing either. Two `grep`s; it is not expensive.
+4. **Then commit**, and say in the message what was verified by the parent versus reported.
+
+**What made Q1's loop work is worth copying:** the parent verified F1 and F2 *itself* before
+writing the reconcile handoff, so the agent inherited facts rather than claims, and its handoff
+said which was which. Do that — a phase that must re-derive its own inputs spends its budget
+there instead of on the work.
 
 ### ⚠ Reconciliation moved out of the parent — 2026-09-07, at the owner's instruction
 
@@ -369,6 +393,12 @@ recording it now leads somewhere — see §7.
 
 ## 9. Standing constraints
 
+- ⚠ **Mutation ids carry their creating step's id as a prefix** — `07-R3`, `Q1-SC1` — added
+  2026-09-08 at the owner's instruction. The bare namespace collided with the gap/work-item
+  namespace: `S11` and `G5` were each simultaneously a step-7 mutation id and half of the open
+  `S11/G5` work item, and `S12` collided too. §7's old warning that "the `S*` namespace is
+  polluted" understated it — it was never confined to `S`, nor to steps 3–5. The prefix is the
+  **creating** step, not the harness the mutation currently lives in, so it never changes.
 - **Commit only when asked** (repo convention, root `CLAUDE.md`). Each reconciliation has been
   an explicit ask; `git push` is separately gated and needs its own.
 - **The server `ai-server` is reachable over SSH and is read-only to this work.** Reads are
