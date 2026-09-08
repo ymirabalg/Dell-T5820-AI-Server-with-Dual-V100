@@ -208,7 +208,16 @@ export const collectCooling = async ({
       // Unreachable on this board, and kept anyway: it costs one comparison, it can
       // fabricate nothing (an `errors[]` entry mints no verdict and no severity), and it is
       // the difference between §6.3's sentence being true and being true by luck.
-      if (channel !== 5) {
+      // ⚠ Channel 5's silence is excused by its **documented absent state**, and only while
+      // that state actually holds. On the stock 4-fan driver `pwm5` is missing too, and
+      // `pwm5Present: false` explains the em dash a few lines below. But if `pwm5` IS listed
+      // and `fan5_input` is not, the module is loaded and the tach is simply gone — there is
+      // no absent state to point at, the COOLING cell renders `unavailable` which O13 says is
+      // **not a severity**, and §6.5's one exception therefore does not reach it. That is
+      // S11/G5: an em dash with nothing behind it, on the panel this dashboard exists for.
+      // Settled 2026-09-07 — the collector files the entry, so §6.5's rule stays one rule
+      // rather than becoming "always, except here".
+      if (channel !== 5 || listed.has(PWM5_FILE)) {
         problems.push(
           `${dir}: no \`${file}\` in the listing — channel ${channel} did not enumerate`,
         );

@@ -272,6 +272,32 @@ describe('§3.7 outcome 2 — the DKMS 5-fan module did not load', () => {
    * text, and the cost of being right is a silent dead fan on a box with two passively
    * cooled 250 W cards.
    */
+  /*
+   * ⚠ **S11/G5, closed at the collector 2026-09-07.** Channel 5's silence is excused by its
+   * documented absent state — and only while that state holds. Here `pwm5` IS listed and
+   * `fan5_input` is not: the module is loaded and the tach is gone, so `pwm5Present` is `true`,
+   * the COOLING cell renders **`unavailable`**, and O13 says that is **not a severity** — which
+   * means §6.5's one exception ("a coloured neighbour in the same panel already names the
+   * cause") does not reach it.
+   *
+   * Without this entry that em dash has nothing behind it, on the panel that earns this
+   * dashboard's existence. The alternative — a fixed note rendered by the panel — was rejected
+   * because it turns §6.5's rule into "always, except here".
+   */
+  test('⚠ fan5 missing while pwm5 is PRESENT is explained — S11/G5 has no absent state to hide behind', async () => {
+    const entries = [...DELL_SMM_STOCK_ENTRIES, 'pwm5'].filter((e) => e !== 'fan5_input');
+    const { cooling, pwm5Present, errors } = await collectCooling({
+      io: fake({ entries, files: { ...DELL_SMM_STOCK, pwm5: '255\n' }, readFails: {} }).io,
+    });
+
+    // The state that removes channel 5's excuse: the module IS loaded.
+    expect(pwm5Present).toBe(true);
+    expect(cooling.fan5Rpm).toBeNull();
+    // …so the em dash is explained, by name.
+    const messages = errors.map((e) => e.message);
+    expect(messages.some((m) => m.includes('fan5_input') && m.includes('channel 5'))).toBe(true);
+  });
+
   test('⚠ a channel 1–4 missing from the listing is explained; channel 5 is not', async () => {
     const withoutFan2 = DELL_SMM_STOCK_ENTRIES.filter((e) => e !== 'fan2_input');
     const { cooling, errors } = await collectCooling({

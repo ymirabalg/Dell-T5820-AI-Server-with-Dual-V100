@@ -777,7 +777,7 @@ States:
 | Wrong password | `Password not recognised.` The field is **not** cleared — retyping a long password because of a typo is worse than the marginal shoulder-surfing risk on a LAN box |
 | Rate-limited | `Too many attempts. Try again in Ns.`, counting down, submit disabled |
 | Session expired | Arrived here from an expired session: `Session expired — sign in again.` |
-| Could not reach the dashboard | **A response that is neither a success nor a refusal is not a wrong password.** If the request fails at the network, or the server answers with anything other than 302/2xx, 401 or 429, the screen says `Could not reach the dashboard.` and leaves submit enabled. Rendering `Password not recognised.` for a server that never answered sends the operator to retype a password that was correct — and §5's other half, that the server never logs, means there is nothing else for them to look at. **Tone is warning, not error** — the same as *session expired*, because nothing the operator did is wrong. **The screen never retries on its own**: submit stays enabled and the operator decides, since an automatic retry against a dead container is indistinguishable from a scripted guess and would spend §5's global budget |
+| Could not reach the dashboard | **A response that is neither a success nor a refusal is not a wrong password.** If the request fails at the network, or the server answers with anything other than 302/2xx, 401 or 429, the screen says `Could not reach the dashboard.` and leaves submit enabled. Rendering `Password not recognised.` for a server that never answered sends the operator to retype a password that was correct — and §5's other half, that the server never logs, means there is nothing else for them to look at. **Tone is `warn`, not `error`** (⚠ S30, settled 2026-09-07) — the same as *session expired*, because nothing the operator did is wrong. `error` was rejected for reading as *you did something wrong* in the one state where they did not, and for making this row and *Password not recognised.* visually identical; a toneless row was rejected because every other row in this table has one. **The screen never retries on its own**: submit stays enabled and the operator decides, since an automatic retry against a dead container is indistinguishable from a scripted guess and would spend §5's global budget |
 
 **The countdown is server-supplied, never client-invented.** A 429 carries a
 `Retry-After` header and the screen renders its countdown from that value. A client-side
@@ -949,6 +949,27 @@ never change while the box is up, and the panel is short.
 
 **RAM** — used against 61 GiB as a bar, plus swap. Swap gets its own row because any swap
 in use is meaningful here, where 12 GiB × 2 of host RAM prompt cache is configured.
+
+**⚠ Charts carry a hover layer and a table view, and both are DEFAULTS rather than requests.**
+Added 2026-09-07. An HTML/SVG chart is interactive whether or not anyone planned for it, and the
+established practice for one is a crosshair + tooltip on a line or area plot, a per-mark tooltip
+on bars and dots, and a table view so the numbers are reachable without reading pixels. Earlier
+drafts of this section listed exactly four controls and said nothing about any of that, which
+made the silence read as a prohibition — it was not one.
+
+The reasoning for accepting them, since decision 7 makes this a **wall panel** nobody hovers:
+
+- **They cost nothing when unused.** A tooltip that never fires renders nothing and occupies no
+  space in the grid, so §6.1's no-scroll promise is untouched.
+- **The wall is not the only viewer.** The same page is opened on a laptop when something is
+  wrong, and that is precisely when reading a value off a 600-point trace by eye is worst.
+- **The table view is an accessibility floor**, not a convenience: it is what makes a chart's
+  content reachable when colour, size or vision make the marks unreadable — and §9 already
+  requires identity never to rest on colour alone.
+
+⚠ **They remain outside §6.2's four controls**, which govern the *dashboard* — cadence, window,
+refresh, pause. A tooltip is part of a chart, not a control of the page, and neither writes to
+the server (invariant 2).
 
 **COOLING** — `fan5` RPM as the headline, the derived mode (`HIGH pwm 255` / `EC auto`),
 `fan2` and the remaining channels smaller, and the fan service state. When the GPU
@@ -1184,6 +1205,19 @@ These are the normal operating states of this machine, not edge cases:
 | A condition's subject is absent from a collection that **was** read | **Retired.** The subject has left the machine, and that is an answer: the condition leaves the ledger, the dot and the count, and one `normal`-toned entry records it. Confirmed over the same ten seconds, so one flickering enumeration cannot retire a card |
 | An `—` whose cause is already shown beside it | **No second explanation.** When a coloured neighbour in the same panel already names the cause — a red *channel unavailable* chip next to a `—` fan reading — the em dash needs no entry of its own and no separate treatment. One fact, stated once. This is the only exception to the rule above, and it applies only when the neighbour is in the same panel and carries a severity |
 
+**⚠ S11/G5, settled 2026-09-07: the exception has ONE hole and the collector closes it, not the
+panel.** `fan5` reading `—` while `pwm5Present` is `true` has a neighbour that renders
+**`unavailable`**, and O13 says `unavailable` is not a severity — so the exception above does not
+reach it, and until now no collector filed an entry either. That is an em dash with nothing
+behind it, in the panel this dashboard exists for.
+
+**`collectCooling` files the entry.** When `pwm5` is in the listing but `fan5_input` is not,
+channel 5 no longer has the documented absent state that excuses its silence — the module is
+loaded and the tach is missing, which is news. The alternative, a fixed note rendered by the
+COOLING panel, was rejected: it turns *"an em dash always has an entry behind it"* into *"always,
+except here"*, and a qualified rule is one a future reader has to know the exceptions to. **The
+rule stays one rule.**
+
 **A reading that stopped and a subject that left must never look alike either.** *We stopped
 being able to look* is not *it got better*. Every rule in this section blanks **the figure it
 names**; none of them may quietly lower §9's aggregate, because the aggregate is the one thing
@@ -1292,6 +1326,13 @@ be checked against the command that produced it without arithmetic.
   distinction lives in the `errors[]` message text, and it is the only signal that a source
   is wedged rather than merely broken — a run of `skipped` entries is what a reader needs to
   see before reaching for the container.
+  ⚠ **S19, settled 2026-09-07: the message text carries it and the RENDERING does not.** One em
+  dash and one entry either way — no fourth display state beside §6.3's three-valued `Severity`,
+  no separate glyph, no colour. The two mean the same thing to the panel (*this figure is not
+  current*) and differ only in the remedy, which is a sentence to read rather than a shape to
+  recognise. A distinct visual state was rejected for needing an axis §6.3 does not have, and
+  raising the panel to `watch` for a skipped call was rejected because it colours a fact about
+  **the dashboard's ability to look**, which §9 keeps out of the aggregate deliberately.
 - **A collector that has stopped answering produces the same `errors[]` entries on every poll**
   for as long as it does — the third persistent-entry case, on the same terms as
   `pwm5Present: false` (§3.6) and the `NoSuchUnit` entry (§3.7). **The event log records the
@@ -1420,6 +1461,7 @@ raised, not assumed.
 | `fan1`–`fan4` when the 5-fan module is absent | They survive; only channel 5 disappears | CLAUDE.md: a DKMS failure means "you silently drop to four fans" |
 | A channel lost mid-session | Same rule as a failed poll — the trace stops, the gap is hatched, nothing is drawn to zero | §6.5's intent, extended |
 | Chart form for temp + fan | **Two stacked plots on one shared x-axis.** Never a dual y-axis on one plot | Two scales on one frame make a crossing look meaningful when it is an artefact of scaling |
+| Chart interaction | **Hover layer and table view are the default** — crosshair + tooltip on a line plot, per-mark on bars and dots, and a table view of the series. See §6.2 | They cost nothing on a wall nobody touches, and the same page is opened on a laptop exactly when reading a value off a trace by eye is hardest. The table view is an accessibility floor, not a convenience |
 | Series colours | GPU 0 `#3987e5` solid · GPU 1 `#199e70` dashed · fan 5 `#d95926` | Validated all-pairs against the panel ground, worst protan/deutan ΔE 9.4. GPU 1 is deliberately not orange — an orange line on a temperature chart reads as "hot" |
 | Series distinguishability | Colour **plus** dash pattern **plus** a direct end-label | §6.3 requires it without relying on colour alone |
 | Numerals | Monospace, `tabular-nums`, throughout | At a 5 s refresh, digits that jitter in place are worse than optically even ones |
