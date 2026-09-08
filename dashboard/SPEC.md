@@ -845,6 +845,12 @@ The "no scroll" promise holds at ≥1280px **wide and ≥1024px tall** — measu
 mock, the panel is ~1026px tall at 1280 wide, so a 1280×800 display does scroll. At
 1920×1080 it fits comfortably. Below either bound, legibility wins.
 
+⚠ **The promise is about the PAGE, not about every component** — clarified 2026-09-08. A
+component whose content is unbounded by nature may scroll inside its own fixed-size box: the
+session event log below is specified that way, and §6.2's table view is ruled the same. What
+the promise forbids is the *grid* growing past the viewport and the reader having to scroll
+the dashboard to see a panel.
+
 ### 6.2 Panels
 
 **Header** — hostname, **`uptimeSec` beside it** in §3.2's four forms, an aggregate status
@@ -970,6 +976,23 @@ The reasoning for accepting them, since decision 7 makes this a **wall panel** n
 ⚠ **They remain outside §6.2's four controls**, which govern the *dashboard* — cadence, window,
 refresh, pause. A tooltip is part of a chart, not a control of the page, and neither writes to
 the server (invariant 2).
+
+**⚠ Ruled 2026-09-08, after Q2 built it and found the two requirements incompatible.**
+
+- **On a line or area plot the crosshair's own tooltip discharges the per-mark requirement.**
+  They cannot both be reached: a full-body crosshair needs hover zones tiling the plot, and
+  those zones necessarily occlude every mark beneath them. The crosshair tooltip is the more
+  useful of the two on a 600-point trace — it reports every series at one instant — so it is
+  the one that stays. **The "per-mark on bars and dots" clause governs bar and dot charts**,
+  which `components/` does not yet contain; it becomes live when one is built, and it is not
+  unmet in the meantime. A per-mark `<title>` may still be emitted on discrete marks: correct
+  markup that costs nothing and becomes reachable if paint order ever changes.
+- **The table view scrolls within its own container** — `max-height` plus `overflow-y`. §6.1's
+  no-scroll promise governs the **page**, not a component: this section already specifies the
+  session event log as "a compact scrolling list". The alternative was capping or decimating
+  rows, and that was rejected because a decimated table is no longer a complete substitute for
+  the chart — which is the whole ground on which the table is an accessibility floor, and the
+  ground on which keyboard parity with the chart was declined.
 
 **COOLING** — `fan5` RPM as the headline, the derived mode (`HIGH pwm 255` / `EC auto`),
 `fan2` and the remaining channels smaller, and the fan service state. When the GPU
@@ -1461,7 +1484,7 @@ raised, not assumed.
 | `fan1`–`fan4` when the 5-fan module is absent | They survive; only channel 5 disappears | CLAUDE.md: a DKMS failure means "you silently drop to four fans" |
 | A channel lost mid-session | Same rule as a failed poll — the trace stops, the gap is hatched, nothing is drawn to zero | §6.5's intent, extended |
 | Chart form for temp + fan | **Two stacked plots on one shared x-axis.** Never a dual y-axis on one plot | Two scales on one frame make a crossing look meaningful when it is an artefact of scaling |
-| Chart interaction | **Hover layer and table view are the default** — crosshair + tooltip on a line plot, per-mark on bars and dots, and a table view of the series. See §6.2 | They cost nothing on a wall nobody touches, and the same page is opened on a laptop exactly when reading a value off a trace by eye is hardest. The table view is an accessibility floor, not a convenience |
+| Chart interaction | **Hover layer and table view are the default** — crosshair + tooltip on a line plot, per-mark on bars and dots **once such a chart exists** (§6.2's 2026-09-08 ruling: on a line plot the crosshair's tooltip discharges it, since hover zones necessarily occlude the marks), and a table view of the series, **scrolling within its own container**. See §6.2 | They cost nothing on a wall nobody touches, and the same page is opened on a laptop exactly when reading a value off a trace by eye is hardest. The table view is an accessibility floor, not a convenience |
 | Series colours | GPU 0 `#3987e5` solid · GPU 1 `#199e70` dashed · fan 5 `#d95926` | Validated all-pairs against the panel ground, worst protan/deutan ΔE 9.4. GPU 1 is deliberately not orange — an orange line on a temperature chart reads as "hot" |
 | Series distinguishability | Colour **plus** dash pattern **plus** a direct end-label | §6.3 requires it without relying on colour alone |
 | Numerals | Monospace, `tabular-nums`, throughout | At a 5 s refresh, digits that jitter in place are worse than optically even ones |

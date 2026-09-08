@@ -51,8 +51,25 @@
   font-size: 11px;
 }
 
+/* Q2-S2 — the scroll container (see the module doc). `--table-scroll-max` is the same
+   viewport-relative stopgap `StackedTimeSeriesChart` uses, from `tokens.css`, so the two
+   table views are not carrying two independently-guessed numbers. */
+.tableView {
+  max-height: var(--table-scroll-max);
+  overflow-y: auto;
+}
+
+.tableView:focus-visible {
+  outline: 2px solid var(--ink-primary);
+  outline-offset: -2px;
+}
+
 .table {
-  border-collapse: collapse;
+  /* Q2-S2: `separate`, not `collapse` — see the identical note in
+     `stacked-time-series-chart.module.css`. No vertical borders here either, so nothing
+     visible changes. */
+  border-collapse: separate;
+  border-spacing: 0;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: 11px;
@@ -70,6 +87,14 @@
 .table th {
   color: var(--ink-muted);
   font-weight: normal;
+}
+
+/* Q2-S2 — sticky header, same mechanism and reasoning as the full chart's. */
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-1);
+  z-index: 1;
 }
 
 /* Q2 reconciliation (F4) — the time cell is a `<th scope="row">` so a screen reader can

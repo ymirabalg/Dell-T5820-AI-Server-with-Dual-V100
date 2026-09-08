@@ -112,6 +112,40 @@
  * full, always-available substitute for every value the hover layer can show — not by cloning
  * the hover interaction onto a focus ring. Recorded as a decision, not an oversight — see the
  * build notes.
+ *
+ * ### ⚠ Q2-S2 — the table view SCROLLS within its own container, and every row stays in the DOM
+ *
+ * `SPEC.md` §6.2 (ruled 2026-09-08, after Q2's own reconciliation deferred it as F10): a
+ * default 30-minute window is ~722 `<tr>`, 120 minutes is ~1,202 — rendered with no cap into a
+ * fixed grid cell before this ruling. Capping or decimating rows was considered and REJECTED:
+ * a decimated table is no longer a complete substitute for the chart, which is the whole ground
+ * on which the table is an accessibility floor and on which the paragraph above declines
+ * keyboard parity with the hover layer. So the fix is `max-height` plus `overflow-y: auto` on
+ * `.tableView` — §6.1's no-scroll promise governs the PAGE, not a component, and this section
+ * already specifies the session event log as a scrolling list on the same reasoning.
+ *
+ * - **Keyboard reachability.** A scrollable region only a mouse can reach fails the exact
+ *   floor this exists to hold up, so `.tableView` — the same `<div role="group"
+ *   aria-label={ariaLabel}>` that already names the whole table view — carries `tabIndex={0}`.
+ *   No second name is introduced: the existing group becomes the scroll container AND the tab
+ *   stop, so its one accessible name does both jobs.
+ * - **`max-height` is a viewport-relative STOPGAP, not a magic pixel count.** §6.1 makes real
+ *   sizing the grid's decision, and step 10 has not built the grid yet — the same reason step 9
+ *   deferred the sparkline's own sizing (L9). `--table-scroll-max` (`tokens.css`) is `40vh`,
+ *   shared verbatim with the sparkline's table view so there are not two independently-guessed
+ *   numbers. Recorded for step 10 to replace with `max-height: 100%` once a panel body has an
+ *   actual bounded height to inherit — see `s2-table-scroll.md`.
+ * - **A sticky header, since it is cheap and does not fake anything.** `.table thead th` is
+ *   `position: sticky; top: 0`, so a reader who has scrolled past row 200 still sees which
+ *   column is which. `.table` switched to `border-collapse: separate` (from `collapse`)
+ *   because sticky positioning on a table cell is documented as unreliable under `collapse` in
+ *   WebKit; this table has no vertical borders, so the switch changes nothing visible.
+ * - **None of this is observable from `renderToStaticMarkup`.** `max-height`, `overflow-y` and
+ *   `position: sticky` are CSS-only, and this suite renders no DOM at all — jsdom is not even
+ *   in play here. The ⚠ test below asserts the one part of the fix that IS structure:
+ *   `tabindex="0"` on the group's own opening tag. It does not and cannot prove the container
+ *   actually scrolls or that the header actually sticks — say so rather than naming the test as
+ *   though it did.
  */
 
 import { Fragment } from 'react';
@@ -524,7 +558,7 @@ function ChartTableView({
   }
 
   return (
-    <div className={styles.tableView} role="group" aria-label={ariaLabel} data-role="table-view">
+    <div className={styles.tableView} role="group" aria-label={ariaLabel} tabIndex={0} data-role="table-view">
       {plots.map((plot) => {
         const rows = tableRowsFor(plot, gaps, domainStartMs, domainEndMs);
         return (

@@ -89,12 +89,25 @@
 }
 
 /* Q2 — the table view. One `<table>` per plot (see the module doc); this file just gives it
-   the same dark-instrument-panel chrome as the chart it stands in for. */
+   the same dark-instrument-panel chrome as the chart it stands in for.
+
+   Q2-S2: this is also the SCROLL CONTAINER (`max-height` + `overflow-y`, SPEC §6.2's
+   2026-09-08 ruling) and, via the `tabIndex={0}` the component puts on this same element, the
+   keyboard tab stop for it. `--table-scroll-max` is `tokens.css`'s viewport-relative stopgap —
+   see the module doc's Q2-S2 section for why it is not a magic pixel number and why it is not
+   the grid's real answer. */
 .tableView {
   display: flex;
   flex-direction: column;
   gap: 12px;
   font-family: var(--font-mono);
+  max-height: var(--table-scroll-max);
+  overflow-y: auto;
+}
+
+.tableView:focus-visible {
+  outline: 2px solid var(--ink-primary);
+  outline-offset: -2px;
 }
 
 .tableEmpty {
@@ -105,7 +118,13 @@
 
 .table {
   width: 100%;
-  border-collapse: collapse;
+  /* Q2-S2: `separate`, not `collapse` — `position: sticky` on a table cell is documented as
+     unreliable in WebKit when the table uses `border-collapse: collapse`. There are no
+     vertical borders anywhere in this table, so the switch to `separate` (with zero spacing)
+     changes nothing visible; it only removes a real cross-browser risk to the sticky header
+     below. */
+  border-collapse: separate;
+  border-spacing: 0;
   font-variant-numeric: tabular-nums;
   font-size: 11px;
 }
@@ -122,6 +141,18 @@
 .table th {
   color: var(--ink-muted);
   font-weight: normal;
+}
+
+/* Q2-S2 — a sticky header so a reader who has scrolled hundreds of rows down still sees which
+   column is which. Sticks relative to `.tableView`, the nearest scrolling ancestor; bounded to
+   each table's own extent, so the next plot's table gets its own header rather than this one
+   persisting past its own rows. Needs its own background — otherwise scrolled body rows show
+   through the header while it is pinned. */
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-1);
+  z-index: 1;
 }
 
 /* A gap row spans every column (see the component) — italic and muted, so it reads as a

@@ -1008,8 +1008,8 @@ REGRESSIONS = [
     # caption, column headers and row headers — three of the four were unasserted.
     ("Q2-TV6 the table view loses the caller's accessible name, so the group reaches a screen reader as unnamed numbers",
      CHART_SRC,
-     '    <div className={styles.tableView} role="group" aria-label={ariaLabel} data-role="table-view">',
-     '    <div className={styles.tableView} data-role="table-view">',
+     '    <div className={styles.tableView} role="group" aria-label={ariaLabel} tabIndex={0} data-role="table-view">',
+     '    <div className={styles.tableView} tabIndex={0} data-role="table-view">',
      [CHART]),
     ("Q2-TV7 the per-table <caption> is dropped, so two tables in one group cannot be told apart",
      CHART_SRC,
@@ -1057,22 +1057,41 @@ REGRESSIONS = [
      [SPARKLINE]),
     ("Q2-SP10 the sparkline goes back to naming every trend on the page the same, in both views",
      SPARKLINE_SRC,
-     [('      <caption className="sr-only">{ariaLabel}</caption>',
-       '      <caption className="sr-only">trend over the selected window</caption>'),
+     [('        <caption className="sr-only">{ariaLabel}</caption>',
+       '        <caption className="sr-only">trend over the selected window</caption>'),
       ("      aria-label={ariaLabel}\n",
        '      aria-label="trend over the selected window"\n')],
      [SPARKLINE]),
     ("Q2-SP11 the sparkline's time cell is a plain data cell, so a reading announces no instant",
      SPARKLINE_SRC,
-     '            <th scope="row">{formatTime(p.tMs)}</th>',
-     "            <td>{formatTime(p.tMs)}</td>",
+     '              <th scope="row">{formatTime(p.tMs)}</th>',
+     "              <td>{formatTime(p.tMs)}</td>",
      [SPARKLINE]),
     ("Q2-SP12 a non-finite reading reaches the caller's formatter on the sparkline too, in the tooltip and the table",
      SPARKLINE_SRC,
      [("                <title>{`${formatTime(p.tMs)}\\n${p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}`}</title>",
        "                <title>{`${formatTime(p.tMs)}\\n${p.v !== null ? formatValue(p.v) : EM_DASH}`}</title>"),
-      ("            <td>{p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}</td>",
-       "            <td>{p.v !== null ? formatValue(p.v) : EM_DASH}</td>")],
+      ("              <td>{p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}</td>",
+       "              <td>{p.v !== null ? formatValue(p.v) : EM_DASH}</td>")],
+     [SPARKLINE]),
+
+    # ---------------------------------- Q2-S2 (2026-09-08): §6.2's owner ruling that the table
+    # view scrolls within its own container. `max-height`/`overflow-y`/sticky-header are
+    # CSS-only and unobservable from `renderToStaticMarkup` — see `s2-table-scroll.md` — so the
+    # only thing these two mutations can and do certify is the STRUCTURAL half of the fix: the
+    # scroll container is reachable by keyboard. Each restores the exact, plausible mistake of
+    # shipping the scrolling CSS while forgetting the accessibility follow-through the ruling
+    # itself warns about ("a scrollable region that only a mouse can reach fails the very floor
+    # this is meant to hold up").
+    ("Q2-TV11 the table view's scroll container carries no tabIndex, so a keyboard user cannot reach or scroll it",
+     CHART_SRC,
+     '    <div className={styles.tableView} role="group" aria-label={ariaLabel} tabIndex={0} data-role="table-view">',
+     '    <div className={styles.tableView} role="group" aria-label={ariaLabel} data-role="table-view">',
+     [CHART]),
+    ("Q2-SP13 the sparkline's table-view scroll container carries no tabIndex, so a keyboard user cannot reach or scroll it",
+     SPARKLINE_SRC,
+     '    <div className={styles.tableView} role="group" aria-label={ariaLabel} tabIndex={0} data-role="table-view">',
+     '    <div className={styles.tableView} role="group" aria-label={ariaLabel} data-role="table-view">',
      [SPARKLINE]),
 ]
 

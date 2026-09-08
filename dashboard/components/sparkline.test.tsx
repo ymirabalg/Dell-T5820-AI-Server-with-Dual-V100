@@ -470,3 +470,25 @@ describe('⚠ Q2/F6 — a non-finite reading is not a reading', () => {
     expect((html.match(new RegExp(`<td>${EM_DASH}</td>`, 'g')) ?? []).length).toBe(2);
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// Q2-S2 — the table view SCROLLS within its own container (SPEC §6.2, ruled 2026-09-08), the
+// same ruling as `StackedTimeSeriesChart`'s. See that file's identical Q2-S2 test for why the
+// scrolling/sticky CSS itself is not asserted here: it is CSS-only and this suite renders no
+// DOM at all.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ Q2-S2 — the scrolling table view is reachable by keyboard', () => {
+  test('⚠ the table view’s own group is a keyboard-focusable scroll container, not merely a styled box', () => {
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel="CPU: temperature over the selected window" points={[{ tMs: 100, v: 1 }]} color="#3987e5" view="table" formatValue={formatValue} formatTime={formatTime} />,
+    );
+    // The whole OPENING TAG of the group carrying `data-role="table-view"` — all three
+    // attributes on the SAME tag, so a wrong implementation putting `tabindex` on some other
+    // element (e.g. a row) cannot pass this.
+    const opening = /<div[^>]*data-role="table-view"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(opening).toContain('role="group"');
+    expect(opening).toContain('aria-label="CPU: temperature over the selected window"');
+    expect(opening).toContain('tabindex="0"');
+  });
+});

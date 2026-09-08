@@ -1201,3 +1201,25 @@ describe('⚠ Q2/F7 — a plot whose series reported nothing says so', () => {
     expect(render({ view: 'table' })).not.toContain('data-role="empty-row"');
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// Q2-S2 — the table view SCROLLS within its own container (SPEC §6.2, ruled 2026-09-08).
+// `max-height`/`overflow-y`/`position: sticky` are CSS-only and this suite renders no DOM at
+// all (`renderToStaticMarkup`, no jsdom) — none of that is checkable here, and this file does
+// not pretend otherwise. What IS structure, and load-bearing on its own: a scroll region only
+// a mouse can reach fails the exact accessibility floor the table view exists to be, so the
+// fix is not complete without `tabIndex={0}` on the group that already names the table view.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ Q2-S2 — the scrolling table view is reachable by keyboard', () => {
+  test('⚠ the table view’s own group is a keyboard-focusable scroll container, not merely a styled box', () => {
+    const html = render({ view: 'table', ariaLabel: 'GPU 1: temperature over the selected window' });
+    // The whole OPENING TAG of the group that carries `data-role="table-view"` — asserting
+    // all three attributes on the SAME tag, not merely present somewhere in the document, so
+    // a wrong implementation that adds `tabindex` to some unrelated element cannot pass this.
+    const opening = /<div[^>]*data-role="table-view"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(opening).toContain('role="group"');
+    expect(opening).toContain('aria-label="GPU 1: temperature over the selected window"');
+    expect(opening).toContain('tabindex="0"');
+  });
+});

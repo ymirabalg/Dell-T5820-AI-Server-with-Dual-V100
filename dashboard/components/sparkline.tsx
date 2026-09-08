@@ -65,6 +65,34 @@
  *   represent gaps EITHER (the decision above), so a table claiming to show gaps this
  *   component cannot draw would say more than the chart it stands in for. Nulls still render
  *   `EM_DASH`, matching the broken polyline.
+ *
+ * ### ⚠ Q2-S2 -- the table view SCROLLS within its own container, and every row stays in the DOM
+ *
+ * `SPEC.md` §6.2 (ruled 2026-09-08): the same ruling as `StackedTimeSeriesChart`'s, applied
+ * here at this component's own scale -- "the table view scrolls within its own container:
+ * `max-height` plus `overflow-y`." Capping or decimating rows was considered and REJECTED for
+ * the same reason as the full chart's: a decimated table stops being the chart's complete
+ * substitute, which is the ground the table stands on as an accessibility floor.
+ *
+ * - **A new wrapping `<div>` is the scroll container**, since this table previously had none --
+ *   unlike `StackedTimeSeriesChart`, whose `.tableView` `<div role="group" aria-label=...>`
+ *   already existed for F3's sake. It carries `role="group"`, the same required `ariaLabel`
+ *   prop (no new prop, no per-instance `id` to collide across the three sparklines on one
+ *   page -- see this file's own note above on why `ariaLabel` is required and un-defaulted),
+ *   and `tabIndex={0}` for keyboard reachability. The inner `<table>`'s own `<caption>` still
+ *   carries the identical text; a screen reader hearing the group's name and then the table's
+ *   own name once more is the accepted, documented shape for a keyboard-scrollable table (the
+ *   WCAG "scrollable data table" pattern), not an oversight -- it is not a SECOND, DIFFERENT
+ *   name competing with the first.
+ * - **`max-height` reuses `--table-scroll-max`** (`tokens.css`), the exact same viewport-relative
+ *   stopgap as the full chart's, rather than a second independently-guessed number for a
+ *   smaller box. See that file's comment for why it is a stopgap and not the grid's real
+ *   answer (recorded for step 10 in `s2-table-scroll.md`).
+ * - **A sticky header**, `position: sticky` on `thead th`, `border-collapse: separate` for the
+ *   same WebKit reliability reason as the full chart's -- see that component's identical note.
+ * - **None of this is observable from `renderToStaticMarkup`.** The scrolling and sticking are
+ *   CSS-only; this suite never touches a DOM at all. The ⚠ test below asserts only the
+ *   structural part: `tabindex="0"` on the group's own opening tag.
  */
 
 import { Fragment } from 'react';
@@ -173,28 +201,35 @@ function SparklineTableView({
     );
   }
   return (
-    <table className={styles.table} data-role="table-view">
-      <caption className="sr-only">{ariaLabel}</caption>
-      <thead>
-        <tr>
-          <th scope="col">time</th>
-          <th scope="col">value</th>
-        </tr>
-      </thead>
-      <tbody>
-        {points.map((p) => (
-          <tr key={p.tMs}>
-            {/* ⚠ A row HEADER, not a data cell — see the identical note in
-                `stacked-time-series-chart.tsx` (Q2 reconciliation, F4). */}
-            <th scope="row">{formatTime(p.tMs)}</th>
-            {/* ⚠ `Number.isFinite` matches this file's OWN chart-path guard in `runsOf`: a
-                non-finite reading is a break in the polyline, so it must not be a printed
-                `NaN` in the table beside it (Q2 reconciliation, F6). */}
-            <td>{p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}</td>
+    // Q2-S2: this div is the scroll container AND the keyboard tab stop (see the module doc's
+    // Q2-S2 section) — `role="group"`/`aria-label` name it, `tabIndex={0}` makes it reachable
+    // without a mouse. The inner `<table>`'s own `<caption>` (below) still carries its own
+    // name; that is not a duplicate introduced by this div, it is the documented shape for a
+    // keyboard-scrollable table.
+    <div className={styles.tableView} role="group" aria-label={ariaLabel} tabIndex={0} data-role="table-view">
+      <table className={styles.table}>
+        <caption className="sr-only">{ariaLabel}</caption>
+        <thead>
+          <tr>
+            <th scope="col">time</th>
+            <th scope="col">value</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {points.map((p) => (
+            <tr key={p.tMs}>
+              {/* ⚠ A row HEADER, not a data cell — see the identical note in
+                  `stacked-time-series-chart.tsx` (Q2 reconciliation, F4). */}
+              <th scope="row">{formatTime(p.tMs)}</th>
+              {/* ⚠ `Number.isFinite` matches this file's OWN chart-path guard in `runsOf`: a
+                  non-finite reading is a break in the polyline, so it must not be a printed
+                  `NaN` in the table beside it (Q2 reconciliation, F6). */}
+              <td>{p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

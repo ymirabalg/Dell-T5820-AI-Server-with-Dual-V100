@@ -53,6 +53,19 @@
   --status-alarm: #d03b3b;
 
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Q2-S2 — the table view's own scroll cap (SPEC §6.2, ruled 2026-09-08: "the table view
+     scrolls within its own container"). §6.1 puts real sizing in the GRID's hands and step 10
+     has not built the grid yet — `PanelShell`'s `.body` already carries `min-height: 0` in
+     anticipation of a bounded ancestor, but nothing above it is bounded today. Viewport-relative
+     rather than a literal pixel count someone would have to justify from nothing: it scales the
+     way the page's own "does this fit" reasoning already does (§6.1: "the panel is ~1026px
+     tall at 1280 wide"). **This is a stopgap, not the real answer.** Once step 10 gives a
+     panel body a genuine bounded height, this should become `max-height: 100%` inheriting it
+     — recorded for step 10 in `pipeline/steps/Q2-hover-and-table/s2-table-scroll.md`. One
+     token, one place to change, used identically by both table views so the two components
+     do not each carry their own independently-guessed number. */
+  --table-scroll-max: 40vh;
 }
 
 /* Visually hidden but reachable by assistive tech — used wherever a glyph or colour alone
