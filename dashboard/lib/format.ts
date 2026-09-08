@@ -340,17 +340,27 @@ const UPTIME_SUB_MINUTE = 60;
  * Not locale-formatted — these are clock digits and a day count, not a measured quantity,
  * and a box up for 1,234 days should read `up 1234 d`, not `up 1,234 d`. Truncating
  * rather than rounding, so the figure never claims a minute that has not elapsed.
+ *
+ * ⚠ **`prefix` is the leading word, not a second formatter — added for §6.4's banner, ruled
+ * 2026-09-08 (S-C).** The sticky alarm banner's "since" used to be a clock time
+ * (`since 03:00:14`), indistinguishable from six hours ago on a wall panel open since Friday.
+ * The ruling renders it as an ELAPSED duration instead (`for 2 d 06:00`) — the SAME
+ * day/hour/minute arithmetic as uptime, "how long has X been going", only the leading word
+ * differs. Rather than a fifth duration formatter (§6.6 pins the locale once, and this project
+ * has already had to fix a locale in four places), the caller passes the word it needs.
+ * Defaults to `'up'` so every existing call site — the header, `api.probe.ts`, every test in
+ * this file — is unchanged.
  */
-export const formatUptime = (v: Seconds | null): string => {
+export const formatUptime = (v: Seconds | null, prefix: 'up' | 'for' = 'up'): string => {
   if (!readable(v) || v < 0) return EM_DASH;
   const total = Math.floor(v);
   const days = Math.floor(total / 86_400);
   const hours = Math.floor((total % 86_400) / 3_600);
   const minutes = Math.floor((total % 3_600) / 60);
-  if (days >= 1) return `up ${days} d ${pad2(hours)}:${pad2(minutes)}`;
-  if (hours >= 1) return `up ${pad2(hours)}:${pad2(minutes)}`;
-  if (total < UPTIME_SUB_MINUTE) return 'up <1 min';
-  return `up ${minutes} min`;
+  if (days >= 1) return `${prefix} ${days} d ${pad2(hours)}:${pad2(minutes)}`;
+  if (hours >= 1) return `${prefix} ${pad2(hours)}:${pad2(minutes)}`;
+  if (total < UPTIME_SUB_MINUTE) return `${prefix} <1 min`;
+  return `${prefix} ${minutes} min`;
 };
 
 /**

@@ -5,9 +5,10 @@
  * A pure function of an already-reduced view. `lib/client/banner.ts`'s `bannerView` decides
  * WHICH condition leads and what the count is; this component only lays the result out, and
  * — the same convention `Header` and `PanelShell.subtitle` follow — every string here is
- * **pre-formatted by the caller**. `since` in particular is a formatted clock string
- * (`'since 15:10:40'`), not a raw `sinceMs`: this file does not import `lib/format.ts`, so it
- * cannot disagree with anything else on the page about how a timestamp reads.
+ * **pre-formatted by the caller**. `since` in particular is a formatted ELAPSED duration
+ * (`'for 2 d 06:00'`, ruled 2026-09-08 S-C — it used to be a clock string, `'since 15:10:40'`),
+ * not a raw `sinceMs`: this file does not import `lib/format.ts`, so it cannot disagree with
+ * anything else on the page about how a duration reads.
  *
  * ⚠ **Renders nothing at all when there is no lead.** §6.4 never asks for an empty banner
  * shell, and an always-present-but-empty `<div role="alert">` would be exactly the kind of
@@ -33,10 +34,11 @@ export interface AlarmBannerItem {
   readonly id: string;
   readonly label: string;
   readonly value: string;
-  /** Pre-formatted — `'since 15:10:40'`. **No timezone**: `formatTimeOfDay` carries none, and
-   *  §6.2 puts the zone abbreviation once beside the header's clock rather than on every
-   *  timestamp on the page. (Two doc comments used to claim `'since 15:10:40 EDT'` here and
-   *  in `dashboard-shell.tsx`; the code never emitted it — 10a-reconcile, adversarial F11.) */
+  /** Pre-formatted — `'for 2 d 06:00'`, an ELAPSED duration (ruled 2026-09-08, S-C), not a
+   *  clock time: `since 03:00:14` on a wall panel open since Friday is indistinguishable from
+   *  six hours ago. (This field used to carry a clock string, `'since 15:10:40'`, with no
+   *  timezone — two doc comments here and in `dashboard-shell.tsx` used to claim one anyway,
+   *  `'since 15:10:40 EDT'`, that the code never emitted — 10a-reconcile, adversarial F11.) */
   readonly since: string;
   /** §6.5's stale case, pre-formatted — `'last read 6:12 ago'`. `null` when the condition was
    *  carried by the most recent poll, which is the ordinary case and adds nothing. */

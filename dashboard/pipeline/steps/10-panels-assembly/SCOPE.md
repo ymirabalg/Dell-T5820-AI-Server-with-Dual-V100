@@ -96,7 +96,7 @@ in priority order).
 
 | # | Item | Note |
 |---|---|---|
-| **2.5a** | `state === null` is *before the first poll*, not missing data | **One wrapper in assembly**, not nine `if` branches. Must not render `—` |
+| **2.5a** | `state === null` is *before the first poll*, not missing data | **One wrapper in assembly**, not nine `if` branches. Must not render `—`. ⚠ **Ruled 2026-09-08 (S-D): this governs ONLY the frame where the client state itself is `null`.** Once state exists, a `null` *field* renders `—` under invariant 1, on poll 0 exactly as on poll 400 — there is one vocabulary for "no reading", not two |
 | **2.5b** | Age indicator needs **its own interval** (D2) | ⚠ Do **not** tick it off store changes — the store changes once at the `live → stale` crossing, which is *worse than never*: it looks right in a fast-cadence fixture and freezes on a real failure, the one thing the indicator exists to prevent |
 | **2.5c** | `unknownStanding` renders in SAFETY, or comes **off** `RuntimeState` (D3) | Leaving a field that implies a mechanism which cannot fire is HANDOVER do-not-copy #9 |
 | **2.5d** | Unique SVG `id`s across chart instances | Step 10 is the caller L4 assigned this to |

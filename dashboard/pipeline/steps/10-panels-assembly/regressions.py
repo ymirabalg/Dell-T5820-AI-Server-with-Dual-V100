@@ -633,6 +633,18 @@ REGRESSIONS = [
      "  return <DashboardShell />;",
      "  return (\n    <>\n      <p>ai-server 192.168.4.71</p>\n      <DashboardShell />\n    </>\n  );",
      [PAGE_TEST]),
+    # ⚠ S-C, 2026-09-08: the banner's "since" moved from a clock time to an elapsed duration
+    # (`for 2 d 06:00`). The subtraction order is the whole implementation — swap it and every
+    # confirmed band, however old, clamps to zero and reads "for <1 min" instead of naming how
+    # long it has actually been standing. A plausible transposition (which operand comes first
+    # in "elapsed = now minus since" is not mnemonic the way "age = now minus last-seen" is,
+    # since this file writes both in the same few lines), and it reddens deterministically:
+    # neither fixture in the ⚠ test below can produce anything but "for <1 min" under it.
+    ("10a-SC1 the elapsed \"since\" subtracts in the wrong order, so every alarm reads \"for <1 min\" no matter how long it has stood",
+     DASHBOARD_SHELL_SRC,
+     "formatUptime(seconds(Math.max(0, nowMs - sinceMs) / 1000), 'for');",
+     "formatUptime(seconds(Math.max(0, sinceMs - nowMs) / 1000), 'for');",
+     [DASHBOARD_SHELL_TEST]),
 ]
 
 # ---------------------------------------------------------------------------

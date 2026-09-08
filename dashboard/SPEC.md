@@ -892,6 +892,21 @@ of them.
 The age indicator is not decoration: when polling fails, the page must visibly stop
 claiming to be live.
 
+**⚠ A fourth literal, ruled 2026-09-08 (S-A).** The three above do not cover `severity === null`
+with `alarms === 0` — the state of every page load between hydration and the first poll, and of
+any poll that produces no banded reading. It reads **`● no readings`**. §9 forbids the obvious
+alternative: *"not `'normal'`, which would claim health for a poll that produced nothing."* `● —`
+was rejected because the status line already carries `— — · —` beside it and a fourth dash is
+mush, and keeping `all healthy` was rejected because it is the dot and the text disagreeing three
+pixels apart — precisely what §9's "one reduction" forbids.
+
+**⚠ Invariant 1 governs the pre-first-poll frame, ruled 2026-09-08 (S-D).** In a browser the
+client state is non-null from the first render while individual header fields are legitimately
+`null`, and those render `—` exactly as they would on poll 400 after a collector fails. The
+"before the first poll" rule governs only the frame where the client state **itself** is null,
+which the connecting shell covers. There is **one** vocabulary for "no reading", not two: a
+second one for "not yet" is the conflation invariant 1 exists to prevent.
+
 **Every panel is `title · subtitle · chip`.** Added 2026-09-07: the panel list below describes
 panel **bodies**, and until now said nothing about the head — which left four fields §3 insists
 on carrying with nowhere to be rendered.
@@ -1092,10 +1107,18 @@ rule that applies is the absolute one.
 ### 6.4 Alarm behaviour
 
 **Sticky banner.** Any alarm-level condition pins a banner to the top naming the condition,
-the value, and when it started. It stays until the condition clears — so a 03:00 excursion
+the value, and when it started **as an elapsed form** (`for 2 d 06:00`, ruled 2026-09-08 — see below). It stays until the condition clears — so a 03:00 excursion
 is still on screen at 09:00 even though nothing is stored. Multiple conditions collapse
 into one banner with a count. Watch-level conditions colour their cell but never raise a
 banner.
+
+**⚠ The "since" is ELAPSED, not a clock time — ruled 2026-09-08 (S-C).** `since 03:00:14` on a
+wall panel that has been open since Friday is indistinguishable from six hours ago, and decision 7
+makes multi-day the expected case. The banner renders **`for 2 d 06:00`**, using `formatUptime`'s
+existing vocabulary — §6.5's stale-age text already puts an elapsed figure in this banner, so the
+two agree rather than mixing forms. A date prefix on the clock time was the alternative and was
+not taken: it preserves the exact instant but answers "when did it start" when the operator's
+question is "how long has this been wrong".
 
 **Standing conditions.** A condition that is genuinely alarm-severity but *known,
 persistent and already understood* must not hold the banner open indefinitely — a banner
@@ -1224,7 +1247,7 @@ These are the normal operating states of this machine, not edge cases:
 | `pwm5` returns `ENODATA` | Renders as **"EC auto"**, healthy. Never as an error |
 | An `llama-server` instance is down | Its row shows the unit state and the reason; **the other instance is unaffected, and that is a structural requirement, not an observation about current scheduling.** No instance's probe may spend another's budget, and no collector-wide bound may blank a per-instance verdict |
 | A single sensor read fails | That figure shows `—`, its `errors` entry is available, the rest of the panel renders |
-| A condition's subject stops being reported, and the collection it belongs to could **not** be read | **Stale.** It keeps its last confirmed band and its "since", still counts (§9), and its row and the banner name the age of the reading. **It also keeps its last VALUE, rendered unchanged** — see below. One `watch`-toned event-log entry when it goes stale — after the same ten seconds of **sampled** wall time §6.4 requires — and one when a reading returns. Never a silent removal |
+| A condition's subject stops being reported, and the collection it belongs to could **not** be read | **Stale.** It keeps its last confirmed band and its "since", still counts (§9), and its row and the banner name the age of the reading **as `last read 6:12 ago`** (ruled 2026-09-08, S-B), coloured `--status-watch` rather than `--status-alarm` — the condition is still an alarm, and what this text says is that nobody has been able to look since, which is a different fact and must not read as a second alarm. **SAFETY's row uses the same words.** **It also keeps its last VALUE, rendered unchanged** — see below. One `watch`-toned event-log entry when it goes stale — after the same ten seconds of **sampled** wall time §6.4 requires — and one when a reading returns. Never a silent removal |
 | A condition's subject is absent from a collection that **was** read | **Retired.** The subject has left the machine, and that is an answer: the condition leaves the ledger, the dot and the count, and one `normal`-toned entry records it. Confirmed over the same ten seconds, so one flickering enumeration cannot retire a card |
 | An `—` whose cause is already shown beside it | **No second explanation.** When a coloured neighbour in the same panel already names the cause — a red *channel unavailable* chip next to a `—` fan reading — the em dash needs no entry of its own and no separate treatment. One fact, stated once. This is the only exception to the rule above, and it applies only when the neighbour is in the same panel and carries a severity |
 

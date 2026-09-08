@@ -50,7 +50,7 @@ import {
   formatZoneAbbreviation,
 } from '@/lib/format';
 import { LOGIN_PATH, SESSION_PATH } from '@/lib/auth/login-view';
-import { isoTimestamp } from '@/lib/types';
+import { seconds } from '@/lib/types';
 
 import styles from './dashboard-shell.module.css';
 import { useNowTick } from './use-now-tick';
@@ -58,15 +58,32 @@ import { useNowTick } from './use-now-tick';
 /** §6.2's age indicator ticks every second — the same granularity `formatAge` renders at. */
 const AGE_TICK_MS = 1000;
 
-/** A wall-clock ms → `'since HH:MM:SS'`, for §6.4's banner. Not a `lib/format.ts` export: it
- *  is a composition of `formatTimeOfDay` with a browser-clock value rather than a new unit, and
- *  belongs beside the one caller that has a wall-clock ms to format.
+/**
+ * §6.4's banner "since", as an ELAPSED duration — `'for 2 d 06:00'` — ruled 2026-09-08 (S-C).
  *
- *  ⚠ **No timezone**, and this doc used to claim one (`'since HH:MM:SS ZZZ'`), as did
- *  `AlarmBannerItem.since` — 10a-reconcile, adversarial F11. `formatTimeOfDay`'s options carry
- *  no `timeZoneName`; the abbreviation is a separate formatter and §6.2 puts it once beside the
- *  header's clock, not on every timestamp. The doc was wrong, not the code. */
-const sinceText = (ms: number): string => `since ${formatTimeOfDay(isoTimestamp(new Date(ms).toISOString()))}`;
+ * ⚠ **This used to be a clock time** (`` `since ${formatTimeOfDay(...)}` ``, F12/10a-reconcile).
+ * `since 03:00:14` on a wall panel open since Friday is indistinguishable from six hours ago,
+ * and decision 7 makes multi-day the expected case for this machine — §6.4's own justifying
+ * example never leaves one day. A date prefix on the clock time was the alternative considered
+ * and explicitly NOT taken: it preserves the exact instant but answers "when did it start" when
+ * the operator's question is "how long has this been wrong".
+ *
+ * ⚠ **Reuses `formatUptime`'s vocabulary, not a new formatter** (§6.6 pins the locale once, and
+ * this project has already had to fix a locale in four places) — `'for'` is `formatUptime`'s
+ * own day/hour/minute arithmetic with a different leading word, added to `lib/format.ts` for
+ * exactly this call.
+ *
+ * ⚠ **Must AGREE IN FORM with F10's stale-age text** (`'last read 6:12 ago'`, ruled S-B, below)
+ * — both name an elapsed duration now, never a clock time.
+ *
+ * ⚠ **Changes the RENDERING only.** `sinceMs` is still §6.4's "first observation of the
+ * CONFIRMED band" (O4); only `nowMs − sinceMs` is now formatted as a duration instead of
+ * `sinceMs` alone being formatted as an instant. Clamped at zero — the same convention
+ * `formatAge` uses for a clock-skewed `ts` (§6.6) — since `sinceMs` is a browser-clock value
+ * that should never be later than `nowMs`, but a negative duration must never render as one.
+ */
+const sinceText = (sinceMs: number, nowMs: number): string =>
+  formatUptime(seconds(Math.max(0, nowMs - sinceMs) / 1000), 'for');
 
 /**
  * §6.5's stale age, for §6.4's banner — `'last read 6:12 ago'`.
@@ -85,7 +102,7 @@ const toBannerItem = (c: BannerCondition, nowMs: number): AlarmBannerItem => ({
   id: c.id,
   label: c.label,
   value: c.value,
-  since: sinceText(c.sinceMs),
+  since: sinceText(c.sinceMs, nowMs),
   age: staleAgeText(c, nowMs),
 });
 

@@ -443,6 +443,38 @@ describe('⚠ F10 — a stale alarm reaches the banner carrying the age of its r
   });
 });
 
+describe('⚠ S-C — the banner names "since" as an ELAPSED duration, never a clock time', () => {
+  test('⚠ a multi-day confirmation reads "for 2 d 06:00"; a same-day one reads the hour form, both from the same clock', () => {
+    // §6.4's own justifying example never leaves one day; decision 7 makes multi-day the
+    // expected case here, and `since 03:00:14` on a wall panel open since Friday is
+    // indistinguishable from six hours ago. Both sides of the day boundary are fixtured, per
+    // ANCHOR §5's "every boundary guard needs a fixture on both sides" — one step in this
+    // pipeline shipped it in one direction only.
+    vi.useFakeTimers();
+    vi.setSystemTime(BASE_MS);
+    handle = {
+      state: stateOf({
+        alarms: 2,
+        severity: 'alarm',
+        displayed: [
+          // 2 d 06:00 ago — SPEC §6.4's own literal example for the ruling.
+          alarmCondition({ label: 'GPU 0 temperature', sinceMs: BASE_MS - (2 * 86_400 + 6 * 3_600) * 1_000 }),
+          // 06:00 ago, same day — the "under one day" side of the boundary.
+          alarmCondition({ label: 'fan5', sinceMs: BASE_MS - 6 * 3_600 * 1_000 }),
+        ],
+      }),
+      runtime: runtimeStub().runtime,
+    };
+    const unmount = mount();
+    expect(container.textContent).toContain('for 2 d 06:00');
+    expect(container.textContent).toContain('for 06:00');
+    // ⚠ Never a clock time — F12's exact defect, and the alternative the ruling explicitly
+    // declined (a date prefix on the clock instant).
+    expect(container.textContent).not.toMatch(/since \d{2}:\d{2}:\d{2}/);
+    unmount();
+  });
+});
+
 describe('⚠ the identity fields come from the snapshot, not from a placeholder', () => {
   test('⚠ the hostname is the snapshot’s own, not a literal', () => {
     // Deliberately NOT `ai-server`: the fixture's own value is `ai-server`, so asserting that

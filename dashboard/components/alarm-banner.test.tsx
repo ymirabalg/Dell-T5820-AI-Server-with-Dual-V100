@@ -14,7 +14,7 @@ const item = (over: Partial<AlarmBannerItem> = {}): AlarmBannerItem => ({
   id: 'gpu_temp:0',
   label: 'GPU 0 temperature',
   value: '82 °C',
-  since: 'since 15:10:40',
+  since: 'for 2 d 06:00',
   // ⚠ `null` is the LIVE case — a condition this poll carried. The stale case has its own
   // fixtures below; §6.5's rule is that the two must not look alike, so both sides are here
   // rather than the default standing in for both (ANCHOR §5's boundary-fixture rule).
@@ -36,7 +36,7 @@ describe('one alarm-level condition', () => {
     );
     expect(html).toContain('GPU 0 temperature');
     expect(html).toContain('82 °C');
-    expect(html).toContain('since 15:10:40');
+    expect(html).toContain('for 2 d 06:00');
   });
 
   test('carries an alert landmark, since this is the sticky alarm banner', () => {
