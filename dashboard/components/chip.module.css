@@ -1,0 +1,43 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--ink-secondary);
+}
+
+.chip[data-size='sm'] {
+  font-size: 0.85em;
+}
+
+.glyph {
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+}
+
+.label {
+  color: var(--ink-secondary);
+}
+
+/* Colour is spent on the glyph only — text beside it stays in text tokens (dataviz: "text
+   never wears the data colour"). `data-severity` is the finite, closed vocabulary this
+   selects on; an arbitrary chart-series hex is never expressed this way (see the step
+   notes on the CSS approach) — it goes through an inline colour, deliberately elsewhere. */
+.chip[data-severity='normal'] .glyph {
+  color: var(--status-good);
+}
+
+.chip[data-severity='watch'] .glyph {
+  color: var(--status-watch);
+}
+
+.chip[data-severity='alarm'] .glyph {
+  color: var(--status-alarm);
+}
+
+.chip[data-severity='none'] .glyph {
+  color: var(--ink-muted);
+}

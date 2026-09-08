@@ -1,0 +1,58 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.85em 1em;
+  min-width: 0;
+  min-height: 0;
+}
+
+.head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 0.75em;
+  row-gap: 0.15em;
+  align-items: start;
+  border-bottom: 1px solid var(--gridline);
+  padding-bottom: 0.5em;
+}
+
+.title {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--ink-primary);
+}
+
+.subtitle {
+  grid-column: 1;
+  grid-row: 2;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Targets `Chip`'s root by its `data-severity` attribute rather than by class name: a CSS
+   module hash-scopes its own classes, so a sibling module cannot select another component's
+   class by name — this selector reaches across that boundary the way `data-*` always can. */
+.head > [data-severity] {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  min-width: 0;
+  min-height: 0;
+}

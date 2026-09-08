@@ -1,0 +1,29 @@
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  padding: 0.15em 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.chip {
+  flex: 0 0 auto;
+}
+
+.label {
+  color: var(--ink-muted);
+  flex: 1 1 auto;
+}
+
+.value {
+  color: var(--ink-primary);
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.note {
+  color: var(--ink-secondary);
+  flex-basis: 100%;
+  font-size: 0.85em;
+}

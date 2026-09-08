@@ -1,0 +1,66 @@
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+  font-family: var(--font-mono);
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5em;
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  color: var(--ink-muted);
+}
+
+.value {
+  color: var(--ink-primary);
+}
+
+.track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-0);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 200ms ease-out;
+}
+
+/* The fill takes the severity colour; the track is a lighter step of the same ramp
+   (dataviz: "the unfilled track is a lighter step of the same ramp"), so state reads across
+   the whole bar rather than only in the thin fill. */
+.track[data-severity='normal'] {
+  background: color-mix(in oklab, var(--status-good) 22%, var(--surface-0));
+}
+
+.track[data-severity='normal'] .fill {
+  background: var(--status-good);
+}
+
+.track[data-severity='watch'] {
+  background: color-mix(in oklab, var(--status-watch) 22%, var(--surface-0));
+}
+
+.track[data-severity='watch'] .fill {
+  background: var(--status-watch);
+}
+
+.track[data-severity='alarm'] {
+  background: color-mix(in oklab, var(--status-alarm) 22%, var(--surface-0));
+}
+
+.track[data-severity='alarm'] .fill {
+  background: var(--status-alarm);
+}
+
+.track[data-severity='none'] .fill {
+  background: var(--ink-muted);
+}

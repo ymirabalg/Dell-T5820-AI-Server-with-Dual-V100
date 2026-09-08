@@ -1,0 +1,49 @@
+.chart {
+  display: block;
+  font-family: var(--font-mono);
+}
+
+.gridline {
+  stroke: var(--gridline);
+  stroke-width: 1;
+}
+
+.line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.tickLabel {
+  fill: var(--ink-muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.legendLabel {
+  fill: var(--ink-secondary);
+  font-size: 9px;
+}
+
+/* Text never wears the data colour (dataviz) — the end-label's swatch is the coloured dot;
+   the label text itself stays in a text token. */
+.endLabel {
+  fill: var(--ink-secondary);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.endDot {
+  stroke: var(--surface-1);
+  stroke-width: 1;
+}
+
+.hatchGround {
+  fill: var(--surface-1);
+}
+
+.hatchLine {
+  stroke: var(--gridline);
+  stroke-width: 2;
+}

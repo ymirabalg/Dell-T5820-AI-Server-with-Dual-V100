@@ -1,0 +1,70 @@
+/**
+ * Design tokens shared by every primitive in this directory.
+ *
+ * SPEC.md §9 fixes decision 9: **a single dark theme, background painted explicitly — there
+ * is no light variant.** So this file does the dataviz skill's own recommended thing
+ * ("define the slots you use as CSS custom properties in a local block") but skips the
+ * skill's light/dark duality entirely: one set of values, declared once, on `:root`. There is
+ * no `@media (prefers-color-scheme)` and no `[data-theme]` branch here, and that is a
+ * deliberate reading of decision 9 rather than an oversight — see the step notes.
+ *
+ * Values NOT fixed by SPEC.md are taken verbatim from the dataviz skill's validated dark
+ * instance (`references/palette.md`, "Chart chrome & ink" + "Status palette" dark columns),
+ * since §6.3 says only "near-black ground … hairline rules" and does not give literal hex.
+ * That is recorded as a decision in the step notes, per invariant 7 — SPEC is silent on the
+ * exact chrome hex, so this is a conservative implementation against an already-validated
+ * source, not an invention.
+ *
+ * The three chart SERIES colours (GPU 0 / GPU 1 / fan 5) are NOT here — §9 gives exact hex
+ * for those and they are resolved per-series by the caller (`components/palette.ts`), never
+ * baked into a component's CSS, because a chart's series-to-colour assignment is a data
+ * binding, not a style.
+ *
+ * This file is imported once per primitive that needs a token (`import './tokens.css'`),
+ * which Next.js explicitly supports from any component — see the step notes on the CSS
+ * approach. Repeated imports of identical global CSS are idempotent in the built stylesheet.
+ */
+
+:root {
+  /* Surfaces. `--surface-1` is the panel/card ground; `--surface-0` is a recessed well
+     inside a panel (a meter's empty track) — one step toward the page's near-black plane. */
+  --surface-0: #0d0d0d;
+  --surface-1: #1a1a19;
+
+  /* Ink. SPEC §9: "Numerals: monospace, tabular-nums, throughout" — deliberately overriding
+     the dataviz skill's own hero-figure guidance (which prefers proportional figures for a
+     big standalone number): this is a wall panel refreshed every few seconds, and digits
+     that jitter in place are worse than optically uneven ones. Recorded, not silently
+     followed against the skill. */
+  --ink-primary: #ffffff;
+  --ink-secondary: #c3c2b7;
+  --ink-muted: #898781;
+
+  /* Chrome. */
+  --gridline: #2c2c2a;
+  --baseline: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+
+  /* Status — fixed, reserved, never a series hue (dataviz: "status colours are reserved").
+     This project's Severity is three-valued (normal/watch/alarm), so only three of the
+     skill's four status steps are used; there is no "serious" band here. */
+  --status-good: #0ca30c;
+  --status-watch: #fab219;
+  --status-alarm: #d03b3b;
+
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Visually hidden but reachable by assistive tech — used wherever a glyph or colour alone
+   would otherwise carry the only meaning (dataviz: "status colours … never colour alone"). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

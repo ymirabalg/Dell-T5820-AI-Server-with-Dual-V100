@@ -1,0 +1,16 @@
+.sparkline {
+  display: block;
+  overflow: visible;
+}
+
+.line {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.end {
+  stroke: var(--surface-1);
+  stroke-width: 1;
+}
