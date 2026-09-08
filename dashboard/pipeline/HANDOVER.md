@@ -1,26 +1,27 @@
-# Handover — after Q2, before step 10
+# Handover — after 10a, before 10b
 
-**Rewritten 2026-09-08 by Q2's reconciliation.** Steps 1–8 are closed, **step 9 is closed**,
-**Q1** (the red-test ledger's scanner) is closed, and **Q2** (§6.2's hover layer and table view)
-is closed. This file is the whole inheritance: the next phase's agents get clean context and read
-it as fact.
+**Rewritten 2026-09-08 by 10a's reconciliation.** Steps 1–8 are closed, **step 9 is closed**,
+**Q1** and **Q2** are closed, and **10a — the shell** is closed (header, sticky banner, grid,
+`app/` wiring, D2, D6, and step 10's own harness). This file is the whole inheritance: the next
+phase's agents get clean context and read it as fact.
 
-⚠ **Read §0.1 and §0.2 first.** §0.1 changes what "the harnesses are green" means; §0.2 is new
-and carries the two spec questions **step 10 is partly blocked on**.
+⚠ **Read §0.3 FIRST.** It says why `pnpm verify` is **not deterministic today**, and it changes
+what a green harness run is allowed to be taken as evidence of. §0.1 and §0.2 remain true.
 
-**Next is step 10** (panels & assembly): the nine panels, header controls, banner, grid and
-breakpoints. `pipeline/WORK-ITEMS.md` §10 is the queue and `pipeline/UI-BACKEND-GAPS.md` is what
-to open first. Step 10 writes the **first real callers** of `components/`, which is where every
-"required and un-defaulted" prop decision gets its first exercise.
+**Next is 10b — the nine panel bodies.** §3.6 is the props contract it writes against and it is
+now a **real exported type**, not prose. `pipeline/WORK-ITEMS.md` §10 is the queue,
+`pipeline/UI-BACKEND-GAPS.md` is what to open first, and
+`pipeline/steps/10-panels-assembly/SCOPE.md` §2.1 lists the nine panels and the traps that have
+already bitten a draft of each.
 
 ⚠ **Everything below about steps 1–8's surface, the four structural rules, and the toolchain is
-inherited unchanged and is still true.** The sections Q1 rewrote are §0.1 (new), §1's harness
-list, §4, §5.2 and §8. The sections **Q2** rewrote are §0.2 (new), §1's harness list, §2, §3.5
-(new), §4, §8 and §9. ⚠ **§4 and §8 were stale in the safe direction again** — D4 and D5 were
-carried as open for step 9 while `traceFor` and `errorsForPanel` have existed since 2026-09-07
-(`lib/client/series.ts:201`, `lib/client/observations.ts:350`, both verified by grep, not
-assumed). That is the sixth time. **Re-check every row against the tree and against `SPEC.md`
-before trusting it; do not copy the tables forward.**
+inherited unchanged and is still true.** The sections **10a** rewrote are §0.3 (new), §1's harness
+list, §2, §3.6 (new), §4, §8 and §9. Q1 rewrote §0.1, Q2 rewrote §0.2 and §3.5.
+
+⚠ **§4 and §8 have been found stale IN THE SAFE DIRECTION six times** (most recently D4/D5,
+carried as open for step 9 while both had existed since 2026-09-07). **10a re-checked every row
+it touches against the tree, by grep, and marked what it did NOT re-check.** Do the same; do not
+copy the tables forward.
 
 ---
 
@@ -124,7 +125,11 @@ the eight ledgers, and every approximation needs a hand-maintained exemption lis
 this is deferred to the step that next adds a harness rather than closed with a partial guard.
 Full reasoning in `pipeline/steps/Q1-ledger-scanner/reconciliation.md` §6.
 
-## 0.2 ⚠ NEW — what Q2 found, and the two questions step 10 inherits
+## 0.2 ⚠ what Q2 found, and the two questions step 10 inherits
+
+> **10a's note, 2026-09-08:** everything below is still true and still owed — **but 10a was not
+> blocked on it**, because 10a mounts no chart. The chart/table toggle, Q2-S2's height and Q2-F9's
+> clamp all land on **10b**, which is the first phase to put a real chart in a real grid cell.
 
 Q2 built §6.2's hover layer and table view onto both chart primitives. Thirteen adversarial
 findings were adjudicated (ten accepted, two rejected, one split) — full table in
@@ -181,6 +186,66 @@ hover layer or three identically-named tables by forgetting an optional prop. Th
 production call site** (`grep -rn "<Sparkline"` finds only its own test file), so step 10 is the
 first phase to feel it. Read `StackedTimeSeriesChart`'s own `ariaLabel` prop doc — which argues
 the case — before relaxing any of them.
+
+---
+
+## 0.3 ⚠ NEW — `pnpm verify` is NOT deterministic today, and what 10a found
+
+### The determinism problem — read before trusting any green run
+
+**`lib/collectors/serving.test.ts:592`** — `⚠ a slow discovery cannot band an alarm on a healthy
+instance` — sleeps a **real 95 ms** inside a **real 100 ms** `discoveryTimeoutMs`, with 20 ms HTTP
+fakes layered on top. That is a race by construction: under CPU contention the sleep overruns the
+budget, the collector legitimately takes the degraded path, and the test fails. 10a's adversarial
+phase saw it fail an unprompted `pnpm verify` and reproduced it **2 times in 6 runs** under load
+(0 in 10 unloaded).
+
+Why this is worse than an ordinary flake, and why it is stated at the top of this file:
+
+> `regressions.py` unions every red test name across all mutations into `covered`, then checks
+> that every ⚠-marked test appears there. **A contention-driven failure of this test during any
+> mutation run credits it as covered by a mutation that never touched it** — and because it *is*
+> ⚠-marked, that credit is exactly what the ledger is checking. ANCHOR §5 already says a
+> *mutation* that reddens probabilistically is worse than none. This is the same disease in the
+> **test**, and every harness in the project shares the exposure.
+
+**Consequences you must act on:**
+
+- A single red run on this test is **not** evidence you broke something. Re-run before debugging.
+- A single green ledger run is **not** proof every ⚠ mark is genuinely covered.
+- Do not "fix" it by widening the margin: the 95-vs-100 relationship **is** the property under
+  test. The fix is an **injected clock**, so the ordering is exact rather than raced.
+- 10a raised the file count 77 → 79 and added a fifth jsdom environment, which increases per-run
+  worker contention. It plausibly makes an existing latent flake likelier; it did not create it.
+
+**Owner: 10c** (it lives in **step 5's** `LEDGER_FILES`, outside 10a's scope, and 10c is already
+the loop that owns cross-harness work). Carried in §9.
+
+### What else 10a's loop found
+
+Four things worth inheriting as rules, all paid for by an adversarial phase that ran its edits
+rather than arguing them:
+
+1. ⚠ **A test that asserts a marker attribute is not testing the thing the CSS keys on.**
+   `grid.test.tsx` asserted `data-slot` — which **no stylesheet reads** — while placement is bound
+   by `className={styles.X}`. Rewiring COOLING into the log's grid area was **19/19 green with
+   `tsc` clean**. The describe was even *named* "the `data-slot` the layout CSS keys on". If a
+   test names a relationship, check the relationship exists.
+2. ⚠ **A mutation harness over the parts does not cover the join, and the join is where the
+   acceptance criterion lives.** `header-status.ts` and `header.tsx` were each tested thoroughly
+   in isolation; nothing asserted they are ever handed the real values. Hard-coding
+   `mode={'live'} alarms={0}` in the shell, inverting pause/resume and killing the cadence handler
+   — all four at once — left `pnpm verify` at exit 0 across 77 files, on a build that can never
+   say "paused" and reads `● all healthy` on six alarms. **That is `PLAN.md`'s own green criterion
+   for step 10, unable to fail.** Same shape as Q1's finding, one level up.
+3. ⚠ **Two `position: sticky; top: 0` siblings do not stack — they overlap.** The header
+   (`z-index: 10`) painted over the alarm banner (`z-index: 9`) completely from the first scroll,
+   and the banner's own comment described the arrangement as correct. Invisible at scroll 0, which
+   is every screenshot. **One sticky wrapper containing both** is the fix that needs no measured
+   header height.
+4. ⚠ **A prose contract is not a contract.** `10a-build.md` documented a `PanelProps` shape and
+   claimed it was "wired end to end"; no such type existed, and nine panels could each have
+   invented a different prop name and typechecked. See §3.6.
 
 ---
 
@@ -260,7 +325,7 @@ Step 7 shipped a test that **failed 1 run in 16** and could not be reproduced by
 wrote it. See §5.4. When a change touches anything that consumes entropy or a clock, run
 `pnpm verify` in a loop — step 7's reconciliation ran it **20 times**, step 8's **10**.
 
-### The deliberate-regression harnesses — run all **EIGHT** after any change in `lib/`, `app/` or `components/`
+### The deliberate-regression harnesses — run all **NINE** after any change in `lib/`, `app/` or `components/`
 
 ```bash
 python3 pipeline/steps/02-format-severity/regressions.py                    #  55 mutations + ledger
@@ -270,8 +335,16 @@ python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 12
 python3 pipeline/steps/06-telemetry-route/regressions.py                    # 63 mutations + ledger
 python3 pipeline/steps/07-auth-login/regressions.py                         # 128 mutations + ledger
 python3 pipeline/steps/08-client-runtime/regressions.py                     # 173 mutations + ledger
-python3 pipeline/steps/09-ui-primitives/regressions.py                      #  93 mutations + ledger
+python3 pipeline/steps/09-ui-primitives/regressions.py                      #  95 mutations + ledger
+python3 pipeline/steps/10-panels-assembly/regressions.py                    #  70 mutations + ledger
 ```
+
+⚠ **NINE as of 10a (2026-09-08).** `pipeline/steps/10-panels-assembly/regressions.py` is new: it
+owns `app/dashboard-shell*.tsx`, `app/page*.tsx`, `app/use-now-tick*`, `lib/client/header-status*`,
+`lib/client/banner*`, `lib/client/use-telemetry*`, and the four `components/` files 10a added
+(`header`, `alarm-banner`, `grid`, `panel-placeholder`). It went **32 → 34** (10a's test phase)
+**→ 70** (10a's reconciliation), with **86 ⚠ marks**, and it is the first harness in the project
+to mutate a **CSS file** (`components/grid.module.css` — six of the seventy).
 
 ⚠ **The last one is the harness for `components/`, not for "step 9".** Ledger ownership follows
 the FILE (see below), and every `components/*` test file is in its `LEDGER_FILES` and in no
@@ -285,10 +358,14 @@ was written after them. Q1's fix to the ⚠-scanner applies to step 9's too — 
 the corrected scanner and carries the same blind spot — so an item that touches the scanner
 touches eight files and owes eight runs.
 
-**803 mutations** (710 across steps 2–8, **93** in the `components/` harness). ⚠ **This total and the eight above it go
-stale on every item that adds a mutation, and have done five times.** Do not trust them; the authoritative number is the
+**875 mutations** — 55/72/92/127/63/128/173 across steps 2–8, **95** in the `components/`
+harness, **70** in step 10's. ⚠ Derived 2026-09-08 by importing all nine and reading
+`len(REGRESSIONS)`, not copied forward.
+⚠ **This total and the nine above it go stale on every item that adds a mutation, and have done six times.** Do not trust them; the authoritative number is the
 `All N regressions failed their check` line each harness prints, and all **eight** can be
-re-derived at once by importing each `regressions.py` and reading `len(REGRESSIONS)`. Each replaces one exact string in one source file with a **plausible wrong
+re-derived at once by importing each `regressions.py` and reading `len(REGRESSIONS)`. ⚠ Do **not**
+count with `grep -c '("10a-'` or its equivalent: the id-prefix guard `startswith("10a-")` contains
+the same literal and inflates every count by exactly one. Each replaces one exact string in one source file with a **plausible wrong
 implementation** — the wrong thing someone would actually write, never a syntax error — runs
 the affected check, and restores the file. Every one must exit 1. Step 1 has no harness.
 
@@ -296,8 +373,15 @@ the affected check, and restores the file. Every one must exit 1. Step 1 has no 
 source files in place. Concurrency produces a plausible false `TS6133` **and** a ledger that
 falsely reports ⚠ tests as uncovered — both quotable rather than obviously broken. Serialise.
 Steps 4, 5, 7 and 8 each take several minutes, and **a harness writes nothing to stdout until
-it exits** (Python block-buffers to a file), so run it in the background and wait on
-`until ! pgrep -f "regressions[.]py" >/dev/null; do sleep 10; done`.
+it exits** (Python block-buffers to a file).
+
+⚠ **DO NOT WRITE THAT WAIT LOOP. The advice this paragraph used to give cost five hours on
+2026-09-08** and ANCHOR §9 now documents it: a `pgrep -f "regressions[.]py"` loop written in the
+**same `bash -c` string** that launched the harness matches the *waiting shell's own command
+line*, so it spins forever with no harness running at all. Seven orphaned shells were found this
+way; 10a's adversarial phase found an eighth still spinning, from another session.
+**Run harnesses as plain sequential foreground commands** — `python3 …/09.py; python3 …/10.py` —
+which are serial by construction and need no poll.
 ⚠ **The brackets are load-bearing.** Written as `pgrep -f regressions.py`, the pattern matches
 the **waiting shell's own command line** — which contains that text — so the loop can never
 exit. Seven such shells were found spinning from earlier sessions on 2026-09-07, and every
@@ -406,9 +490,14 @@ Everything under `dashboard/`. Nothing outside it has been created or modified e
 | `app/login/page.tsx` · `login-form.tsx` | `/login`, and `LoginForm` (stateful) + `LoginCard` (**pure**) |
 | `proxy.ts` | §5's gate. **`proxy.ts`, NOT `middleware.ts`** — §7 |
 | **`components/*.tsx` + `*.module.css`** | **step 9's primitives, with Q2's hover layer and table view** — see §3.5 |
-| 67 test files | **2258 tests** |
+| **`components/header.tsx` · `alarm-banner.tsx` · `grid.tsx` · `panel-placeholder.tsx`** | **New in 10a** — §6.2's header, §6.4's banner, §6.1's grid, and the 10a/10b seam. All four pure, all four with `.module.css` |
+| **`components/panel-props.ts`** | **New in 10a.** `PanelProps` / `PanelId` — the contract 10b typechecks against. §3.6 |
+| **`lib/client/header-status.ts` · `banner.ts`** | **New in 10a.** §9's aggregate status reduction and §6.4's banner reduction. Pure, hook-free, no React |
+| **`app/dashboard-shell.tsx` + `.module.css`** | **New in 10a.** The ONE stateful surface: one `useTelemetry()`, one `useNowTick()`, one `state === null` guard, one sticky band |
+| **`app/use-now-tick.ts`** | **New in 10a.** D2's independent age interval. Never driven by any store |
+| 79 test files | **2399 tests** |
 | `package.json` · `pnpm-lock.yaml` · `tsconfig.json` · `next.config.mjs` · `vitest.config.mts` | pinned toolchain; `strict` + seven more flags, all asserted |
-| `app/layout.tsx` · `app/page.tsx` | placeholders. ⚠ **`app/page.tsx` must stay free of telemetry** — see §6 |
+| `app/layout.tsx` · `app/page.tsx` | ⚠ **No longer placeholders.** `page.tsx` renders `<DashboardShell />` and nothing else; `layout.tsx` imports `components/tokens.css` and paints the ground from tokens. ⚠ **`app/page.tsx` must stay free of telemetry** — see §6 — and it is now tested (`app/page.test.tsx`) |
 
 ⚠ **`components/` exists, and as of Q2 (2026-09-08) it carries §6.2's hover layer and table
 view too.** Step 9 built the panel shell, chips, meters, rows, the sparkline and §6.2's stacked
@@ -417,12 +506,22 @@ native `<title>` tooltips and a table view to both chart primitives. One harness
 it — `pipeline/steps/09-ui-primitives/regressions.py`, **93 mutations, 103 ⚠ marks**.
 
 ⚠ **Every component is still a pure function of its props with zero React hooks**, and
-`components/purity.test.ts` is unmodified and unweakened through both items. That is not a style
+`components/purity.test.ts` is unmodified and unweakened through all three items — 10a included.
+**The hook boundary is settled and 10b inherits it as fact: `components/` is hook-free, hooks live
+under `app/`, and there are exactly two of them** (`useTelemetry`, `useNowTick`), both called once,
+both in `app/dashboard-shell.tsx`. The guard's walk recurses, so `components/panels/` is inside it
+the moment 10b creates it. That is not a style
 preference: it is why the view toggle is a **prop** the caller owns (step 10), and why there is
 no `useId`, no hover-position state and no self-toggling leaf anywhere under `components/`.
 
-**Does not exist yet:** any *panel* or page assembly (step 10); `Dockerfile`, `.dockerignore`,
-`dashboard.sh`, the systemd unit, `README.md`, jsdom.
+⚠ **The assembly exists as of 10a (2026-09-08).** `app/dashboard-shell.tsx` composes
+`Header` + `AlarmBanner` + `Grid`, and all nine grid slots hold a `PanelPlaceholder`. **jsdom
+exists** (`jsdom@30.0.1`, devDependency, added by 10a for D6) — five test files use it, and
+`next build` was re-run to confirm it does not reach `.next/standalone`.
+
+**Does not exist yet:** the **nine panel bodies** (10b — the placeholders are what they replace);
+`Dockerfile`, `.dockerignore`, `dashboard.sh`, the systemd unit, `README.md`; any browser-driven
+test (10c, §9).
 
 ---
 
@@ -592,6 +691,70 @@ has samples for nothing. ⚠ **It has no height bound — see §0.2's Q2-S2 befo
 
 ---
 
+## 3.6 ⚠ NEW — the props contract 10b writes against (10a)
+
+**It is a real exported type**, not a paragraph: `components/panel-props.ts`. That distinction is
+the whole finding behind this section (10a adversarial F16) — the contract used to exist only in a
+build document, `PanelPlaceholder` took `{ title }` alone, and `GridProps`'s nine slots are
+`ReactNode`, which **any** element satisfies. Nine independently-written panels could each have
+invented a different prop name and shape, and every one would have typechecked.
+
+```ts
+// components/panel-props.ts
+export type PanelId =
+  | 'gpu0' | 'gpu1' | 'cpu' | 'memory' | 'cooling'
+  | 'safety' | 'storage-and-network' | 'serving' | 'session-event-log';
+
+export interface PanelProps {
+  readonly state: RuntimeState;   // the FULL, non-null state
+  readonly nowMs: number;         // this tick's wall clock, from app/use-now-tick.ts
+  readonly panelId: PanelId;      // the SVG-id namespace (2.5d / L4)
+}
+```
+
+**What 10b does:** replace one `<PanelPlaceholder title="…" {...props} />` at a time in
+`app/dashboard-shell.tsx` with `<GpuPanel {...props} index={0} />`. The grid wiring, the CSS
+classes and the slot names do not change. A panel that invents its own prop names now fails `tsc`.
+
+**Five rules that bind on top of the type**, each already paid for:
+
+1. **`state` is the FULL `RuntimeState`, deliberately.** Computing a panel's slice IS its body's
+   domain logic — the GPU↔instance join (`gpu.index === serving.instance`, correct on this
+   deployment and **not derivable from the snapshot**), COOLING's channel-5 reasoning, SAFETY's
+   `errorsForPanel` join. 10a handing down a pre-sliced subset would have been 10b's job done
+   early against a guess.
+2. **A panel never asks "has the hook mounted".** `app/dashboard-shell.tsx` holds the **only**
+   `state === null` guard in the assembly (SCOPE 2.5a). Below it, a `null` FIELD is an ordinary
+   "no reading" and renders `—` — the same question on poll 400 as on poll 1.
+3. **A panel never sees `runtime`.** §6.2's four controls live in the header and nowhere else. A
+   panel that genuinely needs one is a **new decision**, not an extension of this one.
+4. **`nowMs` is the only clock.** `components/` is hook-free, and a `Date.now()` inside a render
+   freezes exactly as F8 showed the shell's own would — it is only re-read when React re-renders,
+   which after polling stops is never.
+5. **`panelId` prefixes every SVG id the panel mints** — `` `${panelId}-temp-trace` `` (L4). 10b
+   will write ONE `GpuPanel` and mount it twice; without the discriminator both instances mint the
+   same gradient/clip-path ids, and a colliding SVG id surfaces as a chart painted with the wrong
+   gradient — a bug that looks like a styling accident and is invisible to `tsc`.
+
+**And the panel-body rules from §6, restated because 10b is the first phase they bite:** read
+`state.displayed`, **never** `conditionsFrom`; a cell's colour is `lib/severity.ts` on the
+**current** reading, never `displayed`'s debounced severity; hatch `state.gaps`, never a hole in a
+series; **600 points per series**, not per chart.
+
+### What else 10a hands 10b
+
+| | |
+|---|---|
+| `components/grid.tsx` `GridProps` | Nine named slots: `gpu0` `gpu1` `cpu` `memory` `cooling` `safety` `storageAndNetwork` `serving` `sessionEventLog`. Exact spelling; the grid places by NAME, never by position |
+| `CHART_SIZE` (exported from `grid.tsx`) | `sparkline: {220×44}`, `cooling: {480×210}`. The **grid's** decision (2.5e), because the grid's row heights are what a chart must fit inside. A panel wanting another size asks for a new named export here rather than picking a number |
+| ⚠ the ≥1600px promotion | §6.1 changes which chart **component** a GPU card uses, not a size. **Left to 10b.** Recommended (not mandated): render both and let a `min-width: 1600px` media query in the panel's own CSS show one — so no viewport-tracking state has to cross the hook boundary |
+| `PanelShell` | `title · subtitle · chip` (§6.2). ⚠ **subtitle is identity, never measurement** — it must not change on a poll unless the machine changed |
+| the placeholder's title casing | `GPU 0` / `GPU 1` keep their capitals; the rest are lower case (`cpu`, `cooling`, `storage & network`, `session event log`) — `PanelShell`'s documented reading of §6.2's self-contradictory prose |
+| ⚠ `unknownStanding` | **Decision recorded, not implemented (D3).** Keep the field; SAFETY renders each entry as its own row worded as a configuration defect (``unknown `STANDING` entry: `<id>` ``), **not** counted in §9's dot/count (O12), but visually distinct — silence is not acceptable for a mechanism whose whole job is suppressing alarms |
+| ⚠ the banner's stale wording | `last read 6:12 ago`, coloured `--status-watch` not `--status-alarm`. **SAFETY's row half owes the same words** (§6.5 requires "its row **and** the banner"). Spec question S-B |
+
+---
+
 ## 4. Obligations, with owning steps
 
 ### Closed by step 8
@@ -605,27 +768,29 @@ has samples for nothing. ⚠ **It has no height bound — see §0.2's Q2-S2 befo
 
 ### Still open
 
-⚠ **Re-checked against `SPEC.md` and against the tree by Q2's reconciliation, 2026-09-08.** That
-is the **sixth** reading and the sixth time it was stale **in the safe direction**. What was stale
-this time was not the spec table but the DEFER table below it: **D4 and D5 were carried as open
-for step 9** while `errorsForPanel` and `traceFor` have existed since 2026-09-07
-(`lib/client/observations.ts:350`, `lib/client/series.ts:201` — verified by grep, not assumed);
-`ANCHOR.md` §7 already knew and this file did not. Do it again next time; do not copy either
-table forward.
+⚠ **Re-checked against the tree by 10a's reconciliation, 2026-09-08 — the seventh reading.**
+This time the staleness would have been in the *other* direction if left alone: **D2 and D6 were
+open and are now closed**, and O2's structural half was **violated in code while listed here as
+merely owed** (`aggregateStatus` took no `severity`, so the dot and the words were two reductions
+and disagreed — 10a F5). An obligation listed as "owed to step N" is not evidence that step N has
+not already half-done it wrongly. **Re-read the code each row names.**
+
+⚠ Rows below marked *(not re-checked)* were copied forward by 10a because nothing in 10a's scope
+touches them — steps 11 and 12 must re-verify their own.
 
 | # | One line | Owner |
 |---|---|---|
 | **O1** | `Condition.severity` is the **confirmed** band, never a raw per-poll severity. Cell colour is **not** downstream of a condition | **steps 9, 10** |
-| **O2** | The dot and the alarm count are ONE reduction. A suppressed standing condition is neither red nor counted; the count is **omitted when zero** | step 10 |
-| **O3** | One reading, one condition — dedupe by id. Channel 5's zero is carried by `fan5_absolute` and is never a `fan_stopped` subject | step 10 |
-| **O4** | `DisplayedCondition.sinceMs` is when the **confirmed** band was first observed | step 10 |
-| **O12** | A reading with no §6.3 band is invisible to §9's dot. **Do not invent a band** — report it | step 10 |
-| **O13** | `EC auto` and `unavailable` are **not** severities. `EC auto` is healthy (invariant 3) | **steps 9, 10** |
-| **O14** | Formatters return unit-inclusive strings; ask for a `parts` variant rather than splitting on whitespace | ⚠ **was step 9 — now step 10.** Step 9 and Q2 both closed without needing it: `components/` never splits a formatted string, because the chart primitives take a caller-supplied formatter and print its output whole. Step 10 is the first phase to render a headline figure and its unit at different sizes, which is where the ask actually arises. **`lib/format.ts` has no `parts` variant today** (checked 2026-09-08) — if you need one, ask for it; do not split on whitespace |
+| ~~**O2**~~ | **Closed by 10a for the header, 2026-09-08.** `aggregateStatus(mode, alarms, severity)` takes the same `severity` the dot is coloured with, so they cannot disagree; the count is `bannerConditions(displayed).length`, the same filter the banner uses, so the header and the banner cannot disagree either; the count is omitted at zero in **every** mode. ⚠ It was **open as a defect, not merely as an obligation** — the first build split them and rendered `● all healthy` beside a grey "no band" dot. **A panel chip is still 10b's** to get right (O1) | closed for the header |
+| ~~**O3**~~ | **Satisfied structurally.** Panels read `state.displayed` — `observePoll`'s already-deduplicated output — and 10a's banner reduction is built on `bannerConditions`, not on `conditionsFrom`. ⚠ Still live as a **rule** for 10b: a panel that reaches for `conditionsFrom` re-opens it | rule, for 10b |
+| ~~**O4**~~ | **Satisfied.** `sinceMs` is consumed as the confirmed band's first observation (`lib/client/banner.ts`, verified against `lib/conditions.ts`'s doc) and rendered as `since HH:MM:SS`. ⚠ See spec question **S-C**: it carries no date, which is a separate open question | closed |
+| **O12** | A reading with no §6.3 band is invisible to §9's dot. **Do not invent a band** — report it | **10b** — it is SAFETY's `unknownStanding` rows and any bandless row a panel prints |
+| **O13** | `EC auto` and `unavailable` are **not** severities. `EC auto` is healthy (invariant 3) | **10b** — COOLING |
+| **O14** | Formatters return unit-inclusive strings; ask for a `parts` variant rather than splitting on whitespace | ⚠ **was step 9, then step 10 — now 10b.** 10a rendered no headline figure (every slot is a placeholder), so the ask still has not arisen. Original note follows. Step 9 and Q2 both closed without needing it: `components/` never splits a formatted string, because the chart primitives take a caller-supplied formatter and print its output whole. Step 10 is the first phase to render a headline figure and its unit at different sizes, which is where the ask actually arises. **`lib/format.ts` has no `parts` variant today** (checked 2026-09-08) — if you need one, ask for it; do not split on whitespace |
 | ~~O19~~ | **Closed 2026-09-07.** It was a **deletion, not a rename**: `GiB` already existed for RAM and swap, so `GB`, `gb()` and `formatGB` were removed and disk moved onto `GiB`. ⚠ **`Filesystem.usedGB`/`totalGB` were WIRE names**, so this was a §4 contract change — server and client moved together | closed |
-| **O20** | ⚠ `dashboard.sh set-password` must emit `scrypt.<log2N>.<r>.<p>.<salt>.<key>` — §4.1 | **step 11** |
-| **O21** | ⚠ `SESSION_SECRET` must be written unquoted — §4.1 | **step 11** |
-| **O22** | ⚠ **One process, one module instance.** A **security** obligation — §4.1 | **steps 11, 12** |
+| **O20** | ⚠ `dashboard.sh set-password` must emit `scrypt.<log2N>.<r>.<p>.<salt>.<key>` — §4.1 | **step 11** *(not re-checked)* |
+| **O21** | ⚠ `SESSION_SECRET` must be written unquoted — §4.1 | **step 11** *(not re-checked)* |
+| **O22** | ⚠ **One process, one module instance.** A **security** obligation — §4.1 | **steps 11, 12** *(not re-checked)* |
 | ~~O23~~ | **Closed 2026-09-07** — the hasher moved to `scripts/hash-password.py` on the host. See §4.1 for what it cost and how that is paid | closed |
 
 O6–O9, O15–O18 are closed (steps 3–6).
@@ -634,20 +799,23 @@ O6–O9, O15–O18 are closed (steps 3–6).
 
 | # | What | Owner |
 |---|---|---|
-| **D1** | **S40.** §6.4's event log gains a third feed — state fields with a closed vocabulary and no §6.3 band (`ch5Mode`). Spec clarification now; code later | **step 10** |
-| **D2** | **S41.** The age tick is an **independent** interval, **not** driven off store changes — see §6 rule 4 | **step 10** |
-| **D3** | `unknownStanding` is rendered, or removed from `RuntimeState` | **step 10** |
+| **D1** | **S40.** §6.4's event log gains a third feed — state fields with a closed vocabulary and no §6.3 band (`ch5Mode`). Spec clarification now; code later | **10b** — SESSION EVENT LOG's body |
+| ~~**D2**~~ | **CLOSED by 10a.** `app/use-now-tick.ts` — a plain `setInterval`, importing nothing from any store. ⚠ **And the hook alone was not enough:** deleting it and reading `Date.now()` at render shipped green until `app/dashboard-shell.test.tsx` asserted the age advances with the state object **referentially unchanged**. A store-driven tick looks perfect in a fast-cadence fixture and freezes at the exact moment the indicator exists for | closed |
+| **D3** | `unknownStanding` is rendered, or removed from `RuntimeState` | **10b.** ⚠ **The decision is already made** — keep the field, render it in SAFETY. §3.6's table has the wording and the O12 caveat. Only the code is owed |
 | ~~**D4**~~ | ~~`errorsForPanel(snapshot, panel)`~~ — **closed 2026-09-07**, `lib/client/observations.ts:350`. ⚠ Carried here as open for step 9 until Q2 checked the tree | closed |
 | ~~**D5**~~ | ~~`traceFor(state, pick)`~~ — **closed 2026-09-07**, `lib/client/series.ts:201`. Same staleness | closed |
-| **D6** | jsdom, and the first assertion it buys: unmounting `useTelemetry` calls `stop()` | ⚠ **step 10.** Step 9 and Q2 both closed without it, and Q2 is the evidence it is still owed: **`:hover` is unobservable in jsdom**, so the crosshair's reveal mechanism is described in prose and asserted only through the DOM structure it needs (adjacency, geometry). Nothing tests that the CSS rule fires |
+| ~~**D6**~~ | **CLOSED by 10a.** `jsdom@30.0.1` (devDependency), `lib/client/use-telemetry.test.tsx` (unmount calls `stop()`, exactly once) + `.ssr.test.tsx` (no `window` → `{state: null, runtime: null}`, constructing nothing). **Invariant 6's cost was verified, not asserted**: `next build` was run and `.next/standalone` contains no jsdom — the tracer excludes it because only test files import it. ⚠ **Step 11 must re-check this once its Dockerfile exists** — a build-stage/runtime-stage split could still copy the wrong thing. ⚠ jsdom still cannot see `:hover`, `position: sticky`, `matchMedia` or layout — see §9's browser item | closed |
 | **D7** | ⚠ **NARROWED 2026-09-07, not closed.** ~~S19~~ is settled in `SPEC.md` (line 1327: *"the message text carries it and the RENDERING does not"*). ~~S30~~ is settled (line 780: *"Tone is `warn`, not `error`"*). **S11/G5's collector half is settled** (line 1208 — `collectCooling` files the entry when `pwm5` is in the listing and `fan5_input` is not). What is left is **S11/G5's panel-rendering residue**: what a panel does with an em dash whose neighbour is not coloured | **step 10** |
 | **D8** | The `STANDING` env plumbing, and its place on §4.1's silent-failure list | **step 11**, verified **step 12** |
 | — | ~~The red-test ledger retrofit for step 3's harness~~ — **done during step 8**, confirmed by Q1's build phase and re-run clean by its reconciliation (72 mutations, 24 ⚠ marks, exit 0). ⚠ It was carried as open here, in `ANCHOR.md` §7 and in `WORK-ITEMS.md` §2 (A6) long after it was finished; all three are corrected | closed |
 | — | ~~Q1 — the ⚠-scanner back-port~~ — **closed 2026-09-07.** All eight harnesses, 771 mutations, 689 marks. §0.1 | closed |
-| **Q1-F4** | Nothing asserts a ⚠-bearing test file is in some `LEDGER_FILES`. Zero live loss today; both orphan files named in §0.1 | **step 10** — the next step that adds a harness |
-| **Q2-F9** | The chart CLAMPS out-of-domain points rather than dropping them, and does not check that the domain it is given contains them. `traceFor` guarantees it; the component does not. The **fix is not obviously "filter"** — dropping an out-of-domain instant's hover column leaves a visible pegged mark whose tooltip names a different instant, so it is a clamp-vs-drop rendering decision, not a one-line guard | **step 10** |
+| **Q1-F4** | Nothing asserts a ⚠-bearing test file is in some `LEDGER_FILES`. Zero live loss today; both orphan files named in §0.1 | ⚠ **10c.** 10a is the step that added the ninth harness, so the union it was waiting on has now actually changed — and 10a's own ledger files were added by hand, which is exactly the step a cross-harness runner would check. Deferred to 10c with F4-browser and F17 because 10c is the loop that owns cross-harness work |
+| **Q2-F9** | The chart CLAMPS out-of-domain points rather than dropping them, and does not check that the domain it is given contains them. `traceFor` guarantees it; the component does not. The **fix is not obviously "filter"** — dropping an out-of-domain instant's hover column leaves a visible pegged mark whose tooltip names a different instant, so it is a clamp-vs-drop rendering decision, not a one-line guard | **10b** — untouched by 10a, which mounts no chart |
 | **Q2-F8** | `Sparkline` renders its `data-empty` state for an all-null window and so drops its hover layer entirely, while `StackedTimeSeriesChart` keeps one em-dash zone per instant. Q2 **rejected** changing it — the sparkline has no axis, so its zones would float over a blank box, and its table view carries the em-dash rows — but the asymmetry is written down here so step 10 can revisit it if a real card needs it | step 10, only if needed |
 | **Q2-F13** | The table's `<tr key={tMs}>` depends on two upstream guards holding: §6.7 keys the ring on `ts` and drops repeats, and `decimateSeries` guards `secondIndex !== firstIndex`. Reachability is nil today and a composite key would be **unfalsifiable** (`renderToStaticMarkup` cannot observe a React key). Recorded so a change to either guard has a written note | whoever changes either guard |
+| **10a-F4** | ⚠ **Nothing in the pipeline runs a browser**, and the one manual pass is not repeatable. §9 | **10c** |
+| **10a-F12** | The banner's "since" carries no date — spec question **S-C**, §8 | **owner, then whoever renders it** |
+| **10a-F17** | ⚠ **`pnpm verify` is not deterministic.** §0.3 | **10c** |
 | — | **A commit point** — `71a2f7d` was taken before step 9. The next is the owner's call | **owner** |
 
 ### 4.1 ⚠ The three step-11 obligations that fail **silently**, stated in full
@@ -1088,14 +1256,28 @@ top of `lib/guardrails.test.ts` — not by a text assertion.
 
 ---
 
-## 8. Spec gaps — re-verified against `SPEC.md` by Q2's reconciliation, 2026-09-08
+## 8. Spec gaps — re-verified by 10a's reconciliation, 2026-09-08
 
 ⚠ This table has now been **stale five times** (92 % before step 5, 100 % before step 6, again
-before step 7, again in step 8, and again here). **Every time, in the safe direction: entries
+before step 7, again in step 8, and again in Q2). **Every time, in the safe direction: entries
 carried as open that the spec had already answered.** Re-check every row against the spec text
 before trusting it. Invariant 7 stands: if the spec is silent, **report it — do not assume**.
 
-**Open, with owners — three rows: S11/G5's residue, and Q2's two new ones.**
+**Open, with owners — seven rows: S11/G5's residue, Q2's two, and 10a's four new ones.**
+
+### ⚠ NEW — 10a's four, 2026-09-08. Three are IMPLEMENTED conservatively; one is not implemented.
+
+These are **questions for the owner**, not proposals — but three of them had to render *something*
+today, so each names the exact string in the code so the owner rules on a real thing. Full
+statements with the rejected alternatives are in
+`pipeline/steps/10-panels-assembly/10a-reconciliation.md` §5.
+
+| # | Gap | Implemented as | Owner |
+|---|---|---|---|
+| **10a-S-A** ⚠ | **What the header reads when nothing has a band yet.** §6.2 gives three literals (`● all healthy`, `❙❙ paused · 6 alarms`, `⊘ stale · 6 alarms`) and none covers `severity === null` with `alarms === 0` — the state of **every page load** between hydration and the first poll, and of any poll producing no banded reading. §9 forbids the obvious answer: *"not `'normal'`, which would claim health for a poll that produced nothing."* The dot is correctly grey there; the words were saying **all healthy** three pixels away | **`● no readings`**. `● —` rejected (the status line already carries `— — · —` beside it); leaving `all healthy` rejected (it is the dot and the text disagreeing, which §9's "one reduction" exists to forbid) | **owner** |
+| **10a-S-B** ⚠ | **How a stale reading's age is worded.** §6.5 requires *"its row and the banner name the age of the reading"* and gives no wording | **`last read 6:12 ago`**, coloured `--status-watch` not `--status-alarm` — the condition is still an alarm; this says nobody has been able to *look* since, which must not read as a second alarm. ⚠ **The row half is 10b's (SAFETY) and must use the same words** | **owner**, then 10b |
+| **10a-S-C** ⚠ | **A "since" older than a day.** `since 03:00:14` on a wall panel open since Friday is indistinguishable from six hours ago. §6.4's example stays inside one day; decision 7 makes multi-day the expected case, and §6.4 also says the event log "is lost on reload, by design", which is what makes a multi-day page load ordinary rather than exceptional | ⚠ **NOT IMPLEMENTED.** Candidates: an elapsed form (`for 2 d 06:00` — `formatUptime`/`formatAge` have the vocabulary, and S-B has now put elapsed text in this banner anyway) or a date prefix when the instant is not today | **owner** |
+| **10a-S-D** ⚠ | **Does SCOPE §2.5a govern the browser's pre-first-poll frame?** SCOPE says `state === null` is "before the first poll … **must not render `—`**". In a browser `state` is non-null from the first render, five header fields are legitimately `null`, and invariant 1 says they render `—`. Two documents, two readings | Code follows **invariant 1**: the guard covers the frame where `state` really is null (server render / pre-hydration), and `—` for a null field is the same correct answer on poll 0 as on poll 400. Reasoning in the reconciliation §3.3 | **owner** — one sentence in §6.2 or in SCOPE settles it |
 
 ⚠ **The two Q2 rows are QUESTIONS, not proposals.** No phase wrote wording for either; the owner
 does (ANCHOR §8). Full statements, with the measurements and the trade-off table, are in
@@ -1194,21 +1376,28 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | ~~**`errorsForPanel(snapshot, panel)`**~~ (D4) | — | **closed 2026-09-07** — `lib/client/observations.ts:350`. ⚠ Carried as open here until Q2 checked |
 | ~~**`traceFor(state, pick)`**~~ (D5) | — | **closed 2026-09-07** — `lib/client/series.ts:201`. Same |
 | ~~The GB → GiB rename~~ (O19) | — | **closed 2026-09-07** — a deletion; `GiB` already existed |
-| **Formatter `parts` variant** (O14) | ⚠ **step 10** (was step 9) | open — nothing in `components/` splits a formatted string, so it never arose |
-| **jsdom** (D6) | ⚠ **step 10** (was step 9 or 10) | open — and Q2 sharpened the case: `:hover` is unobservable in jsdom, so nothing tests that the crosshair's CSS rule fires |
-| S11/G5's **panel-rendering residue** | step 10 | open — §8. ⚠ S19 and S30 are **closed** in `SPEC.md`; the collector half of S11/G5 is closed too |
-| **S40's third event-log feed** (D1) · **the independent age tick** (D2) · **render `unknownStanding`** (D3) | **step 10** | open |
-| The header: dot + count + paused/stale mode (O2) | step 10 | unblocked |
-| A `state === null` wrapper written once (composition gap (d)) | step 10 | open |
-| Render "duty unreadable" vs "channel 5 absent" distinctly | step 10 | open |
-| **Keep the server-rendered shell free of telemetry and secrets** | **step 10** | §3.3 — the standing condition under which the gate asymmetry is acceptable |
+| **Formatter `parts` variant** (O14) | ⚠ **10b** (was step 9, then step 10) | open — 10a renders no headline figure (every slot is a placeholder), so it still has not arisen |
+| ~~**jsdom** (D6)~~ | — | **closed by 10a** — `jsdom@30.0.1`, both halves tested, and `next build` re-run to confirm it does not reach `.next/standalone`. ⚠ jsdom still cannot see `:hover`, `position: sticky`, `matchMedia` or layout — that is the browser item below, not this one |
+| S11/G5's **panel-rendering residue** | **10b** | open — §8. ⚠ S19 and S30 are **closed** in `SPEC.md`; the collector half of S11/G5 is closed too |
+| **S40's third event-log feed** (D1) · **render `unknownStanding`** (D3) | **10b** | open — D3's *decision* is made (§3.6); only the code is owed |
+| ~~**the independent age tick** (D2)~~ | — | **closed by 10a** — `app/use-now-tick.ts`, **and** the caller-side test that catches its deletion |
+| ~~The header: dot + count + paused/stale mode (O2)~~ | — | **closed by 10a** — and it was a live defect, not just an obligation: the first build split the dot from the count. §0.3 |
+| ~~A `state === null` wrapper written once~~ | — | **closed by 10a** — one guard, in `app/dashboard-shell.tsx`, nowhere else. ⚠ Open question **10a-S-D** about what it covers |
+| Render "duty unreadable" vs "channel 5 absent" distinctly | **10b** | open — COOLING's body |
+| **Keep the server-rendered shell free of telemetry and secrets** | ⚠ **standing, all steps** | §3.3. 10a made `app/page.tsx` four lines and **tested it** (`app/page.test.tsx`) — it had no test at all before |
 | ~~The red-test ledger retrofit for step 3's harness~~ | — | **closed** — done during step 8, confirmed 2026-09-07. All **eight** harnesses carry a ledger |
 | ~~**Q1** — the ⚠-scanner back-port~~ | — | **closed 2026-09-07** — 771 mutations, 689 marks, eight harnesses green. §0.1 |
-| **Q1-F4** — assert every ⚠-bearing test file is in some `LEDGER_FILES` | **step 10** | open — §0.1. Zero live loss today |
+| **Q1-F4** — assert every ⚠-bearing test file is in some `LEDGER_FILES` | ⚠ **10c** | open — §0.1. The union it was waiting on has now changed: 10a added the **ninth** harness and hand-wrote its `LEDGER_FILES`, which is exactly the step a cross-harness runner would check |
 | ~~**Q2** — §6.2's hover layer and table view~~ | — | **closed 2026-09-08** — 13 findings adjudicated, `components/` harness at 93 mutations. §0.2 |
-| **Q2-S2** — the table view's height, against §6.1's no-scroll promise | **owner**, then step 10 | ⚠ open — **step 10's chart/table toggle is blocked on it.** §8 |
+| **Q2-S2** — the table view's height, against §6.1's no-scroll promise | **owner**, then **10b/10c** | ⚠ open. **Answered for the stopgap, not for the layout:** `--table-scroll-max: 40vh` still stands, and 10a's grid gives a panel body a bounded ancestor for the **first time**, so SCOPE 2.5f's `max-height: 100%` replacement is now possible — **10c**, with a browser |
 | **Q2-S1** — §6.2's per-mark tooltip clause vs the crosshair layer that occludes it | **owner** | open — §8 |
-| **Q2-F9** — the chart clamps out-of-domain points; the domain's containment is a precondition it neither states as a prop rule nor checks | **step 10** | open — §4 |
+| **Q2-F9** — the chart clamps out-of-domain points; the domain's containment is a precondition it neither states as a prop rule nor checks | **10b** | open — §4. Untouched by 10a, which mounts no chart |
+| ~~**10a — the shell**~~ | — | **closed 2026-09-08** — 18 findings adjudicated (16 accepted, 2 deferred, 1 half-rejected). 79 files · 2399 tests · nine harnesses · 875 mutations. `10a-reconciliation.md` |
+| ⚠ **10a-F17 — `pnpm verify` is not deterministic** | **10c** | ⚠ open, and it undermines every ledger in the project. **§0.3 — read it before trusting a green run.** Fix with an injected clock in `lib/collectors/serving.test.ts:592`, never a wider margin |
+| ⚠ **10a-F4 — nothing in the pipeline runs a browser** | **10c** | open. The step owes **two** things: (1) the test phase's seven measurements re-run headlessly — `getBoundingClientRect` at 820/899/900/1150/1279/1280/1920, asserting COOLING's `y`/`height`/`x` span at ≥1280 and the `y`-order at <900; **(2) a way to force an alarm-level condition client-side.** Without (2) the banner never mounts, which is exactly why the manual pass could not see F13 — the one element §6.4 makes normative was the one element the browser check could not reach |
+| **10a-S-A · S-B · S-C · S-D** — four spec questions | **owner** | §8. Three implemented conservatively, S-C not implemented |
+| **10a — SCOPE 2.5f**: replace `--table-scroll-max: 40vh` with `max-height: 100%` | **10c** | open — now unblocked by 10a's grid, but wants a browser to confirm |
+| **10b — the nine panel bodies** | **10b** | next. §3.6 is the contract; SCOPE §2.1 is the list and its traps |
 | **O20 · O21 · O22 · D8** — the four silent-failure obligations | **step 11** | §4.1 |
 | **`dashboard.sh check`**: an unparseable `PASSWORD_HASH`; a `SESSION_SECRET` short or quoted; a `STANDING` entry matching nothing; the env file's mode and owner | **step 11** | the only place any of them can be caught, because nothing is logged |
 | **F7 — `LIMITS` bounds scrypt's memory but not its time** (measured 1 720 ms vs 58 ms at the worst accepted parameters) | **step 11** | with `check` |
@@ -1327,9 +1516,13 @@ here by inheritance. **Do not commit UI to the backend branch** — that mistake
 had to be split apart with a soft reset. ⚠ **Pushing `dashboard-frontend` needs the owner's
 approval**; `git push` is gated by a permission classifier here and was refused once.
 
-⚠ **Q1 left the tree dirty on purpose**: 15 modified files (7 test files, 8 `regressions.py`) and
-the `pipeline/handoffs/` + `pipeline/steps/Q1-ledger-scanner/` directories untracked. The parent
-runs `pnpm verify` itself and commits; **a phase agent stages nothing** (`ANCHOR.md` §8).
+⚠ **10a left the tree dirty on purpose**, and the parent commits it. Modified: `app/layout.tsx`,
+`app/page.tsx`, `package.json`, `pnpm-lock.yaml` (one devDependency, `jsdom@30.0.1`). Untracked:
+everything 10a created — four `components/` primitives + `panel-props.ts`, two `lib/client/`
+reductions, `app/dashboard-shell*`, `app/use-now-tick*`, `app/page.test.tsx`,
+`pipeline/steps/10-panels-assembly/` and `pipeline/handoffs/`. **A phase agent stages nothing**
+(`ANCHOR.md` §8), and its green is not the green — the parent re-runs `pnpm verify` itself.
+(Q1 did the same before it: 15 modified files and two untracked directories.)
 
 **`dashboard/` has been committed since step 8.** Nothing has been pushed.
 That was the owner's call, taken on step 8's review recommendation (S14): a commit point

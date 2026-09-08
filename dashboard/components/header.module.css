@@ -1,0 +1,141 @@
+/**
+ * §6.1's header band.
+ *
+ * ⚠ **Stickiness lives on the band that WRAPS this, not here (10a-reconcile, adversarial
+ * F13).** §6.1 wants the header on screen while the grid scrolls below 1280px ("scrolling
+ * begins here and that is accepted") and §6.4 wants the alarm banner pinned under it. Two
+ * siblings each `position: sticky; top: 0` do not stack — they pin to the same rectangle and
+ * the opaque one with the higher z-index hides the other, which is exactly what shipped. So
+ * `app/dashboard-shell.module.css`'s `.stickyBand` holds both and is the one sticky element;
+ * this file styles the header's own contents and nothing about where it sits.
+ *
+ * ⚠ CSS is not observable in jsdom (HANDOVER's own repeated finding, and this step's
+ * handoff). `styles.test.ts` catches the one class of silent-no-op this project has actually
+ * shipped (an un-wrapped `flex-basis: 100%`); everything else here — sticky positioning,
+ * the three-region layout actually lining up, colour contrast — is asserted by authorship
+ * against §6.1/§6.3 and by opening a real browser, not by the suite. Said here rather than
+ * implied, per the bar this step was handed.
+ */
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5em 1.5em;
+  padding: 0.6em 1em;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-secondary);
+}
+
+.identity {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75em;
+  min-width: 0;
+}
+
+.hostname {
+  color: var(--ink-primary);
+  font-weight: 600;
+}
+
+.uptime {
+  color: var(--ink-muted);
+  font-size: 0.9em;
+}
+
+.status {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  min-width: 0;
+}
+
+.dot {
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+}
+
+/* Colour is spent on the glyph only (dataviz: "text never wears the data colour"), same rule
+   `chip.module.css` follows — `data-mode` never colours anything, only `data-severity` does,
+   so a paused dashboard sitting on an alarm stays visibly red rather than fading to neutral. */
+.dot[data-severity='normal'] {
+  color: var(--status-good);
+}
+
+.dot[data-severity='watch'] {
+  color: var(--status-watch);
+}
+
+.dot[data-severity='alarm'] {
+  color: var(--status-alarm);
+}
+
+.dot[data-severity='none'] {
+  color: var(--ink-muted);
+}
+
+.statusText {
+  color: var(--ink-primary);
+}
+
+.time {
+  color: var(--ink-muted);
+  font-size: 0.9em;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6em;
+}
+
+.control {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  font-size: 0.9em;
+}
+
+.controlLabel {
+  color: var(--ink-muted);
+}
+
+.controls button {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--ink-secondary);
+  background: var(--surface-0);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3em 0.6em;
+  cursor: pointer;
+}
+
+.controls select {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--ink-secondary);
+  background: var(--surface-0);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.2em 0.4em;
+}
+
+/* §6.2: logout is "visually separated" from the four controls. A hairline rather than extra
+   gap alone, so the separation survives the flex-wrap at narrow widths. */
+.separator {
+  width: 1px;
+  align-self: stretch;
+  background: var(--gridline);
+}
+
+.logout {
+  color: var(--ink-primary);
+}

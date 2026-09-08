@@ -1,0 +1,26 @@
+/**
+ * The one sticky element on the dashboard page (10a-reconcile, adversarial F13).
+ *
+ * §6.1 wants the header on screen while the grid scrolls below 1280px; §6.4 wants the alarm
+ * banner "pinned to the top … until the condition clears". The first build gave BOTH
+ * `position: sticky; top: 0` as siblings, with `z-index: 10` on the header and `9` on the
+ * banner. Two stickies pinned to the same offset do not stack — they occupy the same rectangle
+ * of the viewport, and the opaque higher-z one paints over the other. At scroll 0 (every
+ * screenshot, and the only state a browser check with no live alarm can reach) it looks
+ * perfect; one panel's worth of scrolling and §6.4's banner is simply gone.
+ *
+ * One sticky WRAPPER holding both is the fix that needs no measured header height: the band is
+ * as tall as its contents, pins as a unit, and its children need no `top` and no `z-index` at
+ * all. `z-index: 10` here keeps the whole band above the grid scrolling beneath it.
+ *
+ * ⚠ Not observable in jsdom — no layout engine, no injected stylesheet (re-derived three ways
+ * by 10a's test phase). What the suite CAN prove, and does, is the DOM shape this depends on:
+ * that the header and the banner are children of one element carrying this class, rather than
+ * siblings. Whether a browser paints it correctly is 10c's browser step (F4).
+ */
+
+.stickyBand {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}

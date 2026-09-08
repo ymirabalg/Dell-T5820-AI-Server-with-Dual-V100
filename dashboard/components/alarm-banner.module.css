@@ -1,0 +1,86 @@
+/**
+ * §6.4's banner.
+ *
+ * ⚠ **It is NOT `position: sticky` itself, and that is the fix for a real bug (10a-reconcile,
+ * adversarial F13).** It used to be `position: sticky; top: 0; z-index: 9` while
+ * `header.module.css` was `position: sticky; top: 0; z-index: 10`, with a comment here
+ * claiming that "this sits … immediately below it in document order, so no z-index is needed
+ * for correct paint order". Document order governs paint order for *overlapping* boxes, which
+ * was precisely the problem: two siblings both pinned to `top: 0` occupy the same rectangle,
+ * and the opaque higher-z header painted over the banner completely. §6.4's "pins a banner to
+ * the top … it stays until the condition clears" silently stopped holding the moment the page
+ * scrolled — invisible at scroll 0, which is every screenshot. Both are now children of ONE
+ * sticky band (`app/dashboard-shell.module.css`'s `.stickyBand`), so they stack instead of
+ * overlapping and neither needs a z-index of its own.
+ *
+ * ⚠ CSS/layout is not observable in jsdom — the sticky positioning and the exact colour
+ * contrast are asserted by authorship against §6.3's palette tokens and by opening a real
+ * browser, not by any test in this file's suite.
+ */
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6em;
+  padding: 0.6em 1em;
+  background: color-mix(in srgb, var(--status-alarm) 22%, var(--surface-0));
+  border-bottom: 1px solid var(--status-alarm);
+  font-family: var(--font-mono);
+  color: var(--ink-primary);
+}
+
+.glyph {
+  color: var(--status-alarm);
+  font-size: 1.1em;
+  line-height: 1.3;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6em;
+}
+
+.count {
+  color: var(--status-alarm);
+  font-weight: 600;
+}
+
+.lead b {
+  color: var(--ink-primary);
+  font-weight: 600;
+}
+
+.since {
+  color: var(--ink-muted);
+  font-size: 0.85em;
+}
+
+.rest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em 1em;
+  color: var(--ink-secondary);
+  font-size: 0.85em;
+}
+
+.itemSince {
+  font-style: normal;
+  color: var(--ink-muted);
+}
+
+/* §6.5's stale age. Watch-coloured rather than alarm-coloured on purpose: the CONDITION is
+   still an alarm (the banner is red around it) — what this says is that nobody has been able
+   to look since, which is a different fact and must not read as a second alarm. */
+.stale {
+  font-style: normal;
+  color: var(--status-watch);
+}

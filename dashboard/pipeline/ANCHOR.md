@@ -27,9 +27,11 @@ adversarial and review phases and fixed before they became wrong code. Several w
 
 ---
 
-## 2. State — READ CAREFULLY. Updated 2026-09-07, end of session two.
+## 2. State — READ CAREFULLY. Updated 2026-09-08 by 10a's reconciliation.
 
-**Steps 1–8 are closed and verified. Step 9's full loop is closed.** Steps 10–12 have not started.
+**Steps 1–8 are closed and verified. Step 9's full loop is closed. Q1 and Q2 are closed.
+Step 10 is UNDER WAY: 10a — the shell — is closed; 10b and 10c have not started.** Steps 11–12
+have not started.
 
 ### ⚠ The backend has LANDED ON `main` — 2026-09-07. Two branches remain.
 
@@ -64,9 +66,11 @@ permission classifier in this environment and was refused once before the owner 
 | step 9 | **closed** — build → test → adversarial → reconcile, 25 findings adjudicated |
 | **Q1** | **closed 2026-09-07** — the ledger scanner, seven findings adjudicated. §2.2 |
 | **Q2** | **closed 2026-09-08** — §6.2's hover layer + table view, 13 findings adjudicated. §2.2 |
-| suite | **67 files · 2258 tests · `pnpm verify` exit 0** (Q2, 2026-09-08; was 2210 after Q1) |
-| step 9's harness | **93** mutations (32 of them `Q2-`), ledger clean over **103** ⚠ marks |
-| all eight harnesses | **803 mutations · every harness exit 0** — 710 across steps 2–8 (unchanged since Q1) plus the `components/` harness's 93 |
+| **10a** | build → test → adversarial → **reconcile done 2026-09-08**, 18 findings adjudicated; **the parent's review is the phase that closes it** (§8). §2.2 |
+| suite | **79 files · 2399 tests · `pnpm verify` exit 0** (10a, 2026-09-08; was 67 · 2260 after Q2) |
+| step 9's harness | **95** mutations, ledger clean over its ⚠ marks |
+| step 10's harness | **70** mutations, **86** ⚠ marks — new in 10a, and the first to mutate a CSS file |
+| all **nine** harnesses | **875 mutations · every harness exit 0** — 710 across steps 2–8, 95 in `components/`, 70 in step 10's. ⚠ Derived by importing each `regressions.py` and reading `len(REGRESSIONS)`, not copied forward |
 | the box | **running the backend natively**, see §2.1 |
 
 ### 2.1 ⚠ The backend is DEPLOYED and running on `ai-server` right now
@@ -87,7 +91,49 @@ tree**, or you ship whatever an agent happens to be mid-edit on. Full account in
 
 ⚠ The deployed password is `dashboard1`, set for testing. Step 11 replaces it properly.
 
-### 2.2 ⚠ What to do next — **step 10**. `pipeline/WORK-ITEMS.md` §10 is the queue
+### 2.2 ⚠ What to do next — **10b, the nine panel bodies**
+
+**10a — the shell — is CLOSED, 2026-09-08**, once the parent's review passes: build → test →
+adversarial → reconcile are done, and §8's fifth phase (the parent re-runs `pnpm verify` itself,
+audits the adjudication table, spot-checks, commits) is the one that closes it.
+**18 adversarial findings adjudicated: 16 accepted, 2 deferred, 1 half-rejected.**
+See `pipeline/steps/10-panels-assembly/10a-reconciliation.md`; the queue is
+`pipeline/WORK-ITEMS.md` §10 and SCOPE §5's three-loop cut (10a → **10b** → 10c) is being followed.
+
+| | |
+|---|---|
+| what exists | §6.2's header, §6.4's sticky banner, §6.1's grid + breakpoints, `app/dashboard-shell.tsx` (one `useTelemetry`, one `useNowTick`, one `state === null` guard), nine `PanelPlaceholder`s |
+| closed obligations | **D2** (the independent age tick), **D6** (jsdom + `useTelemetry`), **O2** (dot and count are one reduction), the 2.5a wrapper, 2.5d's id namespace |
+| suite | **79 files · 2399 tests · `pnpm verify` exit 0** (was 67 · 2260) |
+| harnesses | **NINE.** `pipeline/steps/10-panels-assembly/regressions.py` is new — **70 mutations, 86 ⚠ marks**, and the first harness in the project to mutate a **CSS file**. **875 mutations total**, derived by importing all nine, not copied forward |
+
+**⚠ The three things 10b must inherit as fact, not rediscover:**
+
+1. **The hook boundary is settled.** `components/` is hook-free (`purity.test.ts`, unweakened);
+   hooks live under `app/`; there are exactly two and both are called once, in
+   `app/dashboard-shell.tsx`. **The nine panels are pure functions of props.**
+2. **`components/panel-props.ts` is a REAL type** — `PanelProps { state, nowMs, panelId }` — and
+   all nine slots really receive it. It was prose in `10a-build.md` and the prose claimed a wiring
+   that did not exist; nine panels could each have invented a different prop name and typechecked.
+   `HANDOVER.md` §3.6 is the full contract.
+3. ⚠ **`pnpm verify` is NOT deterministic today** — `lib/collectors/serving.test.ts:592` races a
+   real 95 ms sleep against a real 100 ms budget, and a probabilistic ⚠ test can be falsely
+   credited by **any** harness ledger. `HANDOVER.md` §0.3. Deferred to **10c**; do not debug a
+   single red run on that test before re-running it.
+
+**⚠ Two findings from 10a's loop worth carrying into every later step**, because both shipped
+green and neither is specific to this code:
+
+- **A mutation harness over the parts does not cover the join.** `header-status.ts` and
+  `header.tsx` were each thoroughly tested in isolation while the shell that feeds them was
+  executed by nothing — so hard-coding `mode={'live'} alarms={0}`, inverting pause/resume and
+  killing the cadence handler left `pnpm verify` at exit 0 across 77 files, on a build that can
+  never say "paused" and reads `● all healthy` on six alarms. That is `PLAN.md`'s own green
+  criterion for step 10, unable to fail. Same shape as Q1's finding, one level up.
+- **A test that asserts a marker attribute is not testing what the CSS keys on.** `grid.test.tsx`
+  asserted `data-slot`, which no stylesheet reads, while placement is bound by
+  `className={styles.X}` — rewiring COOLING into the log's grid area was 19/19 green with `tsc`
+  clean, and the describe was *named* "the `data-slot` the layout CSS keys on".
 
 **Q1 is CLOSED, 2026-09-07** — build → test → adversarial → reconcile, seven findings adjudicated
 (six accepted, one deferred, none rejected). See
@@ -136,9 +182,20 @@ about whether any of it works. Open a browser.
 
 ### The queue
 
-**Step 10 is next and nothing blocks it.** Still open and recorded in `HANDOVER.md`: F9's deferred
-half (domain containment — an out-of-domain instant is a clamp-vs-drop *rendering* decision, not a
-one-line guard), F4's orphan-file guard from Q1, D1/D2/D3/D6, L9 and L11.
+**10b is next and nothing blocks it.** ⚠ **Updated 2026-09-08 — this list was written before 10a
+and half of it is now closed.** Still open and recorded in `HANDOVER.md`:
+
+| item | owner |
+|---|---|
+| the **nine panel bodies** (SCOPE §2.1) | **10b** |
+| **D1** S40's third event-log feed · **D3** rendering `unknownStanding` (the *decision* is made — HANDOVER §3.6 — only the code is owed) | 10b |
+| **S11/G5**'s panel-rendering residue · **O12/O13/O14** | 10b |
+| **Q2-F9** the clamp-vs-drop rendering decision · **Q2-S2** the table view's height | 10b, with the owner on S2 |
+| **10a-F4** a repeatable browser step — **and a way to force an alarm client-side**, without which the banner never mounts | **10c** |
+| **10a-F17** `pnpm verify`'s non-determinism · **Q1-F4** the cross-harness ledger runner · **L9** sizing · **L11** the unit-name constant · SCOPE 2.5f's `max-height` | **10c** |
+| **10a-S-A/S-B/S-C/S-D** — four spec questions, three implemented conservatively | **owner** |
+
+~~D2~~ and ~~D6~~ are **closed by 10a**. `D8` remains step 11's.
 
 ## 3. Toolchain
 

@@ -1,20 +1,12 @@
+import { DashboardShell } from './dashboard-shell';
+
 /**
- * Placeholder page. Step 1 delivers the scaffold and the type contract only — no
- * collectors, no panels, no auth. The dashboard proper is assembled in step 10.
+ * §6.1's page. This file itself stays free of telemetry and secrets (HANDOVER rule 16,
+ * §3.3): it renders exactly one client component and carries no props of its own, so a
+ * revoked cookie that can still fetch this HTML shell (§3.3's documented asymmetry) receives
+ * nothing more than `DashboardShell`'s own "connecting…" state until its first
+ * `/api/telemetry` call 401s and sends it to `/login`.
  */
 export default function Page() {
-  return (
-    <main
-      style={{
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        padding: '2rem',
-        lineHeight: 1.6,
-      }}
-    >
-      <h1 style={{ fontSize: '1.1rem', fontWeight: 600, margin: 0 }}>ai-server dashboard</h1>
-      <p style={{ margin: '0.75rem 0 0', color: '#7c848e' }}>
-        Scaffold only. The telemetry contract lives in <code>lib/types.ts</code>.
-      </p>
-    </main>
-  );
+  return <DashboardShell />;
 }
