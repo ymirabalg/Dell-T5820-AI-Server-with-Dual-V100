@@ -662,6 +662,22 @@ checked set, which is the exact failure this rule exists to prevent. Rules that 
    | `⚠ the crossing and the recovery, and nothing in between` | a mutation dropping `observeStaleness`'s early-out |
    | `⚠ a stale condition does not re-log its band on every poll` | **the most valuable of the six.** For a continuous metric the guard is invisible: the frozen band always equals the logged one, so the `previousBand === band` early-out defends it a second time. It is load-bearing only for a **value-band** condition — a unit that goes `active → failed` and becomes unreadable five seconds into its ten-second run carries a pending value across the outage, and an unguarded loop confirms it on the strength of time nobody sampled. Every fixture in that file used `gpu_temp` |
 
+10. ⚠ **Mutation ids carry their creating step's id as a prefix — `07-R3`, `Q1-SC1`.** Added
+    2026-09-08 (Q3), at the owner's instruction: the bare id namespace collided with the
+    work-item/gap namespace (`S11`/`G5` were each simultaneously a step-7 mutation id and half
+    of the open `S11/G5` work item; `S12` collided too). The prefix names the step that
+    **created** the mutation, not the harness it currently lives in — four mutations (`SC1`,
+    `K8`, `W19` in `07-auth-login/regressions.py`; `W21` in `08-client-runtime/regressions.py`)
+    were created by work item Q1 and take `Q1-`, not their host step's number, because
+    provenance never changes even though a mutation could in principle move. The change is
+    textual only, confined to `entry[0]`'s leading token: `eid = entry[0].split()[0]` is still
+    the whole parsing mechanism, and the ledger matches ⚠ *test names*, not mutation ids, so no
+    covered-set moved. **Historical step notes (`build.md`, `review.md`, `adversarial.md`,
+    `reconciliation.md`) keep bare ids** — their directory already supplies the missing prefix,
+    and a blind rename across the docs would have corrupted the record, since `S11`, `G5`,
+    `S12` and `D1` appear there as both mutation ids and work-item/gap ids with no textual rule
+    to tell the two apart.
+
 ### 5.3 Source-text guardrails — catches a call that should exist and does not
 
 `lib/guardrails.test.ts` asserts, over the source text: under **`lib/collectors/`,

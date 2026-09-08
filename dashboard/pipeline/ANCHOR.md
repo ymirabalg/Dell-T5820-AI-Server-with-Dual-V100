@@ -413,4 +413,14 @@ recording it now leads somewhere — see §7.
   tree that failed.
 - **Never `sleep`-poll a background harness.** `until ! pgrep -f regressions.py` never exits:
   the pattern matches the waiting shell's own command line. Write `pgrep -f "regressions[.]py"`.
+- ⚠ **THE BRACKET IS NOT ENOUGH, and this cost five hours on 2026-09-08.** `regressions[.]py`
+  stops the pattern matching *itself*, but a wait loop written as part of the **same `bash -c`
+  string** that also ran the harness has the literal text `python3 …/regressions.py` in its own
+  command line — so `pgrep -f` matches the waiter, and it spins forever. Two shells sat in that
+  state for five hours with **no harness running at all**; the tell is `pgrep` matching while
+  `pgrep -fl "vitest|node"` shows no child doing work. It was written into a subagent handoff by
+  the parent, who had quoted the bracket rule while introducing the very bug it warns about.
+  **The fix is to not wait at all**: run harnesses as plain sequential foreground commands in one
+  call — `python3 …/07.py; python3 …/08.py` — which are serial by construction and need no poll.
+  If you must poll, poll from a shell that has never mentioned the harness.
   Seven orphaned shells were found this way.

@@ -229,14 +229,14 @@ def red_test_lines(out):
 #   check is a test file to run, or the literal "types" to run `pnpm typecheck`.
 REGRESSIONS = [
     # ---------------------------------------------------------------- §6.6 formatters
-    ("R1 formatters treat 0 as absent (falsy check)", "lib/format.ts",
+    ("02-R1 formatters treat 0 as absent (falsy check)", "lib/format.ts",
      "  readable(v) ? `${fmt.format(v === 0 ? 0 : v)}${unit}` : EM_DASH;",
      "  v ? `${fmt.format(v)}${unit}` : EM_DASH;", "lib/format.test.ts"),
-    ("R2 null renders blank instead of the em dash", "lib/format.ts",
+    ("02-R2 null renders blank instead of the em dash", "lib/format.ts",
      "export const EM_DASH = '—';", "export const EM_DASH = '';", "lib/format.test.ts"),
-    ("R2b null renders N/A", "lib/format.ts",
+    ("02-R2b null renders N/A", "lib/format.ts",
      "export const EM_DASH = '—';", "export const EM_DASH = 'N/A';", "lib/format.test.ts"),
-    ("R3 swap formatted at 1 dp like RAM", "lib/format.ts",
+    ("02-R3 swap formatted at 1 dp like RAM", "lib/format.ts",
      "export const formatSwapGiB = (v: GiB | null): string => render(v, TWO_DP, ' GiB');",
      "export const formatSwapGiB = (v: GiB | null): string => render(v, ONE_DP, ' GiB');",
      "lib/format.test.ts"),
@@ -244,148 +244,148 @@ REGRESSIONS = [
     # forms; step 2's code implemented three and rendered a just-booted box `up 0 min`,
     # which is §3.2's own stated defect (`up 0 d 00:14`) one scale down. The fixture pair
     # around the boundary is the point: 59 s and 60 s must render differently.
-    ("R30 the sub-minute uptime form is dropped - a fresh boot reads `up 0 min` (F1)",
+    ("02-R30 the sub-minute uptime form is dropped - a fresh boot reads `up 0 min` (F1)",
      "lib/format.ts",
      "  if (total < UPTIME_SUB_MINUTE) return 'up <1 min';\n", "", "lib/format.test.ts"),
-    ("R31 the sub-minute boundary swallows the first whole minute too",
+    ("02-R31 the sub-minute boundary swallows the first whole minute too",
      "lib/format.ts",
      "  if (total < UPTIME_SUB_MINUTE) return 'up <1 min';",
      "  if (total <= UPTIME_SUB_MINUTE) return 'up <1 min';", "lib/format.test.ts"),
 
-    ("R4 HIGH band starts above 192 instead of at 192", "lib/format.ts",
+    ("02-R4 HIGH band starts above 192 instead of at 192", "lib/format.ts",
      "  return v >= PWM_HIGH_FLOOR ? 'HIGH' : v >= PWM_LOW_FLOOR ? 'LOW' : 'OFF';",
      "  return v > PWM_HIGH_FLOOR ? 'HIGH' : v >= PWM_LOW_FLOOR ? 'LOW' : 'OFF';",
      "lib/format.test.ts"),
 
     # ------------------------------------------------------- A3/R2: the shared quantisation
-    ("R16 an unreadable pwm duty is given a state anyway (A3)", "lib/format.ts",
+    ("02-R16 an unreadable pwm duty is given a state anyway (A3)", "lib/format.ts",
      "  if (!Number.isFinite(v) || v < PWM_MIN || v > PWM_MAX) return null;\n",
      "", "lib/format.test.ts"),
-    ("R17 an out-of-range duty is clamped into the register instead of rejected",
+    ("02-R17 an out-of-range duty is clamped into the register instead of rejected",
      "lib/format.ts",
      "  if (!Number.isFinite(v) || v < PWM_MIN || v > PWM_MAX) return null;",
      "  if (!Number.isFinite(v)) return null;", "lib/format.test.ts"),
-    ("R18 a manual channel with an unreadable duty bands `normal` (A3, the safety half)",
+    ("02-R18 a manual channel with an unreadable duty bands `normal` (A3, the safety half)",
      "lib/severity.ts",
      "  if (ch5Engagement(cooling) === 'unknown') return absolute === 'alarm' ? 'alarm' : null;",
      "  if (ch5Engagement(cooling) === 'unknown') return absolute;", "lib/severity.test.ts"),
-    ("R19 engagement folds 'unknown' into 'not-engaged' (the boolean this replaced)",
+    ("02-R19 engagement folds 'unknown' into 'not-engaged' (the boolean this replaced)",
      "lib/severity.ts", "  if (state === null) return 'unknown';",
      "  if (state === null) return 'not-engaged';", "lib/severity.test.ts"),
 
     # ---------------------------------------------------------------- §3.2 uptime
-    ("R20 uptime always uses the day form (§3.2's `up 0 d 00:14`)", "lib/format.ts",
+    ("02-R20 uptime always uses the day form (§3.2's `up 0 d 00:14`)", "lib/format.ts",
      "  if (days >= 1) return `up ${days} d ${pad2(hours)}:${pad2(minutes)}`;",
      "  if (days >= 0) return `up ${days} d ${pad2(hours)}:${pad2(minutes)}`;",
      "lib/format.test.ts"),
 
     # ---------------------------------------------------------------- §6.3 bands
-    ("R5 GPU temp alarm at >80 instead of >=80", "lib/severity.ts",
+    ("02-R5 GPU temp alarm at >80 instead of >=80", "lib/severity.ts",
      "    : tempC >= 80\n      ? 'alarm'", "    : tempC > 80\n      ? 'alarm'",
      "lib/severity.test.ts"),
-    ("R6 the engaged fan5 band applied in every mode", "lib/severity.ts",
+    ("02-R6 the engaged fan5 band applied in every mode", "lib/severity.ts",
      "  if (ch5Engagement(cooling) !== 'engaged') return null;", "  if (false) return null;",
      "lib/severity.test.ts"),
-    ("R7 engagement inferred from ch5Mode alone", "lib/severity.ts",
+    ("02-R7 engagement inferred from ch5Mode alone", "lib/severity.ts",
      "  if (cooling.ch5Mode !== 'manual') return 'not-engaged';\n  const state = pwmStateName(cooling.ch5Pwm);\n  if (state === null) return 'unknown';\n  return state === 'HIGH' ? 'engaged' : 'not-engaged';",
      "  return cooling.ch5Mode === 'manual' ? 'engaged' : 'not-engaged';",
      "lib/severity.test.ts"),
-    ("R8 pwm5Present null read as the alarm", "lib/severity.ts",
+    ("02-R8 pwm5Present null read as the alarm", "lib/severity.ts",
      "  present === null ? 'watch' : present ? 'normal' : 'alarm';",
      "  present === null ? 'alarm' : present ? 'normal' : 'alarm';", "lib/severity.test.ts"),
-    ("R21 an unreadable ufw.conf gets no severity (the pre-§6.3-amendment behaviour)",
+    ("02-R21 an unreadable ufw.conf gets no severity (the pre-§6.3-amendment behaviour)",
      "lib/severity.ts", "  enforcing === null ? 'watch' : enforcing ? 'normal' : 'alarm';",
      "  enforcing === null ? 'normal' : enforcing ? 'normal' : 'alarm';",
      "lib/severity.test.ts"),
-    ("R22 dkmsForRunningKernel null read as the alarm", "lib/severity.ts",
+    ("02-R22 dkmsForRunningKernel null read as the alarm", "lib/severity.ts",
      "  built === null ? 'watch' : built ? 'normal' : 'alarm';",
      "  built === null ? 'alarm' : built ? 'normal' : 'alarm';", "lib/severity.test.ts"),
-    ("R23 llama.cpp's 503-while-loading treated as an alarm", "lib/severity.ts",
+    ("02-R23 llama.cpp's 503-while-loading treated as an alarm", "lib/severity.ts",
      "    case 'unhealthy':\n      return 'watch';", "    case 'unhealthy':\n      return 'alarm';",
      "lib/severity.test.ts"),
-    ("R24 an `unknown` link state treated as healthy", "lib/severity.ts",
+    ("02-R24 an `unknown` link state treated as healthy", "lib/severity.ts",
      "    case 'dormant':\n    case 'testing':\n    case 'unknown':\n      return 'watch';",
      "    case 'dormant':\n    case 'testing':\n      return 'watch';\n    case 'unknown':\n      return 'normal';",
      "lib/severity.test.ts"),
-    ("R15 worstSeverity calls an all-null panel normal", "lib/severity.ts",
+    ("02-R15 worstSeverity calls an all-null panel normal", "lib/severity.ts",
      "  let worst: Severity | null = null;", "  let worst: Severity | null = 'normal';",
      "lib/severity.test.ts"),
 
     # ---------------------------------------------------------------- §3.7 throttle
-    ("R9 unknown throttle bits silently dropped", "lib/throttle.ts",
+    ("02-R9 unknown throttle bits silently dropped", "lib/throttle.ts",
      "    reasons.push(decodeBit(rest & -rest));",
      "    const b = rest & -rest;\n    if (BY_BIT.has(b)) reasons.push(decodeBit(b));",
      "lib/throttle.test.ts"),
-    ("R10 unknown throttle bit treated as alarm", "lib/throttle.ts",
+    ("02-R10 unknown throttle bit treated as alarm", "lib/throttle.ts",
      "      severity: 'watch',\n      label: `${code} ${UNKNOWN_REASON_NAME}`,",
      "      severity: 'alarm',\n      label: `${code} ${UNKNOWN_REASON_NAME}`,",
      "lib/throttle.test.ts"),
-    ("R11 'normal, not a fault' attached to every mask", "lib/throttle.ts",
+    ("02-R11 'normal, not a fault' attached to every mask", "lib/throttle.ts",
      "    note: value === 0n || value === SW_POWER_CAP ? NOT_A_FAULT_NOTE : null,",
      "    note: NOT_A_FAULT_NOTE,", "lib/throttle.test.ts"),
 
     # ---------------------------------------------------------------- §6.4 the pipeline
-    ("R12 change compared with the first severity, not sticky", "lib/conditions.ts",
+    ("02-R12 change compared with the first severity, not sticky", "lib/conditions.ts",
      "        changed: prev.changed || prev.lastSeverity !== severity,",
      "        changed: prev.firstSeverity !== severity,", "lib/conditions.test.ts"),
-    ("R12b `changed` not sticky — differs-from-previous-poll (A1: needs a 4th observation)",
+    ("02-R12b `changed` not sticky — differs-from-previous-poll (A1: needs a 4th observation)",
      "lib/conditions.ts", "        changed: prev.changed || prev.lastSeverity !== severity,",
      "        changed: prev.lastSeverity !== severity,", "lib/conditions.test.ts"),
     # ⚠ Re-aimed in step 8's reconciliation: `observePoll`'s loop now runs over the deduped
     # groups, so the observation is `chosen` and the key is `id`. Same mutation, same property.
-    ("R25 the ledger fed the RAW per-poll severity (A2 — the composition defect)",
+    ("02-R25 the ledger fed the RAW per-poll severity (A2 — the composition defect)",
      "lib/conditions.ts", "    const entry = observeSeverity(ledger.get(id), severity);",
      "    const entry = observeSeverity(ledger.get(id), chosen.rawSeverity);",
      "lib/conditions.test.ts"),
-    ("R26 the displayed severity is the raw one, skipping the debounce entirely",
+    ("02-R26 the displayed severity is the raw one, skipping the debounce entirely",
      "lib/conditions.ts", "    const severity = hold.confirmed;",
      "    const severity = o.rawSeverity;", "lib/conditions.test.ts"),
-    ("R13 standing overwrites the real severity", "lib/conditions.ts",
+    ("02-R13 standing overwrites the real severity", "lib/conditions.ts",
      "      severity,\n      displaySeverity,", "      severity: displaySeverity,\n      displaySeverity,",
      "lib/conditions.test.ts"),
-    ("R14 debounce confirms on the first poll in the new band", "lib/conditions.ts",
+    ("02-R14 debounce confirms on the first poll in the new band", "lib/conditions.ts",
      "  if (nowMs - state.pendingSinceMs < holdMs) return state;", "  if (false) return state;",
      "lib/conditions.test.ts"),
-    ("R27 the banner timestamp is the confirmation instant, not the first sighting (R4)",
+    ("02-R27 the banner timestamp is the confirmation instant, not the first sighting (R4)",
      "lib/conditions.ts", "      sinceMs: hold.confirmedSinceMs,", "      sinceMs: nowMs,",
      "lib/conditions.test.ts"),
     # ⚠ Re-aimed in step 8's reconciliation. The dedupe used to be a `seen` set inside the
     # loop; it is now the grouping itself, because §9 needs every observation of an id in hand
     # to take the worst severity. Giving each observation its own group is the same defect.
-    ("R28 conditions are not deduplicated by id (R5 — one reading counted twice)",
+    ("02-R28 conditions are not deduplicated by id (R5 — one reading counted twice)",
      "lib/conditions.ts",
      "    const group = grouped.get(o.id);\n"
      "    if (group === undefined) grouped.set(o.id, [o]);\n"
      "    else group.push(o);",
      "    grouped.set(`${o.id}#${grouped.size}`, [o]);",
      "lib/conditions.test.ts"),
-    ("R29 the aggregate reduces the TRUE severity, so a standing alarm turns the dot red",
+    ("02-R29 the aggregate reduces the TRUE severity, so a standing alarm turns the dot red",
      "lib/conditions.ts", "worstSeverity(...displayed.map((d) => d.displaySeverity));",
      "worstSeverity(...displayed.map((d) => d.severity));", "lib/conditions.test.ts"),
-    ("R37 a backwards clock breaks the identity contract (A14)", "lib/conditions.ts",
+    ("02-R37 a backwards clock breaks the identity contract (A14)", "lib/conditions.ts",
      "    return settled ? state : { ...state, pendingSinceMs: nowMs };",
      "    return { ...state, pendingSinceMs: nowMs };", "lib/conditions.test.ts"),
 
     # ------------------------------------------------------- §6.4 the STANDING vocabulary
-    ("R38 a bare `unit` in STANDING is accepted, silencing gpu-fan-control (A10)",
+    ("02-R38 a bare `unit` in STANDING is accepted, silencing gpu-fan-control (A10)",
      "lib/conditions.ts", "      if (rule.bareKindAllowedInStanding) ids.add(trimmed);\n      else unknown.push(trimmed);",
      "      ids.add(trimmed);", "lib/conditions.test.ts"),
-    ("R32 a subject on a singleton kind is silently accepted (A9)", "lib/conditions.ts",
+    ("02-R32 a subject on a singleton kind is silently accepted (A9)", "lib/conditions.ts",
      "    } else if (subject === '' || rule.singleton) {\n      unknown.push(trimmed);",
      "    } else if (subject === '') {\n      unknown.push(trimmed);", "lib/conditions.test.ts"),
-    ("R33 an empty subject is silently accepted (A9)", "lib/conditions.ts",
+    ("02-R33 an empty subject is silently accepted (A9)", "lib/conditions.ts",
      "    } else if (subject === '' || rule.singleton) {\n      unknown.push(trimmed);",
      "    } else if (rule.singleton) {\n      unknown.push(trimmed);", "lib/conditions.test.ts"),
 
     # ---------------------------------------------------------------- type-level
-    ("R34 formatMiB loosened off its brand (§6.6's three memory units)", "lib/format.ts",
+    ("02-R34 formatMiB loosened off its brand (§6.6's three memory units)", "lib/format.ts",
      "export const formatMiB = (v: MiB | null): string",
      "export const formatMiB = (v: number | null): string", "types"),
-    ("R35 usedPercent takes two unrelated units (R1)", "lib/severity.ts",
+    ("02-R35 usedPercent takes two unrelated units (R1)", "lib/severity.ts",
      "export const usedPercent = <T extends number>(\n  used: T | null,\n  total: NoInfer<T> | null,\n): Percent | null => {",
      "export const usedPercent = (\n  used: number | null,\n  total: number | null,\n): Percent | null => {",
      "types"),
-    ("R36 ErrorSource loses net-operstate again (A5)", "lib/types.ts",
+    ("02-R36 ErrorSource loses net-operstate again (A5)", "lib/types.ts",
      "  | 'net-operstate'\n", "", "types"),
 
     # ===================================================================================
@@ -398,13 +398,13 @@ REGRESSIONS = [
 
     # ⚠ §6.6: "A negative age never renders as a negative number." A `ts` ahead of the browser's
     # clock is skew, and an age of `-4 s` invites the one reading it cannot have.
-    ("R49 a negative age renders with its minus sign, so skew reads as a future reading",
+    ("02-R49 a negative age renders with its minus sign, so skew reads as a future reading",
      "lib/format.ts",
      "  const total = Math.floor(Math.max(0, ms) / 1000);",
      "  const total = Math.floor(ms / 1000);",
      "lib/format.test.ts"),
 
-    ("R50 an absent age renders as zero seconds, so before-the-first-poll looks current",
+    ("02-R50 an absent age renders as zero seconds, so before-the-first-poll looks current",
      "lib/format.ts",
      "  if (!readable(ms)) return EM_DASH;",
      "  if (ms === null) return '0 s';",
@@ -420,7 +420,7 @@ REGRESSIONS = [
     # ⚠ §6.3's two-sided absolute row, low end: "`0` is a stopped fan or a lost tach … no state
     # this channel can be commanded into produces it." Six of the seven `ch5Mode` states banded
     # `normal` before the zero clause, and `ec-auto` is the one this box sits in below 55 °C.
-    ("R51 the fan5 absolute row loses its zero clause, so a stalled tach bands green",
+    ("02-R51 the fan5 absolute row loses its zero clause, so a stalled tach bands green",
      "lib/severity.ts",
      "  return value > 5100 || value === 0 ? 'alarm' : 'normal';",
      "  return value > 5100 ? 'alarm' : 'normal';",
@@ -429,7 +429,7 @@ REGRESSIONS = [
     # ⚠ Invariant 1, the other direction: `null` is a channel that produced no reading and
     # carries **no severity**. Treating it as a zero turns a driver that did not load into a
     # stopped fan, which is the two states §6.5 says must never look alike.
-    ("R52 a null fan5 reading is treated as zero, so an absent channel alarms as a dead fan",
+    ("02-R52 a null fan5 reading is treated as zero, so an absent channel alarms as a dead fan",
      "lib/severity.ts",
      "  const value: Rpm | null = cooling.fan5Rpm;\n"
      "  if (value === null || !Number.isFinite(value)) return null;\n"
@@ -443,7 +443,7 @@ REGRESSIONS = [
     # treated as a stopped fan — the comparison must be `===`, never `Object.is`, which would
     # let it through." `fanN_input` is an unsigned revolution count, so `-0` only ever arrives
     # from a corrupt read — exactly the value that must not slip past the row.
-    ("R53 the stopped-fan comparison becomes Object.is, so a corrupt -0 bands normal",
+    ("02-R53 the stopped-fan comparison becomes Object.is, so a corrupt -0 bands normal",
      "lib/severity.ts",
      "  return value === 0 ? 'alarm' : 'normal';",
      "  return Object.is(value, 0) ? 'alarm' : 'normal';",
@@ -452,7 +452,7 @@ REGRESSIONS = [
     # ⚠ §6.3: "No upper row — the EC does not modulate them under GPU load and no nominal is
     # documented." An invented ceiling on fan1-fan4 is the plausible symmetry error, and it
     # would fire on a healthy box rather than on anything measured.
-    ("R54 fan1-fan4 gain an invented upper bound, which §6.3 refuses to guess at",
+    ("02-R54 fan1-fan4 gain an invented upper bound, which §6.3 refuses to guess at",
      "lib/severity.ts",
      "  return value === 0 ? 'alarm' : 'normal';",
      "  return value === 0 || value > 5100 ? 'alarm' : 'normal';",
@@ -460,7 +460,7 @@ REGRESSIONS = [
 
     # ⚠ §6.5's law 1 at the boundary that matters most on this row: `up <1 min` says "the box
     # just booted"; `—` says "/proc/uptime could not be read". Those demand different reactions.
-    ("R55 a just-booted box renders the em dash, so a fresh boot looks like an unread file",
+    ("02-R55 a just-booted box renders the em dash, so a fresh boot looks like an unread file",
      "lib/format.ts",
      "  if (!readable(v) || v < 0) return EM_DASH;",
      "  if (!readable(v) || v <= 0) return EM_DASH;",
@@ -470,42 +470,42 @@ REGRESSIONS = [
     # ⚠ The one that ships wrong: `en-US` defaults to 12-hour, so dropping `hourCycle`
     # renders §6.2's header `02:47:31 PM`. Midnight is the fixture that catches every
     # version of this — noon is `12:00:00` under h12, h23 and h24 alike.
-    ("R56 the hour cycle is left to en-US, which is 12-hour", "lib/format.ts",
+    ("02-R56 the hour cycle is left to en-US, which is 12-hour", "lib/format.ts",
      "  hourCycle: 'h23',\n} as const",
      "} as const", "lib/format.test.ts"),
     # ⚠ The other 24-hour spelling. `h24` differs from `h23` at exactly one instant a day:
     # midnight reads `24:00:00`, which on a header looks like a clock that has failed.
-    ("R57 h24 instead of h23 - midnight reads 24:00:00", "lib/format.ts",
+    ("02-R57 h24 instead of h23 - midnight reads 24:00:00", "lib/format.ts",
      "  hourCycle: 'h23',\n} as const",
      "  hourCycle: 'h24',\n} as const", "lib/format.test.ts"),
     # §6.2's header is `14:47:31`, not `14:47`. At a 5 s cadence a minute-resolution clock
     # is indistinguishable from a page that has stopped polling.
-    ("R58 seconds dropped from the header clock", "lib/format.ts",
+    ("02-R58 seconds dropped from the header clock", "lib/format.ts",
      "  second: '2-digit',\n  hourCycle",
      "  hourCycle", "lib/format.test.ts"),
     # ⚠ `shortGeneric` is the plausible wrong reading of "the short zone name": it is
     # DST-BLIND (`ET` in both July and January), so the header would be silently wrong for
     # eight months of the year.
-    ("R60 the zone abbreviation uses the generic form and stops tracking DST", "lib/format.ts",
+    ("02-R60 the zone abbreviation uses the generic form and stops tracking DST", "lib/format.ts",
      "  timeZoneName: 'short',\n} as const",
      "  timeZoneName: 'shortGeneric',\n} as const", "lib/format.test.ts"),
-    ("R61 the zone abbreviation is the long name - `Eastern Daylight Time`", "lib/format.ts",
+    ("02-R61 the zone abbreviation is the long name - `Eastern Daylight Time`", "lib/format.ts",
      "  timeZoneName: 'short',\n} as const",
      "  timeZoneName: 'long',\n} as const", "lib/format.test.ts"),
     # ⚠ `Intl.DateTimeFormat.prototype.format` THROWS `RangeError: Invalid time value` on an
     # invalid Date, so this guard's absence is not a bad-looking cell - it is the header
     # throwing and taking the page with it. `IsoTimestamp` is an unvalidated brand, so an
     # unparsable value is reachable by construction.
-    ("R62 the unparsable-ts guard is dropped, so the formatter throws", "lib/format.ts",
+    ("02-R62 the unparsable-ts guard is dropped, so the formatter throws", "lib/format.ts",
      "  return Number.isNaN(at.getTime()) ? null : at;",
      "  return at;", "lib/format.test.ts"),
     # The pinned-zone seam is accepted and ignored. ⚠ WHICH rows go red depends on the
     # machine's own zone, but at least one always does: the tables pin four different zones
     # and no single host zone satisfies more than one of them.
-    ("R63 the pinned timeZone is ignored by the clock", "lib/format.ts",
+    ("02-R63 the pinned timeZone is ignored by the clock", "lib/format.ts",
      "{ ...TIME_OF_DAY_OPTIONS, timeZone });",
      "{ ...TIME_OF_DAY_OPTIONS });", "lib/format.test.ts"),
-    ("R64 the pinned timeZone is ignored by the zone abbreviation", "lib/format.ts",
+    ("02-R64 the pinned timeZone is ignored by the zone abbreviation", "lib/format.ts",
      "{ ...ZONE_OPTIONS, timeZone });",
      "{ ...ZONE_OPTIONS });", "lib/format.test.ts"),
 
