@@ -27,11 +27,12 @@ adversarial and review phases and fixed before they became wrong code. Several w
 
 ---
 
-## 2. State — READ CAREFULLY. Updated 2026-09-08 by 10a's reconciliation.
+## 2. State — READ CAREFULLY. Updated 2026-09-08 by 10b-S-G's reconciliation.
 
 **Steps 1–8 are closed and verified. Step 9's full loop is closed. Q1 and Q2 are closed.
-Step 10 is UNDER WAY: 10a — the shell — is closed; 10b and 10c have not started.** Steps 11–12
-have not started.
+Step 10 is UNDER WAY: 10a — the shell — is closed, 10b — the nine panel bodies — is closed, and
+so is 10b-S-G, the owner's `errors[].instance` ruling. 10c has not started and is the last of
+the three loops.** Steps 11–12 have not started.
 
 ### ⚠ The backend has LANDED ON `main` — 2026-09-07. Two branches remain.
 
@@ -69,8 +70,8 @@ permission classifier in this environment and was refused once before the owner 
 | **10a** | build → test → adversarial → **reconcile done 2026-09-08**, 18 findings adjudicated; **the parent's review is the phase that closes it** (§8). §2.2 |
 | suite | **79 files · 2399 tests · `pnpm verify` exit 0** (10a, 2026-09-08; was 67 · 2260 after Q2) |
 | step 9's harness | **95** mutations, ledger clean over its ⚠ marks |
-| step 10's harness | **70** mutations, **86** ⚠ marks — new in 10a, and the first to mutate a CSS file |
-| all **nine** harnesses | **875 mutations · every harness exit 0** — 710 across steps 2–8, 95 in `components/`, 70 in step 10's. ⚠ Derived by importing each `regressions.py` and reading `len(REGRESSIONS)`, not copied forward |
+| step 10's harness | **138** mutations — new in 10a (70/86), grown by 10b and by 10b-S-G. The first harness to mutate a CSS file |
+| all **nine** harnesses | **947 mutations · every harness exit 0** — 714 across steps 2–8 (step 5 is **130**, step 8 **174**, both grown by 10b-S-G), 95 in `components/`, 138 in step 10's. ⚠ Re-derived 2026-09-08 by importing each `regressions.py` and reading `len(REGRESSIONS)`, not copied forward |
 | the box | **running the backend natively**, see §2.1 |
 
 ### 2.1 ⚠ The backend is DEPLOYED and running on `ai-server` right now
@@ -93,6 +94,43 @@ tree**, or you ship whatever an agent happens to be mid-edit on. Full account in
 
 ### 2.2 ⚠ What to do next — **10c, the backlog** (and the wiring)
 
+### ⚠ 10b-S-G is CLOSED, 2026-09-08 — and it is the LAST item before 10c. Step 10 closes with 10c.
+
+The owner's ruling that `errors[]` gains an optional `instance` is built, tested, attacked and
+reconciled: build → test → adversarial → reconcile are done and §8's fifth phase (the parent
+re-runs `pnpm verify`, audits the adjudication table, spot-checks, commits) is what closes it.
+**11 adversarial findings adjudicated: 6 accepted (3 in part), 1 rejected, 2 deferred.** See
+`pipeline/steps/10-panels-assembly/10b-sg-reconciliation.md`.
+
+**What it changed, as fact for 10c:** `TelemetryError` carries `instance?: number` — the
+contract's **first and only optional member**, pinned by a dedicated `types.test-d.ts` census so a
+second one is still a compile error. The `errors[]`→`llama-server` join is **structural**: no
+panel reads message text to decide attribution any more. It is **additive on the wire**, so an old
+server's snapshot still validates and every entry simply falls back to panel-level rendering — the
+redeploy is needed for the feature to *work*, not to avoid a refusal (unlike O19).
+
+**Four things 10c inherits from it, and one is a rule:**
+
+1. ⚠ **A mutation harness proves every ⚠ test CAN fail; it never proves every branch HAS one.**
+   `namesInstance` had two call sites and one mutation. Deleting the unmutated filter left
+   `pnpm verify` green at 93 files / 2587 tests while the panel printed every attributed message
+   **twice**. **Grep for a function's other call sites before believing the mutation named for
+   it**, and make a test whose name says "once" **count** rather than `toContain`.
+2. ⚠ **Adding a discriminator obliges you to every consumer.** `panelsForSource('dbus')` reaches
+   COOLING, SERVING and SAFETY; S-G taught one of the three. Fixed for the entries that name an
+   instance; ⚠ **entries with NO instance are still ambiguous** (bus-wide vs `collectSafety`'s own
+   per-unit failure) — `HANDOVER.md` §8's **S-G-Q2**, the owner's.
+3. **Four new spec questions** — S-G-Q1…Q4 in `HANDOVER.md` §8 — none implemented, each naming
+   the code that stands today. S-G-Q1 (only the last of several entries from one source about one
+   instance is rendered, anywhere) is the one with a live consequence on this box.
+4. ⚠ **`exactOptionalPropertyTypes` is off**, so `{...base, instance: maybeUndefined}` typechecks
+   with the key present — assert absence with `Object.hasOwn`, never `?.field === undefined`.
+   Measured 2026-09-08: `npx tsc --noEmit --exactOptionalPropertyTypes` **exits 0 on this tree**,
+   so turning it on is a one-line change with no migration. 10c's, and it gets less free with time.
+
+**Suite after S-G: 93 files · 2594 tests · `pnpm verify` exit 0. Nine harnesses · 947 mutations**
+(step 5 → 130, step 8 → 174, step 10 → 138).
+
 **10b — the nine panel bodies — is CLOSED, 2026-09-08**, once the parent's review passes:
 build → test → adversarial → reconcile are done, and §8's fifth phase (the parent re-runs
 `pnpm verify` itself, audits the adjudication table, spot-checks, commits) is the one that closes
@@ -107,8 +145,8 @@ being followed and 10c is the last of the three.
 | what exists | 10a's shell — §6.2's header, §6.4's sticky banner, §6.1's grid + breakpoints, `app/dashboard-shell.tsx` — **plus 10b's nine panel bodies** under `components/panels/`, with `status-row.tsx`, `panel-notes.tsx`, `condition-lookup.ts`, `panel-chart.ts`, `event-sentence.ts` |
 | ⚠ what does NOT exist | **the wiring.** `dashboard-shell.tsx` still renders nine `PanelPlaceholder`s; the panels have **no production call site**, so nothing yet proves the nine compose. That is 10c's first job, and `<GpuPanel {...props} />` takes **no `index`** |
 | closed obligations | 10a: **D2**, **D6**, **O2**, the 2.5a wrapper, 2.5d's id namespace. 10b: **O12**, **O13**, **O3**'s rule, **D3** (`unknownStanding`), **S11/G5**'s panel residue |
-| suite | **92 files · 2559 tests · `pnpm verify` exit 0** (was 79 · 2399) |
-| harnesses | **NINE.** `pipeline/steps/10-panels-assembly/regressions.py` covers both loops — **129 mutations, 150 ⚠ marks** (was 70/86 after 10a) |
+| suite | **93 files · 2594 tests · `pnpm verify` exit 0** (was 92 · 2559 after 10b; 79 · 2399 after 10a) |
+| harnesses | **NINE · 947 mutations.** `pipeline/steps/10-panels-assembly/regressions.py` covers both loops — **138 mutations** (129 after 10b, 70/86 after 10a). Step 5 is **130**, step 8 **174**, both grown by 10b-S-G |
 
 **⚠ The four things 10c must inherit as fact, not rediscover:**
 
@@ -204,7 +242,9 @@ below is what is left, and `HANDOVER.md` §9 is the authoritative form of it.
 | **Q2-F9** the clamp-vs-drop rendering decision · **Q2-S2** the table view's height (⚠ still unreachable — the toggle needs `app/`) | 10c, with the owner |
 | **10a-F4** a repeatable browser step — **and a way to force an alarm client-side**, without which the banner never mounts | **10c** |
 | **10a-F17** `pnpm verify`'s non-determinism · **Q1-F4** the cross-harness ledger runner · **10b-F1-guard** the document-wide-`toContain` lint · **L9** sizing (with **10b-F14b**: no gap hatching at 1280–1599px) · **L11** the unit-name constant · SCOPE 2.5f's `max-height` | **10c** |
-| **10a-S-A/S-B/S-C/S-D** and **10b-S-E/S-F/S-G/S-H** — eight spec questions, six implemented conservatively | **owner** |
+| **10a-S-A/S-B/S-C/S-D** and **10b-S-E/S-F/S-H** — seven spec questions, five implemented conservatively (**S-G is RULED, implemented and closed**) | **owner** |
+| ⚠ **S-G-Q1 · S-G-Q2 · S-G-Q3 · S-G-Q4** — the four questions implementing S-G raised. None implemented; `HANDOVER.md` §8 carries each with the code that stands today | **owner** |
+| **S-G-A10** the session log's per-source fold vs the panel's per-instance one · **S-G-A11** turn on `exactOptionalPropertyTypes` (measured free today) | **10c** |
 
 ~~D2~~ and ~~D6~~ are **closed by 10a**; ~~D3~~, ~~O12~~, ~~O13~~ and ~~S11/G5~~ by **10b**.
 `D8` remains step 11's.

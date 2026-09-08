@@ -456,6 +456,62 @@ describe('collectUnitStates', () => {
     expect(errors).toHaveLength(1);
   });
 
+  describe('⚠ 10b-S-G — `unitInstances` attaches a structural `instance`, never guessed from text', () => {
+    test('a per-unit failure carries the instance ITS OWN unit maps to', async () => {
+      const bus = fakeBus({
+        units: {
+          'llama-server@0.service': { kind: 'state', state: 'active' },
+          'llama-server@1.service': { kind: 'no-such-unit' },
+        },
+      });
+      const unitInstances = new Map([
+        [servingUnitName(0), 0],
+        [servingUnitName(1), 1],
+      ]);
+      const { errors } = await collectUnitStates({
+        dbus: bus.dbus,
+        units: [servingUnitName(0), servingUnitName(1)],
+        unitInstances,
+      });
+      expect(errors).toHaveLength(1);
+      expect(errors[0]?.message).toContain('llama-server@1.service');
+      expect(errors[0]?.instance).toBe(1);
+    });
+
+    test('a unit absent from `unitInstances` — e.g. the fan service — carries no instance', async () => {
+      const bus = fakeBus({
+        units: { 'llama-server@1.service': { kind: 'no-such-unit' }, [FAN_SERVICE_UNIT]: { kind: 'no-such-unit' } },
+      });
+      const { errors } = await collectUnitStates({
+        dbus: bus.dbus,
+        units: [servingUnitName(1), FAN_SERVICE_UNIT],
+        unitInstances: new Map([[servingUnitName(1), 1]]),
+      });
+      expect(errors).toHaveLength(2);
+      const fanError = errors.find((e) => e.message.includes(FAN_SERVICE_UNIT));
+      const instanceError = errors.find((e) => e.message.includes('llama-server@1.service'));
+      expect(fanError?.instance).toBeUndefined();
+      expect(instanceError?.instance).toBe(1);
+    });
+
+    test('a bus-wide connect failure carries no instance even when `unitInstances` is given', async () => {
+      // Not this row's fact — every requested unit is affected at once, which is what the
+      // module doc calls "the bus", not a row.
+      const refused = Object.assign(new Error('connect ENOENT'), { code: 'ENOENT' });
+      const bus = fakeBus({ connectError: refused });
+      const { errors } = await collectUnitStates({
+        dbus: bus.dbus,
+        units: [servingUnitName(0), servingUnitName(1)],
+        unitInstances: new Map([
+          [servingUnitName(0), 0],
+          [servingUnitName(1), 1],
+        ]),
+      });
+      expect(errors).toHaveLength(1);
+      expect(errors[0]?.instance).toBeUndefined();
+    });
+  });
+
   test('⚠ an unreachable bus is null for EVERY unit and exactly ONE entry', async () => {
     // §6.5 matches an error to the figure it explains, and the figure a dead bus explains
     // is the bus. Three entries saying the same thing would push the real cause off a

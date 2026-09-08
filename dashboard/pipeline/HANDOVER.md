@@ -1,12 +1,18 @@
-# Handover — after 10b, before 10c
+# Handover — after 10b-S-G, before 10c
 
-**Rewritten 2026-09-08 by 10b's reconciliation.** Steps 1–8 are closed, **step 9 is closed**,
-**Q1** and **Q2** are closed, **10a — the shell** is closed, and **10b — the nine panel bodies**
-is closed pending the parent's review. This file is the whole inheritance: the next phase's
-agents get clean context and read it as fact.
+**Rewritten 2026-09-08 by 10b-S-G's reconciliation** (the owner's ruling that gave `errors[]` an
+optional `instance`), on top of 10b's. Steps 1–8 are closed, **step 9 is closed**, **Q1** and
+**Q2** are closed, **10a — the shell** is closed, **10b — the nine panel bodies** is closed, and
+**10b-S-G** is closed pending the parent's review. This file is the whole inheritance: the next
+phase's agents get clean context and read it as fact.
 
 ⚠ **Read §0.3 FIRST.** It says why `pnpm verify` is **not deterministic today**, and it changes
-what a green harness run is allowed to be taken as evidence of. §0.1, §0.2 and §0.4 remain true.
+what a green harness run is allowed to be taken as evidence of. §0.1, §0.2, §0.4 and the new
+**§0.5** remain true.
+
+⚠ **§0.5 is new and it is what 10b-S-G cost most to learn:** a mutation harness proves every ⚠
+test *can* fail; it never proves every branch *has* one. The line it missed was the **second call
+site of the same function**, in a file carrying 133 mutations.
 
 **Next is 10c — the backlog** (SCOPE §5's third loop): §3's inherited items, L9's sizing, L11's
 unit-name constant, Q1-F4's cross-harness runner, SCOPE 2.5f's `max-height`, **the wiring of the
@@ -295,6 +301,62 @@ appending branches. Both were one line. **When a fix lands on one of a pair, che
 
 ---
 
+## 0.5 ⚠ NEW — what 10b-S-G found: the ledger's blind spot, and a half-applied discriminator
+
+**11 adversarial findings: 6 accepted (3 in part), 1 rejected, 2 deferred; A2 accepted after a
+judgment call, A5 accepted as a fixture with no behaviour change.** Full table in
+`pipeline/steps/10-panels-assembly/10b-sg-reconciliation.md`. Four things generalise.
+
+### ⚠ A mutation harness proves every ⚠ test CAN fail. It never proves every branch HAS one.
+
+`serving-panel.tsx` calls `namesInstance` **twice** — once in `errorFor` (mutation `10b-SV4`) and
+once in the `unattributed` filter (**no mutation, in a file with 133 of them**). Replacing the
+second with the unfiltered array left `pnpm verify` at **93 files / 2587 tests, exit 0**, on a
+build that prints every attributed message twice: once on its own row and again as a panel-level
+note asserting a collector-wide fault. The **"too few"** direction was fixtured; **"too many" had
+no assertion anywhere in the project.**
+
+**The rules that fall out, and they are cheap:**
+
+1. **A guard needs a fixture on both sides** (ANCHOR §5, and this is its fourth instance) — for a
+   filter, that means asserting what it **keeps out**, not only what it lets through.
+2. **`toContain` cannot see a duplicate.** A test whose *name* says "renders once" must **count**:
+   `expect(html.split(needle).length - 1).toBe(1)`. This is §0.4's rule at a different angle and
+   it was a fourth instance of the same weakness.
+3. **When a function is used more than once, grep for its other call sites before believing the
+   mutation that names it.** Nothing else found this — no ledger, no scanner, no type.
+
+### ⚠ Adding a discriminator to a shared record obliges you to every consumer of that record
+
+`TelemetryError` gained `instance`; `panelsForSource('dbus')` fans out to **COOLING, SERVING and
+SAFETY**; S-G taught **one** of the three to read it. The entry `collectServing` files when
+systemd has no record of instance 1 therefore rendered as
+`fan service | active | llama-server@1.service: NoSuchUnit` on COOLING **and** SAFETY, beside a
+healthy `gpu-fan-control.service` — the panel §6.2 calls the one that earns this dashboard's
+existence. It was **pre-existing** (the entry was already `source: 'dbus'`), which is exactly what
+made it dangerous: **the fix looked done.** ⚠ **A subject that two of three renderers ignore is
+worse than no subject at all.** Both panels now filter on `e.instance === undefined`
+(`10b-SG3`/`10b-SG4`); ⚠ a `dbus` entry with **no** instance is still ambiguous — §9's S-G-Q2.
+
+### ⚠ Three of eleven findings were a document contradicting the code it shipped with
+
+*"Nothing is dropped"* (false within one source), a comment citing `events.ts` as agreement
+(no longer agreement after this very change), and a build note crediting a test that does not
+discriminate (`connect ECONNREFUSED …:8081` passes the **old** heuristic on its own substring).
+All three were written by the phase that also wrote the correct code, and the third was caught
+only by **restoring the old implementation and running the suite**. Four loops in a row now.
+**Compare against the counterfactual that was the code, not against a weaker one.**
+
+### ⚠ `Object.hasOwn`, not `?.field === undefined`
+
+`exactOptionalPropertyTypes` is **off**, so `{ ...base, instance: maybeUndefined }` typechecks
+with the key **present** and reads identically through `?.instance`. Every assertion that a
+subjectless entry *omits* the field uses `Object.hasOwn(...) === false`. ⚠ Measured 2026-09-08:
+`npx tsc --noEmit --exactOptionalPropertyTypes` **exits 0 on this tree** — turning the flag on is
+free today (§9, 10c).
+
+---
+
 ## 1. How to run anything
 
 `pnpm` is installed through corepack into a directory that is **not** on this machine's
@@ -373,22 +435,28 @@ wrote it. See §5.4. When a change touches anything that consumes entropy or a c
 
 ### The deliberate-regression harnesses — run all **NINE** after any change in `lib/`, `app/` or `components/`
 
-⚠ **Step 10's is now 129 mutations with 150 ⚠ marks** (was 105/121 after 10b's test phase) — 10b's
-reconciliation added 24 and re-aimed seven anchors whose target text it changed. It covers 10a's
-shell **and** 10b's nine panel bodies; `components/panels/*.test.*` files belong to this harness's
-`LEDGER_FILES` and to no other (ledger ownership follows the FILE, §5.2 rule 6).
+⚠ **Counts below re-derived 2026-09-08 by 10b-S-G's reconciliation**, by importing each
+`regressions.py` and reading `len(REGRESSIONS)` — not copied forward. Step 10's covers 10a's
+shell **and** 10b's nine panel bodies; `components/panels/*.test.*` files belong to this
+harness's `LEDGER_FILES` and to no other (ledger ownership follows the FILE, §5.2 rule 6).
 
 ```bash
 python3 pipeline/steps/02-format-severity/regressions.py                    #  55 mutations + ledger
 python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  72 mutations + ledger
 python3 pipeline/steps/04-collector-cooling/regressions.py                  #  92 mutations + ledger
-python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 127 mutations + ledger
-python3 pipeline/steps/06-telemetry-route/regressions.py                    # 63 mutations + ledger
+python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 130 mutations + ledger
+python3 pipeline/steps/06-telemetry-route/regressions.py                    #  63 mutations + ledger
 python3 pipeline/steps/07-auth-login/regressions.py                         # 128 mutations + ledger
-python3 pipeline/steps/08-client-runtime/regressions.py                     # 173 mutations + ledger
+python3 pipeline/steps/08-client-runtime/regressions.py                     # 174 mutations + ledger
 python3 pipeline/steps/09-ui-primitives/regressions.py                      #  95 mutations + ledger
-python3 pipeline/steps/10-panels-assembly/regressions.py                    #  70 mutations + ledger
+python3 pipeline/steps/10-panels-assembly/regressions.py                    # 138 mutations + ledger
 ```
+
+⚠ **10b-S-G touched three of them and re-ran two.** Step 5 gained `10b-SF1` (test phase) and
+`10b-SG1`/`10b-SG2` (reconciliation) → **130**; step 8 gained `10b-W1` (build) → **174**; step 10
+gained `10b-SG3`…`10b-SG7` (reconciliation) → **138**. **Step 8 was NOT re-run by the
+reconciliation and did not need to be** — nothing under `lib/client/` changed in that phase. The
+rule is: re-run the harnesses whose `LEDGER_FILES` you touched, and **say which**.
 
 ⚠ **NINE as of 10a (2026-09-08).** `pipeline/steps/10-panels-assembly/regressions.py` is new: it
 owns `app/dashboard-shell*.tsx`, `app/page*.tsx`, `app/use-now-tick*`, `lib/client/header-status*`,
@@ -409,9 +477,9 @@ was written after them. Q1's fix to the ⚠-scanner applies to step 9's too — 
 the corrected scanner and carries the same blind spot — so an item that touches the scanner
 touches eight files and owes eight runs.
 
-**875 mutations** — 55/72/92/127/63/128/173 across steps 2–8, **95** in the `components/`
-harness, **70** in step 10's. ⚠ Derived 2026-09-08 by importing all nine and reading
-`len(REGRESSIONS)`, not copied forward.
+**947 mutations** — 55/72/92/130/63/128/174 across steps 2–8, **95** in the `components/`
+harness, **138** in step 10's. ⚠ Derived 2026-09-08 (after 10b-S-G) by importing all nine and
+reading `len(REGRESSIONS)`, not copied forward.
 ⚠ **This total and the nine above it go stale on every item that adds a mutation, and have done six times.** Do not trust them; the authoritative number is the
 `All N regressions failed their check` line each harness prints, and all **eight** can be
 re-derived at once by importing each `regressions.py` and reading `len(REGRESSIONS)`. ⚠ Do **not**
@@ -547,7 +615,7 @@ Everything under `dashboard/`. Nothing outside it has been created or modified e
 | **`app/dashboard-shell.tsx` + `.module.css`** | **New in 10a.** The ONE stateful surface: one `useTelemetry()`, one `useNowTick()`, one `state === null` guard, one sticky band |
 | **`app/use-now-tick.ts`** | **New in 10a.** D2's independent age interval. Never driven by any store |
 | **`components/panels/*.tsx` + `*.module.css`** | **New in 10b — the nine panel bodies**, plus `status-row.tsx`, `panel-notes.tsx`, `condition-lookup.ts`, `panel-chart.ts`, `event-sentence.ts`, `test-support.ts`. All pure, all inside `purity.test.ts`'s recursive walk. ⚠ **Not yet mounted anywhere** — see below |
-| 92 test files | **2559 tests** |
+| 93 test files | **2594 tests** (10b-S-G: 2559 → 2587 → 2594) |
 | `package.json` · `pnpm-lock.yaml` · `tsconfig.json` · `next.config.mjs` · `vitest.config.mts` | pinned toolchain; `strict` + seven more flags, all asserted |
 | `app/layout.tsx` · `app/page.tsx` | ⚠ **No longer placeholders.** `page.tsx` renders `<DashboardShell />` and nothing else; `layout.tsx` imports `components/tokens.css` and paints the ground from tokens. ⚠ **`app/page.tsx` must stay free of telemetry** — see §6 — and it is now tested (`app/page.test.tsx`) |
 
@@ -1345,8 +1413,27 @@ before step 7, again in step 8, and again in Q2). **Every time, in the safe dire
 carried as open that the spec had already answered.** Re-check every row against the spec text
 before trusting it. Invariant 7 stands: if the spec is silent, **report it — do not assume**.
 
-**Open, with owners — ten rows: Q2's two, 10a's four, and 10b's four new ones. S11/G5's
-rendering residue is CLOSED.**
+**Open, with owners — thirteen rows: Q2's two, 10a's four, 10b's three still-open ones (S-G is
+now RULED and implemented), and 10b-S-G's own four successors. S11/G5's rendering residue is
+CLOSED.**
+
+### ⚠ NEW — 10b-S-G's four, 2026-09-08. None is implemented; each names what stands today.
+
+Implementing the owner's `errors[].instance` ruling answered §6.5's structural requirement and
+raised four questions the spec does not reach. Full statements in
+`pipeline/steps/10-panels-assembly/10b-sg-reconciliation.md` §5. **Questions, not proposals** —
+but each one has code standing behind it today, named here so the owner rules on a real thing.
+
+| # | Gap | What stands today | Owner |
+|---|---|---|---|
+| **S-G-Q1** ⚠ | **When one source files SEVERAL entries about the same instance, does the row show them all or the last?** §6.5 says *"its row shows the unit state and **the reason**"* — singular. `readEnv` files **one entry per parse problem**, so a `1.env` missing `MODEL` with an unparseable `CTX` is two `llama-env` entries for instance 1; the first is on the page **nowhere** (it matched an instance, so it is excluded from the panel-level notes too). Reachable, not theoretical | `errorFor` folds by `source`, so the **last** wins per source per instance. The row already joins **across** sources with ` · `; joining within one is a small change if that is the ruling. The module doc no longer claims otherwise | **owner** |
+| **S-G-Q2** ⚠ | **A `dbus` entry with no `instance` is two different facts.** A bus-wide connect failure blanks every `serving[].unitState` and SERVING must show it; `collectSafety`'s per-unit `gpu-fan-control.service` failure blanks nothing on SERVING. Nothing on the wire tells them apart, so SERVING prints another collector's unit failure under its rows. Fixing it needs a **second** structural subject on §4's error shape (which unit) or two distinguishable sources | Both render under SERVING's rows. COOLING and SAFETY now drop entries that DO name an instance (`10b-SG3`/`SG4`), which narrows the mirror case but cannot close this one | **owner**, then whoever owns §4 |
+| **S-G-Q3** | **Does §3.7 mean to constrain WHICH sources may carry an `instance`?** The build's "4 of 18" table is a judgement in a document: the type is one flat interface, `tag()`'s third parameter is on the shared minting helper, and `wire.ts` accepts `instance` on `ufw`, `coretemp`, `nvidia-smi` and `statvfs` alike (inert for the fourteen — they never route to SERVING) | Enforced by a **test per path**: `10b-SF1` for `collectSafety`, `10b-SG1`/`10b-SG2` for `llama-env`'s two directory-level paths. That is the honest mechanism while the constraint is a judgement rather than a rule | **owner** |
+| **S-G-Q4** | **Must `serving[]`'s `instance` values be unique on the wire, and should `wire.ts` refuse a snapshot that repeats one?** `parseInstanceIndex`'s docstring states the stake — two rows sharing one condition id, §9 dedupes, one instance vanishes from the header count — and the **collector** guarantees it with a `Set`; `wire.ts`'s stated purpose is not to trust the other side, and S-G made `instance` the sole join key, so a duplicate now duplicates every attributed diagnostic under one React key | Validated per entry, never across the array. A duplicate parses and renders twice | **owner**, then 10c |
+
+Also open and unchanged from the build's own note: **`SPEC.md` does not say `instance` must be
+non-negative**, and `wire.ts` deliberately matches `Gpu.index`'s permissiveness (`-1` and `0` both
+validate) rather than inventing a floor the spec does not state.
 
 ### ⚠ NEW — 10b's four, 2026-09-08. Three are IMPLEMENTED conservatively; one is not implemented.
 
@@ -1358,7 +1445,7 @@ proposals — but three had to render *something* today, so each names the strin
 |---|---|---|---|
 | **10b-S-E** ⚠ | **What a GPU panel renders for a card ABSENT from a `gpus[]` that WAS read.** §6.5 rules the *condition* (retired — *"the subject has left the machine, and that is an answer"*) but §6.2 gives no panel wording, and §6.5's only GPU literal, `no GPUs enumerated`, is for the whole enumeration failing. Before 10b's reconciliation the two states rendered **byte-identically** and the panel still printed `served by instance 1  gemma-4-12b` for a card that is not there — §6.2's own named failure mode | **`card not enumerated`**, a body takeover, no served-model row. Rejected: the ordinary body of em dashes, which is indistinguishable from a present card whose readings failed | **owner** |
 | **10b-S-F** ⚠ | **May a panel's HEAD chip read `normal` while one of that panel's own readings is `—`?** MEMORY with `RAM — / —` and a healthy swap shows a green ✓ over an em dash; so do STORAGE and COOLING. §9's *"a dashboard that goes green because it stopped being able to look"* is written about the **aggregate**, which conditions protect (a stale condition keeps its band and its place in the count). §6.3 says nothing about a panel head over a mixture, and the panels are inconsistent: CPU and GPU go no-band, the other three do not | ⚠ **NOT CHANGED**: `worstSeverity` over the bands that exist, skipping `null`s, which is what §6.3 literally supports. The alternative — no-band whenever any input is unreadable — costs a panel its alarm colour when one unrelated field fails | **owner** |
-| **10b-S-G** ⚠ | **`errors[]` carries a `source` but no subject, and §6.5 needs one.** *"An `llama-server` instance is down → **its** row shows the unit state and the reason; the other instance is unaffected, and that is a structural requirement, not an observation about current scheduling."* §4's error shape cannot express which instance an entry is about, so the join can only be made by reading the message text | Matched on the message: the unit name (`servingUnitName`), the `<i>.env` path, or the port; last **per source**; entries naming no instance render once under the rows. Tested, and **a heuristic**. The clean fix is an optional `instance`/subject on a `TelemetryError` — a §4 wire change | **owner**, then whoever owns §4 |
+| ~~**10b-S-G**~~ ⚠ | **`errors[]` carries a `source` but no subject, and §6.5 needs one.** The join could only be made by reading the message text | **RULED AND IMPLEMENTED, 2026-09-08.** `SPEC.md` §3.7 (line 542) carries the owner's wording; `TelemetryError` gained an optional `instance?: number` and the panel matches on that field alone — no message text is read in the attribution path any more. ⚠ **Additive, so an old server's snapshot still validates**; the redeploy is needed for the feature to *work*, not to avoid a refusal. Four **new** questions came out of implementing it — S-G-Q1…Q4 below | closed |
 | **10b-S-H** | **When one source blanks several figures on one panel, is its message stated once or beside each?** `errorsForPanel`'s doc says granularity is per **source**; §3.7 says an alarm needs its explanation **beside it**. `dell-smm` blanks five channels and the mode; `statvfs` blanks both mounts; `proc-meminfo` blanks RAM and swap | **Once**, under the figures it blanks — matching COOLING's existing choice. Consequence, stated plainly: with `dell-smm` down, fans 1–4 read `—` with the message sitting on fan 5 | **owner** |
 
 ### ⚠ NEW — 10a's four, 2026-09-08. Three are IMPLEMENTED conservatively; one is not implemented.
@@ -1495,7 +1582,14 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | **10b-F11 / 10b-S-F** — a panel head reading `normal` over one of its own em dashes | **owner**, then 10b/10c | open — §8. Deferred deliberately: it changes what every panel head means, which is not a reconciler's call |
 | **10b-F14b** — at 1280–1599px (the design target) the GPU and CPU traces cannot hatch a gap | **10c**, with L9 | open. `Sparkline` takes no `gaps` prop by design, so HANDOVER's *"hatch `state.gaps`, never a hole in a series"* holds only above 1600px, where the promoted chart receives them. The fix is a new prop on **step 9's** primitive or a different primitive at the design breakpoint — both are L9's sizing question, and 10c owns L9 and the browser pass that would show which |
 | **10b-F14a** — SERVING's composite row value reads `:— · — · ctx — · health —` for an identity-only instance | **owner** | open, cosmetic. Not an O14 violation (it concatenates whole formatter outputs, never splits one); changing it means inventing a composition rule §6.6 does not state |
-| **10b-S-E · S-F · S-G · S-H** — four spec questions | **owner** | §8. Three implemented conservatively, S-F not implemented |
+| **10b-S-E · S-F · S-H** — three spec questions (~~S-G~~ is **ruled and implemented**) | **owner** | §8. Two implemented conservatively, S-F not implemented |
+| ~~**10b-S-G** — `errors[]` gains an optional `instance`~~ | — | **closed 2026-09-08** pending the parent's review — build → test → adversarial → reconcile, **11 findings adjudicated** (6 accepted of which 3 in part, 1 rejected, 2 deferred). The `errors[]`→`llama-server` join is **structural**, not a substring match. `10b-sg-reconciliation.md` |
+| ⚠ **S-G-Q1** — several entries from one source about one instance: only the last is rendered, anywhere | **owner** | open — §8. `readEnv` files one entry per parse problem, so this loses a real reason on a real box. The doc that claimed otherwise is corrected; **the behaviour is unchanged and deliberate**, because §6.5 says "the reason", singular |
+| ⚠ **S-G-Q2** — a `dbus` entry with **no** instance conflates a bus-wide failure with `collectSafety`'s per-unit one | **owner**, then whoever owns §4 | open — §8. ⚠ **This is the residue of the A2 fix and it is named at both call sites in the code.** COOLING and SAFETY now ignore entries that name an instance; entries that name none still reach all three panels, so SERVING prints `gpu-fan-control.service`'s failure under its rows. Needs a second structural subject or two sources — not a reconciler's call |
+| **S-G-Q3** — which of the eighteen sources may carry an `instance` is a judgement in a document | **owner** | open — §8. Enforced today by a test per path (`10b-SF1`, `10b-SG1`, `10b-SG2`). A type-level constraint was **rejected** as the fix here: it means a discriminated union over eighteen sources and a per-source rule in `wire.ts` that `SPEC.md` never states |
+| **S-G-Q4** — duplicate `instance` values in `serving[]` validate and render twice under one React key | **owner**, then **10c** | open — §8. The collector prevents it; `wire.ts` does not, and its own header says its purpose is not to trust the other side |
+| **S-G-A10** — should the session event log be per-instance? | **10c** | open, low. `events.ts:400` folds `errors[]` last-per-source across **all** instances while a SERVING row is now last-per-source **per** instance, so with both instances failing `/health` the log's one sentence is instance 1's while row 0 shows instance 0's. `events.ts` has no row to hang an instance on, which is why this is a question and not a bug. The comment that cited the two as agreeing is corrected |
+| **S-G-A11** — turn on `exactOptionalPropertyTypes` | **10c** | open, and ⚠ **measured, not guessed**: `npx tsc --noEmit --exactOptionalPropertyTypes` **exits 0 on this tree today** (2026-09-08), so it is a one-line `tsconfig.json` change with no migration. What it buys: `contract.test.ts`'s `Object.hasOwn(entry,'instance') === false` stops being a runtime-only guarantee — today `{ ...base, instance: maybeUndefined }` typechecks with the key present. `errors.ts`'s docstring records the exposure meanwhile |
 | ~~**10a — the shell**~~ | — | **closed 2026-09-08** — 18 findings adjudicated (16 accepted, 2 deferred, 1 half-rejected). 79 files · 2399 tests · nine harnesses · 875 mutations. `10a-reconciliation.md` |
 | ⚠ **10a-F17 — `pnpm verify` is not deterministic** | **10c** | ⚠ open, and it undermines every ledger in the project. **§0.3 — read it before trusting a green run.** Fix with an injected clock in `lib/collectors/serving.test.ts:592`, never a wider margin |
 | ⚠ **10a-F4 — nothing in the pipeline runs a browser** | **10c** | open. The step owes **two** things: (1) the test phase's seven measurements re-run headlessly — `getBoundingClientRect` at 820/899/900/1150/1279/1280/1920, asserting COOLING's `y`/`height`/`x` span at ≥1280 and the `y`-order at <900; **(2) a way to force an alarm-level condition client-side.** Without (2) the banner never mounts, which is exactly why the manual pass could not see F13 — the one element §6.4 makes normative was the one element the browser check could not reach |

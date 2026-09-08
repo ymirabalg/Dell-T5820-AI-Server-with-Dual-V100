@@ -28,6 +28,12 @@
  * - **`ts` must parse as a date.** §6.7 draws traces "against time, not index", so a `ts`
  *   that is not a time has no place on the axis. {@link parseSnapshot} returns the parsed
  *   epoch alongside the snapshot rather than re-parsing it at every render.
+ * - **⚠ One exception to "every field must be present": `errors[].instance` (10b-S-G).** It
+ *   is the contract's first genuinely OPTIONAL field — absent means "this entry names no
+ *   row", which is both an old server that has never heard of it and a current one whose
+ *   source has no subject, and the two are indistinguishable on purpose. **Present but
+ *   invalid still refuses the entry**, on the same terms as any other malformed field — see
+ *   {@link optionalInteger}.
  *
  * ### ⚠ The vocabularies are `Record<T, true>` tables, not lists
  *
@@ -203,6 +209,28 @@ const integer = (value: unknown): Checked<number> => {
   if (typeof value !== 'number' || !Number.isInteger(value)) return undefined;
   return value;
 };
+
+/**
+ * The sentinel {@link optionalInteger} returns for "the key is not present at all" — 10b-S-G,
+ * and the first field this contract has ever made truly OPTIONAL rather than nullable.
+ *
+ * ⚠ `undefined` already means "invalid" everywhere in this file ({@link Checked}), and an
+ * optional field needs a THIRD outcome distinct from both "invalid" and "a value": the key
+ * may be legitimately missing. Reusing `undefined` for that would make a malformed
+ * `instance` and an absent one indistinguishable, and only one of those is §4's licensed
+ * "an old server has never heard of this field" — the other is a server that sent garbage
+ * and must refuse the snapshot like every other bad reading here.
+ */
+const ABSENT = Symbol('absent');
+
+/**
+ * An optional non-null integer field (10b-S-G's `TelemetryError.instance` is the only one
+ * today). Three outcomes: {@link ABSENT} when the key is not present at all — valid, and the
+ * caller stores no field; `undefined` when the key IS present but is not a valid integer —
+ * invalid, refuse the entry like any other malformed field; or the integer itself.
+ */
+const optionalInteger = (source: Record<string, unknown>, key: string): number | typeof ABSENT | undefined =>
+  Object.hasOwn(source, key) ? integer(source[key]) : ABSENT;
 
 /** Map a branded reading through its constructor, keeping `null` as `null`. */
 const branded = <T>(value: Checked<number | null>, make: (v: number) => T): Checked<T | null> =>
@@ -465,13 +493,24 @@ const safetyOf = (value: unknown): Checked<Safety> => {
   return { ufwEnforcing, pwm5Present, dkmsForRunningKernel, fanServiceState };
 };
 
+/**
+ * §4's one optional field, validated 10b-S-G: **present when the key is absent** (an old
+ * server, or a source with no subject) and **validated like any other field when it is
+ * there**. §4 fixes `instance` as a non-null integer — never `null` — so a server sending
+ * `instance: null` is refused exactly as a wrong-typed `instance` would be: this field marks
+ * one row or it says nothing, and `null` is neither.
+ */
 const telemetryErrorOf = (value: unknown): Checked<TelemetryError> => {
   if (!isRecord(value)) return undefined;
   const rawSource = field(value, 'source');
   if (typeof rawSource !== 'string' || !Object.hasOwn(ERROR_SOURCES, rawSource)) return undefined;
   const message = field(value, 'message');
   if (typeof message !== 'string') return undefined;
-  return { source: rawSource as ErrorSource, message };
+  const rawInstance = optionalInteger(value, 'instance');
+  if (rawInstance === undefined) return undefined;
+  return rawInstance === ABSENT
+    ? { source: rawSource as ErrorSource, message }
+    : { source: rawSource as ErrorSource, message, instance: rawInstance };
 };
 
 // ---------------------------------------------------------------------------

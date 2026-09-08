@@ -282,6 +282,25 @@ describe('the wire format', () => {
   });
 
   /*
+   * 10b-S-G: `errors[].instance` is the contract's first OPTIONAL member — `T | undefined`,
+   * not `T | null` — so its presence on the wire is exactly the presence of the KEY, unlike
+   * every other field this file's `NULLABLE_PATHS` census governs.
+   */
+  test('⚠ errors[].instance crosses the wire as a present key when set, and an ABSENT key when not', () => {
+    const withInstance = roundTrip(servingPopulated) as TelemetrySnapshot;
+    expect(withInstance.errors).toHaveLength(1);
+    expect(withInstance.errors[0]?.instance).toBe(1);
+    expect(Object.hasOwn(withInstance.errors[0] as object, 'instance')).toBe(true);
+
+    // `nothingReadable`'s one entry (`dell-smm`) names no instance — it is collector-wide,
+    // not one row's fact — so the key must not merely be `null`, it must not exist at all.
+    // That is what lets an OLD server, which has never heard of this field, still validate.
+    const withoutInstance = roundTrip(nothingReadable) as TelemetrySnapshot;
+    expect(withoutInstance.errors).toHaveLength(1);
+    expect(Object.hasOwn(withoutInstance.errors[0] as object, 'instance')).toBe(false);
+  });
+
+  /*
    * §3.3 / invariant 3. `ENODATA` from `pwm5` means the channel is in EC automatic
    * control, which is healthy — the driver returns it because state 3 (AUTO) exceeds
    * `i8k_fan_max` (2). The contract gives it its own variant so it can never be filed

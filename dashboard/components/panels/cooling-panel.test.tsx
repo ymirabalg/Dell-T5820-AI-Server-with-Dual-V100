@@ -216,6 +216,38 @@ describe('⚠ §6.5 on a COOLING row — the stale rule has two halves and both 
     expect(row).toContain('LAST dell-smm problem');
     expect(row).not.toContain('FIRST dell-smm problem');
   });
+
+  test('⚠ 10b-S-G — a dbus entry that names an llama-server instance never explains THIS fan service', () => {
+    // `panelsForSource('dbus')` fans out to COOLING, SERVING and SAFETY, and 10b-S-G taught
+    // only SERVING to read `instance`. So the exact entry `collectServing` files when systemd
+    // has no record of instance 1 rendered here, under a `fan service | active` row whose
+    // subject is `gpu-fan-control.service` — F2's disease (an explanation beside a row it is
+    // not about) in a second panel, on a row that reads healthy (adversarial A2).
+    const snapshot: TelemetrySnapshot = {
+      ...withCooling(ch5Manual),
+      errors: [
+        {
+          source: 'dbus',
+          message: 'llama-server@1.service: NoSuchUnit: systemd has no record',
+          instance: 1,
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(<CoolingPanel state={stateWith(snapshot)} nowMs={0} panelId="cooling" />);
+    expect(html).not.toContain('llama-server@1.service');
+  });
+
+  test('⚠ 10b-S-G — a dbus entry with NO instance still explains the fan-service row', () => {
+    // The other side of the same guard: filtering by `instance` must not silence the entries
+    // this row exists to show. A bus-wide failure carries no instance, and `gpu-fan-control`'s
+    // own per-unit failure carries none either (they are not yet distinguishable — A8).
+    const snapshot: TelemetrySnapshot = {
+      ...withCooling({ ...ch5Manual, serviceState: null }),
+      errors: [{ source: 'dbus', message: 'D-Bus: connection refused' }],
+    };
+    const html = renderToStaticMarkup(<CoolingPanel state={stateWith(snapshot)} nowMs={0} panelId="cooling" />);
+    expect(rowContaining(html, 'fan service')).toContain('D-Bus: connection refused');
+  });
 });
 
 describe('⚠ invariant 1, across EVERY reading on this panel', () => {

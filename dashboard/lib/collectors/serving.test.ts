@@ -313,6 +313,9 @@ describe('the canonical fixtures HANDOVER names as this step’s acceptance crit
     expect(errors).toHaveLength(1);
     expect(errors[0]?.source).toBe('llama-health');
     expect(errors[0]?.message).toContain('ECONNREFUSED');
+    // 10b-S-G: attached structurally from the per-instance closure, not read back out of
+    // the message this same failure already put "8081" into.
+    expect(errors[0]?.instance).toBe(1);
     expect(severityUnitState(serving?.[1]?.unitState ?? null)).toBe('alarm');
     expect(severityHealth(serving?.[1]?.health ?? null)).toBe('alarm');
     expect(severityHealth(serving?.[0]?.health ?? null)).toBe('normal');
@@ -324,7 +327,7 @@ describe('the canonical fixtures HANDOVER names as this step’s acceptance crit
     // to the value every later step's render tests are written against.
     expect(servingPopulated.serving).toEqual(servingInstances);
     expect(servingPopulated.errors).toEqual([
-      { source: 'llama-health', message: 'connect ECONNREFUSED 127.0.0.1:8081' },
+      { source: 'llama-health', message: 'connect ECONNREFUSED 127.0.0.1:8081', instance: 1 },
     ]);
   });
 
@@ -543,6 +546,24 @@ describe('per-instance failures, and which source explains each blank', () => {
     expect(serving?.map((s) => s.model)).toEqual(['qwen3.6-27b', 'qwen3.6-27b']);
     // One entry for the bus, not one per instance.
     expect(errors.map((e) => e.source)).toEqual(['dbus']);
+    // 10b-S-G: a bus-wide connect failure explains BOTH rows at once, which is not one
+    // row's fact — it must carry no instance rather than guess either one.
+    expect(errors[0]?.instance).toBeUndefined();
+  });
+
+  test('⚠ 10b-S-G — a per-unit dbus failure carries ITS instance, and only its own', async () => {
+    // systemd has no record of `llama-server@1.service`; instance 0's is untouched. The
+    // structural join (`instance`) has to land on row 1 even though nothing in the message
+    // says "1" — it says the unit name, and only `collectServing` knows which index that is.
+    const { serving, errors } = await collectServing({
+      io: liveBox.io(),
+      dbus: fakeDbus({ 'llama-server@0.service': 'active' }),
+      http: liveBox.http(),
+    });
+    expect(serving?.map((s) => s.unitState)).toEqual(['active', 'inactive']);
+    expect(errors.map((e) => e.source)).toEqual(['dbus']);
+    expect(errors[0]?.message).toContain('llama-server@1.service');
+    expect(errors[0]?.instance).toBe(1);
   });
 
   test('⚠ one instance down leaves the other completely unaffected (§6.5)', async () => {
@@ -743,6 +764,9 @@ describe('the budget is never evidence about a subject (§6.7)', () => {
     expect(errors.map((e) => e.source)).toEqual(['llama-health']);
     expect(errors[0]?.message).toContain('8080');
     expect(errors[0]?.message).not.toContain('8081');
+    // 10b-S-G: the entry is instance 0's own, structurally — not merely a message that
+    // happens to say "8080" and not "8081".
+    expect(errors[0]?.instance).toBe(0);
   });
 });
 
@@ -795,6 +819,38 @@ describe('bounds and hygiene', () => {
     expect(errors.map((e) => e.source)).toEqual(['llama-env']);
     expect(errors[0]?.message).toContain('default.env');
     expect(errors[0]?.message).toContain(DIR);
+  });
+
+  test('⚠ 10b-S-G — the two DIRECTORY-level `llama-env` entries carry no instance', async () => {
+    // Two paths file an entry about the directory rather than about an instance: the `readDir`
+    // failure (nothing was enumerated at all, `serving: null`) and `discoverInstances`'
+    // malformed-filename problems (a listed `.env` that is explicitly NOT an instance).
+    // Neither may name one — attaching, say, `instances[0]` would render "`default.env` is not
+    // `<instance>.env`", a fact about the DIRECTORY, as instance 0's own reason beside instance
+    // 0's healthy readings. Until this test the build's "4 of 18 sources may carry an instance"
+    // enumeration was enforced for `collectSafety` (10b-SF1) and by nothing at all for these
+    // two (adversarial A4); the type cannot express it, `tag()`'s third parameter is on the
+    // shared minting helper, and `wire.ts` accepts `instance` on any source.
+    const listFailed = await collectServing({
+      io: fakeIo({ entries: errno('ENOENT', `ENOENT: scandir '${DIR}'`) }),
+      dbus: liveBox.dbus(),
+      http: liveBox.http(),
+    });
+    expect(listFailed.serving).toBeNull();
+    expect(listFailed.errors).toHaveLength(1);
+    // ⚠ `Object.hasOwn`, not `=== undefined`: a key PRESENT and holding `undefined` reads the
+    // same way through `?.instance`, and is exactly what a careless `{ ...e, instance }` spread
+    // produces (`exactOptionalPropertyTypes` is off, so the compiler allows it — A11).
+    expect(Object.hasOwn(listFailed.errors[0] ?? {}, 'instance')).toBe(false);
+
+    const notAnInstance = await collectServing({
+      io: fakeIo({ entries: ['0.env', 'default.env'], files: { [`${DIR}/0.env`]: CAPTURED_LLAMA_ENV_0 } }),
+      dbus: fakeDbus({ 'llama-server@0.service': 'active' }),
+      http: liveBox.http(),
+    });
+    const dirEntry = notAnInstance.errors.find((e) => e.message.includes('default.env'));
+    expect(dirEntry).toBeDefined();
+    expect(Object.hasOwn(dirEntry ?? {}, 'instance')).toBe(false);
   });
 
   test('⚠ collectServing never runs a command — unit state comes over D-Bus, not systemctl', async () => {

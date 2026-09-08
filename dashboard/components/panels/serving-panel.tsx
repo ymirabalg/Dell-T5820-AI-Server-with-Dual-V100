@@ -18,30 +18,36 @@
  * rendered as one explanatory line rather than a table with no rows, since neither is this
  * panel's fault to explain away silently.
  *
- * ### ⚠ An `errors[]` entry reaches a row only when it NAMES that instance
+ * ### An `errors[]` entry reaches a row only when it NAMES that instance
  *
- * Added 2026-09-08 by 10b's reconciliation (adversarial F2). The first draft read
- * `servingErrors[0]?.message` once and hung it on **every** row: rendered from the shipped
- * `servingPopulated` fixture, the healthy `llama-server@0` carried
- * `connect ECONNREFUSED 127.0.0.1:8081` — instance 1's port, beside instance 0's `health ok`
- * row — and with a `dbus` entry first, both rows named instance 1 while the `llama-health`
- * message that actually explained instance 1 was never rendered at all. §6.5 is explicit that
- * *"an `llama-server` instance is down → **its** row shows the unit state and the reason; the
- * other instance is unaffected"*, and §3.7's whole point is that an alarm carries the
- * explanation that fits it.
+ * Added 2026-09-08 by 10b's reconciliation (adversarial F2); made structural the same day by
+ * the owner's ruling (10b-S-G). The first draft read `servingErrors[0]?.message` once and hung
+ * it on **every** row: rendered from the shipped `servingPopulated` fixture, the healthy
+ * `llama-server@0` carried `connect ECONNREFUSED 127.0.0.1:8081` — instance 1's port, beside
+ * instance 0's `health ok` row. §6.5 is explicit that *"an `llama-server` instance is down →
+ * **its** row shows the unit state and the reason; the other instance is unaffected"*, and
+ * §3.7's whole point is that an alarm carries the explanation that fits it.
  *
- * `errors[]` carries a `source`, not a subject (§4), so the attribution is derived from the
- * identity **this panel already holds**: an entry belongs to instance `i` when its message
- * names `llama-server@i` (D-Bus's own unit name, from `lib/units.ts` — not spelled a second
- * time here), that instance's `<i>.env` file, or its port. Nothing else is guessed: an entry
- * naming no instance is collector-wide (*"`/etc/llama-server`: EACCES"*) and renders once under
- * the rows via {@link PanelNotes}, and an entry naming a DIFFERENT instance never appears on
- * this row. Nothing is dropped, which the old `errors[0]` also did to every entry after the
- * first.
+ * The second draft (10b's reconciliation) fixed the symptom by matching the message text for
+ * a unit name, an `<i>.env` path or a port — honest, tested, and a heuristic: a collector
+ * rewording a message mis-attributes it silently, because a substring match cannot fail
+ * loudly. **`TelemetryError` now carries an optional `instance` (§4), and this file matches on
+ * that field alone** — an entry belongs to instance `i` when `error.instance === i`, full
+ * stop. Nothing about the message is read to decide attribution any more; the message is only
+ * ever displayed. An entry with no `instance` (most sources, and any old server that predates
+ * this field) is collector-wide and renders once under the rows via {@link PanelNotes}, on the
+ * same terms as before.
  *
- * ⚠ **Recorded for the owner, invariant 7**: matching on the message text is the finest join
- * §4 offers, and it is a heuristic. The clean fix is a subject on the wire — an optional
- * `instance` on a `TelemetryError` — which is a §4 change and not this loop's.
+ * ⚠ **"Nothing is dropped" is true ACROSS sources and false WITHIN one** — corrected
+ * 2026-09-08 by this ruling's reconciliation (adversarial A3), because the sentence that used
+ * to stand here claimed otherwise and a reader would have concluded the case was closed.
+ * {@link errorFor} folds by `source`, so two entries with the same `source` **and** the same
+ * `instance` collapse to the last: `readEnv` files one entry per parse problem, so a `1.env`
+ * missing `MODEL` *and* carrying an unparseable `CTX` yields two `llama-env` entries for
+ * instance 1 and only the second is rendered — on the row or anywhere else, since the first
+ * also matched an instance and so is excluded from `unattributed`. Whether the row should
+ * join them (as it already joins across sources) is a §6.5 question the spec does not answer;
+ * it is recorded for the owner rather than decided here. What is fixed is the claim.
  */
 
 import type { DisplayedCondition } from '@/lib/conditions';
@@ -63,18 +69,14 @@ import { StatusRow } from './status-row';
 import styles from './serving-panel.module.css';
 
 /**
- * Whether one `errors[]` entry is about this instance. Three spellings, each of which the
- * collectors actually emit: the D-Bus unit name (`collectServing` reads
- * `llama-server@1.service`), the env file the instance was discovered from
- * (`/etc/llama-server/1.env`), and the probe URL's port (`connect ECONNREFUSED
- * 127.0.0.1:8081`). An entry matching none of them names no instance.
+ * Whether one `errors[]` entry is about this instance (10b-S-G) — the STRUCTURAL join,
+ * comparing `TelemetryError.instance` to `ServingInstance.instance` directly. §4 fixes
+ * `instance` as the same non-null integer identity on both sides, so this is an equality
+ * check and nothing else: no message text is read, so a collector rewording a message cannot
+ * silently move it to the wrong row or drop it to none.
  */
-const namesInstance = (error: TelemetryError, instance: ServingInstance): boolean => {
-  const message = error.message;
-  if (message.includes(servingUnitName(instance.instance))) return true;
-  if (message.includes(`/${String(instance.instance)}.env`)) return true;
-  return instance.port !== null && message.includes(`:${String(instance.port)}`);
-};
+const namesInstance = (error: TelemetryError, instance: ServingInstance): boolean =>
+  error.instance === instance.instance;
 
 const instanceRow = (
   instance: ServingInstance,
@@ -127,12 +129,22 @@ export function ServingPanel({ state, nowMs }: PanelProps) {
         );
 
   const servingErrors = snapshot === null ? [] : errorsForPanel(snapshot, 'serving');
-  // ⚠ The LAST message PER SOURCE that names this instance — `events.ts:400` folds `errors[]`
-  // into a `Map` keyed by source and so shows the last per source, and a panel that showed the
-  // first (or only one of two sources) would print a different sentence for the same fault in
-  // the same session (adversarial F10). Both facts survive: a `dbus` "NoSuchUnit" and the
+  // ⚠ The LAST message PER SOURCE that names this instance. A panel that showed the first (or
+  // only one of two sources) would print a different sentence for the same fault in the same
+  // session (adversarial F10). Both sources survive: a `dbus` "NoSuchUnit" and the
   // `llama-health` probe failure explain different halves of one dead instance, and dropping
-  // either is what §3.7 calls not actionable.
+  // either is what §3.7 calls not actionable. ⚠ Two entries from the SAME source about the
+  // same instance still collapse to the last — see this module's doc; that is the known
+  // limit of this fold, not something the fold's justification covers.
+  //
+  // ⚠ The `events.ts:400` citation this comment used to lean on is only HALF true since
+  // 10b-S-G (adversarial A10, corrected 2026-09-08). That fold is last-per-source across
+  // **all** instances; this one is last-per-source **per instance**. With instance 0 and
+  // instance 1 both failing their `/health` probe, the log's single `llama-health` sentence
+  // is instance 1's (array order) while row 0 shows instance 0's — so the log and this panel
+  // now legitimately differ, which is the outcome the citation was invoked to rule out.
+  // Whether the session log should itself be per-instance is 10c's question; the reason the
+  // fold reads LAST rather than FIRST is unaffected either way.
   const errorFor = (instance: ServingInstance): string | null => {
     const bySource = new Map<string, string>();
     for (const e of servingErrors) if (namesInstance(e, instance)) bySource.set(e.source, e.message);

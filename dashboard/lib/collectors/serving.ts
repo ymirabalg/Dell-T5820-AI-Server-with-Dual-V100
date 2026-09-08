@@ -18,6 +18,15 @@
  * decides which figure each one explains, because it is the only layer that knows what it
  * just tried to read.
  *
+ * ⚠ **10b-S-G: this is also the only layer that knows which instance.** `readEnv` and
+ * `probe` run inside a per-instance closure, so every `llama-env`, `llama-health` and
+ * `llama-models` entry they produce is attached to `TelemetryError.instance` right there —
+ * never guessed downstream by matching a unit name, an `<i>.env` path or a port back out of
+ * the message text. The `dbus` entries this file's own `unitInstances` map makes possible
+ * are attached inside {@link collectUnitStates} for the same reason: only the caller that
+ * built `servingUnitName(instance)` in the first place can say which instance a
+ * `llama-server@<i>` unit failure is about.
+ *
  * ### Read-only, and narrower than that
  *
  * Invariant 2 forbids writing. §13 of the decisions goes further and excludes a probe
@@ -309,8 +318,20 @@ export const collectServing = async ({
   const errors: TelemetryError[] = [...tag('llama-env', found.problems.map((p) => `${dir}: ${p}`))];
   const instances = found.value;
 
+  // ⚠ 10b-S-G: the ONLY place that knows which unit name is which instance, so it is the
+  // one place that builds the map `collectUnitStates` needs to attach `instance`
+  // structurally to a per-unit `dbus` entry, rather than `collectUnitStates` (or anything
+  // downstream) re-deriving it from `servingUnitName`'s own text.
+  const unitInstances = new Map(instances.map((instance) => [servingUnitName(instance), instance]));
+
   const [units, rows] = await Promise.all([
-    collectUnitStates({ dbus, paths, units: instances.map(servingUnitName), timeoutMs: dbusTimeoutMs }),
+    collectUnitStates({
+      dbus,
+      paths,
+      units: instances.map(servingUnitName),
+      unitInstances,
+      timeoutMs: dbusTimeoutMs,
+    }),
     Promise.all(
       instances.map(async (instance) => {
         const { env, errors: envErrors } = await readEnv(io, discovery, dir, instance);
@@ -318,7 +339,11 @@ export const collectServing = async ({
         // instance's env read and is spent by this instance's two requests and nothing
         // else. This line is §6.5's "the other instance is unaffected".
         const probed = await probe(http, deadline(probeBudget, SERVING_PROBE_TIMEOUT_MS), env, probeBudget);
-        return { instance, env, probed, errors: [...envErrors, ...probed.errors] };
+        // ⚠ 10b-S-G: every `llama-env`/`llama-health`/`llama-models` entry this instance's
+        // own read and probe produced is about THIS instance — attached here, once, from
+        // the `instance` this closure already runs under, never guessed from the message.
+        const rowErrors = [...envErrors, ...probed.errors].map((e) => ({ ...e, instance }));
+        return { instance, env, probed, errors: rowErrors };
       }),
     ),
   ]);

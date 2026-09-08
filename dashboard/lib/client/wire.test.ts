@@ -194,6 +194,64 @@ describe('⚠ the closed vocabularies (§3.7)', () => {
   });
 });
 
+describe('⚠ 10b-S-G — errors[].instance is the contract’s first OPTIONAL field', () => {
+  /*
+   * "Both directions need a fixture" — the rule three steps here have already broken. Side
+   * one: an old server that has never heard of `instance` simply omits the key, and that
+   * snapshot must still validate (SPEC.md §4: "an old server's snapshot still validates").
+   */
+  test('an errors[] entry with the key entirely ABSENT still validates, with no instance', () => {
+    const parsed = parseSnapshot(withField('errors', [{ source: 'dell-smm', message: 'no hwmon' }]));
+    expect(parsed).not.toBeNull();
+    expect(parsed?.snapshot.errors).toHaveLength(1);
+    expect(parsed?.snapshot.errors[0]?.instance).toBeUndefined();
+    expect(Object.hasOwn(parsed?.snapshot.errors[0] as object, 'instance')).toBe(false);
+  });
+
+  // Side two: present and a valid non-null integer — validated and carried through, exactly
+  // like `ServingInstance.instance` and `Gpu.index` already are.
+  test('an errors[] entry with a valid instance carries it through unchanged', () => {
+    const parsed = parseSnapshot(
+      withField('errors', [{ source: 'llama-health', message: 'connect ECONNREFUSED', instance: 1 }]),
+    );
+    expect(parsed?.snapshot.errors[0]?.instance).toBe(1);
+  });
+
+  /*
+   * ⚠ Present but the WRONG type is invalid, on the same terms as every other field in this
+   * file — it must not be silently coerced to "absent", which would treat a malformed
+   * snapshot as an old, well-formed one and hide the fact that the server sent garbage.
+   */
+  test.each<[string, unknown]>([
+    ['a string', '1'],
+    ['a float', 1.5],
+    ['negative infinity', -Infinity],
+    ['NaN, which JSON cannot carry but a hand-rolled server could send', Number.NaN],
+    // `instance` is never nullable — an absent KEY is the "no subject" spelling, so a
+    // present `null` is a third, illegal spelling of the same fact and must be refused.
+    ['null — the field is optional, never nullable', null],
+  ])('⚠ an errors[] entry with an instance that is %s is refused', (_name, badInstance) => {
+    expect(
+      parseSnapshot(
+        withField('errors', [{ source: 'llama-health', message: 'connect ECONNREFUSED', instance: badInstance }]),
+      ),
+    ).toBeNull();
+  });
+
+  test('⚠ the fixture round-trips with the key both present and absent in the same array', () => {
+    // Two entries, one instance-bearing and one not, prove the two shapes coexist in a
+    // single `errors[]` without either one contaminating the other.
+    const parsed = parseSnapshot(
+      withField('errors', [
+        { source: 'dbus', message: 'NoSuchUnit llama-server@1.service', instance: 1 },
+        { source: 'ufw', message: 'ENABLED= missing' },
+      ]),
+    );
+    expect(parsed?.snapshot.errors[0]?.instance).toBe(1);
+    expect(parsed?.snapshot.errors[1]?.instance).toBeUndefined();
+  });
+});
+
 describe('⚠ §3.3’s cooling union is validated, which is what a cast could never do', () => {
   const withCooling = (over: Record<string, unknown>): unknown => ({
     ...body(everythingZero),

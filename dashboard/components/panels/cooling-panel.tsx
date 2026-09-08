@@ -110,7 +110,17 @@ export function CoolingPanel({ state, nowMs, panelId }: PanelProps) {
   // session — `errorsForPanel`'s own doc names that hazard, and multi-entry-per-source is
   // routine (`collectCooling` accumulates a `problems: string[]` into one `tag('dell-smm', …)`).
   const dellSmmError = coolingErrors.findLast((e) => e.source === 'dell-smm')?.message ?? null;
-  const dbusError = coolingErrors.findLast((e) => e.source === 'dbus')?.message ?? null;
+  // ⚠ 10b-S-G's reconciliation (adversarial A2). `panelsForSource('dbus')` fans out to
+  // COOLING, SERVING and SAFETY, and an entry carrying an `instance` (§3.7) names ONE
+  // `llama-server` instance — a subject this panel has no row for. Without this filter the
+  // `fan service` row prints `llama-server@1.service: NoSuchUnit: systemd has no record`
+  // beside a healthy `gpu-fan-control.service`, which is F2's disease in a second panel:
+  // an explanation attached to a row it is not about. The entry is not lost — SERVING
+  // renders it on the row it names. An entry with NO instance still lands here, because
+  // that is either the bus-wide failure or `collectSafety`'s own per-unit one, which this
+  // field cannot yet tell apart (A8, recorded as open).
+  const dbusError =
+    coolingErrors.findLast((e) => e.source === 'dbus' && e.instance === undefined)?.message ?? null;
 
   const domain = chartDomainOf(state);
   const gpu0Trace = traceFor(state, (s) => s.gpus?.find((g) => g.index === 0)?.tempC ?? null);

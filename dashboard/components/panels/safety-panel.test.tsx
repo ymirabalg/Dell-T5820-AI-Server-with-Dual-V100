@@ -177,4 +177,25 @@ describe('⚠ §6.5 — a stale SAFETY row shows BOTH facts, and its last value'
     // §6.5's other half: the last confirmed value stands rather than blanking to an em dash.
     expect(row).toContain('active');
   });
+
+  test('⚠ 10b-S-G — a dbus entry naming an llama-server instance never explains the fan-service row', () => {
+    // SAFETY's `fan service` row is `gpu-fan-control.service` and nothing else. `dbus` reaches
+    // this panel, SERVING and COOLING alike, so before this filter the entry `collectServing`
+    // files when systemd has no record of `llama-server@1.service` was printed here, beside a
+    // healthy `active` value — an explanation attached to a row it is not about, which is F2
+    // exactly, in the panel §6.2 calls the one that earns this dashboard's existence
+    // (adversarial A2). SERVING still renders it, on the row it names.
+    const snapshot: TelemetrySnapshot = {
+      ...everythingZero,
+      errors: [
+        {
+          source: 'dbus',
+          message: 'llama-server@1.service: NoSuchUnit: systemd has no record',
+          instance: 1,
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(<SafetyPanel state={stateWith(snapshot)} nowMs={0} panelId="safety" />);
+    expect(html).not.toContain('llama-server@1.service');
+  });
 });

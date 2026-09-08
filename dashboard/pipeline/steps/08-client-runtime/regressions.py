@@ -583,6 +583,15 @@ REGRESSIONS = [
      WIRE_SRC,
      "  if (typeof rawSource !== 'string' || !Object.hasOwn(ERROR_SOURCES, rawSource)) return undefined;",
      "  if (typeof rawSource !== 'string') return undefined;", [WIRE]),
+    # 10b-S-G: `errors[].instance` is the contract's first OPTIONAL field, and the failure
+    # mode this field's validator exists to prevent is exactly this one — a present-but-wrong
+    # `instance` silently treated as though the key were never sent, which is a malformed
+    # snapshot from a real server passed off as an old, well-formed one.
+    ("10b-W1 an invalid errors[].instance is silently treated as absent, not refused",
+     WIRE_SRC,
+     "const optionalInteger = (source: Record<string, unknown>, key: string): number | typeof ABSENT | undefined =>\n  Object.hasOwn(source, key) ? integer(source[key]) : ABSENT;",
+     "const optionalInteger = (source: Record<string, unknown>, key: string): number | typeof ABSENT | undefined =>\n  Object.hasOwn(source, key) ? (integer(source[key]) ?? ABSENT) : ABSENT;",
+     [WIRE]),
     ("08-W9 a load average of any length is accepted",
      WIRE_SRC, "  if (!Array.isArray(value) || value.length !== 3) return undefined;",
      "  if (!Array.isArray(value) || value.length < 3) return undefined;", [WIRE]),

@@ -405,6 +405,15 @@ export interface CollectUnitStatesOptions {
   readonly paths?: CollectorPaths;
   /** The units to ask about. Discovered by the caller; never hard-coded here. */
   readonly units: readonly string[];
+  /**
+   * Which `ServingInstance.instance` each unit is about, if any (10b-S-G). Optional and
+   * absent by default: `collectSafety` asks about `FAN_SERVICE_UNIT` alone, which has no
+   * instance, and omits this entirely. `collectServing` is the caller that knows a mapping —
+   * `servingUnitName(i) → i` — and passes it so a per-unit `errors[]` entry can carry the
+   * instance it is about **structurally**, from the exact value the caller already used to
+   * build the unit name, never by re-reading the message this file writes.
+   */
+  readonly unitInstances?: ReadonlyMap<string, number>;
   /** O17's bound on the whole conversation. See {@link DBUS_TIMEOUT_MS}. */
   readonly timeoutMs?: number;
 }
@@ -444,11 +453,19 @@ const allUnknown = (units: readonly string[]): Map<string, UnitState | null> =>
  * the figure a dead bus explains is "the bus", not each row. A failure to read a *single*
  * unit is that unit's own entry, because the others are still readable and their rows are
  * still true.
+ *
+ * ⚠ **10b-S-G: a per-unit entry carries `unitInstances`'s instance for that unit; the
+ * bus-wide connect failure never does.** Every `problems.push` below moved inside the
+ * per-unit loop already has `unit` in scope, so the instance (if any) is looked up and
+ * attached at the exact point the message is built — never by re-parsing it afterwards. The
+ * one entry filed before the loop starts (the bus itself refused the connection) explains
+ * every requested unit at once, which is not one row's fact, so it carries no instance.
  */
 export const collectUnitStates = async ({
   dbus = nodeDbus,
   paths = DEFAULT_PATHS,
   units,
+  unitInstances,
   timeoutMs = DBUS_TIMEOUT_MS,
 }: CollectUnitStatesOptions): Promise<UnitStateCollection> => {
   const states = allUnknown(units);
@@ -464,13 +481,14 @@ export const collectUnitStates = async ({
     return { states, errors: tag('dbus', [`${socket}: ${reason(e)}`]) };
   }
 
-  const problems: string[] = [];
+  const errors: TelemetryError[] = [];
   try {
     const conversation = new Conversation(stream, within);
     await conversation.authenticate(dbus.uid());
     await sayHello(conversation);
 
     for (const unit of units) {
+      const instance = unitInstances?.get(unit);
       try {
         const found = await conversation.call(
           SYSTEMD_DESTINATION,
@@ -486,18 +504,24 @@ export const collectUnitStates = async ({
             // NO_SUCH_UNIT_ERROR — this is the one error reply that is a state, not a
             // failure to read one, and it is the state SAFETY's fan-service row exists for.
             states.set(unit, NO_SUCH_UNIT_STATE);
-            problems.push(
-              `${unit}: ${NO_SUCH_UNIT_ERROR}: ${detail} — systemd has no record of this unit, ` +
-                `which for a unit this box's own configuration declares is \`${NO_SUCH_UNIT_STATE}\``,
+            errors.push(
+              ...tag(
+                'dbus',
+                [
+                  `${unit}: ${NO_SUCH_UNIT_ERROR}: ${detail} — systemd has no record of this unit, ` +
+                    `which for a unit this box's own configuration declares is \`${NO_SUCH_UNIT_STATE}\``,
+                ],
+                instance,
+              ),
             );
             continue;
           }
-          problems.push(`${unit}: ${found.errorName ?? 'error'}: ${detail}`);
+          errors.push(...tag('dbus', [`${unit}: ${found.errorName ?? 'error'}: ${detail}`], instance));
           continue;
         }
         const objectPath = firstString(found);
         if (objectPath === null) {
-          problems.push(`${unit}: GetUnit answered without an object path`);
+          errors.push(...tag('dbus', [`${unit}: GetUnit answered without an object path`], instance));
           continue;
         }
         const property = await conversation.call(
@@ -508,17 +532,29 @@ export const collectUnitStates = async ({
           [SYSTEMD_UNIT_IFACE, ACTIVE_STATE_PROPERTY],
         );
         if (property.type === DBUS_MESSAGE_TYPE.error) {
-          problems.push(`${unit}: ${property.errorName ?? 'error'}: ${firstString(property) ?? 'no detail'}`);
+          errors.push(
+            ...tag(
+              'dbus',
+              [`${unit}: ${property.errorName ?? 'error'}: ${firstString(property) ?? 'no detail'}`],
+              instance,
+            ),
+          );
           continue;
         }
         const raw = firstString(property);
         const state = asUnitState(raw);
         if (state === null) {
           // §3.7's vocabulary is closed. An unmatched value is reported, never carried.
-          problems.push(
-            raw === null
-              ? `${unit}: ${ACTIVE_STATE_PROPERTY} came back empty`
-              : `${unit}: ${ACTIVE_STATE_PROPERTY} is \`${raw}\`, which is not one of systemd's six states`,
+          errors.push(
+            ...tag(
+              'dbus',
+              [
+                raw === null
+                  ? `${unit}: ${ACTIVE_STATE_PROPERTY} came back empty`
+                  : `${unit}: ${ACTIVE_STATE_PROPERTY} is \`${raw}\`, which is not one of systemd's six states`,
+              ],
+              instance,
+            ),
           );
           continue;
         }
@@ -527,15 +563,15 @@ export const collectUnitStates = async ({
         // A failure mid-conversation ends it: the stream framing is now at an unknown
         // offset, so the remaining units stay `null` rather than being read from a
         // desynchronised buffer.
-        problems.push(`${unit}: ${reason(e)}`);
+        errors.push(...tag('dbus', [`${unit}: ${reason(e)}`], instance));
         break;
       }
     }
   } catch (e) {
-    problems.push(`${socket}: ${reason(e)}`);
+    errors.push(...tag('dbus', [`${socket}: ${reason(e)}`]));
   } finally {
     stream.close();
   }
 
-  return { states, errors: tag('dbus', problems) };
+  return { states, errors };
 };

@@ -676,10 +676,38 @@ export interface Safety {
  *
  * `source` is drawn from §3.7's closed set so the UI can match an error to the figure it
  * explains (§6.5). `message` is free text for display.
+ *
+ * ⚠ **`instance` is OPTIONAL — the first optional member this contract has ever had — ruled
+ * 2026-09-08 (10b-S-G).** §6.5 requires that one `llama-server` instance's row show its own
+ * unit state and reason **while the other instance is unaffected**, a structural requirement.
+ * Before this field, `source` alone could not express *which row* an entry was about, so a
+ * panel could only guess by reading the message text for a unit name, an `<i>.env` path or a
+ * port — a heuristic that mis-attributes silently the moment a collector rewords a message
+ * (10b's finding F2: a fixture's `connect ECONNREFUSED 127.0.0.1:8081` rendered beside the
+ * *healthy* instance).
+ *
+ * **Absent means the entry concerns the panel, not one row** — most sources have no
+ * instance, and this is exactly how a subjectless entry already rendered. **This is unlike
+ * every other member of this contract**, which is `T | null` rather than `T | undefined`
+ * (`lib/types.test-d.ts`'s "no member of any contract type is declared optional" carries a
+ * named exception for this field alone): an old server that has never heard of `instance`
+ * omits the key entirely, and the field's own absence — not a `null` — is what makes an old
+ * server's snapshot still validate under a new client. The redeploy is required for the
+ * *feature* to work, never to avoid a refusal (SPEC.md §4).
+ *
+ * **Only a source that is produced inside a per-instance closure — one that already knows
+ * which `ServingInstance.instance` it is about — may set this.** `llama-env`, `llama-health`
+ * and `llama-models` always can, because `collectServing` reads and probes one instance at a
+ * time. `dbus` can, but only for the `llama-server@<i>` half of its fan-out — the same source
+ * also explains `gpu-fan-control.service`, which has no instance, and a bus-wide connect
+ * failure explains the whole conversation, not one row, so neither carries this field. No
+ * other source names an instance; inventing one where the collector cannot tell would be
+ * exactly the mistake this field exists to make impossible.
  */
 export interface TelemetryError {
   readonly source: ErrorSource;
   readonly message: string;
+  readonly instance?: number;
 }
 
 /**

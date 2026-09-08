@@ -21,9 +21,28 @@ import type { ErrorSource, TelemetryError } from '../types';
  *
  * §6.5 requires "matching an error to the figure it explains", which is the whole reason
  * `ErrorSource` is a closed set of eighteen names rather than a free string.
+ *
+ * ⚠ **`instance` (10b-S-G) is set on every message in the batch, or on none.** A caller
+ * with several messages about different instances calls this once per instance, never once
+ * for the batch — the same discipline `collectUnitStates` follows per unit. Omit it (the
+ * default) for a message that names no instance; passing `undefined` explicitly is the same
+ * as omitting it, never a way to attach "no instance" as a distinct value.
+ *
+ * ⚠ **That last sentence is true of THIS function and of nothing else** (adversarial A11,
+ * recorded 2026-09-08). `exactOptionalPropertyTypes` is off, so `instance?: number` admits
+ * `undefined` as a *value* and `{ ...base, instance: maybeUndefined }` — built anywhere but
+ * here — typechecks with the key **present**. `contract.test.ts` asserts
+ * `Object.hasOwn(entry, 'instance') === false` for an entry that names no instance, and that
+ * is a runtime guarantee the compiler does not carry: it holds today only because this
+ * function branches on `undefined` rather than spreading it, and because `JSON.stringify`
+ * drops an `undefined` value on the way out. Mint entries here.
  */
-export const tag = (source: ErrorSource, messages: readonly string[]): TelemetryError[] =>
-  messages.map((message) => ({ source, message }));
+export const tag = (
+  source: ErrorSource,
+  messages: readonly string[],
+  instance?: number,
+): TelemetryError[] =>
+  messages.map((message) => (instance === undefined ? { source, message } : { source, message, instance }));
 
 /**
  * Turn a rejected read into one message. `unknown` because a `catch` binding always is.

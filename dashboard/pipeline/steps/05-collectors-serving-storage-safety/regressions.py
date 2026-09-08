@@ -357,11 +357,21 @@ REGRESSIONS = [
      "            states.set(unit, NO_SUCH_UNIT_STATE);\n",
      "",
      [DBUS, SERVING]),
+    # ⚠ Re-aimed 2026-09-08 (10b-S-G build): the per-unit `problems.push(…)` accumulation
+    # became `errors.push(...tag('dbus', […], instance))` so a per-unit entry can carry the
+    # instance the caller's `unitInstances` map names. Same property, same mutation — an
+    # entry filed with no message at all — over the new shape.
     ("05-D2b the NoSuchUnit state is minted with no entry — an alarm nothing explains",
      DBUS_SRC,
-     """            problems.push(
-              `${unit}: ${NO_SUCH_UNIT_ERROR}: ${detail} — systemd has no record of this unit, ` +
-                `which for a unit this box's own configuration declares is \\`${NO_SUCH_UNIT_STATE}\\``,
+     """            errors.push(
+              ...tag(
+                'dbus',
+                [
+                  `${unit}: ${NO_SUCH_UNIT_ERROR}: ${detail} — systemd has no record of this unit, ` +
+                    `which for a unit this box's own configuration declares is \\`${NO_SUCH_UNIT_STATE}\\``,
+                ],
+                instance,
+              ),
             );
 """,
      "",
@@ -757,12 +767,38 @@ REGRESSIONS = [
      "    collectUnitStates({ dbus, paths, units: [FAN_SERVICE_UNIT], timeoutMs }),",
      "    collectUnitStates({ dbus, paths, units: [FAN_SERVICE_UNIT, 'llama-server@0.service'], timeoutMs }),",
      SAFETY),
+    # ⚠ 10b-S-G, added in TEST phase: `collectSafety`'s omission of `unitInstances` was
+    # enforced only by the author reading `safety.ts` — nothing failed if a future edit
+    # passed one. `gpu-fan-control.service` has no instance, so a caller that mapped it to
+    # one anyway would be WRONG, not merely absent. This mutation is the wrong edit that
+    # omission is meant to prevent.
+    ("10b-SF1 collectSafety attaches an instance to gpu-fan-control.service, which has none",
+     SAFETY_SRC,
+     "    collectUnitStates({ dbus, paths, units: [FAN_SERVICE_UNIT], timeoutMs }),",
+     "    collectUnitStates({ dbus, paths, units: [FAN_SERVICE_UNIT], unitInstances: new Map([[FAN_SERVICE_UNIT, 0]]), timeoutMs }),",
+     SAFETY),
 
     # ================================================== §3.4's wrapper
     ("05-V1 a directory that will not list becomes an EMPTY instance list, not `null`",
      SERVING_SRC,
      "    return { serving: null, errors: tag('llama-env', [`${dir}: ${reason(e)}`]) };",
      "    return { serving: [], errors: tag('llama-env', [`${dir}: ${reason(e)}`]) };",
+     SERVING),
+    # ⚠ 10b-S-G, added in the RECONCILIATION (adversarial A4). The build's "4 of 18 sources may
+    # carry an `instance`" enumeration lives in a document; the type cannot express it, `tag()`'s
+    # third parameter is on the SHARED minting helper, and `wire.ts` validates `source` and
+    # `instance` independently. `collectSafety`'s side was closed by `10b-SF1`; these two are the
+    # `llama-env` directory-level paths, whose entries are facts about the DIRECTORY. Each
+    # mutation is the plausible wrong edit — "helpfully" attaching the instance in scope.
+    ("10b-SG1 the readDir failure entry names instance 0, putting a directory-level fact on a row",
+     SERVING_SRC,
+     "    return { serving: null, errors: tag('llama-env', [`${dir}: ${reason(e)}`]) };",
+     "    return { serving: null, errors: tag('llama-env', [`${dir}: ${reason(e)}`], 0) };",
+     SERVING),
+    ("10b-SG2 a malformed-filename problem is stamped with the first discovered instance",
+     SERVING_SRC,
+     "  const errors: TelemetryError[] = [...tag('llama-env', found.problems.map((p) => `${dir}: ${p}`))];",
+     "  const errors: TelemetryError[] = [...tag('llama-env', found.problems.map((p) => `${dir}: ${p}`), found.value[0])];",
      SERVING),
     ("05-V2 an instance with no port is reported `unreachable` rather than NOT PROBED",
      SERVING_SRC,
@@ -789,10 +825,13 @@ REGRESSIONS = [
      "    unitState: units.states.get(servingUnitName(instance)) ?? null,",
      "    unitState: [...units.states.values()][0] ?? null,",
      SERVING),
+    # ⚠ Re-aimed 2026-09-08 (10b-S-G build): the call grew a `unitInstances` argument (the
+    # structural map `collectUnitStates` needs to attach `instance` to a per-unit `dbus`
+    # entry). Same property under test — O9's single read must not widen to a second unit.
     ("05-V7 collectServing also reads gpu-fan-control — O9's single read becomes two",
      SERVING_SRC,
-     "    collectUnitStates({ dbus, paths, units: instances.map(servingUnitName), timeoutMs: dbusTimeoutMs }),",
-     "    collectUnitStates({\n      dbus,\n      paths,\n      units: [...instances.map(servingUnitName), 'gpu-fan-control.service'],\n      timeoutMs: dbusTimeoutMs,\n    }),",
+     "    collectUnitStates({\n      dbus,\n      paths,\n      units: instances.map(servingUnitName),\n      unitInstances,\n      timeoutMs: dbusTimeoutMs,\n    }),",
+     "    collectUnitStates({\n      dbus,\n      paths,\n      units: [...instances.map(servingUnitName), 'gpu-fan-control.service'],\n      unitInstances,\n      timeoutMs: dbusTimeoutMs,\n    }),",
      SERVING),
     ("05-V8 env problems are filed against `llama-health`",
      SERVING_SRC,

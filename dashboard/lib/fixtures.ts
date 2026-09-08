@@ -246,11 +246,19 @@ export const servingInstances: readonly ServingInstance[] = [
   },
 ];
 
-/** A snapshot carrying {@link servingInstances}. §3.4 has no other runtime coverage. */
+/**
+ * A snapshot carrying {@link servingInstances}. §3.4 has no other runtime coverage.
+ *
+ * ⚠ **10b-S-G: the error now carries `instance: 1` structurally**, not merely a port number
+ * a panel used to have to find inside the message. This is the exact fixture 10b's finding
+ * F2 caught rendering beside the *healthy* instance 0 — `lib/collectors/serving.test.ts`
+ * asserts {@link collectServing} produces this same `instance` field from a live probe
+ * failure, so the fixture and the collector's real output cannot drift apart.
+ */
 export const servingPopulated: TelemetrySnapshot = {
   ...everythingZero,
   serving: servingInstances,
-  errors: [{ source: 'llama-health', message: 'connect ECONNREFUSED 127.0.0.1:8081' }],
+  errors: [{ source: 'llama-health', message: 'connect ECONNREFUSED 127.0.0.1:8081', instance: 1 }],
 };
 
 /**

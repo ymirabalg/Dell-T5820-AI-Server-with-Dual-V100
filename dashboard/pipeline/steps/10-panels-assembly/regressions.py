@@ -1117,6 +1117,37 @@ REGRESSIONS = [
      "const chip = severityRam(used, total) ?? severitySwap(swap);",
      [MEMORY_PANEL_TEST]),
 
+    # ================================== 10b-S-G's RECONCILIATION, 2026-09-08 (adversarial A1/A2/A5)
+    # Five mutations on the two things S-G left unguarded: the SECOND `namesInstance` call site
+    # (`unattributed`, which had none — deleting it left the whole suite green at 93 files /
+    # 2587 tests), and the two OTHER panels `panelsForSource('dbus')` reaches, which S-G taught
+    # nothing about `instance`.
+    ("10b-SG3 COOLING's fan-service row explains itself with a dbus entry about an llama-server instance",
+     COOLING_PANEL_SRC,
+     "    coolingErrors.findLast((e) => e.source === 'dbus' && e.instance === undefined)?.message ?? null;",
+     "    coolingErrors.findLast((e) => e.source === 'dbus')?.message ?? null;",
+     [COOLING_PANEL_TEST]),
+    ("10b-SG4 SAFETY's rows explain themselves with an entry that names an llama-server instance",
+     SAFETY_PANEL_SRC,
+     "    safetyErrors.findLast((e) => e.source === source && e.instance === undefined)?.message ?? null;",
+     "    safetyErrors.findLast((e) => e.source === source)?.message ?? null;",
+     [SAFETY_PANEL_TEST]),
+    ("10b-SG5 every attributed serving entry is ALSO printed as a panel-level note, so one fault reads as two",
+     SERVING_PANEL_SRC,
+     "  const unattributed = servingErrors.filter(\n    (e) => !(instances ?? []).some((instance) => namesInstance(e, instance)),\n  );",
+     "  const unattributed = servingErrors;",
+     [SERVING_PANEL_TEST]),
+    ("10b-SG6 the panel-level note is dropped, so an entry that names no row on this page renders nowhere",
+     SERVING_PANEL_SRC,
+     "  const unattributed = servingErrors.filter(\n    (e) => !(instances ?? []).some((instance) => namesInstance(e, instance)),\n  );",
+     "  const unattributed = servingErrors.filter(() => false);",
+     [SERVING_PANEL_TEST]),
+    ("10b-SG7 the serving: null / serving: [] takeover swallows the entries that explain WHY nothing was enumerated",
+     SERVING_PANEL_SRC,
+     "          {servingErrors.map((e) => (",
+     "          {[].map((e: TelemetryError) => (",
+     [SERVING_PANEL_TEST]),
+
 ]
 
 # ---------------------------------------------------------------------------

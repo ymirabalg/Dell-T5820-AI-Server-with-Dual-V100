@@ -64,8 +64,15 @@ export function SafetyPanel({ state, nowMs }: PanelProps) {
   // ⚠ LAST, not first — `lib/client/events.ts:400` keys a `Map` by source, so the log shows the
   // last message a source filed. A panel reading the first shows a different sentence for the
   // same fault in the same session (10b-reconcile, adversarial F10).
+  // ⚠ 10b-S-G's reconciliation (adversarial A2): an entry carrying an `instance` (§3.7)
+  // names one `llama-server` instance, and this panel has no row for that subject — `dbus`
+  // reaches all three of COOLING/SERVING/SAFETY, so without this the `fan service` row
+  // prints `llama-server@1.service: NoSuchUnit` beside a healthy `gpu-fan-control.service`.
+  // Nothing is lost: SERVING renders it on the row it names. A `dbus` entry with NO
+  // instance still lands here — bus-wide and `collectSafety`'s per-unit failure are not yet
+  // distinguishable (A8, recorded as open).
   const messageFor = (source: string): string | null =>
-    safetyErrors.findLast((e) => e.source === source)?.message ?? null;
+    safetyErrors.findLast((e) => e.source === source && e.instance === undefined)?.message ?? null;
 
   const fanServiceCondition = findDisplayed(state.displayed, conditionId('unit', FAN_SERVICE_UNIT));
   const fanServiceAge = staleAgeNote(fanServiceCondition, nowMs);

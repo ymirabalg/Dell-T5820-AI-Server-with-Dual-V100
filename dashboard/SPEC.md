@@ -549,9 +549,13 @@ collector rewords a message, because a substring match cannot fail loudly. An en
 one instance now names it. It is **optional**: most sources have no instance, and an absent field
 means the entry concerns the panel rather than one row.
 
-⚠ **This is a §4 WIRE CHANGE**, the second in this project after O19's `GB`→`GiB`. An old server
-against a new client yields a snapshot the browser refuses, so the box is redeployed in the same
-change — and the deploy is already scheduled for step 10's completion.
+⚠ **This is a §4 wire change, and it is NOT O19's kind.** O19 renamed a field, so an old server
+produced a snapshot the new client refused. `instance` is **added and optional**, so an old
+server's snapshot still validates and simply carries no instance — every entry then falls back to
+the panel-level rendering, which is the same behaviour as a source that genuinely has no subject.
+**The redeploy is required for the feature to work, not to avoid a refusal**, and that distinction
+matters: it means this change can land ahead of the deploy without breaking the running box, which
+O19 could not. The deploy is already scheduled for step 10's completion.
 
 **`errors[].source`** — a **closed vocabulary**, because §6.5 requires matching an error to
 the figure it explains: `nvidia-smi`, `coretemp`, `proc-stat`, `proc-meminfo`,

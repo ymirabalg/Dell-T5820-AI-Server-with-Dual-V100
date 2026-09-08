@@ -410,6 +410,26 @@ describe('collectSafety', () => {
     expect(result.errors.filter((e) => e.source === 'dbus')).toHaveLength(1);
   });
 
+  /*
+   * ⚠ 10b-S-G: `collectServing` builds a `unitInstances` map because it is the one place
+   * that knows the unit-to-instance pairing; `collectSafety` calls the SAME
+   * `collectUnitStates` over the SAME dbus path but must never pass one, because
+   * `gpu-fan-control.service` has no instance. Before this build the omission was
+   * enforceable only by reading `safety.ts` and trusting the author — no assertion here
+   * ever looked at `.instance` on a SAFETY error. Drives a genuine PER-UNIT dbus failure
+   * (an `ActiveState` outside the six values dbus.ts's own vocabulary allows, §3.7) through
+   * the real `collectSafety` call site, which is the one path that would carry a wrongly
+   * attached instance if `unitInstances` were ever added there by mistake.
+   */
+  test('⚠ 10b-S-G — a per-unit dbus failure for the fan service never carries an instance', async () => {
+    const result = await collectSafety({ io: healthyIo(), dbus: fakeDbus('zombie') });
+    const dbusErrors = result.errors.filter((e) => e.source === 'dbus');
+    expect(dbusErrors).toHaveLength(1);
+    expect(dbusErrors[0]?.message).toContain(FAN_SERVICE_UNIT);
+    expect(dbusErrors[0]?.instance).toBeUndefined();
+    expect(Object.hasOwn(dbusErrors[0] as object, 'instance')).toBe(false);
+  });
+
   test('⚠ exactly one unit is asked about, and it is `gpu-fan-control.service` (O9)', async () => {
     // O9 makes `cooling.serviceState` and `safety.fanServiceState` ONE read rendered in
     // two panels. `collectServing` opens its own connection and deliberately does not ask

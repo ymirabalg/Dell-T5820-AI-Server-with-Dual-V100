@@ -120,6 +120,9 @@ describe('the contract has no optional members', () => {
    * `field?: number` is not the same promise as `field: number | null`. An optional field
    * disappears from `JSON.stringify` output entirely, so the client cannot tell
    * "unreadable" from "this server never sent it". Absence is spelled `null`.
+   *
+   * ⚠ **`TelemetryError` is the ONE deliberate exception, ruled 2026-09-08 (10b-S-G)** — see
+   * the census below. Every other type in this list still proves the rule.
    */
   test('no member of any contract type is declared optional', () => {
     type NoOptionalProperties = [
@@ -134,7 +137,6 @@ describe('the contract has no optional members', () => {
       Assert<Equals<OptionalKeys<Network>, never>>,
       Assert<Equals<OptionalKeys<Storage>, never>>,
       Assert<Equals<OptionalKeys<Safety>, never>>,
-      Assert<Equals<OptionalKeys<TelemetryError>, never>>,
       Assert<Equals<OptionalKeys<TelemetrySnapshot>, never>>,
       Assert<Equals<OptionalKeys<ThrottleReason>, never>>,
     ];
@@ -146,6 +148,8 @@ describe('the contract has no optional members', () => {
    * census and the nullability census, and `JSON.stringify` then omits the key: the client
    * reads `undefined`, §6.6's `null → —` branch never runs, and the figure renders blank —
    * which is precisely what §6.6 forbids ("never `0`, never blank, never `N/A`").
+   *
+   * ⚠ `TelemetryError` is excluded here for the same 10b-S-G reason as above.
    */
   test('no member of any contract type admits undefined', () => {
     type NoUndefinedProperties = [
@@ -160,11 +164,26 @@ describe('the contract has no optional members', () => {
       Assert<Equals<UndefinedKeys<Network>, never>>,
       Assert<Equals<UndefinedKeys<Storage>, never>>,
       Assert<Equals<UndefinedKeys<Safety>, never>>,
-      Assert<Equals<UndefinedKeys<TelemetryError>, never>>,
       Assert<Equals<UndefinedKeys<TelemetrySnapshot>, never>>,
       Assert<Equals<UndefinedKeys<ThrottleReason>, never>>,
     ];
     expectTypeOf<NoUndefinedProperties>().toBeArray();
+  });
+
+  /*
+   * ⚠ **10b-S-G: `TelemetryError.instance` is the contract's first genuinely OPTIONAL
+   * field.** SPEC.md §4: "`instance` is added and optional … an old server's snapshot still
+   * validates; it simply carries no instance." An old server has never heard of this field
+   * and omits the key outright — not `null`, which would still require every server to know
+   * to send it — so `?:` is the correct spelling here for the one time this contract needs
+   * "maybe this key exists at all" rather than "this key exists and may be unreadable".
+   */
+  test('⚠ the one exception: TelemetryError.instance is genuinely optional', () => {
+    type TelemetryErrorIsOptionalOnlyInInstance = [
+      Assert<Equals<OptionalKeys<TelemetryError>, 'instance'>>,
+      Assert<Equals<UndefinedKeys<TelemetryError>, 'instance'>>,
+    ];
+    expectTypeOf<TelemetryErrorIsOptionalOnlyInInstance>().toBeArray();
   });
 });
 
@@ -208,8 +227,12 @@ describe('the nullability census', () => {
       Assert<Equals<NonNullableKeys<Storage>, 'root' | 'home' | 'net'>>,
       Assert<Equals<NonNullableKeys<Safety>, never>>,
 
-      // An error entry that could not say what failed would be useless.
-      Assert<Equals<NonNullableKeys<TelemetryError>, 'source' | 'message'>>,
+      // An error entry that could not say what failed would be useless. `instance` joins
+      // this census too (10b-S-G) — it is `number | undefined`, never `number | null`, so
+      // `null` is not one of its legal values even though the key may be absent entirely.
+      // "Admits `null`" and "may be absent" are different questions, and `instance` answers
+      // them differently — that is exactly why it needs its own dedicated census above.
+      Assert<Equals<NonNullableKeys<TelemetryError>, 'source' | 'message' | 'instance'>>,
 
       // `hostname`, `gpus` and `serving` are the nullable members of the snapshot;
       // `ts`, the four containers, `errors` and `standing` are not. ⚠ `standing` is on this
@@ -419,6 +442,8 @@ describe('the field census', () => {
       // a stable id.
       Assert<Equals<TelemetryError['source'], ErrorSource>>,
       Assert<Equals<TelemetryError['message'], string>>,
+      // 10b-S-G. `| undefined`, never `| null` — see the dedicated optional-field census.
+      Assert<Equals<TelemetryError['instance'], number | undefined>>,
     ];
     expectTypeOf<SnapshotFields>().toBeArray();
   });
