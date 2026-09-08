@@ -63,9 +63,10 @@ permission classifier in this environment and was refused once before the owner 
 | steps 1–8 | closed. **710** mutations across seven harnesses, every one biting (was 705; Q1 added four) |
 | step 9 | **closed** — build → test → adversarial → reconcile, 25 findings adjudicated |
 | **Q1** | **closed 2026-09-07** — the ledger scanner, seven findings adjudicated. §2.2 |
-| suite | **67 files · 2210 tests · `pnpm verify` exit 0 · `pnpm build` clean** |
-| step 9's harness | 61 mutations, ledger clean over 67 ⚠ marks |
-| all eight harnesses | **771 mutations · 689 ⚠ marks · every harness exit 0** (Q1, 2026-09-07) |
+| **Q2** | **closed 2026-09-08** — §6.2's hover layer + table view, 13 findings adjudicated. §2.2 |
+| suite | **67 files · 2258 tests · `pnpm verify` exit 0** (Q2, 2026-09-08; was 2210 after Q1) |
+| step 9's harness | **93** mutations (32 of them `Q2-`), ledger clean over **103** ⚠ marks |
+| all eight harnesses | **803 mutations · every harness exit 0** — 710 across steps 2–8 (unchanged since Q1) plus the `components/` harness's 93 |
 | the box | **running the backend natively**, see §2.1 |
 
 ### 2.1 ⚠ The backend is DEPLOYED and running on `ai-server` right now
@@ -86,15 +87,37 @@ tree**, or you ship whatever an agent happens to be mid-edit on. Full account in
 
 ⚠ The deployed password is `dashboard1`, set for testing. Step 11 replaces it properly.
 
-### 2.2 ⚠ What to do next — **Q2**, then step 10. `pipeline/WORK-ITEMS.md` §10 is the queue
+### 2.2 ⚠ What to do next — **step 10**. `pipeline/WORK-ITEMS.md` §10 is the queue
 
 **Q1 is CLOSED, 2026-09-07** — build → test → adversarial → reconcile, seven findings adjudicated
 (six accepted, one deferred, none rejected). See
 `pipeline/steps/Q1-ledger-scanner/reconciliation.md`.
 
-**Next is Q2**: §6.2 now requires a hover layer and a table view; step 9's primitives have
-neither, because the build ran before the spec was amended (WORK-ITEMS §10.2). It is new build
-work and wants its own loop. **Then step 10.**
+**Q2 is CLOSED, 2026-09-08** — build → test → adversarial → reconcile, **13 findings adjudicated
+(ten accepted, two rejected, one split accept/defer)**, plus the parent's review. §6.2's hover
+layer and table view now exist on both chart primitives. See
+`pipeline/steps/Q2-hover-and-table/reconciliation.md`; the suite is **67 files · 2258 tests** and
+the `components/` harness is **93 mutations · 103 ⚠ marks**, 32 of them `Q2-`.
+
+⚠ **Q2 handed up two SPEC QUESTIONS the owner has to answer, and step 10 is blocked on the
+second of them** (`reconciliation.md` §4):
+
+- **Q2-S1** — §6.2's "per-mark tooltip on bars and dots" is **entirely unmet, not partially**.
+  The crosshair layer tiles the plot at `pointer-events: all` and is painted last, so it shadows
+  every mark's own `<title>`; the two requirements are in structural tension on a line chart.
+  `build.md` §7 recorded this as partially satisfied and has been corrected.
+- **Q2-S2** — the table view has **no height bound**: ~722 `<tr>` at the default 30-minute
+  window and 1,202 at 120 minutes, in a fixed grid cell, against §6.1's no-scroll promise. §6.2's
+  own justification ("they cost nothing when unused") is true of the tooltip and silent about the
+  table. The three fixes — cap rows, decimate again, scroll in the panel — each trade against a
+  different part of the spec, so it needs §6.1 or §6.2 reworded before step 10 implements it.
+
+**Next is step 10** (panels & assembly): the nine panels, header controls, banner, grid and
+breakpoints. It is the first phase to write a real caller for the primitives, which is where
+`Sparkline`'s three now-REQUIRED props (`ariaLabel`, `formatValue`, `formatTime`) and the
+chart's `view` prop get their first exercise. It also owns F9's deferred half — a caller must
+supply a domain containing the points it passes; `traceFor` does, and the component neither
+requires nor checks it.
 
 #### What Q1 turned out to be, for the record
 

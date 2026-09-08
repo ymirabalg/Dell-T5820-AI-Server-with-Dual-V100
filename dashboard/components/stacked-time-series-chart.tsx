@@ -17,11 +17,15 @@
  *
  * ### Never formats a number
  *
- * This file imports nothing from `lib/format.ts` and does not call `Intl` or `toFixed`
- * anywhere. Every axis label — a y-tick's value, a time tick, a series' end-of-line value —
- * is produced by a caller-supplied formatter (`ChartPlot.formatTick`,
- * `StackedTimeSeriesChartProps.formatTime`, `ChartSeries.endLabel`), so the chart is
- * generic over what unit it is drawing.
+ * This file imports exactly one thing from `lib/format.ts`: {@link EM_DASH}, the fixed
+ * null-marker invariant 1 requires — never a formatter, and never `Intl` or `toFixed`
+ * called directly. Every UNIT-BEARING label — a y-tick's value, a time tick, a series'
+ * end-of-line value, a hover tooltip's or table cell's reading — is produced by a
+ * caller-supplied formatter (`ChartPlot.formatTick`, `StackedTimeSeriesChartProps.formatTime`,
+ * `ChartSeries.endLabel`), so the chart stays generic over what unit it is drawing.
+ * `formatTick` is called only on a **readable** number; a `null` reading renders `EM_DASH`
+ * without ever reaching it, exactly as `formatTick` is already used for axis ticks (which are
+ * never `null`).
  *
  * ### ⚠ Hatched gaps come from `gaps`, never from holes in a series
  *
@@ -44,24 +48,75 @@
  * viewBox — §6.3's 14,451 RPM ("the early warning for the condition that once hung POST")
  * is the reading that must never be silently clipped.
  *
- * ### ⚠ What this is NOT — and what it still OWES
+ * ### ⚠ Q2 — the hover layer and the table view, both CSS/SVG-native, no hook
  *
- * No hover layer, no crosshair, no tooltip, and no table view. **That is a gap, not a
- * decision**: `SPEC.md` §6.2 (amended 2026-09-07) says in as many words that the earlier
- * silence about them *"made the silence read as a prohibition — **it was not one**"*, that
- * they are **defaults rather than requests**, and that *"the table view is an accessibility
- * floor, not a convenience"*; §9's *Chart interaction* row repeats it. They remain outside
- * §6.2's four dashboard controls, which is a statement about the *controls*, not a refusal.
- * The step-9 handoff §5 predates that amendment and its "do not invent an interaction the
- * spec does not ask for" no longer applies to these two — where the handoff disagrees with
- * `SPEC.md`, the spec wins. Step 9's scope was the primitives; **the hover layer and the
- * table view are owed work, recorded for step 10** (see
- * `pipeline/steps/09-ui-primitives/reconciliation.md`, finding H2). Do not read this file's
- * silence as the question having been settled.
+ * `SPEC.md` §6.2 (amended 2026-09-07, per §9's *Chart interaction* row) makes both **defaults
+ * rather than requests**: "a crosshair + tooltip on a line or area plot … and a table view so
+ * the numbers are reachable without reading pixels." `components/purity.test.ts` forbids
+ * every React hook in this directory, so neither is built the way a typical chart library
+ * would — no `pointermove` handler, no hover-position state, no `useId`. Both are expressed as
+ * **props plus markup**, and the view TOGGLE is the caller's state (`view`, a prop — see
+ * `StackedTimeSeriesChartProps.view`), matching the sparkline's own "a primitive that picked
+ * its own size would be deciding layout from a leaf" reasoning one level up: a primitive that
+ * owned its own view toggle would be deciding page behaviour from a leaf the same way.
+ *
+ * **The crosshair is CSS-only, using an adjacent-sibling reveal.** For every distinct instant
+ * any series has a point at, a transparent, full-height `<rect class="hoverZone">` sits over
+ * that instant's pixel span (bounded by the midpoints to its neighbours — a Voronoi partition
+ * of the x-axis, so whichever zone the pointer is over IS the nearest data position, with no
+ * JS computing "nearest"). Immediately after it in the same `<g>`, an adjacent
+ * `<g class="crosshairGroup">` holds the vertical line; `.hoverZone:hover + .crosshairGroup`
+ * reveals it. No id, no `useState`, no listener — CSS does the entire "snap to nearest"
+ * behaviour through the geometry of the zones themselves.
+ *
+ * **The tooltip is a native SVG `<title>`**, a child of the same `<rect>`, listing the
+ * instant and every series' reading AT THAT EXACT `tMs` — never a nearest-neighbour guess
+ * across series. A series with no point at that instant renders `EM_DASH` in the tooltip
+ * rather than borrowing a neighbour's value and mislabelling it with a timestamp it was not
+ * read at (invariant 1, extended across series). The same `<title>` treatment is on the two
+ * discrete marks the chart already draws — a lone-point run's dot and an end-label's dot.
+ *
+ * ⚠ **Those two mark titles are OCCLUDED, and §6.2's "per-mark tooltip on bars and dots" is
+ * NOT delivered by them.** The hover layer is painted LAST and its rects carry
+ * `pointer-events: all` across the whole plot body, so SVG hit-testing hands the pointer to the
+ * zone, never to the circle beneath it. The only reachable remnant is the ~2.5px crescent of
+ * the end dot that protrudes past `plotWidth`. The titles are kept because the markup is
+ * correct and becomes reachable again if paint order ever changes — but what a user actually
+ * reads at a mark is the hover column's tooltip, which carries the same instant and every
+ * series' value at it. §6.2's bar/dot clause is an OPEN SPEC QUESTION (Q2 reconciliation, F2):
+ * `components/` has no bar or dot CHART TYPE to attach it to (Meter is a single
+ * already-labelled bar, not a per-mark series), and on a line chart a full-body crosshair layer
+ * necessarily shadows the marks it covers — the two requirements are in tension.
+ *
+ * **Cost, stated per §6.7's per-series budget:** in the case every real caller in this project
+ * produces — every series in one chart sharing a single sample clock (`state.ring`) — the
+ * distinct-instant count is bounded by max(series length) ≈ 600, not 600×N. In the adversarial
+ * case (independently decimated series whose buckets never land on the same instant), it is
+ * bounded above by 600×N, and the hover layer costs one `<rect>` + one `<title>` + one `<line>`
+ * per instant — linear, not quadratic, and still small next to the chart's own point count at
+ * that N. See the build notes for the full worked figures.
+ *
+ * **The table view renders ONE `<table>` per plot**, not one merged table across plots: a
+ * merged table would put two different units in adjacent cells of one row, which is the same
+ * mistake §9 already rejects for a chart's y-axis ("never a dual y-axis on one plot") one level
+ * removed — one table, one scale. Cell text reuses the SAME `formatTick`/`formatTime` as the
+ * chart (§6.6: use `lib/format.ts`'s formatters via the caller, never a component's own). A
+ * `null` reading renders `EM_DASH`, matching the chart's broken polyline. **Gaps get their own
+ * row**, spanning every column, so a table reader learns time passed with nothing sampled
+ * rather than seeing two readings sit on adjacent lines as if nothing happened between them —
+ * the tabular equivalent of the hatched rectangle §6.7 requires in the chart.
+ *
+ * ⚠ **Keyboard/AT parity is intentionally NOT via making 600 hover zones focusable.** Tabbing
+ * through hundreds of stops to read one chart is worse than the table view it exists beside;
+ * dataviz's "same details on keyboard focus as on hover" is honoured by the table view being a
+ * full, always-available substitute for every value the hover layer can show — not by cloning
+ * the hover interaction onto a focus ring. Recorded as a decision, not an oversight — see the
+ * build notes.
  */
 
 import { Fragment } from 'react';
 
+import { EM_DASH } from '@/lib/format';
 import type { Gap } from '@/lib/client/gaps';
 import type { SeriesPoint } from '@/lib/client/series';
 
@@ -116,6 +171,13 @@ export interface StackedTimeSeriesChartProps {
   readonly formatTime: (ms: number) => string;
   readonly width?: number;
   readonly plotHeight?: number;
+  /**
+   * §6.2's chart/table default — a PROP, not internal state (`purity.test.ts` forbids the
+   * hook a self-toggling primitive would need). `'chart'` is the default so an existing
+   * caller that never sets this keeps drawing exactly what it drew before Q2. The stateful
+   * owner of the actual toggle control is step 10's, per the handoff.
+   */
+  readonly view?: 'chart' | 'table';
 }
 
 const AXIS_HEIGHT = 20;
@@ -273,6 +335,256 @@ const spaceApart = (ys: readonly number[], minGap: number, maxY: number): readon
   return out;
 };
 
+// ---------------------------------------------------------------------------
+// Q2 — hover layer helpers
+// ---------------------------------------------------------------------------
+
+/** `tMs -> v` for one series, so a hover lookup at an arbitrary instant is O(1) rather than
+ * an O(points) scan repeated once per hover column. */
+const pointMapFor = (points: readonly SeriesPoint[]): Map<number, number | null> => {
+  const m = new Map<number, number | null>();
+  for (const p of points) m.set(p.tMs, p.v);
+  return m;
+};
+
+/**
+ * Every distinct instant ANY series across ANY plot has a point at, ascending.
+ *
+ * ⚠ §6.7's per-series budget means this can reach 600 × (total series across every plot) in
+ * the adversarial case where no two series' decimation lands on the same instant. In the case
+ * every caller in this project actually produces — every series drawn from one poll of
+ * `state.ring` — the series share a sample clock and this collapses to ~600. See the module
+ * doc's cost note.
+ */
+const hoverInstantsFor = (plots: readonly ChartPlot[]): readonly number[] => {
+  const set = new Set<number>();
+  for (const plot of plots) {
+    for (const s of plot.series) {
+      for (const p of s.points) set.add(p.tMs);
+    }
+  }
+  return Array.from(set).sort((a, b) => a - b);
+};
+
+interface HoverColumn {
+  readonly atMs: number;
+  readonly x: number;
+  readonly xStart: number;
+  readonly xEnd: number;
+}
+
+/**
+ * A 1-D partition of `[0, plotWidth]` by nearest instant — each column's bounds sit at the
+ * midpoint to its neighbours, so whichever `<rect>` the pointer lands on IS the nearest data
+ * position. This is what lets "the crosshair … snaps to the nearest data position" (dataviz)
+ * happen with no JS computing a nearest-neighbour: the geometry already encodes it.
+ */
+const hoverColumnsFor = (
+  instants: readonly number[],
+  xFor: (tMs: number) => number,
+  plotWidth: number,
+): readonly HoverColumn[] =>
+  instants
+    .map((atMs, i) => {
+      const x = xFor(atMs);
+      const prev = instants[i - 1];
+      const next = instants[i + 1];
+      const xStart = prev === undefined ? 0 : (xFor(prev) + x) / 2;
+      const xEnd = next === undefined ? plotWidth : (x + xFor(next)) / 2;
+      return { atMs, x, xStart: clamp(xStart, 0, plotWidth), xEnd: clamp(xEnd, 0, plotWidth) };
+    })
+    // ⚠ `xFor` CLAMPS, so two instants that both fall outside the domain collapse onto the
+    // same edge and yield xStart === xEnd — a zero-width, unhoverable `<rect>` that still
+    // emits its own crosshair `<g>`. Every count assertion (`hoverZoneCount === crosshairCount`)
+    // is satisfied by such dead nodes, which is exactly why they must not be emitted. This does
+    // NOT make the component safe against a domain that excludes its own points — the last
+    // out-of-domain instant still owns the span up to the first in-domain midpoint (Q2
+    // reconciliation, F9, deferred to step 10): the caller must supply a domain containing the
+    // points it passes, as `traceFor` does by windowing the ring before decimating.
+    .filter((col) => col.xEnd > col.xStart);
+
+/**
+ * The native `<title>` text for one hover column — every plot's every series, at exactly
+ * `atMs`. A series with no point at that instant renders {@link EM_DASH} rather than a
+ * neighbouring reading wearing a timestamp it was not read at (invariant 1, extended across
+ * series — see the module doc).
+ */
+const hoverTooltipFor = (
+  plots: readonly ChartPlot[],
+  maps: readonly (readonly Map<number, number | null>[])[],
+  atMs: number,
+  formatTime: (ms: number) => string,
+): string => {
+  const lines = [formatTime(atMs)];
+  plots.forEach((plot, plotIndex) => {
+    plot.series.forEach((s, seriesIndex) => {
+      const v = maps[plotIndex]?.[seriesIndex]?.get(atMs);
+      // ⚠ `Number.isFinite` matches the CHART path's own guard (`runsOf`, `yDomainOf`): a
+      // NaN reaching this chart from a caller's derived `pick` (a rate, a ratio over a zero
+      // denominator) is a silent BREAK in the polyline, so it must not be a printed
+      // `NaN °C` in the tooltip beside it. Written as one positive test rather than three
+      // negative clauses, since `Number.isFinite` already rejects `null` and `undefined`
+      // and a redundant clause is a mutation nothing can distinguish.
+      lines.push(`${s.label}: ${typeof v === 'number' && Number.isFinite(v) ? plot.formatTick(v) : EM_DASH}`);
+    });
+  });
+  return lines.join('\n');
+};
+
+// ---------------------------------------------------------------------------
+// Q2 — table view
+// ---------------------------------------------------------------------------
+
+interface SampleRow {
+  readonly kind: 'sample';
+  readonly sortMs: number;
+  readonly tMs: number;
+  readonly cells: readonly string[];
+}
+
+interface GapRow {
+  readonly kind: 'gap';
+  readonly sortMs: number;
+  readonly reason: Gap['reason'];
+  readonly fromMs: number;
+  readonly toMs: number | null;
+}
+
+type TableRow = SampleRow | GapRow;
+
+/**
+ * One plot's table rows: every distinct instant its OWN series report, formatted through
+ * `plot.formatTick` exactly as the chart's axis and tooltip are — plus a gap row wherever a
+ * hatch would be drawn, spanning every column, so a table reader learns time passed with
+ * nothing sampled rather than reading two rows as if they were adjacent polls.
+ */
+const tableRowsFor = (
+  plot: ChartPlot,
+  gaps: readonly Gap[],
+  domainStartMs: number,
+  domainEndMs: number,
+): readonly TableRow[] => {
+  const maps = plot.series.map((s) => pointMapFor(s.points));
+  const instants = Array.from(new Set(plot.series.flatMap((s) => s.points.map((p) => p.tMs))));
+  instants.sort((a, b) => a - b);
+
+  const sampleRows: TableRow[] = instants.map((tMs) => ({
+    kind: 'sample',
+    sortMs: tMs,
+    tMs,
+    cells: maps.map((m) => {
+      const v = m.get(tMs);
+      // ⚠ Same guard as the tooltip's, for the same reason — see `hoverTooltipFor`.
+      return typeof v === 'number' && Number.isFinite(v) ? plot.formatTick(v) : EM_DASH;
+    }),
+  }));
+
+  // ⚠ The SAME two filters the chart branch applies to its hatch rectangles, and they must
+  // stay the same two: `lib/client/runtime.ts` prunes gaps against `LONGEST_WINDOW_MS`
+  // (120 min) while the selectable window is 10/30/120 min, so `gaps` legitimately holds
+  // entries up to 110 minutes older than a default 30-minute domain. Without this the table
+  // view claims a gap the chart correctly does not hatch, at two times that are not on the
+  // axis — the table asserting MORE than the chart, which is the inverse of the symmetry the
+  // sparkline's missing gap column is argued from. (Q2 reconciliation, F5/F5a.)
+  const gapRows: TableRow[] = gaps
+    .filter((g) => {
+      const toMs = g.toMs ?? domainEndMs;
+      if (toMs < g.fromMs) return false;
+      return toMs >= domainStartMs && g.fromMs <= domainEndMs;
+    })
+    .map((g) => ({
+      kind: 'gap',
+      sortMs: g.fromMs,
+      reason: g.reason,
+      fromMs: g.fromMs,
+      toMs: g.toMs,
+    }));
+
+  return [...sampleRows, ...gapRows].sort((a, b) => a.sortMs - b.sortMs);
+};
+
+/**
+ * §6.2's table view — one `<table>` per plot (see the module doc for why not one merged
+ * table). A pure function of the same props the chart branch reads; not exported, since the
+ * `view` prop on {@link StackedTimeSeriesChart} is the only public entry point.
+ */
+function ChartTableView({
+  ariaLabel,
+  plots,
+  gaps,
+  domainStartMs,
+  domainEndMs,
+  formatTime,
+}: Pick<
+  StackedTimeSeriesChartProps,
+  'ariaLabel' | 'plots' | 'gaps' | 'domainStartMs' | 'domainEndMs' | 'formatTime'
+>) {
+  if (plots.length === 0) {
+    return <p className={styles.tableEmpty}>{ariaLabel} — no time range to plot</p>;
+  }
+
+  return (
+    <div className={styles.tableView} role="group" aria-label={ariaLabel} data-role="table-view">
+      {plots.map((plot) => {
+        const rows = tableRowsFor(plot, gaps, domainStartMs, domainEndMs);
+        return (
+          <table key={plot.id} className={styles.table} data-role="plot-table">
+            <caption className="sr-only">{plot.series.map((s) => s.label).join(', ')}</caption>
+            <thead>
+              <tr>
+                <th scope="col">time</th>
+                {plot.series.map((s) => (
+                  <th scope="col" key={s.id}>
+                    {s.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {/* ⚠ `plots.length === 0` is the empty case a caller essentially never produces —
+                  COOLING always passes its two `ChartPlot`s. The one it DOES produce is a plot
+                  whose series reported nothing for the whole window (a collector failing
+                  throughout, §6.5's degraded state), and that used to render a header row over
+                  an empty `<tbody>`: silence, with no `—` and no sentence, where the sparkline
+                  says so in words. (Q2 reconciliation, F7.) */}
+              {rows.length === 0 && (
+                <tr data-role="empty-row">
+                  <td colSpan={plot.series.length + 1}>no readings in the selected window</td>
+                </tr>
+              )}
+              {rows.map((row) =>
+                row.kind === 'gap' ? (
+                  <tr key={`gap-${row.fromMs}`} className={styles.gapRow} data-role="gap-row">
+                    <td colSpan={plot.series.length + 1}>
+                      {`gap (${row.reason}) — ${formatTime(row.fromMs)} to `}
+                      {row.toMs === null ? 'ongoing' : formatTime(row.toMs)}
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={row.tMs}>
+                    {/* ⚠ A row HEADER, not a data cell: a screen reader arrowing across a row
+                        announces the column header plus the cell, so with a plain `<td>` here a
+                        reading is announced as "GPU 0, 66 °C" with no way to learn WHICH of the
+                        several hundred instants it belongs to without arrowing back to column 1.
+                        The chart's crosshair binds a reading to its instant; this is how the
+                        table — which §6.2 makes the accessibility floor, and which this build
+                        leans on in place of keyboard parity — binds the same two together.
+                        (Q2 reconciliation, F4.) */}
+                    <th scope="row">{formatTime(row.tMs)}</th>
+                    {row.cells.map((c, i) => (
+                      <td key={plot.series[i]?.id ?? i}>{c}</td>
+                    ))}
+                  </tr>
+                ),
+              )}
+            </tbody>
+          </table>
+        );
+      })}
+    </div>
+  );
+}
+
 export function StackedTimeSeriesChart({
   id,
   ariaLabel,
@@ -283,7 +595,21 @@ export function StackedTimeSeriesChart({
   formatTime,
   width = 600,
   plotHeight = 110,
+  view = 'chart',
 }: StackedTimeSeriesChartProps) {
+  if (view === 'table') {
+    return (
+      <ChartTableView
+        ariaLabel={ariaLabel}
+        plots={plots}
+        gaps={gaps}
+        domainStartMs={domainStartMs}
+        domainEndMs={domainEndMs}
+        formatTime={formatTime}
+      />
+    );
+  }
+
   if (plots.length === 0 || domainEndMs <= domainStartMs) {
     return (
       <svg
@@ -307,6 +633,12 @@ export function StackedTimeSeriesChart({
   const plotsHeight = plots.length * plotHeight + (plots.length - 1) * PLOT_GAP;
   const totalHeight = plotsHeight + AXIS_HEIGHT;
   const hatchId = `${id}-hatch`;
+
+  // Q2's hover layer — see the module doc for the cost analysis and the "why exact-match,
+  // never nearest-neighbour across series" reasoning.
+  const hoverInstants = hoverInstantsFor(plots);
+  const hoverColumns = hoverColumnsFor(hoverInstants, xFor, plotWidth);
+  const hoverMaps = plots.map((plot) => plot.series.map((s) => pointMapFor(s.points)));
 
   return (
     <svg
@@ -374,15 +706,24 @@ export function StackedTimeSeriesChart({
               ? null
               : {
                   id: s.id,
+                  label: s.label,
                   color: s.color,
                   text: s.endLabel,
+                  tMs: lastPoint.tMs,
                   x: xFor(lastPoint.tMs),
                   y: yFor(lastPoint.v),
                 };
           })
           .filter(
-            (r): r is { id: string; color: string; text: string; x: number; y: number } =>
-              r !== null,
+            (r): r is {
+              id: string;
+              label: string;
+              color: string;
+              text: string;
+              tMs: number;
+              x: number;
+              y: number;
+            } => r !== null,
           );
         const spacedYs = spaceApart(
           endRows.map((r) => r.y),
@@ -477,7 +818,11 @@ export function StackedTimeSeriesChart({
                             r={2}
                             fill={s.color}
                             data-role="lone-point"
-                          />
+                          >
+                            {/* §6.2's per-mark tooltip, for the one discrete DOT mark this
+                                chart draws today (see the module doc). */}
+                            <title>{`${formatTime((run.points[0] as { tMs: number }).tMs)}\n${s.label}: ${plot.formatTick((run.points[0] as { v: number }).v)}`}</title>
+                          </circle>
                         )}
                       </Fragment>
                     ))}
@@ -491,7 +836,9 @@ export function StackedTimeSeriesChart({
                   const moved = Math.abs(labelY - row.y) > 0.5;
                   return (
                     <g key={row.id}>
-                      <circle cx={row.x} cy={row.y} r={2.5} fill={row.color} className={styles.endDot} />
+                      <circle cx={row.x} cy={row.y} r={2.5} fill={row.color} className={styles.endDot}>
+                        <title>{`${formatTime(row.tMs)}\n${row.label}: ${row.text}`}</title>
+                      </circle>
                       {moved && (
                         <line
                           x1={row.x + 2}
@@ -527,6 +874,35 @@ export function StackedTimeSeriesChart({
           >
             {formatTime(t)}
           </text>
+        ))}
+      </g>
+
+      {/* Q2's crosshair — CSS-only, adjacent-sibling reveal (see the module doc). Drawn LAST
+          so its (invisible) hit-target rects sit on top of every mark and catch the pointer
+          anywhere in the plot area, not only on a 2px line. */}
+      <g data-role="hover">
+        {hoverColumns.map((col) => (
+          <Fragment key={col.atMs}>
+            <rect
+              className={styles.hoverZone}
+              data-role="hover-zone"
+              x={col.xStart}
+              y={0}
+              width={Math.max(0, col.xEnd - col.xStart)}
+              height={plotsHeight}
+            >
+              <title>{hoverTooltipFor(plots, hoverMaps, col.atMs, formatTime)}</title>
+            </rect>
+            <g className={styles.crosshairGroup} data-role="crosshair" aria-hidden="true">
+              <line
+                x1={col.x}
+                y1={0}
+                x2={col.x}
+                y2={plotsHeight}
+                className={styles.crosshairLine}
+              />
+            </g>
+          </Fragment>
         ))}
       </g>
     </svg>

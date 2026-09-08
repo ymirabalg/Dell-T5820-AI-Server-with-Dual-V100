@@ -21,3 +21,62 @@
   stroke: var(--surface-1);
   stroke-width: 0.5;
 }
+
+/* Q2 — the crosshair's hit target. Same mechanism as `StackedTimeSeriesChart`'s: transparent
+   but `pointer-events: all`, revealing the adjacent `.crosshairGroup` on `:hover`. */
+.hoverZone {
+  fill: transparent;
+  pointer-events: all;
+  cursor: crosshair;
+}
+
+.crosshairGroup {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hoverZone:hover + .crosshairGroup {
+  opacity: 1;
+}
+
+.crosshairLine {
+  stroke: var(--ink-muted);
+  stroke-width: 1;
+}
+
+/* Q2 — the table view. */
+.tableEmpty {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.table {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 2px 10px 2px 0;
+  border-bottom: 1px solid var(--gridline);
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+
+.table th {
+  color: var(--ink-muted);
+  font-weight: normal;
+}
+
+/* Q2 reconciliation (F4) — the time cell is a `<th scope="row">` so a screen reader can
+   announce WHICH instant a reading belongs to. It is still a data-row cell to the eye, so it
+   keeps the body's ink rather than the column headings' muted ink; making it a row header must
+   not silently restyle the time column. */
+.table tbody th {
+  color: var(--ink-secondary);
+  font-weight: normal;
+}

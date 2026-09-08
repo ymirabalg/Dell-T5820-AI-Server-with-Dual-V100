@@ -1,20 +1,26 @@
-# Handover — after Q1, before Q2
+# Handover — after Q2, before step 10
 
-**Rewritten 2026-09-07 by Q1's reconciliation.** Steps 1–8 are closed, **step 9 is closed**, and
-**Q1** (the red-test ledger's scanner) is closed. This file is the whole inheritance: the next
-phase's agents get clean context and read it as fact.
+**Rewritten 2026-09-08 by Q2's reconciliation.** Steps 1–8 are closed, **step 9 is closed**,
+**Q1** (the red-test ledger's scanner) is closed, and **Q2** (§6.2's hover layer and table view)
+is closed. This file is the whole inheritance: the next phase's agents get clean context and read
+it as fact.
 
-⚠ **Read §0.1 first — it is new and it changes what "the harnesses are green" means.**
+⚠ **Read §0.1 and §0.2 first.** §0.1 changes what "the harnesses are green" means; §0.2 is new
+and carries the two spec questions **step 10 is partly blocked on**.
 
-**Next is Q2**: §6.2 was amended after step 9's primitives were built and now requires a **hover
-layer** and a **table view** as defaults, the table view being an accessibility floor. The
-primitives have neither. It is new build work with a spec behind it, not a question — give it its
-own loop. **Then step 10** (panels & assembly). `pipeline/WORK-ITEMS.md` §10 is the queue and
-`pipeline/UI-BACKEND-GAPS.md` is what to open first.
+**Next is step 10** (panels & assembly): the nine panels, header controls, banner, grid and
+breakpoints. `pipeline/WORK-ITEMS.md` §10 is the queue and `pipeline/UI-BACKEND-GAPS.md` is what
+to open first. Step 10 writes the **first real callers** of `components/`, which is where every
+"required and un-defaulted" prop decision gets its first exercise.
 
 ⚠ **Everything below about steps 1–8's surface, the four structural rules, and the toolchain is
 inherited unchanged and is still true.** The sections Q1 rewrote are §0.1 (new), §1's harness
-list, §4, §5.2 and §8.
+list, §4, §5.2 and §8. The sections **Q2** rewrote are §0.2 (new), §1's harness list, §2, §3.5
+(new), §4, §8 and §9. ⚠ **§4 and §8 were stale in the safe direction again** — D4 and D5 were
+carried as open for step 9 while `traceFor` and `errorsForPanel` have existed since 2026-09-07
+(`lib/client/series.ts:201`, `lib/client/observations.ts:350`, both verified by grep, not
+assumed). That is the sixth time. **Re-check every row against the tree and against `SPEC.md`
+before trusting it; do not copy the tables forward.**
 
 ---
 
@@ -80,6 +86,13 @@ step, since step 2.
 | ⚠ marks checked, all eight | — | **689** |
 | mutations, all eight | 706 | **771** |
 
+⚠ **Those two totals are Q1's snapshot and are already out of date** — they are kept because the
+*before/after* is the point of this table, not the current count. As of Q2 (2026-09-08) it is
+**803 mutations** and **725 ⚠ marks** across the eight (622 across steps 2–8, unchanged, plus
+the `components/` harness’s 103), all of the growth in the `components/`
+harness. The authoritative number is always the `All N regressions failed their check` line each
+harness prints; §1 says why no total written here survives.
+
 **Three rules, each paid for:**
 
 1. ⚠ **A regex that silently matches *nothing* is how this happened, twice.** The pre-Q1 regex
@@ -110,6 +123,66 @@ is an ordinary thing to do and the mark would be counted by nobody. No harness k
 the eight ledgers, and every approximation needs a hand-maintained exemption list — which is why
 this is deferred to the step that next adds a harness rather than closed with a partial guard.
 Full reasoning in `pipeline/steps/Q1-ledger-scanner/reconciliation.md` §6.
+
+## 0.2 ⚠ NEW — what Q2 found, and the two questions step 10 inherits
+
+Q2 built §6.2's hover layer and table view onto both chart primitives. Thirteen adversarial
+findings were adjudicated (ten accepted, two rejected, one split) — full table in
+`pipeline/steps/Q2-hover-and-table/reconciliation.md`. Four results matter downstream.
+
+**1. The geometry the whole feature rests on had no test naming it.** `hoverColumnsFor` — the
+Voronoi partition that makes "the crosshair snaps to the nearest data position" work with no JS —
+appeared **zero times** in either test file. Three plausible defects each left `components/` at
+184/184 green, including one where zones span neighbour-to-neighbour, **overlap**, and turn "snap
+to nearest" into "snap to **next**": hovering a spike puts the crosshair on the spike and reports
+the following sample. **A wrong reading presented confidently is worse than no tooltip.** Five
+tests and five mutations now read actual coordinates; they are the first tests in the item to
+read one at all.
+
+⚠ **And the recurring defect landed on the test written to close the previous gap.** The test
+phase added *"⚠ every hover-zone rect is immediately followed by its OWN crosshair group"*, whose
+body counts adjacent pairs and never establishes **ownership** — an implementation pairing every
+zone with the *next* column's crosshair passes it. That is §5's *"a test that names a property it
+does not check has appeared in every single step"*, one level up. **Read each test name against
+its body, including the ones added to fix the last instance of this.**
+
+**2. A fix can make an existing mutation vacuous, and it looks exactly like an inert test.**
+Q2 added `Number.isFinite` guards to four value-rendering paths. `Number.isFinite(null)` and
+`Number.isFinite(undefined)` are already `false`, so `Q2-H2`/`Q2-H3` — which mutate the
+null/undefined halves of the same guard — became **equivalent mutations**: they apply, nothing
+changes, the harness prints `DID NOT BITE`, and the natural reading is "the test is inert" when
+the truth is "the fix subsumed the mutation". This is §1's *"adding a second, independent defence
+makes the first one's mutation inert"* (step 8's `W4`) in a new place. Both were rewritten to
+replace the **whole predicate** rather than delete a clause, and the source guard is written as
+one positive test rather than three negative clauses so no redundant clause invites the same edit
+again. **Whenever a fix adds a defence, re-run the harness and read what stopped biting.**
+
+**3. Two spec questions, both open, both the owner's** (`reconciliation.md` §4, and `ANCHOR.md`
+§2.2):
+
+- **Q2-S1** — §6.2's *"per-mark tooltip on bars and dots"* is **entirely unmet**, not partially.
+  The hover layer tiles the plot at `pointer-events: all` and is painted last, so SVG hit-testing
+  never reaches the marks beneath it and their `<title>`s can never display. A full-body crosshair
+  and reachable per-mark tooltips **cannot coexist on one plot**. `build.md` §7 recorded it as
+  partially satisfied and has been corrected. ⚠ Consequence for the ledger: `Q2-H4`/`Q2-H5`
+  protect markup with **no user-facing effect**, and the ledger structurally cannot tell that
+  apart from a sound mutation.
+- **Q2-S2 — step 10 is blocked on this one.** The table view has **no height bound**: ~722 `<tr>`
+  at the default 30-minute window, 1,202 at 120 minutes, in a fixed grid cell, against §6.1's
+  no-scroll promise. §6.2's own justification — *"they cost nothing when unused"* — is true of the
+  tooltip and **silent about the table view**, which is not "unused" once toggled. Cap the rows,
+  decimate again, or scroll inside the panel: each trades against a different part of the spec,
+  so it needs §6.1 or §6.2 reworded before step 10 wires a toggle.
+
+**4. `Sparkline` is a source-breaking change, twice over.** It now has **three required props**
+that did not exist a week ago — `ariaLabel` (Q2's reconciliation), `formatValue` and `formatTime`
+(Q2's build). All three are required and un-defaulted deliberately: a caller cannot ship an inert
+hover layer or three identically-named tables by forgetting an optional prop. There is still **no
+production call site** (`grep -rn "<Sparkline"` finds only its own test file), so step 10 is the
+first phase to feel it. Read `StackedTimeSeriesChart`'s own `ariaLabel` prop doc — which argues
+the case — before relaxing any of them.
+
+---
 
 ## 1. How to run anything
 
@@ -197,15 +270,22 @@ python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 12
 python3 pipeline/steps/06-telemetry-route/regressions.py                    # 63 mutations + ledger
 python3 pipeline/steps/07-auth-login/regressions.py                         # 128 mutations + ledger
 python3 pipeline/steps/08-client-runtime/regressions.py                     # 173 mutations + ledger
-python3 pipeline/steps/09-ui-primitives/regressions.py                      #  61 mutations + ledger
+python3 pipeline/steps/09-ui-primitives/regressions.py                      #  93 mutations + ledger
 ```
+
+⚠ **The last one is the harness for `components/`, not for "step 9".** Ledger ownership follows
+the FILE (see below), and every `components/*` test file is in its `LEDGER_FILES` and in no
+other's. So **every UI item lands its mutations there**, prefixed with its own creating id —
+it went 61 → 79 (Q2's build + test phases) → **93** (Q2's reconciliation), of which **32 are
+`Q2-`**. It takes about a minute. A UI item that touches nothing under `lib/` or `app/` owes
+**this harness only**: running the other seven would measure nothing it can have changed.
 
 ⚠ **It is eight, not seven.** Every handover before this one said seven, because step 9's harness
 was written after them. Q1's fix to the ⚠-scanner applies to step 9's too — it is the **donor** of
 the corrected scanner and carries the same blind spot — so an item that touches the scanner
 touches eight files and owes eight runs.
 
-**771 mutations** (710 across steps 2–8, 61 in step 9). ⚠ **This total and the eight above it go
+**803 mutations** (710 across steps 2–8, **93** in the `components/` harness). ⚠ **This total and the eight above it go
 stale on every item that adds a mutation, and have done five times.** Do not trust them; the authoritative number is the
 `All N regressions failed their check` line each harness prints, and all **eight** can be
 re-derived at once by importing each `regressions.py` and reading `len(REGRESSIONS)`. Each replaces one exact string in one source file with a **plausible wrong
@@ -325,15 +405,21 @@ Everything under `dashboard/`. Nothing outside it has been created or modified e
 | `app/api/telemetry/route.ts` · `app/api/session/route.ts` | `dynamic` + the handler names, and nothing else |
 | `app/login/page.tsx` · `login-form.tsx` | `/login`, and `LoginForm` (stateful) + `LoginCard` (**pure**) |
 | `proxy.ts` | §5's gate. **`proxy.ts`, NOT `middleware.ts`** — §7 |
-| 57 test files | **1982+ tests** |
+| **`components/*.tsx` + `*.module.css`** | **step 9's primitives, with Q2's hover layer and table view** — see §3.5 |
+| 67 test files | **2258 tests** |
 | `package.json` · `pnpm-lock.yaml` · `tsconfig.json` · `next.config.mjs` · `vitest.config.mts` | pinned toolchain; `strict` + seven more flags, all asserted |
 | `app/layout.tsx` · `app/page.tsx` | placeholders. ⚠ **`app/page.tsx` must stay free of telemetry** — see §6 |
 
-⚠ **Corrected 2026-09-07: `components/` now exists.** Step 9 built the panel shell, chips,
-meters, rows, the sparkline and §6.2's stacked cooling chart, on `dashboard-frontend`, with its
-own harness (`pipeline/steps/09-ui-primitives/regressions.py`, 61 mutations, 67 ⚠ marks).
-They have **no hover layer and no table view** — §6.2 was amended after they were built, which
-is Q2.
+⚠ **`components/` exists, and as of Q2 (2026-09-08) it carries §6.2's hover layer and table
+view too.** Step 9 built the panel shell, chips, meters, rows, the sparkline and §6.2's stacked
+cooling chart on `dashboard-frontend`; Q2 added a caller-owned `view` prop, a CSS-only crosshair,
+native `<title>` tooltips and a table view to both chart primitives. One harness covers all of
+it — `pipeline/steps/09-ui-primitives/regressions.py`, **93 mutations, 103 ⚠ marks**.
+
+⚠ **Every component is still a pure function of its props with zero React hooks**, and
+`components/purity.test.ts` is unmodified and unweakened through both items. That is not a style
+preference: it is why the view toggle is a **prop** the caller owns (step 10), and why there is
+no `useId`, no hover-position state and no self-toggling leaf anywhere under `components/`.
 
 **Does not exist yet:** any *panel* or page assembly (step 10); `Dockerfile`, `.dockerignore`,
 `dashboard.sh`, the systemd unit, `README.md`, jsdom.
@@ -462,6 +548,48 @@ Closed vocabularies, switched over exhaustively: `Severity` · `UnitState` (6) �
 asserted. **Steps 3–8 produced all eighteen sources and no nineteenth was ever needed.** If
 step 9 needs a new one, that is a spec gap to **report**, not a blank to fill.
 
+### 3.5 ⚠ NEW — `components/`, the surface step 10 composes (steps 9 + Q2)
+
+Everything is a **pure function of props**, hook-free, and `purity.test.ts` enforces that by
+shape rather than by a list of hook names. Nothing here owns state, picks its own size, or picks
+its own view.
+
+| Component | Surface worth knowing |
+|---|---|
+| `PanelShell` · `Chip` · `Meter` · `Row` | step 9's. `Meter`'s bar is `aria-hidden` with its value as adjacent visible text (a deliberate anti-double-announcement decision) — which is why it is **not** a per-mark-tooltip site |
+| `Sparkline` | `points` · **`ariaLabel`** · `color` · `formatValue` · `formatTime` (all **required**) · `width?` `height?` · **`view?: 'chart' \| 'table'`** (default `'chart'`) |
+| `StackedTimeSeriesChart` | `id` · **`ariaLabel`** · `plots` · `gaps` · `domainStartMs` · `domainEndMs` · `formatTime` · `width?` `plotHeight?` · **`view?: 'chart' \| 'table'`** (default `'chart'`) |
+
+**Five things about them that will bite a caller, all learned the expensive way:**
+
+1. **The view toggle is the CALLER's state.** Both take `view` as a prop and neither remembers
+   it. Step 10 holds it, exactly as it holds the sparkline's size — *"a primitive that picked its
+   own size would be deciding layout from a leaf"*, one level up.
+2. **`ariaLabel` is required and deliberately un-defaulted on BOTH.** §6.1 puts three sparklines
+   and up to three charts on one page; any built-in sentence announces two of them as the wrong
+   thing. `StackedTimeSeriesChart`'s prop doc argues the case; `Sparkline` had the built-in
+   sentence that comment argues against until Q2 removed it.
+3. **The chart never formats a number.** It imports exactly one thing from `lib/format.ts` —
+   `EM_DASH`. Every unit-bearing string comes from the caller's `formatTick` / `formatTime` /
+   `endLabel`, so the axis, the tooltip and the table cannot disagree about how a reading reads.
+   ⚠ **The formatter is called only on a readable number**: `null`, `undefined` **and non-finite**
+   render `EM_DASH` without reaching it. A derived `pick` that divides — a rate, a ratio over a
+   zero denominator — is where step 10 will produce the non-finite case.
+4. **A gap is drawn from `gaps`, never inferred** — and as of Q2 the **table view applies the
+   same domain filter the chart does**. `runtime.ts` prunes gaps at 120 min while the default
+   window is 30, so `gaps` legitimately holds entries far older than the domain you pass.
+5. ⚠ **The chart CLAMPS points outside `[domainStartMs, domainEndMs]` rather than dropping
+   them**, and neither requires nor checks that the domain contains its own points. `traceFor`
+   guarantees it by windowing the ring before decimating — **so pass the domain you windowed
+   with.** If you do not, an out-of-domain instant can own the leftmost span of the plot and
+   report a reading taken before the labelled window (Q2 F9's deferred half, owner: step 10).
+
+**The table view's shape**, since step 10 renders it: one `<table>` **per plot** (never one
+merged table — two units in adjacent cells is a dual y-axis in tabular form), a `<caption>`
+naming the series, `<th scope="col">` per series, `<th scope="row">` for each row's time, a gap
+row spanning every column, and a per-plot *"no readings in the selected window"* row when a plot
+has samples for nothing. ⚠ **It has no height bound — see §0.2's Q2-S2 before you toggle it.**
+
 ---
 
 ## 4. Obligations, with owning steps
@@ -477,10 +605,13 @@ step 9 needs a new one, that is a spec gap to **report**, not a blank to fill.
 
 ### Still open
 
-⚠ **Re-checked against `SPEC.md` line by line by Q1's reconciliation, 2026-09-07.** This is the
-fifth time this table has been read against the spec and the fifth time it was stale **in the
-safe direction** — carrying as open things the spec had already answered. Do it again next time;
-do not copy this table forward.
+⚠ **Re-checked against `SPEC.md` and against the tree by Q2's reconciliation, 2026-09-08.** That
+is the **sixth** reading and the sixth time it was stale **in the safe direction**. What was stale
+this time was not the spec table but the DEFER table below it: **D4 and D5 were carried as open
+for step 9** while `errorsForPanel` and `traceFor` have existed since 2026-09-07
+(`lib/client/observations.ts:350`, `lib/client/series.ts:201` — verified by grep, not assumed);
+`ANCHOR.md` §7 already knew and this file did not. Do it again next time; do not copy either
+table forward.
 
 | # | One line | Owner |
 |---|---|---|
@@ -490,7 +621,7 @@ do not copy this table forward.
 | **O4** | `DisplayedCondition.sinceMs` is when the **confirmed** band was first observed | step 10 |
 | **O12** | A reading with no §6.3 band is invisible to §9's dot. **Do not invent a band** — report it | step 10 |
 | **O13** | `EC auto` and `unavailable` are **not** severities. `EC auto` is healthy (invariant 3) | **steps 9, 10** |
-| **O14** | Formatters return unit-inclusive strings; ask for a `parts` variant rather than splitting on whitespace | **step 9** |
+| **O14** | Formatters return unit-inclusive strings; ask for a `parts` variant rather than splitting on whitespace | ⚠ **was step 9 — now step 10.** Step 9 and Q2 both closed without needing it: `components/` never splits a formatted string, because the chart primitives take a caller-supplied formatter and print its output whole. Step 10 is the first phase to render a headline figure and its unit at different sizes, which is where the ask actually arises. **`lib/format.ts` has no `parts` variant today** (checked 2026-09-08) — if you need one, ask for it; do not split on whitespace |
 | ~~O19~~ | **Closed 2026-09-07.** It was a **deletion, not a rename**: `GiB` already existed for RAM and swap, so `GB`, `gb()` and `formatGB` were removed and disk moved onto `GiB`. ⚠ **`Filesystem.usedGB`/`totalGB` were WIRE names**, so this was a §4 contract change — server and client moved together | closed |
 | **O20** | ⚠ `dashboard.sh set-password` must emit `scrypt.<log2N>.<r>.<p>.<salt>.<key>` — §4.1 | **step 11** |
 | **O21** | ⚠ `SESSION_SECRET` must be written unquoted — §4.1 | **step 11** |
@@ -506,14 +637,17 @@ O6–O9, O15–O18 are closed (steps 3–6).
 | **D1** | **S40.** §6.4's event log gains a third feed — state fields with a closed vocabulary and no §6.3 band (`ch5Mode`). Spec clarification now; code later | **step 10** |
 | **D2** | **S41.** The age tick is an **independent** interval, **not** driven off store changes — see §6 rule 4 | **step 10** |
 | **D3** | `unknownStanding` is rendered, or removed from `RuntimeState` | **step 10** |
-| **D4** | `errorsForPanel(snapshot, panel)` written **once**, beside `conditionSource` | **step 9** |
-| **D5** | `traceFor(state, pick)` so no panel spells the window→series→decimate order itself | **step 9** |
-| **D6** | jsdom, and the first assertion it buys: unmounting `useTelemetry` calls `stop()` | **step 9 or 10**, whichever first needs an interaction test |
+| ~~**D4**~~ | ~~`errorsForPanel(snapshot, panel)`~~ — **closed 2026-09-07**, `lib/client/observations.ts:350`. ⚠ Carried here as open for step 9 until Q2 checked the tree | closed |
+| ~~**D5**~~ | ~~`traceFor(state, pick)`~~ — **closed 2026-09-07**, `lib/client/series.ts:201`. Same staleness | closed |
+| **D6** | jsdom, and the first assertion it buys: unmounting `useTelemetry` calls `stop()` | ⚠ **step 10.** Step 9 and Q2 both closed without it, and Q2 is the evidence it is still owed: **`:hover` is unobservable in jsdom**, so the crosshair's reveal mechanism is described in prose and asserted only through the DOM structure it needs (adjacency, geometry). Nothing tests that the CSS rule fires |
 | **D7** | ⚠ **NARROWED 2026-09-07, not closed.** ~~S19~~ is settled in `SPEC.md` (line 1327: *"the message text carries it and the RENDERING does not"*). ~~S30~~ is settled (line 780: *"Tone is `warn`, not `error`"*). **S11/G5's collector half is settled** (line 1208 — `collectCooling` files the entry when `pwm5` is in the listing and `fan5_input` is not). What is left is **S11/G5's panel-rendering residue**: what a panel does with an em dash whose neighbour is not coloured | **step 10** |
 | **D8** | The `STANDING` env plumbing, and its place on §4.1's silent-failure list | **step 11**, verified **step 12** |
 | — | ~~The red-test ledger retrofit for step 3's harness~~ — **done during step 8**, confirmed by Q1's build phase and re-run clean by its reconciliation (72 mutations, 24 ⚠ marks, exit 0). ⚠ It was carried as open here, in `ANCHOR.md` §7 and in `WORK-ITEMS.md` §2 (A6) long after it was finished; all three are corrected | closed |
 | — | ~~Q1 — the ⚠-scanner back-port~~ — **closed 2026-09-07.** All eight harnesses, 771 mutations, 689 marks. §0.1 | closed |
 | **Q1-F4** | Nothing asserts a ⚠-bearing test file is in some `LEDGER_FILES`. Zero live loss today; both orphan files named in §0.1 | **step 10** — the next step that adds a harness |
+| **Q2-F9** | The chart CLAMPS out-of-domain points rather than dropping them, and does not check that the domain it is given contains them. `traceFor` guarantees it; the component does not. The **fix is not obviously "filter"** — dropping an out-of-domain instant's hover column leaves a visible pegged mark whose tooltip names a different instant, so it is a clamp-vs-drop rendering decision, not a one-line guard | **step 10** |
+| **Q2-F8** | `Sparkline` renders its `data-empty` state for an all-null window and so drops its hover layer entirely, while `StackedTimeSeriesChart` keeps one em-dash zone per instant. Q2 **rejected** changing it — the sparkline has no axis, so its zones would float over a blank box, and its table view carries the em-dash rows — but the asymmetry is written down here so step 10 can revisit it if a real card needs it | step 10, only if needed |
+| **Q2-F13** | The table's `<tr key={tMs}>` depends on two upstream guards holding: §6.7 keys the ring on `ts` and drops repeats, and `decimateSeries` guards `secondIndex !== firstIndex`. Reachability is nil today and a composite key would be **unfalsifiable** (`renderToStaticMarkup` cannot observe a React key). Recorded so a change to either guard has a written note | whoever changes either guard |
 | — | **A commit point** — `71a2f7d` was taken before step 9. The next is the owner's call | **owner** |
 
 ### 4.1 ⚠ The three step-11 obligations that fail **silently**, stated in full
@@ -954,17 +1088,23 @@ top of `lib/guardrails.test.ts` — not by a text assertion.
 
 ---
 
-## 8. Spec gaps — re-verified against `SPEC.md` by Q1's reconciliation, 2026-09-07
+## 8. Spec gaps — re-verified against `SPEC.md` by Q2's reconciliation, 2026-09-08
 
 ⚠ This table has now been **stale five times** (92 % before step 5, 100 % before step 6, again
 before step 7, again in step 8, and again here). **Every time, in the safe direction: entries
 carried as open that the spec had already answered.** Re-check every row against the spec text
 before trusting it. Invariant 7 stands: if the spec is silent, **report it — do not assume**.
 
-**Open, with owners — one row, down from three:**
+**Open, with owners — three rows: S11/G5's residue, and Q2's two new ones.**
+
+⚠ **The two Q2 rows are QUESTIONS, not proposals.** No phase wrote wording for either; the owner
+does (ANCHOR §8). Full statements, with the measurements and the trade-off table, are in
+`pipeline/steps/Q2-hover-and-table/reconciliation.md` §4.
 
 | # | Gap | Owner |
 |---|---|---|
+| **Q2-S2** ⚠ | **The table view has no height bound, and §6.2's justification does not cover it.** §6.2 accepts the hover layer and table view partly because *"they cost nothing when unused. A tooltip that never fires renders nothing and occupies no space in the grid, so §6.1's no-scroll promise is untouched."* True of the tooltip; **silent about the table view**, which is not "unused" once a caller toggles it. Measured: **~722 `<tr>`** at the default 30-minute window (2 plots × ~361 rows), **1,202** at 120 minutes after §6.7's decimation — ~12,000–20,000 px of content in a grid cell §6.1 budgets at a few hundred, inside a layout promising no scroll at ≥1280×1024. `.tableView` carries no `max-height`, no `overflow` and no row cap, and the primitive gives a caller nothing to hang one on. **Cap the rows** (the table stops being the chart's complete substitute, so §6.2's "accessibility floor" no longer holds), **decimate again** (a second budget beside §6.7's, and two decimations that can disagree), or **scroll inside the panel** (arguably what §6.1 forbids — though §6.1 already accepts scrolling below 1280px, and a panel scrollbar is not a page scrollbar). Needs a sentence in §6.1 or §6.2 | **owner**, then step 10 |
+| **Q2-S1** | **§6.2's "per-mark tooltip on bars and dots" is entirely unmet, and the two clauses are in structural tension.** The crosshair half is delivered by a hover layer that tiles the plot body at `pointer-events: all` and is painted last; SVG hit-testing therefore hands the pointer to a zone and never to the mark beneath, so a mark's own `<title>` can never display (bar a ~2.5px crescent of the end dot past `plotWidth`). **A full-body crosshair and reachable per-mark tooltips cannot coexist on one plot.** Three sub-questions: was the clause written about a **bar or scatter** chart, where there is no crosshair layer? — `components/` has no such primitive, and `Meter` has its value as permanent visible text. If so, is the clause satisfied **vacuously** today and inherited by that future primitive? Or does the crosshair's own tooltip **discharge** it on a line chart, since it already reports the mark's instant and every series' value at it? `build.md` §7 recorded this as *partially* satisfied and has been corrected | **owner**, then whoever specs a bar/dot chart |
 | **S11 / G5** — *the rendering half only* | ⚠ **NARROWED.** The collector half is **settled** in `SPEC.md` line 1208: *"the exception has ONE hole and the collector closes it, not the panel"* — `collectCooling` files an entry when `pwm5` is in the listing and `fan5_input` is not, and the spec explicitly rejects a panel-rendered note because *"a qualified rule is one a future reader has to know the exceptions to."* What is left is what a **panel** does with an em dash whose coloured neighbour is not coloured. Do not re-raise the collector half | **step 10** |
 
 **⚠ Closed since this table was last written — verified against the spec text, not assumed:**
@@ -1051,11 +1191,11 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | Work | Owner | Status |
 |---|---|---|
 | **Panel shell, chips, meters, rows, sparkline, stacked cooling chart** | **step 9** | specified — §6.1, §6.2, §6.6 |
-| **`errorsForPanel(snapshot, panel)`** (D4) | **step 9** | §6's composition gap (b) |
-| **`traceFor(state, pick)`** (D5) | **step 9** | §6's composition gap (c) |
+| ~~**`errorsForPanel(snapshot, panel)`**~~ (D4) | — | **closed 2026-09-07** — `lib/client/observations.ts:350`. ⚠ Carried as open here until Q2 checked |
+| ~~**`traceFor(state, pick)`**~~ (D5) | — | **closed 2026-09-07** — `lib/client/series.ts:201`. Same |
 | ~~The GB → GiB rename~~ (O19) | — | **closed 2026-09-07** — a deletion; `GiB` already existed |
-| **Formatter `parts` variant** (O14) | **step 9** | open |
-| **jsdom** (D6) | **step 9 or 10** | see below |
+| **Formatter `parts` variant** (O14) | ⚠ **step 10** (was step 9) | open — nothing in `components/` splits a formatted string, so it never arose |
+| **jsdom** (D6) | ⚠ **step 10** (was step 9 or 10) | open — and Q2 sharpened the case: `:hover` is unobservable in jsdom, so nothing tests that the crosshair's CSS rule fires |
 | S11/G5's **panel-rendering residue** | step 10 | open — §8. ⚠ S19 and S30 are **closed** in `SPEC.md`; the collector half of S11/G5 is closed too |
 | **S40's third event-log feed** (D1) · **the independent age tick** (D2) · **render `unknownStanding`** (D3) | **step 10** | open |
 | The header: dot + count + paused/stale mode (O2) | step 10 | unblocked |
@@ -1065,7 +1205,10 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | ~~The red-test ledger retrofit for step 3's harness~~ | — | **closed** — done during step 8, confirmed 2026-09-07. All **eight** harnesses carry a ledger |
 | ~~**Q1** — the ⚠-scanner back-port~~ | — | **closed 2026-09-07** — 771 mutations, 689 marks, eight harnesses green. §0.1 |
 | **Q1-F4** — assert every ⚠-bearing test file is in some `LEDGER_FILES` | **step 10** | open — §0.1. Zero live loss today |
-| **Q2** — §6.2's hover layer and table view | **its own loop, next** | open — `WORK-ITEMS.md` §10.2 |
+| ~~**Q2** — §6.2's hover layer and table view~~ | — | **closed 2026-09-08** — 13 findings adjudicated, `components/` harness at 93 mutations. §0.2 |
+| **Q2-S2** — the table view's height, against §6.1's no-scroll promise | **owner**, then step 10 | ⚠ open — **step 10's chart/table toggle is blocked on it.** §8 |
+| **Q2-S1** — §6.2's per-mark tooltip clause vs the crosshair layer that occludes it | **owner** | open — §8 |
+| **Q2-F9** — the chart clamps out-of-domain points; the domain's containment is a precondition it neither states as a prop rule nor checks | **step 10** | open — §4 |
 | **O20 · O21 · O22 · D8** — the four silent-failure obligations | **step 11** | §4.1 |
 | **`dashboard.sh check`**: an unparseable `PASSWORD_HASH`; a `SESSION_SECRET` short or quoted; a `STANDING` entry matching nothing; the env file's mode and owner | **step 11** | the only place any of them can be caught, because nothing is logged |
 | **F7 — `LIMITS` bounds scrypt's memory but not its time** (measured 1 720 ms vs 58 ms at the worst accepted parameters) | **step 11** | with `check` |

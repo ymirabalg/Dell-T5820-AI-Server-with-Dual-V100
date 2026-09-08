@@ -60,3 +60,83 @@
 .leader {
   stroke-width: 1;
 }
+
+/* Q2 — the crosshair's hit target. Transparent but `pointer-events: all`, so the invisible
+   fill still registers hover — `fill: none` would not. Drawn last (see the component), so it
+   sits above every mark and the whole plot body is hoverable, not only a 2px line. */
+.hoverZone {
+  fill: transparent;
+  pointer-events: all;
+  cursor: crosshair;
+}
+
+/* Hidden until its PRECEDING sibling `.hoverZone` is hovered — no id, no JS, no hook. This is
+   the entire "snap to nearest data position" behaviour: whichever zone the pointer is over
+   reveals ITS OWN crosshair, and the zones already partition the axis by nearest instant. */
+.crosshairGroup {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hoverZone:hover + .crosshairGroup {
+  opacity: 1;
+}
+
+.crosshairLine {
+  stroke: var(--ink-muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+
+/* Q2 — the table view. One `<table>` per plot (see the module doc); this file just gives it
+   the same dark-instrument-panel chrome as the chart it stands in for. */
+.tableView {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-family: var(--font-mono);
+}
+
+.tableEmpty {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 2px 10px 2px 0;
+  border-bottom: 1px solid var(--gridline);
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+
+.table th {
+  color: var(--ink-muted);
+  font-weight: normal;
+}
+
+/* A gap row spans every column (see the component) — italic and muted, so it reads as a
+   different KIND of row from a sampled reading rather than one more line of data. */
+.gapRow td {
+  color: var(--ink-muted);
+  font-style: italic;
+  white-space: normal;
+}
+
+/* Q2 reconciliation (F4) — the time cell is a `<th scope="row">` so a screen reader can
+   announce WHICH instant a reading belongs to. It is still a data-row cell to the eye, so it
+   keeps the body's ink rather than the column headings' muted ink; making it a row header must
+   not silently restyle the time column. */
+.table tbody th {
+  color: var(--ink-secondary);
+  font-weight: normal;
+}

@@ -359,7 +359,17 @@ REGRESSIONS = [
          ("      <g transform={`translate(0, ${plotsHeight})`} data-role=\"x-axis\">",
           "      {plots.map((_, pi) => (\n"
           "      <g key={pi} transform={`translate(0, ${plotsHeight})`} data-role=\"x-axis\">"),
-         ("        ))}\n      </g>\n    </svg>", "        ))}\n      </g>\n      ))}\n    </svg>"),
+         # ⚠ Q2, 2026-09-08: re-anchored. This used to close on `))}\n</g>\n</svg>` — the
+         # x-axis's own closing immediately followed by the file's closing `</svg>`. Q2's
+         # hover layer is now the last thing before `</svg>`, and its own Fragment-map closes
+         # with the IDENTICAL three lines — so the old anchor stopped matching the x-axis at
+         # all and silently re-aimed at the hover layer's closing instead (still a single,
+         # unambiguous match, so nothing here would have printed `ANCHOR AMBIGUOUS`; only
+         # `exit=1 Tests no tests` — a compile error from the resulting malformed JSX — gave
+         # it away). Anchored on `{formatTime(t)}` instead, which is unique to the x-axis's
+         # own tick loop regardless of what renders after it.
+         ("            {formatTime(t)}\n          </text>\n        ))}\n      </g>",
+          "            {formatTime(t)}\n          </text>\n        ))}\n      </g>\n      ))}"),
      ],
      [CHART]),
     ("09-T2 a series' dash flag is ignored, so identity drops to colour alone",
@@ -522,8 +532,20 @@ REGRESSIONS = [
      [
          ("aria-label={`${ariaLabel} — no time range to plot`}",
           'aria-label="no time range to plot"'),
-         ("aria-label={ariaLabel}",
-          'aria-label="cooling: temperature and fan speed over the selected window"'),
+         # ⚠ Q2, 2026-09-08: pinned to the SVG's own multi-line attribute block. The bare
+         # `aria-label={ariaLabel}` this used to anchor on became AMBIGUOUS the moment Q2's
+         # table view added a second, single-line use of the identical prop assignment on its
+         # wrapping `<div>` — the exact "an anchor that matches twice" failure HANDOVER §5.2
+         # already names. This anchor is unique to the `<svg role="img">` block.
+         #
+         # ⚠ CORRECTED by Q2's reconciliation (adversarial F11). This comment used to end
+         # "the table view's own aria-labelling is covered by Q2-TV's own mutations instead",
+         # and that was FALSE when it was written: no mutation touched the table wrapper's
+         # `aria-label`, and deleting it cost nothing. Writing the coverage down is not
+         # evidence it exists — the same lesson as ANCHOR §2.2's ledger scanner. It is true
+         # NOW, and only because `Q2-TV6` and `Q2-TV7` below were added to make it true.
+         ("      role=\"img\"\n      aria-label={ariaLabel}",
+          '      role="img"\n      aria-label="cooling: temperature and fan speed over the selected window"'),
      ],
      [CHART]),
 
@@ -714,6 +736,344 @@ REGRESSIONS = [
      r"const HOOK_CALL = /\buse(?:[A-Z]\w*)?\s*\(/;",
      r"const HOOK_CALL = /\buse(?:State|Effect|Ref|Memo|Callback|Reducer|LayoutEffect|ImperativeHandle)\s*\(/;",
      [PURITY]),
+
+    # ============================================== Q2 — hover layer + table view
+    # `pipeline/handoffs/Q2-hover-and-table.md`: §6.2's amended default. Ids carry the
+    # creating step's prefix (`Q2-`), per the 2026-09-08 convention — not `09-`, even though
+    # they live in this step's harness (HANDOVER §0.1 / ANCHOR §9).
+
+    # -------------------------------------------- stacked-time-series-chart.tsx: hover layer
+    ("Q2-H1 the hover-instant union forgets to dedupe, so a shared sample clock still costs 600×N",
+     CHART_SRC,
+     "const hoverInstantsFor = (plots: readonly ChartPlot[]): readonly number[] => {\n"
+     "  const set = new Set<number>();\n"
+     "  for (const plot of plots) {\n"
+     "    for (const s of plot.series) {\n"
+     "      for (const p of s.points) set.add(p.tMs);\n"
+     "    }\n"
+     "  }\n"
+     "  return Array.from(set).sort((a, b) => a - b);\n"
+     "};",
+     "const hoverInstantsFor = (plots: readonly ChartPlot[]): readonly number[] => {\n"
+     "  const out: number[] = [];\n"
+     "  for (const plot of plots) {\n"
+     "    for (const s of plot.series) {\n"
+     "      for (const p of s.points) out.push(p.tMs);\n"
+     "    }\n"
+     "  }\n"
+     "  return out.sort((a, b) => a - b);\n"
+     "};",
+     [CHART]),
+    ("Q2-H2 a series missing the shared instant borrows whatever value happens to sit at `undefined`",
+     CHART_SRC,
+     "      lines.push(`${s.label}: ${typeof v === 'number' && Number.isFinite(v) ? plot.formatTick(v) : EM_DASH}`);",
+     "      lines.push(`${s.label}: ${v === null ? EM_DASH : plot.formatTick(v as number)}`);",
+     [CHART]),
+    ("Q2-H3 a null reading in the hover tooltip renders through the formatter instead of the em dash",
+     CHART_SRC,
+     "      lines.push(`${s.label}: ${typeof v === 'number' && Number.isFinite(v) ? plot.formatTick(v) : EM_DASH}`);",
+     "      lines.push(`${s.label}: ${v === undefined ? EM_DASH : plot.formatTick(v as number)}`);",
+     [CHART]),
+    ("Q2-H4 the lone-point mark's tooltip drops the time and the reading, keeping only the label",
+     CHART_SRC,
+     "                            <title>{`${formatTime((run.points[0] as { tMs: number }).tMs)}\\n${s.label}: ${plot.formatTick((run.points[0] as { v: number }).v)}`}</title>",
+     "                            <title>{s.label}</title>",
+     [CHART]),
+    ("Q2-H5 the end-dot mark's tooltip drops the series label, keeping only its own end-label text",
+     CHART_SRC,
+     "                        <title>{`${formatTime(row.tMs)}\\n${row.label}: ${row.text}`}</title>",
+     "                        <title>{row.text}</title>",
+     [CHART]),
+    # ⚠ Q2, test phase, 2026-09-08: `.hoverZone:hover + .crosshairGroup` is an
+    # adjacent-SIBLING selector — it only fires when the crosshair is the hover zone's very
+    # next DOM sibling. Every content/count assertion above (hoverZoneCount, crosshairCount,
+    # tooltip text) is unchanged by splitting the paired render into two separate loops — a
+    # plausible "tidy it up" refactor — so nothing above would have caught it; the crosshair
+    # would simply never reveal in a real browser. This mutation restores exactly that split.
+    ("Q2-H6 the hover zones and their crosshairs are rendered in two separate passes, breaking the adjacent-sibling selector they depend on",
+     CHART_SRC,
+     "        {hoverColumns.map((col) => (\n"
+     "          <Fragment key={col.atMs}>\n"
+     "            <rect\n"
+     "              className={styles.hoverZone}\n"
+     "              data-role=\"hover-zone\"\n"
+     "              x={col.xStart}\n"
+     "              y={0}\n"
+     "              width={Math.max(0, col.xEnd - col.xStart)}\n"
+     "              height={plotsHeight}\n"
+     "            >\n"
+     "              <title>{hoverTooltipFor(plots, hoverMaps, col.atMs, formatTime)}</title>\n"
+     "            </rect>\n"
+     "            <g className={styles.crosshairGroup} data-role=\"crosshair\" aria-hidden=\"true\">\n"
+     "              <line\n"
+     "                x1={col.x}\n"
+     "                y1={0}\n"
+     "                x2={col.x}\n"
+     "                y2={plotsHeight}\n"
+     "                className={styles.crosshairLine}\n"
+     "              />\n"
+     "            </g>\n"
+     "          </Fragment>\n"
+     "        ))}",
+     "        {hoverColumns.map((col) => (\n"
+     "          <rect\n"
+     "            key={`z-${col.atMs}`}\n"
+     "            className={styles.hoverZone}\n"
+     "            data-role=\"hover-zone\"\n"
+     "            x={col.xStart}\n"
+     "            y={0}\n"
+     "            width={Math.max(0, col.xEnd - col.xStart)}\n"
+     "            height={plotsHeight}\n"
+     "          >\n"
+     "            <title>{hoverTooltipFor(plots, hoverMaps, col.atMs, formatTime)}</title>\n"
+     "          </rect>\n"
+     "        ))}\n"
+     "        {hoverColumns.map((col) => (\n"
+     "          <g key={`c-${col.atMs}`} className={styles.crosshairGroup} data-role=\"crosshair\" aria-hidden=\"true\">\n"
+     "            <line\n"
+     "              x1={col.x}\n"
+     "              y1={0}\n"
+     "              x2={col.x}\n"
+     "              y2={plotsHeight}\n"
+     "              className={styles.crosshairLine}\n"
+     "            />\n"
+     "          </g>\n"
+     "        ))}",
+     [CHART]),
+
+    # -------------------------------------------- stacked-time-series-chart.tsx: table view
+    ("Q2-TV1 view=\"table\" is never honoured, so the caller's toggle silently does nothing",
+     CHART_SRC,
+     "  if (view === 'table') {\n"
+     "    return (\n"
+     "      <ChartTableView",
+     "  if (view === 'chart-x') {\n"
+     "    return (\n"
+     "      <ChartTableView",
+     [CHART]),
+    ("Q2-TV2 only the first plot's table is drawn — a second unit vanishes from the table view",
+     CHART_SRC,
+     "      {plots.map((plot) => {",
+     "      {plots.slice(0, 1).map((plot) => {",
+     [CHART]),
+    ("Q2-TV3 a null reading in the table renders through the formatter, printing a numeral for no reading",
+     CHART_SRC,
+     "      return typeof v === 'number' && Number.isFinite(v) ? plot.formatTick(v) : EM_DASH;",
+     "      return v === undefined ? EM_DASH : plot.formatTick(v as number);",
+     [CHART]),
+    ("Q2-TV4 a table cell is blanked by a falsy check, so a genuine zero reading renders the em dash",
+     CHART_SRC,
+     "      return typeof v === 'number' && Number.isFinite(v) ? plot.formatTick(v) : EM_DASH;",
+     "      return v === undefined || !v ? EM_DASH : plot.formatTick(v);",
+     [CHART]),
+    ("Q2-TV5 gap rows are never built, so a table reader sees two readings as if nothing happened between them",
+     CHART_SRC,
+     "  const gapRows: TableRow[] = gaps\n"
+     "    .filter((g) => {",
+     "  const gapRows: TableRow[] = ([] as readonly Gap[])\n"
+     "    .filter((g) => {",
+     [CHART]),
+
+    # -------------------------------------------- sparkline.tsx: hover layer + table view
+    ("Q2-SP1 hover columns are built only for READABLE points, so a null reading has no column of its own",
+     SPARKLINE_SRC,
+     "  const hoverColumns = hoverColumnsFor(n, xFor, width);",
+     "  const hoverColumns = hoverColumnsFor(readable.length, xFor, width);",
+     [SPARKLINE]),
+    ("Q2-SP2 a null point's hover tooltip renders through the formatter instead of the em dash",
+     SPARKLINE_SRC,
+     "                <title>{`${formatTime(p.tMs)}\\n${p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}`}</title>",
+     "                <title>{`${formatTime(p.tMs)}\\n${formatValue(p.v as number)}`}</title>",
+     [SPARKLINE]),
+    ("Q2-SP3 the first hover column no longer starts at the left edge, so the pointer can miss the first reading",
+     SPARKLINE_SRC,
+     "    const xStart = index === 0 ? 0 : (xFor(index - 1) + x) / 2;",
+     "    const xStart = index === 0 ? 5 : (xFor(index - 1) + x) / 2;",
+     [SPARKLINE]),
+    ("Q2-SP4 view=\"table\" is never honoured on the sparkline either",
+     SPARKLINE_SRC,
+     "  if (view === 'table') {\n"
+     "    return (\n"
+     "      <SparklineTableView",
+     "  if (view === 'chart-x') {\n"
+     "    return (\n"
+     "      <SparklineTableView",
+     [SPARKLINE]),
+    ("Q2-SP5 a null reading in the table renders through the formatter, printing a numeral for no reading",
+     SPARKLINE_SRC,
+     "            <td>{p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}</td>",
+     "            <td>{p.v === undefined ? EM_DASH : formatValue(p.v as number)}</td>",
+     [SPARKLINE]),
+    ("Q2-SP6 a table cell is blanked by a falsy check, so a genuine zero reading renders the em dash",
+     SPARKLINE_SRC,
+     "            <td>{p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}</td>",
+     "            <td>{!p.v ? EM_DASH : formatValue(p.v)}</td>",
+     [SPARKLINE]),
+    # ⚠ Q2, test phase, 2026-09-08: same rationale as Q2-H6 on the full chart — the
+    # adjacent-sibling CSS selector needs the crosshair group to be the hover zone's very next
+    # DOM sibling, and no content/count assertion elsewhere in this file can tell a paired
+    # render apart from two separately-rendered lists that happen to have equal length.
+    ("Q2-SP7 the hover zones and their crosshairs are rendered in two separate passes, breaking the adjacent-sibling selector they depend on",
+     SPARKLINE_SRC,
+     "        {hoverColumns.map((col) => {\n"
+     "          const p = points[col.index] as SparklinePoint;\n"
+     "          return (\n"
+     "            <Fragment key={col.index}>\n"
+     "              <rect\n"
+     "                className={styles.hoverZone}\n"
+     "                data-role=\"hover-zone\"\n"
+     "                x={col.xStart}\n"
+     "                y={0}\n"
+     "                width={Math.max(0, col.xEnd - col.xStart)}\n"
+     "                height={height}\n"
+     "              >\n"
+     "                <title>{`${formatTime(p.tMs)}\\n${p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}`}</title>\n"
+     "              </rect>\n"
+     "              <g className={styles.crosshairGroup} data-role=\"crosshair\" aria-hidden=\"true\">\n"
+     "                <line x1={col.x} y1={0} x2={col.x} y2={height} className={styles.crosshairLine} />\n"
+     "              </g>\n"
+     "            </Fragment>\n"
+     "          );\n"
+     "        })}",
+     "        {hoverColumns.map((col) => {\n"
+     "          const p = points[col.index] as SparklinePoint;\n"
+     "          return (\n"
+     "            <rect\n"
+     "              key={`z-${col.index}`}\n"
+     "              className={styles.hoverZone}\n"
+     "              data-role=\"hover-zone\"\n"
+     "              x={col.xStart}\n"
+     "              y={0}\n"
+     "              width={Math.max(0, col.xEnd - col.xStart)}\n"
+     "              height={height}\n"
+     "            >\n"
+     "              <title>{`${formatTime(p.tMs)}\\n${p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}`}</title>\n"
+     "            </rect>\n"
+     "          );\n"
+     "        })}\n"
+     "        {hoverColumns.map((col) => (\n"
+     "          <g key={`c-${col.index}`} className={styles.crosshairGroup} data-role=\"crosshair\" aria-hidden=\"true\">\n"
+     "            <line x1={col.x} y1={0} x2={col.x} y2={height} className={styles.crosshairLine} />\n"
+     "          </g>\n"
+     "        ))}",
+     [SPARKLINE]),
+
+    # ============================================== Q2 RECONCILIATION, 2026-09-08
+    # Adversarial F1/F3/F4/F5/F6/F7/F9/F12. ⚠ The shape worth noticing: EVERY mutation below
+    # left `components/` at 184/184 green before this phase, and eleven of the fourteen are
+    # geometry or accessible-naming — the two things the 16 build-phase mutations never
+    # touched, because they assert counts, tooltip strings and adjacency only.
+
+    # ---------------------------------- F1: the Voronoi partition and the crosshair's own x
+    # `hoverColumnsFor` is what build.md §2 calls "the entire snap-to-nearest-data-position
+    # behaviour", and nothing named it. These are the adversarial's mutations A, B and C
+    # verbatim.
+    ("Q2-H7 the crosshair is drawn at its column's left EDGE, so the line sits between two readings while the tooltip names one of them",
+     CHART_SRC,
+     [("                x1={col.x}\n"
+       "                y1={0}\n"
+       "                x2={col.x}\n"
+       "                y2={plotsHeight}",
+       "                x1={col.xStart}\n"
+       "                y1={0}\n"
+       "                x2={col.xStart}\n"
+       "                y2={plotsHeight}")],
+     [CHART]),
+    ("Q2-H8 hover columns span neighbour-to-neighbour instead of midpoint-to-midpoint, so they OVERLAP and 'snap to nearest' silently becomes 'snap to next'",
+     CHART_SRC,
+     [("      const xStart = prev === undefined ? 0 : (xFor(prev) + x) / 2;\n"
+       "      const xEnd = next === undefined ? plotWidth : (x + xFor(next)) / 2;",
+       "      const xStart = prev === undefined ? 0 : xFor(prev);\n"
+       "      const xEnd = next === undefined ? plotWidth : xFor(next);")],
+     [CHART]),
+    ("Q2-H10 a zero-width hover column is emitted anyway — a dead node that satisfies every count assertion while being unhoverable",
+     CHART_SRC,
+     "    .filter((col) => col.xEnd > col.xStart);",
+     "    .filter(() => true);",
+     [CHART]),
+
+    # ---------------------------------- F6: a non-finite reading is not a reading
+    # One decision, two sites: the chart guards non-finite in `runsOf` and `yDomainOf`, so a
+    # NaN is a silent BREAK in the polyline; printing `NaN °C` in the tooltip and the table
+    # beside it is the same value being two different things in one component.
+    ("Q2-H9 a non-finite reading reaches the caller's formatter, printing NaN in the hover tooltip and again in the table",
+     CHART_SRC,
+     [("      lines.push(`${s.label}: ${typeof v === 'number' && Number.isFinite(v) ? plot.formatTick(v) : EM_DASH}`);",
+       "      lines.push(`${s.label}: ${typeof v === 'number' ? plot.formatTick(v) : EM_DASH}`);"),
+      ("      return typeof v === 'number' && Number.isFinite(v) ? plot.formatTick(v) : EM_DASH;",
+       "      return typeof v === 'number' ? plot.formatTick(v) : EM_DASH;")],
+     [CHART]),
+
+    # ---------------------------------- F3/F4: the "accessibility floor" is a NAME, a
+    # caption, column headers and row headers — three of the four were unasserted.
+    ("Q2-TV6 the table view loses the caller's accessible name, so the group reaches a screen reader as unnamed numbers",
+     CHART_SRC,
+     '    <div className={styles.tableView} role="group" aria-label={ariaLabel} data-role="table-view">',
+     '    <div className={styles.tableView} data-role="table-view">',
+     [CHART]),
+    ("Q2-TV7 the per-table <caption> is dropped, so two tables in one group cannot be told apart",
+     CHART_SRC,
+     '            <caption className="sr-only">{plot.series.map((s) => s.label).join(\', \')}</caption>\n',
+     '',
+     [CHART]),
+    ("Q2-TV8 the time cell is a plain data cell, so a reading announces its series but never its instant",
+     CHART_SRC,
+     '                    <th scope="row">{formatTime(row.tMs)}</th>',
+     '                    <td>{formatTime(row.tMs)}</td>',
+     [CHART]),
+
+    # ---------------------------------- F5: the table claiming MORE than the chart
+    ("Q2-TV9 gap rows are not filtered to the drawn window, so the table reports a gap the chart correctly does not hatch",
+     CHART_SRC,
+     "    .filter((g) => {\n"
+     "      const toMs = g.toMs ?? domainEndMs;\n"
+     "      if (toMs < g.fromMs) return false;\n"
+     "      return toMs >= domainStartMs && g.fromMs <= domainEndMs;\n"
+     "    })",
+     "    .filter(() => true)",
+     [CHART]),
+
+    # ---------------------------------- F7: the guard was on the side no caller produces
+    ("Q2-TV10 a plot whose series reported nothing renders a header over an empty tbody — silence, where the sparkline says so in words",
+     CHART_SRC,
+     "              {rows.length === 0 && (\n"
+     '                <tr data-role="empty-row">\n'
+     "                  <td colSpan={plot.series.length + 1}>no readings in the selected window</td>\n"
+     "                </tr>\n"
+     "              )}\n",
+     "",
+     [CHART]),
+
+    # ---------------------------------- the sparkline's own copies
+    ("Q2-SP8 the sparkline's hover columns end at the NEXT point instead of the midpoint, so every interior column overlaps its neighbour",
+     SPARKLINE_SRC,
+     "    const xEnd = index === n - 1 ? width : (x + xFor(index + 1)) / 2;",
+     "    const xEnd = index === n - 1 ? width : xFor(index + 1);",
+     [SPARKLINE]),
+    ("Q2-SP9 the sparkline's crosshair is drawn at its column's left edge rather than on its own point",
+     SPARKLINE_SRC,
+     "                <line x1={col.x} y1={0} x2={col.x} y2={height} className={styles.crosshairLine} />",
+     "                <line x1={col.xStart} y1={0} x2={col.xStart} y2={height} className={styles.crosshairLine} />",
+     [SPARKLINE]),
+    ("Q2-SP10 the sparkline goes back to naming every trend on the page the same, in both views",
+     SPARKLINE_SRC,
+     [('      <caption className="sr-only">{ariaLabel}</caption>',
+       '      <caption className="sr-only">trend over the selected window</caption>'),
+      ("      aria-label={ariaLabel}\n",
+       '      aria-label="trend over the selected window"\n')],
+     [SPARKLINE]),
+    ("Q2-SP11 the sparkline's time cell is a plain data cell, so a reading announces no instant",
+     SPARKLINE_SRC,
+     '            <th scope="row">{formatTime(p.tMs)}</th>',
+     "            <td>{formatTime(p.tMs)}</td>",
+     [SPARKLINE]),
+    ("Q2-SP12 a non-finite reading reaches the caller's formatter on the sparkline too, in the tooltip and the table",
+     SPARKLINE_SRC,
+     [("                <title>{`${formatTime(p.tMs)}\\n${p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}`}</title>",
+       "                <title>{`${formatTime(p.tMs)}\\n${p.v !== null ? formatValue(p.v) : EM_DASH}`}</title>"),
+      ("            <td>{p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}</td>",
+       "            <td>{p.v !== null ? formatValue(p.v) : EM_DASH}</td>")],
+     [SPARKLINE]),
 ]
 
 # ---------------------------------------------------------------------------

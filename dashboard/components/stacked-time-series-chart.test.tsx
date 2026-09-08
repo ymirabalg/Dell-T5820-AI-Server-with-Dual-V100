@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 
+import { EM_DASH } from '@/lib/format';
 import type { Gap } from '@/lib/client/gaps';
 import type { SeriesPoint } from '@/lib/client/series';
 
@@ -738,5 +739,465 @@ describe('⚠ L8 — legend entries are laid out by their labels’ widths, not 
       const previous = xs[i - 1] as number;
       expect(x).toBeGreaterThan(previous + 16 + 4 + (labels[i - 1] as string).length * 5.4);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Q2 — the hover layer (crosshair + native tooltip), CSS/SVG-native, no hook.
+// ---------------------------------------------------------------------------------------
+
+const hoverZoneCount = (html: string): number => (html.match(/data-role="hover-zone"/g) ?? []).length;
+const crosshairCount = (html: string): number => (html.match(/data-role="crosshair"/g) ?? []).length;
+const titles = (html: string): string[] =>
+  [...html.matchAll(/<title>([\s\S]*?)<\/title>/g)].map((m) => m[1] ?? '');
+
+describe('Q2 — hover column cost: the common case collapses to series length, not 600×N', () => {
+  test('⚠ three series sharing ONE sample clock produce as many hover columns as one series has points, not the sum', () => {
+    // gpuPlot() carries two series and fanPlot() carries one, all three built from the SAME
+    // tempSeries(10, 0) — ten shared instants, three series. The adversarial bound is 30.
+    const html = render();
+    expect(hoverZoneCount(html)).toBe(10);
+    expect(crosshairCount(html)).toBe(10);
+  });
+
+  test('divergent series (no shared clock) union rather than intersect — the adversarial bound', () => {
+    const plot: ChartPlot = {
+      id: 'temp',
+      formatTick,
+      series: [
+        { id: 'a', label: 'A', color: '#3987e5', points: [{ tMs: 0, v: 1 }, { tMs: 1000, v: 2 }] },
+        { id: 'b', label: 'B', color: '#199e70', points: [{ tMs: 500, v: 3 }, { tMs: 1500, v: 4 }] },
+      ],
+    };
+    const html = render({ plots: [plot] });
+    // 0, 500, 1000, 1500 — four distinct instants from two series with NO overlap at all.
+    expect(hoverZoneCount(html)).toBe(4);
+  });
+
+  test('a plot with no series at all — and therefore no instants — draws no hover layer', () => {
+    const empty: ChartPlot = { id: 'empty', formatTick, series: [] };
+    const html = render({ plots: [empty] });
+    expect(hoverZoneCount(html)).toBe(0);
+  });
+});
+
+describe('Q2 — a hover tooltip never borrows another series’ reading across a mismatched instant', () => {
+  test('⚠ a series with no point at a shared instant renders the em dash there, never a neighbour’s value', () => {
+    const plot: ChartPlot = {
+      id: 'temp',
+      formatTick,
+      series: [
+        {
+          id: 'a',
+          label: 'Series A',
+          color: '#3987e5',
+          points: [{ tMs: 0, v: 60 }, { tMs: 1000, v: 61 }, { tMs: 2000, v: 62 }],
+        },
+        {
+          // No point at tMs=1000 — a real decimation-divergence case, not a contrived one.
+          id: 'b',
+          label: 'Series B',
+          color: '#199e70',
+          points: [{ tMs: 0, v: 90 }, { tMs: 2000, v: 92 }],
+        },
+      ],
+    };
+    const html = render({ plots: [plot] });
+    const t = titles(html);
+    const at1000 = t.find((s) => s.includes('TIME(1000)'));
+    expect(at1000).toContain('Series A: TICK(61)');
+    expect(at1000).toContain(`Series B: ${EM_DASH}`);
+    expect(at1000).not.toContain('TICK(90)');
+    expect(at1000).not.toContain('TICK(92)');
+  });
+
+  test('⚠ a null reading at a shared instant renders the em dash, not the numeral 0', () => {
+    const plot: ChartPlot = {
+      id: 'temp',
+      formatTick,
+      series: [
+        { id: 'a', label: 'Series A', color: '#3987e5', points: [{ tMs: 0, v: 60 }, { tMs: 1000, v: null }] },
+      ],
+    };
+    const html = render({ plots: [plot] });
+    const t = titles(html);
+    const at1000 = t.find((s) => s.includes('TIME(1000)'));
+    expect(at1000).toContain(`Series A: ${EM_DASH}`);
+    expect(at1000).not.toContain('TICK(0)');
+  });
+});
+
+describe('Q2 — per-mark tooltips on the marks that already exist (lone points, end dots)', () => {
+  test('⚠ a lone-point run carries a native title with its series label and formatted value', () => {
+    const plot: ChartPlot = {
+      id: 'temp',
+      formatTick,
+      series: [
+        {
+          id: 'a',
+          label: 'Series A',
+          color: '#3987e5',
+          points: [{ tMs: 0, v: 60 }, { tMs: 1000, v: null }, { tMs: 2000, v: 62 }],
+        },
+      ],
+    };
+    const html = render({ plots: [plot] });
+    const lonePoint = /<circle[^>]*data-role="lone-point"[^>]*>[\s\S]*?<title>([\s\S]*?)<\/title>/.exec(html)?.[1];
+    expect(lonePoint).toContain('Series A');
+    expect(lonePoint).toContain('TICK(60)');
+  });
+
+  test('⚠ an end dot carries a native title with BOTH the series label and its own endLabel text', () => {
+    const plot: ChartPlot = {
+      id: 'temp',
+      formatTick,
+      series: [
+        { id: 'gpu0', label: 'GPU 0', color: '#3987e5', points: [{ tMs: 0, v: 60 }], endLabel: '69 °C' },
+      ],
+    };
+    const html = render({ plots: [plot] });
+    const endDot = /<circle[^>]*class="[^"]*endDot[^"]*"[^>]*>[\s\S]*?<title>([\s\S]*?)<\/title>/.exec(html)?.[1];
+    expect(endDot).toBeDefined();
+    // Both halves, not either — a title carrying only the label (or only the endLabel text)
+    // would satisfy an `.toMatch(/A|B/)` assertion while still dropping the other half.
+    expect(endDot).toContain('GPU 0');
+    expect(endDot).toContain('69 °C');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Q2 — the table view (a PROP, not internal state — `purity.test.ts`).
+// ---------------------------------------------------------------------------------------
+
+describe('Q2 — view="table" renders a table instead of an svg', () => {
+  test('⚠ table view draws no <svg> at all, and chart view (the default) draws no <table>', () => {
+    const table = render({ view: 'table' });
+    const chart = render();
+    expect(table).not.toContain('<svg');
+    expect(table).toContain('<table');
+    expect(chart).not.toContain('<table');
+    expect(chart).toContain('<svg');
+  });
+
+  test('⚠ one table PER PLOT, never one table merging two different units', () => {
+    const html = render({ view: 'table' });
+    expect((html.match(/<table/g) ?? []).length).toBe(2);
+  });
+
+  test('⚠ invariant 1 in the table: a null reading renders the em dash, not the numeral 0', () => {
+    const plot: ChartPlot = {
+      id: 'temp',
+      formatTick,
+      series: [{ id: 'a', label: 'Series A', color: '#3987e5', points: [{ tMs: 0, v: null }] }],
+    };
+    const html = render({ plots: [plot], view: 'table' });
+    expect(html).toContain(`<td>${EM_DASH}</td>`);
+    expect(html).not.toContain('<td>TICK(0)</td>');
+  });
+
+  test('⚠ invariant 1’s other half: a v=0 reading renders the caller’s formatted zero, not the em dash', () => {
+    const plot: ChartPlot = {
+      id: 'temp',
+      formatTick,
+      series: [{ id: 'a', label: 'Series A', color: '#3987e5', points: [{ tMs: 0, v: 0 }] }],
+    };
+    const html = render({ plots: [plot], view: 'table' });
+    expect(html).toContain('<td>TICK(0)</td>');
+    expect(html).not.toContain(`<td>${EM_DASH}</td>`);
+  });
+
+  test('⚠ a gap gets its own row spanning every column, not a silent jump between two readings', () => {
+    const plot: ChartPlot = {
+      id: 'temp',
+      formatTick,
+      series: [
+        {
+          id: 'a',
+          label: 'Series A',
+          color: '#3987e5',
+          points: [{ tMs: 0, v: 60 }, { tMs: 5000, v: 61 }],
+        },
+      ],
+    };
+    const gaps: Gap[] = [{ fromMs: 1000, toMs: 4000, reason: 'hidden' }];
+    const html = render({ plots: [plot], gaps, view: 'table' });
+    expect(html).toContain('data-role="gap-row"');
+    expect(html).toContain('colSpan="2"');
+    expect(html).toContain('hidden');
+  });
+
+  test('an open gap (toMs null) renders "ongoing", never a fabricated end time', () => {
+    const plot: ChartPlot = {
+      id: 'temp',
+      formatTick,
+      series: [{ id: 'a', label: 'Series A', color: '#3987e5', points: [{ tMs: 0, v: 60 }] }],
+    };
+    const gaps: Gap[] = [{ fromMs: 1000, toMs: null, reason: 'failed' }];
+    const html = render({ plots: [plot], gaps, view: 'table' });
+    expect(html).toContain('ongoing');
+  });
+
+  test('no plots at all renders a note, not an empty <table>', () => {
+    const html = render({ plots: [], view: 'table' });
+    expect(html).not.toContain('<table');
+    expect(html).toContain('no time range to plot');
+  });
+
+  test('series labels become the table’s column headers', () => {
+    const html = render({ view: 'table' });
+    expect(html).toContain('<th scope="col">GPU 0</th>');
+    expect(html).toContain('<th scope="col">GPU 1</th>');
+    expect(html).toContain('<th scope="col">fan 5</th>');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Q2 test-phase addition — the DOM property the CSS-only crosshair actually depends on.
+//
+// `.hoverZone:hover + .crosshairGroup` is an ADJACENT-SIBLING selector: it fires only when a
+// `.crosshairGroup` is the immediately-following sibling of the hovered `.hoverZone`, with
+// nothing between them. Every other Q2 test in this file renders through the SAME loop that
+// already keeps these paired (one `Fragment` per column), so none of them can tell "paired
+// because the geometry says so" apart from "paired because a shared `key` happens to align
+// two separately-rendered lists" — a refactor into two loops (all zones, then all groups —
+// a plausible tidy-up, and one that would NOT be caught by hoverZoneCount, crosshairCount, or
+// any tooltip-content assertion, since those counts and contents are unchanged) would leave
+// every hover zone dead: the CSS rule would never match, and no ⚠ test above would go red.
+// ---------------------------------------------------------------------------------------
+
+describe('Q2 — the hover zone and its crosshair must be adjacent DOM siblings, not merely equal in count', () => {
+  test('⚠ every hover-zone rect is immediately followed by its OWN crosshair group, with nothing between', () => {
+    const html = render();
+    const zones = hoverZoneCount(html);
+    const adjacentPairs = (
+      html.match(/<rect[^>]*data-role="hover-zone"[^>]*>[\s\S]*?<\/rect><g[^>]*data-role="crosshair"/g) ?? []
+    ).length;
+    expect(zones).toBeGreaterThan(1); // the fixture must actually exercise more than one pair
+    expect(adjacentPairs).toBe(zones);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Q2 RECONCILIATION, 2026-09-08 — the adversarial's F1: `hoverColumnsFor` is what `build.md`
+// §2 calls "the entire snap-to-nearest-data-position behaviour", and NOTHING named it. Three
+// separate plausible defects each left this file at 184/184 green:
+//
+//   A  the crosshair drawn at `col.xStart` — the line snaps to the MIDPOINT between two
+//      readings and never to a reading, while the tooltip still names the right instant, so
+//      the line and the numbers disagree;
+//   B  the column bounds set to the neighbouring instants instead of the midpoints — the
+//      zones OVERLAP, the later-painted one wins hit testing, and "snap to nearest" silently
+//      becomes "snap to NEXT": hovering a spike reports the following sample;
+//   C  (the sparkline's own copy of B — see `sparkline.test.tsx`).
+//
+// Every Q2 test above asserts a COUNT, a tooltip STRING, or adjacency. None reads a
+// coordinate, so none of the three could go red. The two tests below read the geometry the
+// mechanism actually rests on. The second also closes F1a: the test phase's adjacency test
+// counts adjacent pairs without establishing OWNERSHIP, so an implementation pairing every
+// zone with the NEXT column's crosshair produces exactly `zones` pairs and passes.
+// ---------------------------------------------------------------------------------------
+
+/** Every hover zone as `[x, width]`, in DOM order. */
+const hoverZones = (html: string): [number, number][] =>
+  [...html.matchAll(/<rect[^>]*data-role="hover-zone"[^>]*x="([-\d.]+)"[^>]*width="([-\d.]+)"/g)].map(
+    (m) => [Number(m[1]), Number(m[2])],
+  );
+
+/** Every crosshair line's x, in DOM order — asserting x1 === x2 as it goes (it is vertical). */
+const crosshairXs = (html: string): number[] =>
+  [...html.matchAll(/data-role="crosshair"[^>]*>\s*<line x1="([-\d.]+)"[^>]*x2="([-\d.]+)"/g)].map(
+    (m) => {
+      expect(Number(m[1])).toBe(Number(m[2]));
+      return Number(m[1]);
+    },
+  );
+
+describe('⚠ Q2/F1 — the hover geometry IS the snap-to-nearest behaviour', () => {
+  // 10 points at 0…9000 in a [0, 60000] domain, plotWidth = 600 − 46 = 554.
+  const plotWidth = 554;
+  const xOf = (tMs: number): number => (tMs / 60_000) * plotWidth;
+
+  test('⚠ every crosshair is drawn at its OWN instant’s x, strictly inside its own hover zone — never on a column boundary', () => {
+    const html = render({ plots: [gpuPlot()] });
+    const zones = hoverZones(html);
+    const xs = crosshairXs(html);
+    expect(zones.length).toBe(10);
+    expect(xs.length).toBe(10);
+    xs.forEach((x, i) => {
+      const [zx, zw] = zones[i] as [number, number];
+      // The instant's own x, not its column's edge — this is what makes the line agree with
+      // the tooltip's numbers.
+      expect(x).toBeCloseTo(xOf(i * 1000), 5);
+      // …and it lies inside the zone that reveals it, so pointer and line are never in
+      // different columns. Strictly inside for every interior column.
+      expect(x).toBeGreaterThanOrEqual(zx);
+      expect(x).toBeLessThanOrEqual(zx + zw);
+      if (i > 0 && i < 9) {
+        expect(x).toBeGreaterThan(zx);
+        expect(x).toBeLessThan(zx + zw);
+      }
+    });
+  });
+
+  test('⚠ the columns are a VORONOI partition: each bound is the midpoint to its neighbour, so they tile [0, plotWidth] with no overlap and no gap', () => {
+    const html = render({ plots: [gpuPlot()] });
+    const zones = hoverZones(html);
+    expect(zones.length).toBe(10);
+    zones.forEach(([x, w], i) => {
+      const expectedStart = i === 0 ? 0 : (xOf((i - 1) * 1000) + xOf(i * 1000)) / 2;
+      const expectedEnd = i === 9 ? plotWidth : (xOf(i * 1000) + xOf((i + 1) * 1000)) / 2;
+      expect(x).toBeCloseTo(expectedStart, 5);
+      expect(x + w).toBeCloseTo(expectedEnd, 5);
+      // Adjacent, not overlapping: zone i ends exactly where zone i+1 begins. An overlap is
+      // what turns "nearest" into "next" — the later-painted rect wins hit testing.
+      const next = zones[i + 1];
+      if (next) expect(x + w).toBeCloseTo(next[0], 5);
+    });
+    expect((zones[0] as [number, number])[0]).toBe(0);
+    const last = zones[9] as [number, number];
+    expect(last[0] + last[1]).toBeCloseTo(plotWidth, 5);
+  });
+
+  test('⚠ a hover column that collapses to zero width is not emitted at all — a dead node satisfies every count assertion', () => {
+    // `xFor` clamps, so instants outside the domain pile onto the same edge. Three points
+    // before the window and one inside it: the first two collapse.
+    const plot: ChartPlot = {
+      id: 'temp',
+      formatTick,
+      series: [
+        {
+          id: 'a',
+          label: 'Series A',
+          color: '#3987e5',
+          points: [
+            { tMs: -30_000, v: 60 },
+            { tMs: -20_000, v: 61 },
+            { tMs: -10_000, v: 62 },
+            { tMs: 5_000, v: 63 },
+          ],
+        },
+      ],
+    };
+    const html = render({ plots: [plot] });
+    const zones = hoverZones(html);
+    expect(zones.every(([, w]) => w > 0)).toBe(true);
+    expect(zones.length).toBe(2);
+    expect(crosshairCount(html)).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Q2 RECONCILIATION — F3/F4: §6.2 calls the table view "an accessibility floor", and the
+// naming that makes it one (the caller's `aria-label`, a `<caption>` per table, a row header
+// per row) was entirely unasserted: deleting `role="group" aria-label={ariaLabel}` AND every
+// `<caption>` left the whole suite green.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ Q2/F3 — the table view is named, not an anonymous block of numbers', () => {
+  test('⚠ the table view carries the CALLER’s accessible name, exactly as the chart branch does', () => {
+    const html = render({ view: 'table', ariaLabel: 'GPU 1: temperature over the selected window' });
+    expect(html).toContain('role="group"');
+    expect(html).toContain('aria-label="GPU 1: temperature over the selected window"');
+  });
+
+  test('⚠ every table names itself with a <caption>, so two tables in one group are told apart', () => {
+    const html = render({ view: 'table' });
+    const captions = [...html.matchAll(/<caption[^>]*>([^<]*)<\/caption>/g)].map((m) => m[1]);
+    expect(captions).toEqual(['GPU 0, GPU 1', 'fan 5']);
+  });
+
+  test('⚠ each row’s time cell is a row HEADER, so a reading announces which instant it belongs to', () => {
+    const html = render({ view: 'table' });
+    expect(html).toContain('<th scope="row">TIME(0)</th>');
+    // …and it is a HEADER, not a data cell wearing a header's clothes.
+    expect(html).not.toContain('<td>TIME(0)</td>');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Q2 RECONCILIATION — F5, F6, F7: three ways the table view said something the chart does not.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ Q2/F5 — the table view claims no gap the chart would not hatch', () => {
+  const plot = (): ChartPlot => ({
+    id: 'temp',
+    formatTick,
+    series: [{ id: 'a', label: 'Series A', color: '#3987e5', points: [{ tMs: 0, v: 60 }] }],
+  });
+
+  test('⚠ a gap entirely BEFORE the drawn window is no more a table row than it is a hatch', () => {
+    // Reachable without contriving anything: `runtime.ts` prunes gaps at LONGEST_WINDOW_MS
+    // (120 min) while the default window is 30 min, so `gaps` legitimately holds entries far
+    // older than the domain.
+    const gaps: Gap[] = [{ fromMs: -500_000, toMs: -450_000, reason: 'hidden' }];
+    const chart = render({ plots: [plot()], gaps });
+    const table = render({ plots: [plot()], gaps, view: 'table' });
+    expect(chart).not.toContain('data-gap-reason');
+    expect(table).not.toContain('data-role="gap-row"');
+  });
+
+  test('a gap INSIDE the window is still rendered — the other side of the same guard', () => {
+    const gaps: Gap[] = [{ fromMs: 10_000, toMs: 20_000, reason: 'hidden' }];
+    expect(render({ plots: [plot()], gaps, view: 'table' })).toContain('data-role="gap-row"');
+  });
+
+  test('⚠ an inverted gap (toMs before fromMs) is dropped by the table exactly as the chart drops it', () => {
+    const gaps: Gap[] = [{ fromMs: 25_000, toMs: 5_000, reason: 'failed' }];
+    const chart = render({ plots: [plot()], gaps });
+    const table = render({ plots: [plot()], gaps, view: 'table' });
+    expect(chart).not.toContain('data-gap-reason');
+    expect(table).not.toContain('data-role="gap-row"');
+  });
+});
+
+describe('⚠ Q2/F6 — a non-finite reading is not a reading, in the tooltip or the table', () => {
+  const plot = (): ChartPlot => ({
+    id: 'temp',
+    formatTick,
+    series: [
+      {
+        id: 'a',
+        label: 'Series A',
+        color: '#3987e5',
+        points: [
+          { tMs: 0, v: 5 },
+          { tMs: 1000, v: Number.NaN },
+          { tMs: 2000, v: Number.POSITIVE_INFINITY },
+        ],
+      },
+    ],
+  });
+
+  test('⚠ NaN and Infinity render the em dash in the hover tooltip, never a formatted NaN', () => {
+    const html = render({ plots: [plot()] });
+    expect(html).not.toContain('NaN');
+    expect(html).not.toContain('Infinity');
+    const t = titles(html);
+    expect(t.some((s) => s.includes('TIME(1000)') && s.includes(EM_DASH))).toBe(true);
+  });
+
+  test('⚠ NaN and Infinity render the em dash in the table too — the chart already breaks its line there', () => {
+    const html = render({ plots: [plot()], view: 'table' });
+    expect(html).not.toContain('NaN');
+    expect(html).not.toContain('Infinity');
+    expect((html.match(new RegExp(`<td>${EM_DASH}</td>`, 'g')) ?? []).length).toBe(2);
+  });
+});
+
+describe('⚠ Q2/F7 — a plot whose series reported nothing says so', () => {
+  test('⚠ a plot with series but no samples renders the "no readings" note, not a header over an empty tbody', () => {
+    const plot: ChartPlot = {
+      id: 'temp',
+      formatTick,
+      series: [{ id: 'a', label: 'Series A', color: '#3987e5', points: [] }],
+    };
+    const html = render({ plots: [plot], view: 'table' });
+    expect(html).toContain('<table');
+    expect(html).toContain('no readings in the selected window');
+    expect(html).toContain('data-role="empty-row"');
+  });
+
+  test('a plot that DOES have samples carries no empty-row note — the other side of the same guard', () => {
+    expect(render({ view: 'table' })).not.toContain('data-role="empty-row"');
   });
 });
