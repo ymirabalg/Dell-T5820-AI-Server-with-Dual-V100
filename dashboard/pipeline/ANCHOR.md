@@ -31,13 +31,22 @@ adversarial and review phases and fixed before they became wrong code. Several w
 
 **Steps 1–8 are closed and verified. Step 9's full loop is closed.** Steps 10–12 have not started.
 
-### ⚠ There are now TWO branches, and you are on the second
+### ⚠ The backend has LANDED ON `main` — 2026-09-07. Two branches remain.
 
 ```
-dashboard-backend    3f06e98   [origin/dashboard-backend]   PUSHED, 18 commits ahead of main
-dashboard-frontend   06a09cb   branched off it              LOCAL ONLY, never pushed
-main                 29b07bb   [origin/main]                untouched
+main                 3f06e98   local ahead of [origin/main]   backend merged, fast-forward, NOT PUSHED
+dashboard-backend    3f06e98   [origin/dashboard-backend]     == main. Finished; nothing more goes here
+dashboard-frontend   391d17f   3 commits ahead of main        LOCAL ONLY, never pushed
 ```
+
+The merge was a clean fast-forward — `dashboard-backend` had 18 commits and `main` had none of
+its own — touching only `dashboard/` and the root `.gitignore`. **`main` and `origin/main` have
+diverged until somebody pushes**, and `git push` is gated here and was not asked for.
+
+`dashboard-backend` is now redundant with `main` and carries **zero UI**: no `components/`, no
+`steps/09-ui-primitives/` (verified by `git ls-tree`, 2026-09-07). The split the previous session
+made by soft reset held. Do not add to that branch; if UI ever appears on it, that is the same
+mistake recurring.
 
 **`dashboard-frontend` is the working branch.** It carries `components/` and step 9's harness and
 nothing else; the spec, the collectors, the client runtime and every earlier harness live on
@@ -246,12 +255,47 @@ Steps 1–8's sweep and step 9 are done. The queue is `pipeline/WORK-ITEMS.md` �
 Each work item is **one agent loop**, one item at a time, each phase a **fresh agent with clean
 context** receiving a written handoff:
 
-| phase | model | does |
-|---|---|---|
-| **build** | **Sonnet 5, high effort** | implements + tests. Load the `dataviz` skill for anything with a chart, meter or stat row |
-| **test** | **Sonnet 5, high effort** | reads every test name against its body; fixture symmetry; hunts equivalent and probabilistic mutations |
-| **adversarial** | default | tries to break it, **fixes nothing**, writes findings with concrete failure scenarios |
-| **reconcile** | default (the parent) | adjudicates every finding ACCEPTED/REJECTED/DEFERRED **with reasons**, re-runs everything, commits |
+| phase | model | runs as | does |
+|---|---|---|---|
+| **build** | **Sonnet 5, high effort** | subagent | implements + tests. Load the `dataviz` skill for anything with a chart, meter or stat row |
+| **test** | **Sonnet 5, high effort** | subagent | reads every test name against its body; fixture symmetry; hunts equivalent and probabilistic mutations |
+| **adversarial** | default | subagent | tries to break it, **fixes nothing**, writes findings with concrete failure scenarios |
+| **reconcile** | default | **background subagent** — changed 2026-09-07 | adjudicates every finding ACCEPTED/REJECTED/DEFERRED **with reasons**, applies what survives, re-runs everything, writes `reconciliation.md` and rewrites `HANDOVER.md` |
+
+### ⚠ Reconciliation moved out of the parent — 2026-09-07, at the owner's instruction
+
+It used to be the parent's own work. It is now **a background subagent like every other phase**,
+for one reason: reconciliation is the most context-expensive phase in the loop — it reads the
+build, the test pass, every adversarial finding, and the code each finding names, and step 9's
+ran to 25 findings. Doing that in the parent burned the session that has to survive the *whole*
+queue. The parent now spends its context on judgment and sequencing, not on re-reading.
+
+**What the parent keeps, and must not delegate:**
+
+1. **Green.** `pnpm verify` exiting 0, run *by the parent*, on the tree the agent left behind,
+   before any commit. §4 and §9 both say this and they were written because an agent claimed
+   green on a failing tree. A background agent reporting "verify passes" is a claim, not
+   evidence.
+2. **The commit.** Repo convention is commit-only-when-asked (root `CLAUDE.md`), and every
+   reconciliation so far has been an explicit ask. The agent stages nothing.
+3. **`SPEC.md`.** Unchanged from §5 — phases record gaps, the parent writes wording. A
+   reconciliation agent that wants a spec change says so in its report.
+4. **Audit of the adjudication table.** Read every REJECTED and DEFERRED row and its reason.
+   Accepting a fix costs a diff you can see; rejecting a finding costs nothing visible, which
+   makes rejection the failure mode to check.
+
+**The honest cost of this change.** The parent's judgment in the reconcile seat was load-bearing:
+this project has a reconciliation correctly overruling its own review, and four occasions where
+an agent corrected the parent and was right. Moving the seat to an agent means the parent
+*audits* an adjudication it did not produce — weaker than producing it, and the mitigation is
+rule 4 above, not optimism. If a reconcile agent's rejections start reading thin, pull the phase
+back into the parent for that item and say so here.
+
+**Mechanics.** Spawn it with `Agent`, and let it run in the background — do not block on it. The
+handoff must name: the item, the branch (`dashboard-frontend`), the files in play, the phases'
+notes to read, **what the parent has already verified** (§8's rule below), and the four
+non-delegable items above so the agent does not commit or edit `SPEC.md`. It reports back a
+summary; the transcript stays out of the parent's context, which is the entire point.
 
 **Handoffs live in `pipeline/handoffs/`.** Write one before spawning; the agent's quality tracks
 the handoff's. The step 9 handoff is the model to copy.
