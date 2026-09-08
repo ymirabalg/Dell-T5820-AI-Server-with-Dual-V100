@@ -192,6 +192,11 @@ describe('nodeHttp', () => {
    * ⚠ The assertion is that the call **completes**, not that it rejects. A broken bound
    * rejects too — 1 ms in — so `rejects.toThrow()` is the shape that let this ship. The
    * server deliberately answers *later* than 1 ms so the two implementations differ.
+   *
+   * ⚠ The name deliberately says which seam this is. It was character-identical to
+   * `io.test.ts`'s until 2026-09-07, and the ledger matches a mark by its
+   * literal prefix — so one mutation reddening either file scored BOTH marks covered,
+   * and the other could have gone inert in silence (Q1 adversarial F2).
    */
   test.each([
     ['Infinity', Number.POSITIVE_INFINITY],
@@ -199,7 +204,7 @@ describe('nodeHttp', () => {
     ['a negative', -1],
     ['above 2^31-1', 2 ** 31],
     ['zero', 0],
-  ])('⚠ a timeout of %s falls back to the module default, never to setTimeout’s 1 ms', async (_name, ms) => {
+  ])('⚠ an HTTP timeout of %s falls back to the module default, never to setTimeout’s 1 ms', async (_name, ms) => {
     const base = await serve((_req, res) => {
       setTimeout(() => {
         res.writeHead(200, { 'content-type': 'application/json' });

@@ -60,10 +60,12 @@ permission classifier in this environment and was refused once before the owner 
 
 | | |
 |---|---|
-| steps 1–8 | closed. 705 mutations across seven harnesses, every one biting |
+| steps 1–8 | closed. **710** mutations across seven harnesses, every one biting (was 705; Q1 added four) |
 | step 9 | **closed** — build → test → adversarial → reconcile, 25 findings adjudicated |
+| **Q1** | **closed 2026-09-07** — the ledger scanner, seven findings adjudicated. §2.2 |
 | suite | **67 files · 2210 tests · `pnpm verify` exit 0 · `pnpm build` clean** |
 | step 9's harness | 61 mutations, ledger clean over 67 ⚠ marks |
+| all eight harnesses | **771 mutations · 689 ⚠ marks · every harness exit 0** (Q1, 2026-09-07) |
 | the box | **running the backend natively**, see §2.1 |
 
 ### 2.1 ⚠ The backend is DEPLOYED and running on `ai-server` right now
@@ -84,18 +86,47 @@ tree**, or you ship whatever an agent happens to be mid-edit on. Full account in
 
 ⚠ The deployed password is `dashboard1`, set for testing. Step 11 replaces it properly.
 
-### 2.2 ⚠ What to do next — `pipeline/WORK-ITEMS.md` §10 is the queue
+### 2.2 ⚠ What to do next — **Q2**, then step 10. `pipeline/WORK-ITEMS.md` §10 is the queue
 
-**Q1 first, and it is not step 9 work — it is a defect in the mechanism every step's evidence
-rests on.** The red-test ledger's scanner cannot see a multi-line `test.each(...)`; its regex
-ends the argument list at the first newline. **37 ⚠ marks across steps 2–8 are invisible to it,
-21 of them in step 7** (scrypt, the cookie, the limiter, the gate). That is not a claim that 37
-tests are inert — it is a claim that nobody knows, because the thing built to answer it could not
-see them. Step 9's harness has the corrected scanner: paren-balanced, string-aware **and**
-comment-aware. Back-port it, re-run all seven, expect failures.
+**Q1 is CLOSED, 2026-09-07** — build → test → adversarial → reconcile, seven findings adjudicated
+(six accepted, one deferred, none rejected). See
+`pipeline/steps/Q1-ledger-scanner/reconciliation.md`.
 
-Then **Q2** (§6.2 now requires a hover layer and table view; the primitives have neither, because
-the build ran before the spec was amended), then **step 10**.
+**Next is Q2**: §6.2 now requires a hover layer and a table view; step 9's primitives have
+neither, because the build ran before the spec was amended (WORK-ITEMS §10.2). It is new build
+work and wants its own loop. **Then step 10.**
+
+#### What Q1 turned out to be, for the record
+
+The red-test ledger's scanner could not see a multi-line `test.each(...)` — its regex ended the
+argument list at the first newline — so ⚠ marks it could not see were marks it never checked.
+Step 9's corrected scanner (paren-balanced, string-aware **and** comment-aware) was back-ported
+into steps 2–8 and **all eight** harnesses re-run.
+
+⚠ **The figure this section used to carry — 37 invisible marks, 21 in step 7 — was wrong, and
+wrong in an instructive way.** It was measured with step 9's scanner, which has a *second* blind
+spot of identical shape: a **generic type argument** (`test.each<[string, LoginState]>(…)`)
+defeats the regex completely, matching nothing and printing nothing. Q1's build measured with the
+same scanner and reported the prediction "matched exactly" — two numbers agreeing because they
+share a defect. The true counts are **39 invisible, 23 of them in step 7**. Both extra marks were
+backed incidentally.
+
+Where it stands now, all measured by Q1's reconciliation:
+
+| | |
+|---|---|
+| harnesses | **eight**, all carrying a byte-identical corrected scanner, all exit 0 |
+| mutations | **771** total; **710** across steps 2–8 |
+| ⚠ marks checked | **689** total; **622** across steps 2–8, against 584 before Q1 |
+| new mutations | `SC1`, `K8`, `W19` (step 7) · `W21` (step 8) |
+| one ⚠ dropped | `session.test.ts`'s "verifies as null rather than throwing" — no plausible single wrong implementation; upheld twice under independent challenge |
+| new: the scanner now **reports** what it cannot read | five backtick-named tests, none marked today |
+
+⚠ **The find nobody predicted:** renaming a ⚠ test name is a *ledger* change. `wire.test.ts`'s
+old name gave a ledger prefix of the single character `⚠`, matching every ⚠ FAIL line, so its
+mark scored covered for free in every run this project has done. Renaming it exposed a genuinely
+inert mark — `wire.ts`'s `calendarMatches` guard had never had a mutation — now backed by `W21`.
+**Re-run the owning harness after any ⚠ rename.**
 
 ## 3. Toolchain
 
@@ -214,8 +245,18 @@ reconciliation and has been found stale in the *safe* direction three times (ent
 answered by the spec). **Re-check every entry against `SPEC.md` before trusting it.**
 
 Also mine: each step's `review.md` §DEFER table (names an owning step) and each
-`reconciliation.md` "new spec gaps for you" section. Beware — the `S*` namespace is polluted:
-some `S`-prefixed ids in steps 3–5 are *harness mutation ids*, not gaps.
+`reconciliation.md` "new spec gaps for you" section.
+
+⚠ **Beware the id namespaces, and the warning that used to sit here understated the problem.**
+It said *"the `S*` namespace is polluted: some `S`-prefixed ids in steps 3–5 are harness mutation
+ids, not gaps."* Widened 2026-09-07 by Q1's reconciliation (adversarial F5): the pollution is
+**not confined to `S` and not confined to steps 3–5**. `S11/G5` is one open obligation, cited in
+this file, `HANDOVER.md`, `WORK-ITEMS.md` and `UI-BACKEND-GAPS.md` — and step 7's harness holds a
+mutation id for `S11` *and* one for `G5`. `S12` is both a step-3/5/8 mutation id and a step-5 gap
+id. Q1 renamed the one it created (`S11` → `SC1`) and left `G5` alone, because step 7's own notes
+cite it. **A grep for an id can land in a harness; read what you hit.** The cheap fix — a
+reserved prefix for mutation ids, which are already per-harness scoped — is recorded for the
+owner in Q1's `reconciliation.md` §7 and not taken.
 
 A cached extract of the DEFER tables for steps 1–7 may still exist at
 `/private/tmp/claude-501/.../scratchpad/defers.md`; regenerate it if not.
@@ -236,10 +277,19 @@ strip its defaults; amend the spec instead*). That last one is why Q2 exists.
 
 **Deferred work items with owning steps** (from step 8's §9.4 list):
 
-- **Backend, still open:** **D8** `STANDING` env plumbing → step 11, verified step 12 · the
-  **red-test ledger retrofit for step 3's harness**, which still has none — **folded into Q1**.
+- **Backend, still open:** **D8** `STANDING` env plumbing → step 11, verified step 12. ⚠ That is
+  now the *only* backend item here — the **red-test ledger retrofit for step 3's harness** was
+  listed beside it as "still has none, folded into Q1" and **that was wrong: it was done during
+  step 8.** Q1's build phase confirmed it (`LEDGER_FILES` at line 71, a wired-up coverage check,
+  a comment at line 43 saying so) and Q1's reconciliation re-ran it clean — 72 mutations, 24 ⚠
+  marks, exit 0. Corrected 2026-09-07; also corrected in `WORK-ITEMS.md` §2 (A6) and
+  `HANDOVER.md`.
 - **Closed 2026-09-07:** ~~O19~~ (GB→GiB, a §4 wire change), ~~D4~~ `errorsForPanel`,
-  ~~D5~~ `traceFor`, ~~D7~~ (S11/G5, S19, S30), ~~the six unbacked `severity.ts` marks~~.
+  ~~D5~~ `traceFor`, ~~A6~~ (step 3's ledger retrofit — see above), ~~the six unbacked
+  `severity.ts` marks~~. **D7 is narrowed, not closed:** ~~S19~~ and ~~S30~~ are settled in
+  `SPEC.md` (lines 1327 and 780, both marked *settled 2026-09-07*), and **S11/G5's collector half
+  is settled too** (line 1208 — `collectCooling` files the entry). What remains of D7 is
+  S11/G5's **panel-rendering** residue, owned by step 10.
 - **Still open for steps 10–12:** D1 S40's third event-log feed · D2 the independent age tick ·
   D3 rendering `unknownStanding` · D6 jsdom + `useTelemetry` unmount · L9 sparkline sizing ·
   L11 the unit-name constant guard.

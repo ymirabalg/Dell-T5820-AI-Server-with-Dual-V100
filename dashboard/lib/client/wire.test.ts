@@ -307,7 +307,7 @@ describe('⚠ `ts` is a time, and it is the time it says it is', () => {
     ['the 31st of a 30-day month', '2026-04-31T00:00:00.000Z'],
     ['a 13th month', '2026-13-01T00:00:00.000Z'],
     ['an hour that does not exist', '2026-09-06T24:30:00.000Z'],
-  ])('⚠ %s is refused rather than rolled forward', (_name, ts) => {
+  ])('⚠ an impossible calendar date is refused, never rolled forward — %s', (_name, ts) => {
     expect(parseSnapshot(withTs(ts))).toBeNull();
   });
 

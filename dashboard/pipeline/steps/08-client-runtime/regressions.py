@@ -137,9 +137,121 @@ LEDGER_FILES = [
 ]
 
 # `test('…')`, `it('…')` and `test.each(…)('…')`, single- or double-quoted.
-MARKED = re.compile(
-    r"""(?:^|\s)(?:test|it)(?:\.each\([^\n]*\))?\(\s*(['"])((?:(?!\1).)*⚠(?:(?!\1).)*)\1"""
+# ⚠ BACK-PORTED from step 9's reconciliation (Q1, 2026-09-07) — this step's
+# ledger previously used a `MARKED` regex whose `.each([^\n]*)` could not span a
+# newline, so a ⚠ name on a MULTI-LINE `test.each([...])(...)` was invisible to it: it
+# never counted as marked, and nothing ever required a mutation to redden it. See
+# HANDOVER §5.2 and `pipeline/steps/09-ui-primitives/regressions.py` for the full
+# account.
+#
+# The replacement finds each `test`/`it` call, skips a `.each(...)` argument list
+# PAREN-BALANCED and STRING-AWARE, then reads the first string literal of the call
+# itself.
+# ⚠ Q1 reconciliation, 2026-09-07 (adversarial F1): a GENERIC TYPE ARGUMENT between
+# `.each` and its `(` — `test.each<[string, LoginState]>([…])('⚠ …')` — defeated
+# `(?:test|it)(\.each)?\s*\(` completely. Not mis-parsed: never matched at all, because
+# the empty-`(\.each)?` branch cannot get past `.each<` either. Two ⚠ marks in
+# `lib/auth/login-view.test.ts` were invisible to BOTH the pre-Q1 regex and the step-9
+# scanner Q1 back-ported, so the true invisible-mark count for steps 2–8 was 39, not 37.
+# The optional `<…>` below closes it. Excluding `;{}()` from the type argument keeps the
+# match from running away across a statement; a type argument containing a parenthesis
+# (`test.each<[() => void]>`) would still be missed — and would now be REPORTED by the
+# `CANDIDATE` diagnostic below rather than dropped in silence.
+CALL = re.compile(r"(?:^|\s)(?:test|it)(\.each)?(?:\s*<[^;{}()]*>)?\s*\(")
+FIRST_STRING = re.compile(r"""\s*(['"])((?:\\.|(?!\1).)*)\1""")
+
+# ⚠ Q1 reconciliation, 2026-09-07 (adversarial F3): every `test`/`it` call this scanner is
+# EXPECTED to be able to read. `marked_tests()` reports anything matching this that it could
+# not read — a backtick-quoted name, a `.skip`/`.only`/`.concurrent` modifier, a generic type
+# argument it still cannot parse, an unbalanced `.each(…)` list. Before this, EVERY one of
+# those was a silent `continue`: the mark simply did not exist as far as the ledger was
+# concerned, which is the exact defect Q1 was opened to fix, and F1 proved it was still live
+# in the "corrected" scanner. The report is a warning, never a failure — it cannot break a
+# passing run, and a run that starts failing for a new reason is the thing this project can
+# least afford. Names are matched against prose-suppressed source (`_code_only`) because
+# `(?:^|\s)it\s*\(` also matches English: three comments in this tree say "… through it (T52)".
+CANDIDATE = re.compile(
+    r"(?:^|\s)(?:test|it)\s*"
+    r"(?:<|\(|\.(?:each|skip|only|todo|concurrent|fails|for|runIf|skipIf)\b)"
 )
+
+
+def _skip_balanced(text, i):
+    """`text[i]` is `(`; index just past its matching `)`, skipping strings AND comments.
+
+    ⚠ Comments are not decoration here: an apostrophe inside one (`step 8's runtime`) opens a
+    string as far as a naive scanner is concerned, and everything after it is mis-parsed.
+    """
+    depth = 0
+    while i < len(text):
+        ch = text[i]
+        if text.startswith("//", i):
+            nl = text.find("\n", i)
+            i = len(text) if nl == -1 else nl
+            continue
+        if text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            i = len(text) if end == -1 else end + 2
+            continue
+        if ch in "'\"`":
+            quote = ch
+            i += 1
+            while i < len(text):
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == quote:
+                    break
+                i += 1
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return None
+
+
+def _code_only(text):
+    """`text` with every comment and every string BODY blanked, offsets preserved.
+
+    Used ONLY by the `CANDIDATE` diagnostic, so that prose and the source-text guards that
+    quote `test(` as data are not reported as calls the scanner failed to read.
+    """
+    out = list(text)
+    i = 0
+    while i < len(text):
+        if text.startswith("//", i):
+            nl = text.find("\n", i)
+            end = len(text) if nl == -1 else nl
+            out[i:end] = " " * (end - i)
+            i = end
+            continue
+        if text.startswith("/*", i):
+            e = text.find("*/", i + 2)
+            end = len(text) if e == -1 else e + 2
+            out[i:end] = " " * (end - i)
+            i = end
+            continue
+        if text[i] in "'\"`":
+            quote = text[i]
+            i += 1
+            while i < len(text):
+                if text[i] == "\\":
+                    out[i] = " "
+                    if i + 1 < len(text):
+                        out[i + 1] = " "
+                    i += 2
+                    continue
+                if text[i] == quote:
+                    break
+                out[i] = " "
+                i += 1
+            i += 1
+            continue
+        i += 1
+    return "".join(out)
 
 
 def marked_tests():
@@ -147,12 +259,40 @@ def marked_tests():
     found = []
     for rel in LEDGER_FILES:
         text = pathlib.Path(rel).read_text()
-        for m in MARKED.finditer(text):
-            name = m.group(2)
-            prefix = name.split("%")[0].strip()
+        read = set()
+        for m in CALL.finditer(text):
+            at = m.end() - 1  # the `(` of either `test(` or `test.each(`
+            if m.group(1):  # `.each(…)` — skip its argument list, then expect `(`
+                after = _skip_balanced(text, at)
+                if after is None:
+                    continue
+                after = len(text) - len(text[after:].lstrip())
+                if after >= len(text) or text[after] != "(":
+                    continue
+                at = after
+            s = FIRST_STRING.match(text, at + 1)
+            if s is None:
+                continue
+            read.add(m.start())
+            name = s.group(2)
+            if "⚠" not in name:
+                continue
+            # ⚠ Q1 reconciliation, 2026-09-07 (adversarial F7): the `%` split exists to strip a
+            # `test.each` placeholder, so it applies ONLY to a `.each` call. Run on a plain
+            # name it truncated the prefix at a literal percent sign (`⚠ exactly full renders
+            # 100%, …` matched on `⚠ exactly full renders 100`), shortening the discriminating
+            # prefix for no reason — and a short prefix is the input to F2's conflation.
+            prefix = (name.split("%")[0] if m.group(1) else name).strip()
             if len(prefix) < 12:
                 print(f"!!! {rel}: ⚠ test name is unmatchably short: {name!r}")
             found.append((rel, name, prefix))
+        for c in CANDIDATE.finditer(_code_only(text)):
+            if c.start() in read:
+                continue
+            nl = text.find("\n", c.start())
+            snippet = text[c.start(): len(text) if nl == -1 else nl].strip()[:100]
+            line = text.count("\n", 0, c.start()) + 1
+            print(f"!!! {rel}:{line}: a test/it call the ⚠-scanner cannot read — {snippet}")
     return found
 
 
@@ -413,6 +553,18 @@ REGRESSIONS = [
     ("W4 the ts shape is not checked, so one instant spelled two ways enters the ring twice",
      WIRE_SRC, "  if (typeof rawTs !== 'string' || !ISO_UTC.test(rawTs)) return null;",
      "  if (typeof rawTs !== 'string') return null;", [WIRE]),
+    # ⚠ Q1 reconciliation, 2026-09-07. The OTHER half of the docstring's F13 note, and it had
+    # been missing since F13 landed: the calendar round-trip that took `W4`'s property over
+    # never got a mutation of its own. It went unnoticed because the mark's name was
+    # `⚠ %s is refused rather than rolled forward`, whose ledger prefix is the single character
+    # `⚠` — a substring of literally every ⚠ FAIL line, so the mark scored covered for free.
+    # Q1's build renamed it (the "unmatchably short" rule) and this run is the first that could
+    # see it was inert. `Date.parse` rolls `2026-02-30` to `2026-03-02` and `2026-04-31` to
+    # `2026-05-01`, so two of the table's four rows redden; the other two are `NaN` and are
+    # refused a line earlier. This is the defect `wire.ts` actually shipped — its own comment
+    # once claimed the shape check left only `2026-13-01` to catch.
+    ("W21 the calendar round-trip goes, so Date.parse rolls an impossible date forward",
+     WIRE_SRC, "  if (!calendarMatches(rawTs, tsMs)) return null;\n", "", [WIRE]),
     ("W5 manual with no duty is accepted, and the missing duty becomes OFF",
      WIRE_SRC,
      "  if (mode === 'manual') {\n"
@@ -653,7 +805,13 @@ REGRESSIONS = [
     # together.
     ("U6 both hidden-tab guards go, so a background tab polls from the moment it mounts",
      RUNTIME_SRC,
-     [("    if (this.state.hidden) return;\n    void this.poll();\n  }", "    void this.poll();\n  }"),
+     # ⚠ Q1 reconciliation, 2026-09-07 (adversarial F6): this anchor matched TWICE —
+     # `start()` (the site the name describes) and `resume()` carry byte-identical guards, and
+     # `replace(…, 1)` silently took whichever came first. Pinned to `start()` by including the
+     # `syncHidden()` line above it, so a reorder of the two methods now reports
+     # `ANCHOR NOT FOUND` instead of quietly certifying the other property.
+     [("    this.syncHidden();\n    if (this.state.hidden) return;\n    void this.poll();\n  }",
+       "    this.syncHidden();\n    void this.poll();\n  }"),
       ("    if (!force && (this.state.paused || this.state.hidden)) return;",
        "    if (!force && this.state.paused) return;")],
      [RUNTIME]),
@@ -1100,6 +1258,7 @@ def main() -> int:
     os.chdir(ROOT)
     bad = []
     moved = []
+    ambiguous = []
     covered = set()
     for entry in REGRESSIONS:
         if len(entry) == 5:
@@ -1115,6 +1274,19 @@ def main() -> int:
         if missing:
             print(f"--- {name}\n    ANCHOR NOT FOUND in {src} — the implementation moved")
             moved.append(name)
+            continue
+        # ⚠ Q1 reconciliation, 2026-09-07 (adversarial F6). An anchor that matches TWICE is a
+        # third finding, and the most dangerous of the three because it does not look like one:
+        # `str.replace(old, new, 1)` silently takes the FIRST site, so the mutation still
+        # applies, a test still reddens, the ledger still goes green — and the property being
+        # certified is no longer the one the mutation's name records. Reorder the two sites and
+        # the mutation moves with no diff anywhere. Found on step 8's `U6`, whose name says
+        # "both hidden-tab guards" while one of two identical guard sites was left standing.
+        doubled = [(old, mutated.count(old)) for old, _ in pairs if mutated.count(old) > 1]
+        if doubled:
+            print(f"--- {name}\n    ANCHOR AMBIGUOUS in {src} — matches {doubled[0][1]}×; "
+                  f"replace(…, 1) would take whichever comes first. Pin it to one site")
+            ambiguous.append(name)
             continue
         for old, new in pairs:
             mutated = mutated.replace(old, new, 1)
@@ -1150,11 +1322,13 @@ def main() -> int:
     # to print both under "DID NOT BITE", which is the more alarming of the two labels and
     # sends a reader hunting for a missing test that is not missing. Found 2026-09-07, when
     # an edit to `cooling.ts` moved `T31`'s anchor and the run reported it as inert.
+    if ambiguous:
+        print("\nANCHORS AMBIGUOUS — pin these to one site, they did not run:", ", ".join(ambiguous))
     if moved:
         print("\nANCHORS MOVED — re-aim these, they did not run:", ", ".join(moved))
     if bad:
         print("\nDID NOT BITE:", ", ".join(bad))
-    if moved or bad:
+    if moved or bad or ambiguous:
         return 1
 
     # ------------------------------------------------------------------ the ledger

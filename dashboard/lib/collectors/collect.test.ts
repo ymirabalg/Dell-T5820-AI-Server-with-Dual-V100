@@ -148,7 +148,7 @@ describe('⚠ pathsFrom — the container/host mount override', () => {
   test.each([
     ['empty', ''],
     ['whitespace', '   '],
-  ])('⚠ an %s value is not an override', (_name, value) => {
+  ])('⚠ ROOT_MOUNT and HOME_MOUNT ignore a blank value — the %s case', (_name, value) => {
     expect(pathsFrom({ ROOT_MOUNT: value, HOME_MOUNT: value })).toEqual(DEFAULT_PATHS);
   });
 });

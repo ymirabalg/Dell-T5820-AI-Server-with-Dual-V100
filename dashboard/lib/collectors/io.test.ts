@@ -250,6 +250,11 @@ describe('nodeIo — the real thing', () => {
    *
    * ⚠ Asserts that the call **completes**, not that it rejects: the broken implementation
    * rejects too, 1 ms in.
+   *
+   * ⚠ The name deliberately says which seam this is. It was character-identical to
+   * `http.test.ts`'s until 2026-09-07, and the ledger matches a mark by its
+   * literal prefix — so one mutation reddening either file scored BOTH marks covered,
+   * and the other could have gone inert in silence (Q1 adversarial F2).
    */
   test.each([
     ['Infinity', Number.POSITIVE_INFINITY],
@@ -257,7 +262,7 @@ describe('nodeIo — the real thing', () => {
     ['a negative', -1],
     ['above 2^31-1', 2 ** 31],
     ['zero', 0],
-  ])('⚠ a timeout of %s falls back to the module default, never to setTimeout’s 1 ms', async (_name, ms) => {
+  ])('⚠ a subprocess timeout of %s falls back to the module default, never to setTimeout’s 1 ms', async (_name, ms) => {
     // `slowEcho` takes ~120 ms, comfortably past a 1 ms clamp and comfortably inside the
     // 4 s fallback. Under the bug this rejects; under the fix it returns stdout.
     expect(await nodeIo.run(slowEcho, [], ms)).toBe('late\n');

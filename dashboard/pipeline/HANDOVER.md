@@ -1,20 +1,29 @@
-# Handover — after step 8, before step 9
+# Handover — after Q1, before Q2
 
-Steps 1 (**Scaffold & contract**), 2 (**Format & severity core**), 3 (**GPU & host
-collectors**), 4 (**Cooling collector**), 5 (**Serving / storage / safety**), 6 (**Telemetry
-route**), 7 (**Auth & login**) and 8 (**Client runtime**) are closed. This file is the whole
-inheritance: the step-9 agents get clean context and read it as fact.
+**Rewritten 2026-09-07 by Q1's reconciliation.** Steps 1–8 are closed, **step 9 is closed**, and
+**Q1** (the red-test ledger's scanner) is closed. This file is the whole inheritance: the next
+phase's agents get clean context and read it as fact.
 
-**Step 9 is UI primitives and charts** — panel shell, chips, meters, rows, sparkline, and
-§6.2's stacked cooling chart. Green when render tests distinguish `null` → `—` from `0 RPM`,
-and the cooling chart is **two stacked plots, never a dual axis**.
+⚠ **Read §0.1 first — it is new and it changes what "the harnesses are green" means.**
+
+**Next is Q2**: §6.2 was amended after step 9's primitives were built and now requires a **hover
+layer** and a **table view** as defaults, the table view being an accessibility floor. The
+primitives have neither. It is new build work with a spec behind it, not a question — give it its
+own loop. **Then step 10** (panels & assembly). `pipeline/WORK-ITEMS.md` §10 is the queue and
+`pipeline/UI-BACKEND-GAPS.md` is what to open first.
+
+⚠ **Everything below about steps 1–8's surface, the four structural rules, and the toolchain is
+inherited unchanged and is still true.** The sections Q1 rewrote are §0.1 (new), §1's harness
+list, §4, §5.2 and §8.
+
+---
 
 ⚠ **`MOCK.html` is a reference, never a source.** It shows four states and it predates several
 spec decisions (S30's sixth login row is the recorded example). Do not import from it, do not
 copy a number out of it, and where it disagrees with `SPEC.md`, the spec wins. Its value is
 that it shows what the thing is meant to *look* like.
 
-**Three things step 9 must inherit rather than rediscover:**
+**Three things every remaining step must inherit rather than rediscover:**
 
 - ⚠ **A cell's colour is NOT a condition.** §6.4: a cell calls `lib/severity.ts` on the
   **current reading**, undebounced. `state.displayed` is the banner's and the log's input, and
@@ -30,8 +39,10 @@ that it shows what the thing is meant to *look* like.
 
 ## 0. ⚠ The revert check — `git status`, and the manifest that preceded it
 
-**`dashboard/` is now committed** (`71a2f7d`, branch `dashboard-backend`), so `git status
---short` and `git diff --stat` finally work as a revert check and are the primary one. That is
+**`dashboard/` is committed** (since `71a2f7d`; the working branch is now `dashboard-frontend`
+at `391d17f` — see §11), so `git status --short` and `git diff --stat` work as a revert check
+and are the primary one. ⚠ **A phase deliberately leaves its own work uncommitted**, so read
+`git status` against what the phase's notes say it changed, not against an empty diff. That is
 new in step 8: before the commit an untracked `dashboard/` collapsed to `?? ./`, and a source
 file left mutated by a killed harness was invisible.
 
@@ -55,6 +66,50 @@ and is recorded here in its corrected form only. Two other `build.md` claims are
 §5.3; none of the three may be repeated as originally written.
 
 ---
+
+## 0.1 ⚠ NEW — what Q1 found, and the three rules that came out of it
+
+Q1 back-ported step 9's corrected ⚠-scanner into steps 2–8. It was not a tidy-up; the ledger had
+been reporting *"every ⚠-marked test went red"* over a set smaller than the real one, in every
+step, since step 2.
+
+| | before Q1 | after |
+|---|---:|---:|
+| harnesses carrying the corrected scanner | 1 (step 9) | **8** |
+| ⚠ marks checked, steps 2–8 | 584 | **622** |
+| ⚠ marks checked, all eight | — | **689** |
+| mutations, all eight | 706 | **771** |
+
+**Three rules, each paid for:**
+
+1. ⚠ **A regex that silently matches *nothing* is how this happened, twice.** The pre-Q1 regex
+   could not span a newline in a `test.each(…)` argument list. The replacement could not span a
+   **generic type argument** (`test.each<[string, LoginState]>(…)`) — the same defect one shape
+   over, in the scanner brought in to fix the first one. Neither printed anything, because a call
+   that is never matched takes none of the scanner's skip paths. **The scanner now reports every
+   `test`/`it` call it cannot read** (`!!! <file>:<line>: a test/it call the ⚠-scanner cannot
+   read`). Five fire today, all backtick-named tests, none marked. If one of those lines ever
+   names a test with a ⚠ in it, the ledger has stopped counting it.
+2. ⚠ **Renaming a ⚠ test name is a LEDGER change. Re-run the owning harness.** Q1's build renamed
+   four names and re-ran one harness. `lib/client/wire.test.ts`'s old name gave a ledger prefix of
+   the single character `⚠` — a substring of *every* ⚠ FAIL line — so its mark had scored covered
+   for free in every run this project has ever done. The rename exposed it as genuinely inert.
+   See §5.2 rule 8.
+3. ⚠ **A mutation anchor that matches its file TWICE is a third failure category**, and the most
+   dangerous, because it does not look like one: `replace(old, new, 1)` silently takes the first
+   site, the mutation still bites, the ledger still goes green, and the property being certified
+   is no longer the one the mutation's name records. Two existed (`U6` in step 8, `T68` in step
+   4). Both are pinned, and every harness now prints `ANCHORS AMBIGUOUS` and exits 1 rather than
+   guessing.
+
+**One item is deferred to step 10 and it is the mechanism-shaped one:** nothing anywhere asserts
+that a test file carrying ⚠ marks is in *some* step's `LEDGER_FILES`. Measured: 65 test files, 63
+are; the two that are not (`lib/throttle.test.ts`, `lib/contract.test.ts`) carry **0** ⚠ marks, so
+nothing is lost today. `throttle.test.ts` is already a step-2 mutation target, so adding a ⚠ to it
+is an ordinary thing to do and the mark would be counted by nobody. No harness knows the union of
+the eight ledgers, and every approximation needs a hand-maintained exemption list — which is why
+this is deferred to the step that next adds a harness rather than closed with a partial guard.
+Full reasoning in `pipeline/steps/Q1-ledger-scanner/reconciliation.md` §6.
 
 ## 1. How to run anything
 
@@ -132,21 +187,27 @@ Step 7 shipped a test that **failed 1 run in 16** and could not be reproduced by
 wrote it. See §5.4. When a change touches anything that consumes entropy or a clock, run
 `pnpm verify` in a loop — step 7's reconciliation ran it **20 times**, step 8's **10**.
 
-### The deliberate-regression harnesses — run all seven after any change in `lib/` or `app/`
+### The deliberate-regression harnesses — run all **EIGHT** after any change in `lib/`, `app/` or `components/`
 
 ```bash
 python3 pipeline/steps/02-format-severity/regressions.py                    #  55 mutations + ledger
 python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  72 mutations + ledger
-python3 pipeline/steps/04-collector-cooling/regressions.py                  #  91 mutations + ledger
+python3 pipeline/steps/04-collector-cooling/regressions.py                  #  92 mutations + ledger
 python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 127 mutations + ledger
-python3 pipeline/steps/06-telemetry-route/regressions.py                    #  63 mutations + ledger
-python3 pipeline/steps/07-auth-login/regressions.py                         # 125 mutations + ledger
-python3 pipeline/steps/08-client-runtime/regressions.py                     # 172 mutations + ledger
+python3 pipeline/steps/06-telemetry-route/regressions.py                    # 63 mutations + ledger
+python3 pipeline/steps/07-auth-login/regressions.py                         # 128 mutations + ledger
+python3 pipeline/steps/08-client-runtime/regressions.py                     # 173 mutations + ledger
+python3 pipeline/steps/09-ui-primitives/regressions.py                      #  61 mutations + ledger
 ```
 
-**705 mutations.** ⚠ **This total and the seven above it go stale on every item that adds a
-mutation, and have done four times.** Do not trust them; the authoritative number is the
-`All N regressions failed their check` line each harness prints, and all seven can be
+⚠ **It is eight, not seven.** Every handover before this one said seven, because step 9's harness
+was written after them. Q1's fix to the ⚠-scanner applies to step 9's too — it is the **donor** of
+the corrected scanner and carries the same blind spot — so an item that touches the scanner
+touches eight files and owes eight runs.
+
+**771 mutations** (710 across steps 2–8, 61 in step 9). ⚠ **This total and the eight above it go
+stale on every item that adds a mutation, and have done five times.** Do not trust them; the authoritative number is the
+`All N regressions failed their check` line each harness prints, and all **eight** can be
 re-derived at once by importing each `regressions.py` and reading `len(REGRESSIONS)`. Each replaces one exact string in one source file with a **plausible wrong
 implementation** — the wrong thing someone would actually write, never a syntax error — runs
 the affected check, and restores the file. Every one must exit 1. Step 1 has no harness.
@@ -164,7 +225,13 @@ one of them had been abandoned after its caller gave up and read the log instead
 still: run the harness in the background and use its **exit status**, which cannot be
 confused with anything.
 
-⚠ **`ANCHOR NOT FOUND` and `DID NOT BITE` are different findings.**
+⚠ **`ANCHOR NOT FOUND`, `ANCHOR AMBIGUOUS` and `DID NOT BITE` are three different findings.**
+The third label is new in Q1 (2026-09-07) and covers an anchor that matches its file **more than
+once**: `replace(old, new, 1)` takes the first site silently, so the mutation applies, a test
+reddens, the ledger goes green, and the property being certified is no longer the one the
+mutation's name records. Two existed and both are now pinned — `U6` (step 8: `start()` and
+`resume()` carry byte-identical hidden-tab guards) and `T68` (step 4: one `} from
+'@/lib/collectors';` closes both the value import and the `import type` block).
 
 - **`ANCHOR NOT FOUND`** means the implementation moved and the mutation needs **re-aiming**.
   It does not mean the test is fine. Step 7 re-aimed thirteen; step 8's reconciliation re-aimed
@@ -190,7 +257,7 @@ confused with anything.
    **Whenever a fix adds a defence, re-run the harness and read what stopped biting.**
 
 ⚠ **`ANCHORS MOVED` and `DID NOT BITE` are now printed as separate summary lines.** Until
-2026-09-07 all seven harnesses appended an anchor miss to the same list and reported it under
+2026-09-07 all the harnesses appended an anchor miss to the same list and reported it under
 `DID NOT BITE` — the more alarming of the two labels, sending a reader to hunt for a missing
 test that is not missing. Found when an edit to `cooling.ts` moved step 4's `T31`.
 
@@ -200,7 +267,7 @@ marks to `lib/conditions.ts` and `lib/format.ts`, so the ledger was **retrofitte
 harness** — and immediately found **six pre-existing ⚠ marks with no mutation behind them**,
 five of them on `severity.ts`'s fan-stopped rows, including the `-0` / `Object.is` trap. All
 six are now backed (`R51`–`R55`, and `T51` in step 4). ⚠ **Step 3's harness gained its ledger on
-2026-09-07, and all seven now have one.** That retrofit found **four ⚠ marks with no mutation
+2026-09-07, and all **eight** now have one.** That retrofit found **four ⚠ marks with no mutation
 behind them** — a temperature that must not gain a plausibility range, the *total* half of O7's
 backwards-counter guard (fixture symmetry: only the *busy* half had a mutation), and `gpus: []`
 collapsing to `null`. The fourth had its ⚠ dropped: it depends on nothing under
@@ -216,11 +283,17 @@ printed log is therefore wrong; the ledger unions *all* of them. This cost one w
 in step 8. **Trust the ledger's verdict, never the printed excerpt.**
 
 ⚠ **A `test.each` name whose first `%` falls early is unmatchable by the ledger**, and the
-harness now warns (`⚠ test name is unmatchably short`).
+harness warns (`⚠ test name is unmatchably short`). ⚠ **Q1, 2026-09-07: the warning is not the
+whole defence, and a name short enough scores covered for FREE rather than being caught.** A
+prefix of `⚠` alone is a substring of every ⚠ FAIL line, so `prefix in joined` is trivially true
+and the mark is reported covered by a run that never touched it. One mark had been in that state
+since it was written. The `%` split now applies only to `.each` calls (a literal `%` in a plain
+name no longer truncates the prefix), and **the harness reports every `test`/`it` call it could
+not read at all** — see §0.1 rule 1.
 
 ⚠ **Mutation ids must be unique within a harness — and this is now ENFORCED, because writing
 it down did not work.** Step 8's reconciliation added nine colliding ids; when the rule was
-finally checked across all seven harnesses on 2026-09-07 it found **nine more, pre-existing and
+finally checked across all eight harnesses on 2026-09-07 it found **nine more, pre-existing and
 invisible** — `R30`/`R31` in step 2, `T56`/`T57`/`T67`/`T68` in step 4, `D10`/`D11`/`L15` in
 step 5. A duplicate does not crash: it makes the `DID NOT BITE` and `ANCHORS MOVED` lists
 ambiguous about *which* entry failed, so the one output that matters when something is wrong is
@@ -256,12 +329,18 @@ Everything under `dashboard/`. Nothing outside it has been created or modified e
 | `package.json` · `pnpm-lock.yaml` · `tsconfig.json` · `next.config.mjs` · `vitest.config.mts` | pinned toolchain; `strict` + seven more flags, all asserted |
 | `app/layout.tsx` · `app/page.tsx` | placeholders. ⚠ **`app/page.tsx` must stay free of telemetry** — see §6 |
 
-**Does not exist yet:** any component, panel or chart; `Dockerfile`, `.dockerignore`,
+⚠ **Corrected 2026-09-07: `components/` now exists.** Step 9 built the panel shell, chips,
+meters, rows, the sparkline and §6.2's stacked cooling chart, on `dashboard-frontend`, with its
+own harness (`pipeline/steps/09-ui-primitives/regressions.py`, 61 mutations, 67 ⚠ marks).
+They have **no hover layer and no table view** — §6.2 was amended after they were built, which
+is Q2.
+
+**Does not exist yet:** any *panel* or page assembly (step 10); `Dockerfile`, `.dockerignore`,
 `dashboard.sh`, the systemd unit, `README.md`, jsdom.
 
 ---
 
-## 3. The public surface step 9 builds on
+## 3. The public surface steps 9–12 build on
 
 ### 3.1 ⚠ The client runtime (step 8) — this is the corrected surface, not `build.md`'s
 
@@ -398,6 +477,11 @@ step 9 needs a new one, that is a spec gap to **report**, not a blank to fill.
 
 ### Still open
 
+⚠ **Re-checked against `SPEC.md` line by line by Q1's reconciliation, 2026-09-07.** This is the
+fifth time this table has been read against the spec and the fifth time it was stale **in the
+safe direction** — carrying as open things the spec had already answered. Do it again next time;
+do not copy this table forward.
+
 | # | One line | Owner |
 |---|---|---|
 | **O1** | `Condition.severity` is the **confirmed** band, never a raw per-poll severity. Cell colour is **not** downstream of a condition | **steps 9, 10** |
@@ -425,9 +509,11 @@ O6–O9, O15–O18 are closed (steps 3–6).
 | **D4** | `errorsForPanel(snapshot, panel)` written **once**, beside `conditionSource` | **step 9** |
 | **D5** | `traceFor(state, pick)` so no panel spells the window→series→decimate order itself | **step 9** |
 | **D6** | jsdom, and the first assertion it buys: unmounting `useTelemetry` calls `stop()` | **step 9 or 10**, whichever first needs an interaction test |
-| **D7** | S11/G5, S19, S30 — inherited and untouched by step 8 | **steps 9, 10** |
+| **D7** | ⚠ **NARROWED 2026-09-07, not closed.** ~~S19~~ is settled in `SPEC.md` (line 1327: *"the message text carries it and the RENDERING does not"*). ~~S30~~ is settled (line 780: *"Tone is `warn`, not `error`"*). **S11/G5's collector half is settled** (line 1208 — `collectCooling` files the entry when `pwm5` is in the listing and `fan5_input` is not). What is left is **S11/G5's panel-rendering residue**: what a panel does with an em dash whose neighbour is not coloured | **step 10** |
 | **D8** | The `STANDING` env plumbing, and its place on §4.1's silent-failure list | **step 11**, verified **step 12** |
-| — | ~~The red-test ledger retrofit for step 3's harness~~ — **done 2026-09-07.** All seven harnesses now carry a ledger | closed |
+| — | ~~The red-test ledger retrofit for step 3's harness~~ — **done during step 8**, confirmed by Q1's build phase and re-run clean by its reconciliation (72 mutations, 24 ⚠ marks, exit 0). ⚠ It was carried as open here, in `ANCHOR.md` §7 and in `WORK-ITEMS.md` §2 (A6) long after it was finished; all three are corrected | closed |
+| — | ~~Q1 — the ⚠-scanner back-port~~ — **closed 2026-09-07.** All eight harnesses, 771 mutations, 689 marks. §0.1 | closed |
+| **Q1-F4** | Nothing asserts a ⚠-bearing test file is in some `LEDGER_FILES`. Zero live loss today; both orphan files named in §0.1 | **step 10** — the next step that adds a harness |
 | — | **A commit point** — `71a2f7d` was taken before step 9. The next is the owner's call | **owner** |
 
 ### 4.1 ⚠ The three step-11 obligations that fail **silently**, stated in full
@@ -521,8 +607,11 @@ window bounds, and every `null`/`0` pair invariant 1 governs.
 
 > Every ⚠-marked test must appear in at least one mutation's RED set.
 
-Copy the block verbatim from `pipeline/steps/08-client-runtime/regressions.py`; `LEDGER_FILES`
-is the only line that changes. Rules that come with it:
+Copy the block verbatim from **any** harness — it is byte-identical in all eight, md5
+`d9bb8cfeae1ba6dbc9a87ceac24baaf3` over the span from the `F1` comment through
+`red_test_lines` — and `LEDGER_FILES` is the only line that changes. ⚠ **Check that md5 before
+copying.** The block was corrected twice on 2026-09-07 and a stale copy is a silently smaller
+checked set, which is the exact failure this rule exists to prevent. Rules that come with it:
 
 1. **A ledger failure is not "add a mutation until it goes green".** The first hypothesis is
    that the test is **inert** and needs a body matching its name, or a rename to what it
@@ -538,6 +627,29 @@ is the only line that changes. Rules that come with it:
    Ship a second mutation whose check is the vitest file.
 5. **`test.each` names are matched by the prefix before the first `%`.** Put the placeholder
    later in the sentence, and do not give two `test.each` blocks the same prefix.
+   ⚠ **Both halves of that had been violated and neither was detectable.** A prefix of `⚠` alone
+   matches every ⚠ FAIL line, so the mark scores covered without any mutation touching it — one
+   was in that state since it was written (§0.1 rule 2). And two ⚠ names in step 5's ledger were
+   **character-identical** (`lib/collectors/http.test.ts` and `lib/collectors/io.test.ts`,
+   `⚠ a timeout of %s …`), so one mutation reddening either scored **both** covered and the other
+   could have gone inert in silence. Both are renamed to name their seam. Q1 swept all 689 marks
+   against every FAIL line their harness can emit: **that was the only live collision, and there
+   are now zero.** A second, inert instance exists and is recorded — `⚠ the route declares
+   dynamic = force-dynamic` is duplicated between `app/api/session/route.test.ts` (step 7) and
+   `app/api/telemetry/route.test.ts` (step 6) — harmless only because the two files sit in
+   disjoint check universes, and live the moment either harness's `checks` grows.
+   ⚠ **The `%` split applies only to `.each` calls.** It used to run on every name, so a literal
+   `%` in a plain test name truncated its prefix for no reason.
+8. ⚠ **A ⚠ RENAME IS A LEDGER CHANGE. Re-run the owning harness.** New in Q1, 2026-09-07, and
+   the only rule here found by a rename rather than by a mutation. Four ⚠ names were reworded to
+   move a `%s` placeholder later; one harness was re-run; the rename that was not re-validated
+   was hiding an **inert mark** — `wire.ts`'s `calendarMatches` round-trip had never had a
+   mutation, and step 8's harness docstring already recorded half the story (F13's guard silently
+   voided `W4`'s coverage, `W4`'s side was fixed, the new guard's was not). `W21` backs it now.
+   The name is what the ledger matches on; editing it is editing the check.
+9. ⚠ **Nothing asserts that a ⚠-bearing test file is in some `LEDGER_FILES`.** 65 test files, 63
+   are; `lib/throttle.test.ts` and `lib/contract.test.ts` are not and carry 0 marks. Deferred to
+   step 10 with reasons — §0.1.
 6. **Ledger ownership follows the file, not the step.**
 7. ⚠ **A ⚠ mark the ledger cannot back is usually a MISSING FIXTURE, not a bad mark.** Step 8's
    reconciliation had six, and every one turned out to be a real hole:
@@ -826,19 +938,26 @@ top of `lib/guardrails.test.ts` — not by a text assertion.
 
 ---
 
-## 8. Spec gaps — re-verified against `SPEC.md` during step 8
+## 8. Spec gaps — re-verified against `SPEC.md` by Q1's reconciliation, 2026-09-07
 
-⚠ This table has been **stale three times** (92 % before step 5, 100 % before step 6, and again
-before step 7). **Re-check every entry against the spec text before trusting it.** Invariant 7
-stands: if the spec is silent, **report it — do not assume**.
+⚠ This table has now been **stale five times** (92 % before step 5, 100 % before step 6, again
+before step 7, again in step 8, and again here). **Every time, in the safe direction: entries
+carried as open that the spec had already answered.** Re-check every row against the spec text
+before trusting it. Invariant 7 stands: if the spec is silent, **report it — do not assume**.
 
-**Open, with owners:**
+**Open, with owners — one row, down from three:**
 
 | # | Gap | Owner |
 |---|---|---|
-| **S11 / G5** | §6.5's exception to *"an em dash always has an `errors[]` entry behind it"* applies **only when the coloured neighbour is in the same panel and carries a severity**. For channel 5 the neighbour reads **`unavailable`**, and O13 says `unavailable` is not a severity — so the exception does not reach it, and an em dash on `fan5` with `pwm5Present: true` still owes an entry no collector files | **steps 9, 10** |
-| **S19** | A *skipped* collector and a *failed* one are indistinguishable to §6.5's rendering rules. The message text carries the distinction; §6.5 has one bucket. **Steps 9/10 must choose a sentence** | **steps 9, 10** |
-| **S30** | **§5.2's sixth row has no tone.** *Could not reach the dashboard.* has fixed copy and a fixed submit state but no `data-sev`. `warn` was chosen; `MOCK.html`'s state C predates the row | step 10 |
+| **S11 / G5** — *the rendering half only* | ⚠ **NARROWED.** The collector half is **settled** in `SPEC.md` line 1208: *"the exception has ONE hole and the collector closes it, not the panel"* — `collectCooling` files an entry when `pwm5` is in the listing and `fan5_input` is not, and the spec explicitly rejects a panel-rendered note because *"a qualified rule is one a future reader has to know the exceptions to."* What is left is what a **panel** does with an em dash whose coloured neighbour is not coloured. Do not re-raise the collector half | **step 10** |
+
+**⚠ Closed since this table was last written — verified against the spec text, not assumed:**
+
+| # | Where it is settled |
+|---|---|
+| ~~**S19**~~ | `SPEC.md` line 1327: *"⚠ S19, settled 2026-09-07: the message text carries it and the RENDERING does not."* One em dash and one entry either way; no fourth display state, no separate glyph, no colour. A distinct visual state and raising the panel to `watch` were both explicitly rejected, with reasons |
+| ~~**S30**~~ | `SPEC.md` line 780: *"Tone is `warn`, not `error` (⚠ S30, settled 2026-09-07)"* — the same as *session expired*, because nothing the operator did is wrong. `error` and a toneless row were both rejected, with reasons |
+| ~~**S49–S53**~~ | All five are in the spec as `WORK-ITEMS.md` §9's **A8–A12**. The paragraph below saying *"the owner has not yet put any of them into `SPEC.md`"* **was true when written and is now false**; it is kept for the reasoning and marked |
 
 ⚠ **S20, S31, S32 and S33 were on this table when step 8 closed and are NOT open** — all four
 are answered by the current spec text (§4's *"a rule, not a census"*; §5's *"This check runs
@@ -849,9 +968,12 @@ trusting any row.** Also closed and no longer worth raising: step 2's DEFER 15 a
 `lib/severity.ts` exports a function for all fifteen of §6.3's rows, and `lib/conditions.ts`
 carries `singleton` and `bareKindAllowedInStanding` per kind.
 
-**⚠ New in step 8, and the owner has not yet put any of them into `SPEC.md`.** The code's
-current choice is recorded beside each; **none was filled by assumption**, and a step that
-disagrees should raise it rather than change it:
+**⚠ New in step 8 — and ALL FIVE ARE NOW IN `SPEC.md`, as `WORK-ITEMS.md` §9's A8–A12.** This
+heading used to read *"the owner has not yet put any of them into `SPEC.md`"*; that stopped being
+true on 2026-09-07 and this file did not notice until Q1's reconciliation checked. `ANCHOR.md` §7
+already knew. **The table is kept because the reasoning behind each ruling is worth having**, and
+because the code's choice — recorded beside each, none of it filled by assumption — is what the
+spec then adopted:
 
 | # | Gap | What the code does |
 |---|---|---|
@@ -918,13 +1040,16 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | ~~The GB → GiB rename~~ (O19) | — | **closed 2026-09-07** — a deletion; `GiB` already existed |
 | **Formatter `parts` variant** (O14) | **step 9** | open |
 | **jsdom** (D6) | **step 9 or 10** | see below |
-| S11/G5's narrowed case · S19's sentence | steps 9, 10 | open — §8 |
+| S11/G5's **panel-rendering residue** | step 10 | open — §8. ⚠ S19 and S30 are **closed** in `SPEC.md`; the collector half of S11/G5 is closed too |
 | **S40's third event-log feed** (D1) · **the independent age tick** (D2) · **render `unknownStanding`** (D3) | **step 10** | open |
 | The header: dot + count + paused/stale mode (O2) | step 10 | unblocked |
 | A `state === null` wrapper written once (composition gap (d)) | step 10 | open |
 | Render "duty unreadable" vs "channel 5 absent" distinctly | step 10 | open |
 | **Keep the server-rendered shell free of telemetry and secrets** | **step 10** | §3.3 — the standing condition under which the gate asymmetry is acceptable |
-| ~~The red-test ledger retrofit for step 3's harness~~ | — | **closed 2026-09-07** — all seven carry one |
+| ~~The red-test ledger retrofit for step 3's harness~~ | — | **closed** — done during step 8, confirmed 2026-09-07. All **eight** harnesses carry a ledger |
+| ~~**Q1** — the ⚠-scanner back-port~~ | — | **closed 2026-09-07** — 771 mutations, 689 marks, eight harnesses green. §0.1 |
+| **Q1-F4** — assert every ⚠-bearing test file is in some `LEDGER_FILES` | **step 10** | open — §0.1. Zero live loss today |
+| **Q2** — §6.2's hover layer and table view | **its own loop, next** | open — `WORK-ITEMS.md` §10.2 |
 | **O20 · O21 · O22 · D8** — the four silent-failure obligations | **step 11** | §4.1 |
 | **`dashboard.sh check`**: an unparseable `PASSWORD_HASH`; a `SESSION_SECRET` short or quoted; a `STANDING` entry matching nothing; the env file's mode and owner | **step 11** | the only place any of them can be caught, because nothing is logged |
 | **F7 — `LIMITS` bounds scrypt's memory but not its time** (measured 1 720 ms vs 58 ms at the worst accepted parameters) | **step 11** | with `check` |
@@ -1027,13 +1152,27 @@ continuous metric and **load-bearing for a value-band one**. The list is a recor
 
 ## 11. Repo state, environment, and the commit point
 
+⚠ **Rewritten 2026-09-07 by Q1's reconciliation — the branch layout changed after step 9.**
+
 ```
-branch   dashboard-backend      (branched from main; main is untouched)
-commit   71a2f7d                183 files — the commit that brought `dashboard/` under git
-HEAD     e852631                 later commits touch `pipeline/` documents only
+main                 3f06e98    local, AHEAD of origin/main — the backend merged as a
+                                fast-forward, NOT PUSHED
+dashboard-backend    3f06e98    == main. Finished; carries ZERO UI; nothing more goes here
+dashboard-frontend   391d17f    3 commits ahead of main. LOCAL ONLY, never pushed.
+                                ⚠ THIS IS THE WORKING BRANCH
 ```
 
-**`dashboard/` is committed as of step 8**, on `dashboard-backend`. Nothing has been pushed.
+**`dashboard-frontend` carries `components/` and step 9's harness**; the spec, the collectors,
+the client runtime and every earlier harness live on `dashboard-backend`'s history and arrive
+here by inheritance. **Do not commit UI to the backend branch** — that mistake was made once and
+had to be split apart with a soft reset. ⚠ **Pushing `dashboard-frontend` needs the owner's
+approval**; `git push` is gated by a permission classifier here and was refused once.
+
+⚠ **Q1 left the tree dirty on purpose**: 15 modified files (7 test files, 8 `regressions.py`) and
+the `pipeline/handoffs/` + `pipeline/steps/Q1-ledger-scanner/` directories untracked. The parent
+runs `pnpm verify` itself and commits; **a phase agent stages nothing** (`ANCHOR.md` §8).
+
+**`dashboard/` has been committed since step 8.** Nothing has been pushed.
 That was the owner's call, taken on step 8's review recommendation (S14): a commit point
 *before step 9* rather than before step 11, with **revert integrity** as the stated reason —
 `git status` could not previously see a source file a killed harness left mutated. It also

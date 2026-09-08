@@ -223,7 +223,7 @@ describe('parseUfwConf — §3.6’s firewall check', () => {
     ['single-quoted', UFW_CONF_SINGLE_QUOTED_NO],
     ['a trailing comment', UFW_CONF_TRAILING_COMMENT_NO],
     ['an `export` prefix', UFW_CONF_EXPORTED_NO],
-  ])('⚠ %s `no` is unknown, not the alarm — the accepted form is the one `ufw` writes', (_name, text) => {
+  ])('⚠ a `no` spelled in a form `ufw` itself never writes is unknown, not the alarm — %s', (_name, text) => {
     const parsed = parseUfwConf(text);
     expect(parsed.value).toBeNull();
     expect(parsed.value).not.toBe(false);

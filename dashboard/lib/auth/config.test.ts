@@ -131,7 +131,7 @@ describe('⚠ §4’s `standing`: split on the separator, and judged nowhere nea
   test.each([
     ['unset', undefined],
     ['empty', ''],
-  ])('⚠ %s means nothing is standing, never an empty id', (_name, value) => {
+  ])('⚠ STANDING means nothing is standing, never an empty id — %s', (_name, value) => {
     const env = value === undefined ? {} : { [STANDING_KEY]: value };
     expect(readStandingList(env)).toEqual([]);
   });

@@ -140,9 +140,17 @@ it is the species step 8 named and that this project has now shipped in prose fo
 
 ## 2. Already recorded, still open, and in this scope
 
-### A6 — the red-test ledger retrofit for step 3's harness
+### ~~A6~~ — the red-test ledger retrofit for step 3's harness — **CLOSED**
 
-`03-collectors-gpu-host` is the **only one of the seven harnesses without a ledger**. When the
+> ⚠ **Closed. It was done during step 8, and Q1's build phase confirmed it on 2026-09-07** —
+> `03-collectors-gpu-host/regressions.py` carries `LEDGER_FILES`, a wired-up `marked_tests()`
+> coverage check, and a comment at line 43 saying the retrofit happened during step 8. Q1's
+> reconciliation re-ran it: **72 mutations, 24 ⚠ marks, every one reddened, exit 0.** It was
+> carried as open in this section, in `ANCHOR.md` §7 and in `HANDOVER.md`'s DEFER list long
+> after it was done; all three are now corrected. The original text is kept below because its
+> *reasoning* is still the argument for the ledger everywhere else.
+
+`03-collectors-gpu-host` was the **only one of the seven harnesses without a ledger**. When the
 same retrofit was done to step 2's during step 8, it immediately found **six ⚠ marks with no
 mutation behind them**, five of them on `severity.ts`'s fan-stopped rows — the most
 safety-critical table in the project — including the `-0` / `Object.is` trap.
@@ -646,6 +654,10 @@ test went red" over a set that was **smaller than the real one**.
 **Steps 2–8 all carry the old regex.** Measured by running step 9's corrected scanner against
 each step's own `LEDGER_FILES`:
 
+> ⚠⚠ **CORRECTED 2026-09-07 by Q1's reconciliation. The "marks that actually exist" column was
+> itself measured with a scanner that could not see everything, so two rows and the total were
+> under-counted. Corrections marked in place.**
+
 | step | marks the old scanner sees | marks that actually exist | **invisible** |
 |---|---:|---:|---:|
 | 02-format-severity | 11 | 13 | **2** |
@@ -653,13 +665,29 @@ each step's own `LEDGER_FILES`:
 | 04-collector-cooling | 83 | 83 | 0 |
 | 05-collectors-serving-storage-safety | 94 | 97 | **3** |
 | 06-telemetry-route | 56 | 56 | 0 |
-| **07-auth-login** | 108 | 129 | **21** |
+| **07-auth-login** | 108 | ~~129~~ **131** | ~~21~~ **23** |
 | 08-client-runtime | 210 | 219 | **9** |
-| | | | **37 total** |
+| | | | ~~37~~ **39 total** |
 
-⚠ **Twenty-one of them are in step 7** — scrypt, the session cookie, the rate limiter, the gate.
-That is the step where an inert test is worth the most, and it is the step with the most
+⚠ **Twenty-three of them are in step 7** — scrypt, the session cookie, the rate limiter, the
+gate. That is the step where an inert test is worth the most, and it is the step with the most
 unchecked marks.
+
+### ⚠ This prediction was "matched exactly" by Q1's build, and that was not evidence
+
+Q1's build reported every row of this table hit dead on and treated the agreement as
+confirmation. **It was not.** This column was produced by running step 9's scanner, and Q1's
+build measured with the same scanner back-ported. Both are blind to a **generic type argument**
+between `.each` and its `(` — `test.each<[string, LoginState]>([…])('⚠ …')` — which defeats the
+`CALL` regex so completely that it matches nothing and takes none of the scanner's skip paths,
+so nothing is printed either. Two numbers agreeing because they share a defect are one number
+computed twice.
+
+Q1's adversarial phase found it (F1) and the reconciliation reproduced it independently: two ⚠
+marks in `lib/auth/login-view.test.ts` were invisible to the old regex *and* to the "corrected"
+one. Both are backed incidentally; step 7 now reports **130** ⚠ marks and exits 0. The fix is
+one regex line and it applies to **all eight** harnesses — step 9's included, since it is the
+donor and carries the same hole.
 
 **This is not a claim that 37 tests are inert.** It is a claim that **nobody knows**, because
 the mechanism built to answer that question could not see them. Some will be backed already by
@@ -672,10 +700,24 @@ scan) — into steps 2–8, then **re-run all seven harnesses and read the ledge
 failures; that is the point. Each one is then §5.2 rule 1: give the test a body matching its
 name, or drop the ⚠ and record why.
 
-⚠ **A second, smaller defect rides along.** The corrected scanner emits four
-`⚠ test name is unmatchably short` warnings the old one never printed — `test.each` names whose
-first `%` falls too early for the ledger to match on (`collect.test.ts`, `safety.test.ts`,
+⚠ **A second defect rides along, and it was not the smaller one.** The corrected scanner emits
+four `⚠ test name is unmatchably short` warnings the old one never printed — `test.each` names
+whose first `%` falls too early for the ledger to match on (`collect.test.ts`, `safety.test.ts`,
 `config.test.ts`, `wire.test.ts`). Those names need the placeholder moved later in the sentence.
+
+⚠⚠ **Corrected 2026-09-07: `wire.test.ts`'s was load-bearing.** Its prefix was the single
+character `⚠`, which is a substring of *every* ⚠ FAIL line — so the mark scored **covered for
+free in every harness run this project has ever done**. Renaming it exposed a genuinely inert
+mark: `wire.ts`'s `calendarMatches` round-trip has never had a mutation, and step 8's harness
+docstring already recorded half the story (F13's guard silently voided `W4`'s coverage; `W4`'s
+side was fixed and the new guard's was not). Backed now by `W21`. **The general rule that falls
+out: a ⚠ rename is a ledger change, and the owning harness must be re-run.** Q1's build renamed
+four and re-ran one.
+
+**Q1 is DONE, 2026-09-07** — build → test → adversarial → reconcile. All **eight** harnesses
+carry the corrected scanner and are green: 771 mutations, 689 ⚠ marks. Steps 2–8 alone are 710
+mutations and **622** marks, against 584 before. Full account in
+`pipeline/steps/Q1-ledger-scanner/reconciliation.md`.
 
 ## 10.2 Q2 — §6.2 now requires a hover layer and a table view; the primitives have neither
 

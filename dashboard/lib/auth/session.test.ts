@@ -273,6 +273,22 @@ describe('the promise that deciding never raises (§5)', () => {
    * Every input below is an ordinary way a bad cookie arrives, and each must be a `null`
    * rather than a caught throw.
    */
+  /*
+   * ⚠ Q1 (2026-09-07): the ⚠ this block used to carry was DROPPED, per HANDOVER §5.2 rule
+   * 1's second branch — the property has no plausible single wrong implementation, so this
+   * is a case for dropping the mark rather than the standard.
+   *
+   * Every one of these eleven inputs is rejected by a TOTAL check — the dot-placement
+   * guard, `BASE64URL.test`, or `decodeExact` (alphabet, length, canonical re-encode all
+   * total, see `base64url.ts`) — before the only fallible operation in this function,
+   * `JSON.parse`, is ever reached. Reaching `JSON.parse` additionally requires a signature
+   * that matches a real HMAC of the payload, which none of these un-signed fixtures can
+   * produce. Reddening this test therefore needs at least two independent defects at once
+   * (bypass the signature check AND remove the outer catch, or weaken a decoder guard AND
+   * both of those) — not a single plausible mistake. The outer catch's real job — a
+   * validly-signed payload that fails `JSON.parse` — already has its own dedicated,
+   * ⚠-marked, mutation-backed test directly below (`E2`).
+   */
   test.each([
     ['null', null],
     ['an empty string', ''],
@@ -285,7 +301,7 @@ describe('the promise that deciding never raises (§5)', () => {
     ['a truncated token', 'eyJ2IjoxLCJzaWQiOiJhIn0'],
     ['only dots', '...'],
     ['a 64 KiB blob', `${'A'.repeat(65536)}.${'B'.repeat(43)}`],
-  ])('⚠ the token verifies as null rather than throwing — %s', (_name, token) => {
+  ])('the token verifies as null rather than throwing — %s', (_name, token) => {
     expect(() => verifySessionToken(token, SECRET, NOW)).not.toThrow();
     expect(verifySessionToken(token, SECRET, NOW)).toBeNull();
   });
