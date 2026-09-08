@@ -1,0 +1,30 @@
+.takeover {
+  color: var(--ink-primary);
+  font-weight: 600;
+}
+
+.takeoverNote {
+  color: var(--ink-secondary);
+  font-size: 0.85em;
+}
+
+.headline {
+  font-size: 1.1em;
+}
+
+/* §6.1's ≥1600px promotion (`gpu-panel.tsx`'s module doc): both the sparkline and the
+   promoted chart are always in the DOM; only one is shown, by width. Not observable from
+   `renderToStaticMarkup` — see that file's own note. */
+.fullChartWrap {
+  display: none;
+}
+
+@media (min-width: 1600px) {
+  .fullChartWrap {
+    display: block;
+  }
+
+  .sparklineWrap {
+    display: none;
+  }
+}

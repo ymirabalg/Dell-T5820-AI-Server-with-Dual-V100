@@ -1,0 +1,12 @@
+.headline {
+  font-size: 1.1em;
+}
+
+.chart {
+  margin: 0.5em 0;
+}
+
+.smaller {
+  font-size: 0.9em;
+  opacity: 0.9;
+}

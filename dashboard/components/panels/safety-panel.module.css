@@ -1,0 +1,23 @@
+.unknownStanding {
+  margin-top: 0.4em;
+  border-top: 1px solid var(--ink-muted);
+  padding-top: 0.4em;
+}
+
+.unknownRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+.unknownLabel {
+  color: var(--ink-muted);
+  flex: 1 1 auto;
+}
+
+.unknownValue {
+  color: var(--ink-secondary);
+  overflow-wrap: anywhere;
+}

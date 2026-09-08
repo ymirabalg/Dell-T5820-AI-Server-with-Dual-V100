@@ -1,0 +1,16 @@
+/* §6.5's panel-level `errors[]` explanations — muted, never a second alarm colour, and the
+   same type scale `status-row.module.css`'s own `.note` uses. */
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+  padding: 0.15em 0;
+}
+
+.note {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}

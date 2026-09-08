@@ -91,35 +91,45 @@ tree**, or you ship whatever an agent happens to be mid-edit on. Full account in
 
 ⚠ The deployed password is `dashboard1`, set for testing. Step 11 replaces it properly.
 
-### 2.2 ⚠ What to do next — **10b, the nine panel bodies**
+### 2.2 ⚠ What to do next — **10c, the backlog** (and the wiring)
 
-**10a — the shell — is CLOSED, 2026-09-08**, once the parent's review passes: build → test →
-adversarial → reconcile are done, and §8's fifth phase (the parent re-runs `pnpm verify` itself,
-audits the adjudication table, spot-checks, commits) is the one that closes it.
-**18 adversarial findings adjudicated: 16 accepted, 2 deferred, 1 half-rejected.**
-See `pipeline/steps/10-panels-assembly/10a-reconciliation.md`; the queue is
-`pipeline/WORK-ITEMS.md` §10 and SCOPE §5's three-loop cut (10a → **10b** → 10c) is being followed.
+**10b — the nine panel bodies — is CLOSED, 2026-09-08**, once the parent's review passes:
+build → test → adversarial → reconcile are done, and §8's fifth phase (the parent re-runs
+`pnpm verify` itself, audits the adjudication table, spot-checks, commits) is the one that closes
+it. **14 adversarial findings adjudicated: 11 accepted, 1 accepted in part, 2 deferred, 0
+rejected outright.** See `pipeline/steps/10-panels-assembly/10b-reconciliation.md`.
+**10a — the shell — closed the same way on 2026-09-08** (18 findings: 16 accepted, 2 deferred,
+1 half-rejected; `10a-reconciliation.md`). SCOPE §5's three-loop cut (10a → 10b → **10c**) is
+being followed and 10c is the last of the three.
 
 | | |
 |---|---|
-| what exists | §6.2's header, §6.4's sticky banner, §6.1's grid + breakpoints, `app/dashboard-shell.tsx` (one `useTelemetry`, one `useNowTick`, one `state === null` guard), nine `PanelPlaceholder`s |
-| closed obligations | **D2** (the independent age tick), **D6** (jsdom + `useTelemetry`), **O2** (dot and count are one reduction), the 2.5a wrapper, 2.5d's id namespace |
-| suite | **79 files · 2399 tests · `pnpm verify` exit 0** (was 67 · 2260) |
-| harnesses | **NINE.** `pipeline/steps/10-panels-assembly/regressions.py` is new — **70 mutations, 86 ⚠ marks**, and the first harness in the project to mutate a **CSS file**. **875 mutations total**, derived by importing all nine, not copied forward |
+| what exists | 10a's shell — §6.2's header, §6.4's sticky banner, §6.1's grid + breakpoints, `app/dashboard-shell.tsx` — **plus 10b's nine panel bodies** under `components/panels/`, with `status-row.tsx`, `panel-notes.tsx`, `condition-lookup.ts`, `panel-chart.ts`, `event-sentence.ts` |
+| ⚠ what does NOT exist | **the wiring.** `dashboard-shell.tsx` still renders nine `PanelPlaceholder`s; the panels have **no production call site**, so nothing yet proves the nine compose. That is 10c's first job, and `<GpuPanel {...props} />` takes **no `index`** |
+| closed obligations | 10a: **D2**, **D6**, **O2**, the 2.5a wrapper, 2.5d's id namespace. 10b: **O12**, **O13**, **O3**'s rule, **D3** (`unknownStanding`), **S11/G5**'s panel residue |
+| suite | **92 files · 2559 tests · `pnpm verify` exit 0** (was 79 · 2399) |
+| harnesses | **NINE.** `pipeline/steps/10-panels-assembly/regressions.py` covers both loops — **129 mutations, 150 ⚠ marks** (was 70/86 after 10a) |
 
-**⚠ The three things 10b must inherit as fact, not rediscover:**
+**⚠ The four things 10c must inherit as fact, not rediscover:**
 
-1. **The hook boundary is settled.** `components/` is hook-free (`purity.test.ts`, unweakened);
-   hooks live under `app/`; there are exactly two and both are called once, in
-   `app/dashboard-shell.tsx`. **The nine panels are pure functions of props.**
-2. **`components/panel-props.ts` is a REAL type** — `PanelProps { state, nowMs, panelId }` — and
-   all nine slots really receive it. It was prose in `10a-build.md` and the prose claimed a wiring
-   that did not exist; nine panels could each have invented a different prop name and typechecked.
-   `HANDOVER.md` §3.6 is the full contract.
+1. **The hook boundary is settled.** `components/` is hook-free (`purity.test.ts`, unweakened —
+   and it now recurses over `components/panels/` too); hooks live under `app/`; there are exactly
+   two and both are called once, in `app/dashboard-shell.tsx`. **The nine panels are pure
+   functions of props**, which is why the chart/table toggle and the age tick live in `app/`.
+2. **`components/panel-props.ts` is a REAL type** — `PanelProps { state, nowMs, panelId }`.
+   ⚠ `GpuPanel` narrows `panelId` to `'gpu0' | 'gpu1'` and **derives** its card index from it;
+   the old separate `index` prop is gone, because two independent copies of *which card am I*
+   typechecked while disagreeing and rendered GPU 0 into the `gpu1` slot (10b-F12).
 3. ⚠ **`pnpm verify` is NOT deterministic today** — `lib/collectors/serving.test.ts:592` races a
    real 95 ms sleep against a real 100 ms budget, and a probabilistic ⚠ test can be falsely
-   credited by **any** harness ledger. `HANDOVER.md` §0.3. Deferred to **10c**; do not debug a
-   single red run on that test before re-running it.
+   credited by **any** harness ledger. `HANDOVER.md` §0.3. Still **10c's**; do not debug a single
+   red run on that test before re-running it.
+4. ⚠ **A document-wide `toContain` is a weak assertion wearing a strong name — three instances
+   in three loops** (10a's `paused`, its test phase's `refresh`, 10b's `—`, the last of which sat
+   in the ⚠ test named for `PLAN.md`'s FIRST invariant and passed while the panel printed
+   `fan 5  0 RPM` for a fan nobody could read). `HANDOVER.md` §0.4. **Assert over the element
+   that carries the claim, never over the document that contains it.** A mechanical guard
+   forbidding the shape is 10c's (`10b-F1-guard`).
 
 **⚠ Two findings from 10a's loop worth carrying into every later step**, because both shipped
 green and neither is specific to this code:
@@ -182,20 +192,22 @@ about whether any of it works. Open a browser.
 
 ### The queue
 
-**10b is next and nothing blocks it.** ⚠ **Updated 2026-09-08 — this list was written before 10a
-and half of it is now closed.** Still open and recorded in `HANDOVER.md`:
+**10c is next and nothing blocks it.** ⚠ **Updated 2026-09-08 by 10b's reconciliation** — this
+list was originally written before 10a and most of it is now closed. The panel bodies are done;
+below is what is left, and `HANDOVER.md` §9 is the authoritative form of it.
 
 | item | owner |
 |---|---|
-| the **nine panel bodies** (SCOPE §2.1) | **10b** |
-| **D1** S40's third event-log feed · **D3** rendering `unknownStanding` (the *decision* is made — HANDOVER §3.6 — only the code is owed) | 10b |
-| **S11/G5**'s panel-rendering residue · **O12/O13/O14** | 10b |
-| **Q2-F9** the clamp-vs-drop rendering decision · **Q2-S2** the table view's height | 10b, with the owner on S2 |
+| ⚠ **wire the nine panels into `app/dashboard-shell.tsx`** — until this happens nothing proves they compose | **10c** |
+| **D1** S40's third event-log feed (`LogEntryKind` is `lib/client/events.ts`'s; the panel's exhaustive switch will force the case) | 10c / owner |
+| **O14** the formatter `parts` variant — re-checked by 10b and **still has not arisen** | 10c |
+| **Q2-F9** the clamp-vs-drop rendering decision · **Q2-S2** the table view's height (⚠ still unreachable — the toggle needs `app/`) | 10c, with the owner |
 | **10a-F4** a repeatable browser step — **and a way to force an alarm client-side**, without which the banner never mounts | **10c** |
-| **10a-F17** `pnpm verify`'s non-determinism · **Q1-F4** the cross-harness ledger runner · **L9** sizing · **L11** the unit-name constant · SCOPE 2.5f's `max-height` | **10c** |
-| **10a-S-A/S-B/S-C/S-D** — four spec questions, three implemented conservatively | **owner** |
+| **10a-F17** `pnpm verify`'s non-determinism · **Q1-F4** the cross-harness ledger runner · **10b-F1-guard** the document-wide-`toContain` lint · **L9** sizing (with **10b-F14b**: no gap hatching at 1280–1599px) · **L11** the unit-name constant · SCOPE 2.5f's `max-height` | **10c** |
+| **10a-S-A/S-B/S-C/S-D** and **10b-S-E/S-F/S-G/S-H** — eight spec questions, six implemented conservatively | **owner** |
 
-~~D2~~ and ~~D6~~ are **closed by 10a**. `D8` remains step 11's.
+~~D2~~ and ~~D6~~ are **closed by 10a**; ~~D3~~, ~~O12~~, ~~O13~~ and ~~S11/G5~~ by **10b**.
+`D8` remains step 11's.
 
 ## 3. Toolchain
 

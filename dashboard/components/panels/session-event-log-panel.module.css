@@ -1,0 +1,42 @@
+/* §6.4's "compact scrolling list" — scrolls within its own container, per this file's module
+   doc: §6.1's no-scroll promise governs the page, not a component. `--table-scroll-max` is
+   the same stopgap `stacked-time-series-chart.module.css` and `sparkline.module.css` use for
+   their own table views (SCOPE 2.5f: replacing it with `max-height: 100%` is 10c's, once a
+   panel body has a real bounded height to hand it). */
+.scroll {
+  max-height: var(--table-scroll-max);
+  overflow-y: auto;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+
+.entry {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  flex-wrap: wrap;
+}
+
+.time {
+  color: var(--ink-muted);
+  flex: 0 0 auto;
+}
+
+.sentence {
+  color: var(--ink-primary);
+  flex: 1 1 auto;
+}
+
+.source {
+  color: var(--ink-secondary);
+  flex: 0 0 auto;
+}

@@ -1,27 +1,31 @@
-# Handover — after 10a, before 10b
+# Handover — after 10b, before 10c
 
-**Rewritten 2026-09-08 by 10a's reconciliation.** Steps 1–8 are closed, **step 9 is closed**,
-**Q1** and **Q2** are closed, and **10a — the shell** is closed (header, sticky banner, grid,
-`app/` wiring, D2, D6, and step 10's own harness). This file is the whole inheritance: the next
-phase's agents get clean context and read it as fact.
+**Rewritten 2026-09-08 by 10b's reconciliation.** Steps 1–8 are closed, **step 9 is closed**,
+**Q1** and **Q2** are closed, **10a — the shell** is closed, and **10b — the nine panel bodies**
+is closed pending the parent's review. This file is the whole inheritance: the next phase's
+agents get clean context and read it as fact.
 
 ⚠ **Read §0.3 FIRST.** It says why `pnpm verify` is **not deterministic today**, and it changes
-what a green harness run is allowed to be taken as evidence of. §0.1 and §0.2 remain true.
+what a green harness run is allowed to be taken as evidence of. §0.1, §0.2 and §0.4 remain true.
 
-**Next is 10b — the nine panel bodies.** §3.6 is the props contract it writes against and it is
-now a **real exported type**, not prose. `pipeline/WORK-ITEMS.md` §10 is the queue,
-`pipeline/UI-BACKEND-GAPS.md` is what to open first, and
-`pipeline/steps/10-panels-assembly/SCOPE.md` §2.1 lists the nine panels and the traps that have
-already bitten a draft of each.
+**Next is 10c — the backlog** (SCOPE §5's third loop): §3's inherited items, L9's sizing, L11's
+unit-name constant, Q1-F4's cross-harness runner, SCOPE 2.5f's `max-height`, **the wiring of the
+nine panels into `app/dashboard-shell.tsx`** (they still have no production call site), 10a-F17's
+determinism fix and 10a-F4's browser pass. `pipeline/WORK-ITEMS.md` §10 is the queue.
+
+⚠ **§0.4 is new and it is the most important thing 10b learned.** *A document-wide `toContain` is
+a weak assertion wearing a strong name* — the third instance in three loops, and this time it was
+protecting `PLAN.md`'s **first** invariant.
 
 ⚠ **Everything below about steps 1–8's surface, the four structural rules, and the toolchain is
-inherited unchanged and is still true.** The sections **10a** rewrote are §0.3 (new), §1's harness
-list, §2, §3.6 (new), §4, §8 and §9. Q1 rewrote §0.1, Q2 rewrote §0.2 and §3.5.
+inherited unchanged and is still true.** The sections **10b** rewrote are §0.4 (new), §2, §3.6's
+tail, §4, §5.2's rule list, §8 and §9. 10a wrote §0.3; Q1 wrote §0.1; Q2 wrote §0.2 and §3.5.
 
-⚠ **§4 and §8 have been found stale IN THE SAFE DIRECTION six times** (most recently D4/D5,
-carried as open for step 9 while both had existed since 2026-09-07). **10a re-checked every row
-it touches against the tree, by grep, and marked what it did NOT re-check.** Do the same; do not
-copy the tables forward.
+⚠ **§4 and §8 have been found stale IN THE SAFE DIRECTION seven times.** **10b re-checked every
+row it touches against the tree and against `SPEC.md`, and marked what it did NOT re-check.** Do
+the same; do not copy the tables forward. ⚠ **And 10b found the other direction too**: two
+*phase notes* (`10b-build.md`, `10b-test.md`) asserted a mutation coverage that did not exist, so
+a document claiming a property is not evidence of it either — read what a mutation **replaces**.
 
 ---
 
@@ -249,6 +253,48 @@ rather than arguing them:
 
 ---
 
+## 0.4 ⚠ NEW — what 10b found, and the one rule to carry out of it
+
+**14 adversarial findings: 11 accepted, 1 accepted in part, 2 deferred, 0 rejected outright.**
+Full table in `pipeline/steps/10-panels-assembly/10b-reconciliation.md`. Three things generalise.
+
+### ⚠ A document-wide `toContain` is a weak assertion wearing a strong name — THIRD instance
+
+10a found `toContain('paused')` inert (satisfied by an unrelated attribute). Its test phase found
+`toContain('refresh')` inert the same way. 10b found `expect(html).toContain('—')` inert in the
+⚠ test named for **invariant 1**, in the panel `PLAN.md` uses as invariant 1's own example:
+`chip.tsx:75` renders `EM_DASH` whenever `severity === null`, so the assertion passes on the chip
+beside the row whatever the value cell prints. Under a one-token change the panel rendered
+**`fan 5  0 RPM`** for a `dell_smm` that loaded and could not read the tach — *"the single worst
+bug this project can ship"*, with the whole suite green.
+
+**The rule: assert over the element that carries the claim, never over the document that
+contains it.** `components/panels/test-support.ts` now exports `valueCells(html)`, and every
+panel has one ⚠ test saying *with every reading null, no value cell prints a numeral* — which
+covers ~30 readings in six tests **and covers a row added tomorrow**. A mechanical guard
+forbidding the shape is **10c's** (§9, `10b-F1-guard`).
+
+⚠ Two related traps, both hit again while fixing it: a row helper that finds the **subtitle**
+(`rowContaining(html,'fan service')` on SAFETY, whose subtitle lists all four checks), and the
+escaped-quote ledger trap below.
+
+### ⚠ Read what a mutation REPLACES before crediting it with a property
+
+`10b-CO2`/`CO3` are `severity={…}` → `severity={null}`: they delete a **band**, which is the
+*zero* side of invariant 1. Both the build note and the test note described them as the
+null-vs-zero pair, and the test phase skipped COOLING's audit **on the strength of that
+description**. `severity → null` and `?? null → ?? zero` are opposite sides of one invariant and
+both read as "invariant 1" in a mutation title. Both notes now carry marked corrections.
+
+### ⚠ The sibling case, again — fixed where reported, missed one branch over
+
+`Sparkline` handled the pre-first-poll ring correctly; `StackedTimeSeriesChart`, fed by the same
+`chartDomainOf`, drew a fully plausible half-hour axis ending at **epoch 0 in local time** under a
+fabricated `0–1 °C` scale. `event-sentence.ts` guarded an empty detail in two of its four
+appending branches. Both were one line. **When a fix lands on one of a pair, check the pair.**
+
+---
+
 ## 1. How to run anything
 
 `pnpm` is installed through corepack into a directory that is **not** on this machine's
@@ -326,6 +372,11 @@ wrote it. See §5.4. When a change touches anything that consumes entropy or a c
 `pnpm verify` in a loop — step 7's reconciliation ran it **20 times**, step 8's **10**.
 
 ### The deliberate-regression harnesses — run all **NINE** after any change in `lib/`, `app/` or `components/`
+
+⚠ **Step 10's is now 129 mutations with 150 ⚠ marks** (was 105/121 after 10b's test phase) — 10b's
+reconciliation added 24 and re-aimed seven anchors whose target text it changed. It covers 10a's
+shell **and** 10b's nine panel bodies; `components/panels/*.test.*` files belong to this harness's
+`LEDGER_FILES` and to no other (ledger ownership follows the FILE, §5.2 rule 6).
 
 ```bash
 python3 pipeline/steps/02-format-severity/regressions.py                    #  55 mutations + ledger
@@ -495,7 +546,8 @@ Everything under `dashboard/`. Nothing outside it has been created or modified e
 | **`lib/client/header-status.ts` · `banner.ts`** | **New in 10a.** §9's aggregate status reduction and §6.4's banner reduction. Pure, hook-free, no React |
 | **`app/dashboard-shell.tsx` + `.module.css`** | **New in 10a.** The ONE stateful surface: one `useTelemetry()`, one `useNowTick()`, one `state === null` guard, one sticky band |
 | **`app/use-now-tick.ts`** | **New in 10a.** D2's independent age interval. Never driven by any store |
-| 79 test files | **2399 tests** |
+| **`components/panels/*.tsx` + `*.module.css`** | **New in 10b — the nine panel bodies**, plus `status-row.tsx`, `panel-notes.tsx`, `condition-lookup.ts`, `panel-chart.ts`, `event-sentence.ts`, `test-support.ts`. All pure, all inside `purity.test.ts`'s recursive walk. ⚠ **Not yet mounted anywhere** — see below |
+| 92 test files | **2559 tests** |
 | `package.json` · `pnpm-lock.yaml` · `tsconfig.json` · `next.config.mjs` · `vitest.config.mts` | pinned toolchain; `strict` + seven more flags, all asserted |
 | `app/layout.tsx` · `app/page.tsx` | ⚠ **No longer placeholders.** `page.tsx` renders `<DashboardShell />` and nothing else; `layout.tsx` imports `components/tokens.css` and paints the ground from tokens. ⚠ **`app/page.tsx` must stay free of telemetry** — see §6 — and it is now tested (`app/page.test.tsx`) |
 
@@ -519,9 +571,19 @@ no `useId`, no hover-position state and no self-toggling leaf anywhere under `co
 exists** (`jsdom@30.0.1`, devDependency, added by 10a for D6) — five test files use it, and
 `next build` was re-run to confirm it does not reach `.next/standalone`.
 
-**Does not exist yet:** the **nine panel bodies** (10b — the placeholders are what they replace);
-`Dockerfile`, `.dockerignore`, `dashboard.sh`, the systemd unit, `README.md`; any browser-driven
-test (10c, §9).
+⚠ **The nine panel bodies exist as of 10b (2026-09-08) and have NO production call site.**
+`app/dashboard-shell.tsx` still renders nine `PanelPlaceholder`s; 10b's scope was
+`components/panels/`, and the swap is an `app/` change. **10c owns the wiring**, and the diff is
+`<PanelPlaceholder …props />` → `<GpuPanel {...props} />` etc. ⚠ **`GpuPanel` takes NO `index`
+prop** — 10b's reconciliation narrowed `panelId` to `'gpu0' | 'gpu1'` and derives the index from
+it, because two independent copies of *which card am I* typechecked while disagreeing (F12).
+⚠ **Until that wiring exists, nothing proves the nine compose**: every one of the ~330
+panel tests renders one panel in isolation against a hand-built `RuntimeState`. Same shape of gap
+10a's own reconciliation flagged for the header/banner/grid — *a mutation harness over the parts
+does not cover the join*.
+
+**Does not exist yet:** `Dockerfile`, `.dockerignore`, `dashboard.sh`, the systemd unit,
+`README.md`; any browser-driven test (10c, §9).
 
 ---
 
@@ -751,7 +813,9 @@ series; **600 points per series**, not per chart.
 | `PanelShell` | `title · subtitle · chip` (§6.2). ⚠ **subtitle is identity, never measurement** — it must not change on a poll unless the machine changed |
 | the placeholder's title casing | `GPU 0` / `GPU 1` keep their capitals; the rest are lower case (`cpu`, `cooling`, `storage & network`, `session event log`) — `PanelShell`'s documented reading of §6.2's self-contradictory prose |
 | ⚠ `unknownStanding` | **Decision recorded, not implemented (D3).** Keep the field; SAFETY renders each entry as its own row worded as a configuration defect (``unknown `STANDING` entry: `<id>` ``), **not** counted in §9's dot/count (O12), but visually distinct — silence is not acceptable for a mechanism whose whole job is suppressing alarms |
-| ⚠ the banner's stale wording | `last read 6:12 ago`, coloured `--status-watch` not `--status-alarm`. **SAFETY's row half owes the same words** (§6.5 requires "its row **and** the banner"). Spec question S-B |
+| ⚠ the banner's stale wording | `last read 6:12 ago`, coloured `--status-watch` not `--status-alarm`. **Done in 10b** — `components/panels/condition-lookup.ts`, and since 10b's reconciliation the two copies are held together by a **source-text guard** (`condition-lookup.test.ts`) rather than a doc comment: the adversarial reworded one side and the whole suite stayed green at 2483/2483 with the banner and the rows saying different things. Spec question S-B is still the owner's |
+| ⚠ a stale row's VALUE | §6.5, in bold: *"A stale condition shows its LAST VALUE, unchanged — not an em dash."* `condition-lookup.ts`'s `staleValueOr` supplies it, on the four rows that can structurally go stale. Before 10b's reconciliation the banner rendered `4,308 RPM` and the row rendered `—` for one condition in one frame |
+| ⚠ a stale row's two NOTES | The stale age and the `errors[]` explanation are two facts and `note={age ?? message}` dropped the second exactly when a source died. `StatusRow` carries `note` (watch-toned age) **and** `detail` (muted explanation) |
 
 ---
 
@@ -768,7 +832,14 @@ series; **600 points per series**, not per chart.
 
 ### Still open
 
-⚠ **Re-checked against the tree by 10a's reconciliation, 2026-09-08 — the seventh reading.**
+⚠ **Re-checked again by 10b's reconciliation, 2026-09-08 — the eighth reading.** **O12, O13 and
+O3's rule are now CLOSED by 10b** and marked below; **O14 is still open and still has not
+arisen**, re-verified by grep (`lib/format.ts` has no `parts` variant; no panel splits a
+formatted string). O1 is closed for the panels: every cell colour in `components/panels/` is a
+`lib/severity.ts` call on the current reading, and `state.displayed` is read only by
+`condition-lookup.ts` for staleness. O20–O22 were **not** re-checked — they are step 11's.
+
+⚠ **The seventh reading, by 10a's reconciliation, 2026-09-08, said:**
 This time the staleness would have been in the *other* direction if left alone: **D2 and D6 were
 open and are now closed**, and O2's structural half was **violated in code while listed here as
 merely owed** (`aggregateStatus` took no `severity`, so the dot and the words were two reductions
@@ -784,9 +855,9 @@ touches them — steps 11 and 12 must re-verify their own.
 | ~~**O2**~~ | **Closed by 10a for the header, 2026-09-08.** `aggregateStatus(mode, alarms, severity)` takes the same `severity` the dot is coloured with, so they cannot disagree; the count is `bannerConditions(displayed).length`, the same filter the banner uses, so the header and the banner cannot disagree either; the count is omitted at zero in **every** mode. ⚠ It was **open as a defect, not merely as an obligation** — the first build split them and rendered `● all healthy` beside a grey "no band" dot. **A panel chip is still 10b's** to get right (O1) | closed for the header |
 | ~~**O3**~~ | **Satisfied structurally.** Panels read `state.displayed` — `observePoll`'s already-deduplicated output — and 10a's banner reduction is built on `bannerConditions`, not on `conditionsFrom`. ⚠ Still live as a **rule** for 10b: a panel that reaches for `conditionsFrom` re-opens it | rule, for 10b |
 | ~~**O4**~~ | **Satisfied.** `sinceMs` is consumed as the confirmed band's first observation (`lib/client/banner.ts`, verified against `lib/conditions.ts`'s doc) and rendered as `since HH:MM:SS`. ⚠ See spec question **S-C**: it carries no date, which is a separate open question | closed |
-| **O12** | A reading with no §6.3 band is invisible to §9's dot. **Do not invent a band** — report it | **10b** — it is SAFETY's `unknownStanding` rows and any bandless row a panel prints |
-| **O13** | `EC auto` and `unavailable` are **not** severities. `EC auto` is healthy (invariant 3) | **10b** — COOLING |
-| **O14** | Formatters return unit-inclusive strings; ask for a `parts` variant rather than splitting on whitespace | ⚠ **was step 9, then step 10 — now 10b.** 10a rendered no headline figure (every slot is a placeholder), so the ask still has not arisen. Original note follows. Step 9 and Q2 both closed without needing it: `components/` never splits a formatted string, because the chart primitives take a caller-supplied formatter and print its output whole. Step 10 is the first phase to render a headline figure and its unit at different sizes, which is where the ask actually arises. **`lib/format.ts` has no `parts` variant today** (checked 2026-09-08) — if you need one, ask for it; do not split on whitespace |
+| ~~**O12**~~ | **Closed by 10b.** Every "no severity" case is `severity={null}` (the explicit no-band chip) or an omitted prop (no chip at all); no panel falls back to `'normal'`. SAFETY's `unknownStanding` rows render with `severity={null}` and are kept out of that panel's own head chip. Backed by `10b-SP3`, `10b-SE2`, `10b-SR2`. ⚠ **The open residue is a question, not an obligation: 10b-S-F** — may a panel HEAD read `normal` while one of its own readings is `—`? §8 | closed; **10b-S-F is the owner's** |
+| ~~**O13**~~ | **Closed by 10b.** COOLING's derived-mode row carries no `severity` prop at all, so `EC auto`/`unavailable` render as identity text beside the banded reading. Backed by `10b-CO1` | closed |
+| **O14** | Formatters return unit-inclusive strings; ask for a `parts` variant rather than splitting on whitespace | ⚠ **was step 9, then step 10, then 10b — now 10c.** ⚠ Re-checked 2026-09-08 by 10b's reconciliation: no panel splits a formatter's output (`grep` for `.split(` over `components/panels/` is empty) and `lib/format.ts` still has no `parts` variant, so **the ask still has not arisen** even now that headline figures render. Two related shapes are recorded rather than acted on: MEMORY/STORAGE compose a GiB pair from two whole `formatGiB` calls, and SERVING composes one row value from four whole formatter outputs. Both concatenate whole unit-bearing strings, which O14 permits; neither splits one. **10b-F14a** — that SERVING row reads `:— · — · ctx — · health —` for an identity-only instance — is a copy nit for the owner, not an O14 violation. Original note follows. Step 9 and Q2 both closed without needing it: `components/` never splits a formatted string, because the chart primitives take a caller-supplied formatter and print its output whole. Step 10 is the first phase to render a headline figure and its unit at different sizes, which is where the ask actually arises. **`lib/format.ts` has no `parts` variant today** (checked 2026-09-08) — if you need one, ask for it; do not split on whitespace |
 | ~~O19~~ | **Closed 2026-09-07.** It was a **deletion, not a rename**: `GiB` already existed for RAM and swap, so `GB`, `gb()` and `formatGB` were removed and disk moved onto `GiB`. ⚠ **`Filesystem.usedGB`/`totalGB` were WIRE names**, so this was a §4 contract change — server and client moved together | closed |
 | **O20** | ⚠ `dashboard.sh set-password` must emit `scrypt.<log2N>.<r>.<p>.<salt>.<key>` — §4.1 | **step 11** *(not re-checked)* |
 | **O21** | ⚠ `SESSION_SECRET` must be written unquoted — §4.1 | **step 11** *(not re-checked)* |
@@ -964,7 +1035,18 @@ checked set, which is the exact failure this rule exists to prevent. Rules that 
    | `⚠ the crossing and the recovery, and nothing in between` | a mutation dropping `observeStaleness`'s early-out |
    | `⚠ a stale condition does not re-log its band on every poll` | **the most valuable of the six.** For a continuous metric the guard is invisible: the frozen band always equals the logged one, so the `previousBand === band` early-out defends it a second time. It is load-bearing only for a **value-band** condition — a unit that goes `active → failed` and becomes unreadable five seconds into its ten-second run carries a pending value across the outage, and an unguarded loop confirms it on the strength of time nobody sampled. Every fixture in that file used `gpu_temp` |
 
-10. ⚠ **Mutation ids carry their creating step's id as a prefix — `07-R3`, `Q1-SC1`.** Added
+10. ⚠ **NEVER write `\'` inside a single-quoted `⚠` test name — use double quotes.** Added by
+    10b's reconciliation, 2026-09-08, which is `10b-test.md` §1's own recommendation finally
+    taken. The ⚠-scanner's `FIRST_STRING` regex captures the string content **including the
+    backslash**, while Vitest's printed name (and therefore the `FAIL` line the ledger unions
+    against) has it stripped — so the mark can never match and is reported **uncovered on every
+    run, whether or not a mutation reddens it**. It is a *loud* failure (the harness exits 1 and
+    names the mark), not a false green, so it cannot hide a gap — but it cost a harness run
+    during 10b's build **and another during its reconciliation**, both times on freshly written
+    names. Three more instances were created and fixed on 2026-09-08. `10b-test.md` §1 scanned
+    all 844 marks across steps 2–10 and found zero live cases; this is about the next one written.
+
+11. ⚠ **Mutation ids carry their creating step's id as a prefix — `07-R3`, `Q1-SC1`.** Added
     2026-09-08 (Q3), at the owner's instruction: the bare id namespace collided with the
     work-item/gap namespace (`S11`/`G5` were each simultaneously a step-7 mutation id and half
     of the open `S11/G5` work item; `S12` collided too). The prefix names the step that
@@ -1256,14 +1338,28 @@ top of `lib/guardrails.test.ts` — not by a text assertion.
 
 ---
 
-## 8. Spec gaps — re-verified by 10a's reconciliation, 2026-09-08
+## 8. Spec gaps — re-verified by 10b's reconciliation, 2026-09-08
 
 ⚠ This table has now been **stale five times** (92 % before step 5, 100 % before step 6, again
 before step 7, again in step 8, and again in Q2). **Every time, in the safe direction: entries
 carried as open that the spec had already answered.** Re-check every row against the spec text
 before trusting it. Invariant 7 stands: if the spec is silent, **report it — do not assume**.
 
-**Open, with owners — seven rows: S11/G5's residue, Q2's two, and 10a's four new ones.**
+**Open, with owners — ten rows: Q2's two, 10a's four, and 10b's four new ones. S11/G5's
+rendering residue is CLOSED.**
+
+### ⚠ NEW — 10b's four, 2026-09-08. Three are IMPLEMENTED conservatively; one is not implemented.
+
+Full statements, with the rejected alternative for each, in
+`pipeline/steps/10-panels-assembly/10b-reconciliation.md` §6. Questions for the owner, not
+proposals — but three had to render *something* today, so each names the string in the code.
+
+| # | Gap | Implemented as | Owner |
+|---|---|---|---|
+| **10b-S-E** ⚠ | **What a GPU panel renders for a card ABSENT from a `gpus[]` that WAS read.** §6.5 rules the *condition* (retired — *"the subject has left the machine, and that is an answer"*) but §6.2 gives no panel wording, and §6.5's only GPU literal, `no GPUs enumerated`, is for the whole enumeration failing. Before 10b's reconciliation the two states rendered **byte-identically** and the panel still printed `served by instance 1  gemma-4-12b` for a card that is not there — §6.2's own named failure mode | **`card not enumerated`**, a body takeover, no served-model row. Rejected: the ordinary body of em dashes, which is indistinguishable from a present card whose readings failed | **owner** |
+| **10b-S-F** ⚠ | **May a panel's HEAD chip read `normal` while one of that panel's own readings is `—`?** MEMORY with `RAM — / —` and a healthy swap shows a green ✓ over an em dash; so do STORAGE and COOLING. §9's *"a dashboard that goes green because it stopped being able to look"* is written about the **aggregate**, which conditions protect (a stale condition keeps its band and its place in the count). §6.3 says nothing about a panel head over a mixture, and the panels are inconsistent: CPU and GPU go no-band, the other three do not | ⚠ **NOT CHANGED**: `worstSeverity` over the bands that exist, skipping `null`s, which is what §6.3 literally supports. The alternative — no-band whenever any input is unreadable — costs a panel its alarm colour when one unrelated field fails | **owner** |
+| **10b-S-G** ⚠ | **`errors[]` carries a `source` but no subject, and §6.5 needs one.** *"An `llama-server` instance is down → **its** row shows the unit state and the reason; the other instance is unaffected, and that is a structural requirement, not an observation about current scheduling."* §4's error shape cannot express which instance an entry is about, so the join can only be made by reading the message text | Matched on the message: the unit name (`servingUnitName`), the `<i>.env` path, or the port; last **per source**; entries naming no instance render once under the rows. Tested, and **a heuristic**. The clean fix is an optional `instance`/subject on a `TelemetryError` — a §4 wire change | **owner**, then whoever owns §4 |
+| **10b-S-H** | **When one source blanks several figures on one panel, is its message stated once or beside each?** `errorsForPanel`'s doc says granularity is per **source**; §3.7 says an alarm needs its explanation **beside it**. `dell-smm` blanks five channels and the mode; `statvfs` blanks both mounts; `proc-meminfo` blanks RAM and swap | **Once**, under the figures it blanks — matching COOLING's existing choice. Consequence, stated plainly: with `dell-smm` down, fans 1–4 read `—` with the message sitting on fan 5 | **owner** |
 
 ### ⚠ NEW — 10a's four, 2026-09-08. Three are IMPLEMENTED conservatively; one is not implemented.
 
@@ -1287,7 +1383,7 @@ does (ANCHOR §8). Full statements, with the measurements and the trade-off tabl
 |---|---|---|
 | **Q2-S2** ⚠ | **The table view has no height bound, and §6.2's justification does not cover it.** §6.2 accepts the hover layer and table view partly because *"they cost nothing when unused. A tooltip that never fires renders nothing and occupies no space in the grid, so §6.1's no-scroll promise is untouched."* True of the tooltip; **silent about the table view**, which is not "unused" once a caller toggles it. Measured: **~722 `<tr>`** at the default 30-minute window (2 plots × ~361 rows), **1,202** at 120 minutes after §6.7's decimation — ~12,000–20,000 px of content in a grid cell §6.1 budgets at a few hundred, inside a layout promising no scroll at ≥1280×1024. `.tableView` carries no `max-height`, no `overflow` and no row cap, and the primitive gives a caller nothing to hang one on. **Cap the rows** (the table stops being the chart's complete substitute, so §6.2's "accessibility floor" no longer holds), **decimate again** (a second budget beside §6.7's, and two decimations that can disagree), or **scroll inside the panel** (arguably what §6.1 forbids — though §6.1 already accepts scrolling below 1280px, and a panel scrollbar is not a page scrollbar). Needs a sentence in §6.1 or §6.2 | **owner**, then step 10 |
 | **Q2-S1** | **§6.2's "per-mark tooltip on bars and dots" is entirely unmet, and the two clauses are in structural tension.** The crosshair half is delivered by a hover layer that tiles the plot body at `pointer-events: all` and is painted last; SVG hit-testing therefore hands the pointer to a zone and never to the mark beneath, so a mark's own `<title>` can never display (bar a ~2.5px crescent of the end dot past `plotWidth`). **A full-body crosshair and reachable per-mark tooltips cannot coexist on one plot.** Three sub-questions: was the clause written about a **bar or scatter** chart, where there is no crosshair layer? — `components/` has no such primitive, and `Meter` has its value as permanent visible text. If so, is the clause satisfied **vacuously** today and inherited by that future primitive? Or does the crosshair's own tooltip **discharge** it on a line chart, since it already reports the mark's instant and every series' value at it? `build.md` §7 recorded this as *partially* satisfied and has been corrected | **owner**, then whoever specs a bar/dot chart |
-| **S11 / G5** — *the rendering half only* | ⚠ **NARROWED.** The collector half is **settled** in `SPEC.md` line 1208: *"the exception has ONE hole and the collector closes it, not the panel"* — `collectCooling` files an entry when `pwm5` is in the listing and `fan5_input` is not, and the spec explicitly rejects a panel-rendered note because *"a qualified rule is one a future reader has to know the exceptions to."* What is left is what a **panel** does with an em dash whose coloured neighbour is not coloured. Do not re-raise the collector half | **step 10** |
+| ~~**S11 / G5**~~ — **CLOSED 2026-09-08 by 10b.** The panel half is discharged **by construction**: COOLING's fan5 row renders only a stale age or a real `errors[]` message, never invented copy, so a `fan5` em dash beside the `unavailable` neighbour gets no entry of its own. ⚠ The guard was **rebuilt** by 10b's reconciliation (adversarial F6): it asserted three substrings — the exact words `10b-CO5` injected — and a fallback sentence with different wording passed it. It now asserts the row carries **no note element at all**, which is what the ruling actually says. Do not re-raise either half | Prior wording, for the record: ⚠ **NARROWED.** The collector half is **settled** in `SPEC.md` line 1208: *"the exception has ONE hole and the collector closes it, not the panel"* — `collectCooling` files an entry when `pwm5` is in the listing and `fan5_input` is not, and the spec explicitly rejects a panel-rendered note because *"a qualified rule is one a future reader has to know the exceptions to."* What is left is what a **panel** does with an em dash whose coloured neighbour is not coloured. Do not re-raise the collector half | **step 10** |
 
 **⚠ Closed since this table was last written — verified against the spec text, not assumed:**
 
@@ -1376,10 +1472,11 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | ~~**`errorsForPanel(snapshot, panel)`**~~ (D4) | — | **closed 2026-09-07** — `lib/client/observations.ts:350`. ⚠ Carried as open here until Q2 checked |
 | ~~**`traceFor(state, pick)`**~~ (D5) | — | **closed 2026-09-07** — `lib/client/series.ts:201`. Same |
 | ~~The GB → GiB rename~~ (O19) | — | **closed 2026-09-07** — a deletion; `GiB` already existed |
-| **Formatter `parts` variant** (O14) | ⚠ **10b** (was step 9, then step 10) | open — 10a renders no headline figure (every slot is a placeholder), so it still has not arisen |
+| **Formatter `parts` variant** (O14) | ⚠ **10c** (was step 9, step 10, 10b) | open — re-checked by 10b: the nine panels render headline figures and still never split a formatted string, so the ask has not arisen. §4 |
 | ~~**jsdom** (D6)~~ | — | **closed by 10a** — `jsdom@30.0.1`, both halves tested, and `next build` re-run to confirm it does not reach `.next/standalone`. ⚠ jsdom still cannot see `:hover`, `position: sticky`, `matchMedia` or layout — that is the browser item below, not this one |
-| S11/G5's **panel-rendering residue** | **10b** | open — §8. ⚠ S19 and S30 are **closed** in `SPEC.md`; the collector half of S11/G5 is closed too |
-| **S40's third event-log feed** (D1) · **render `unknownStanding`** (D3) | **10b** | open — D3's *decision* is made (§3.6); only the code is owed |
+| ~~S11/G5's **panel-rendering residue**~~ | — | **closed by 10b** — by construction, and the guard rebuilt to assert the ruling rather than three substrings. §8 |
+| **S40's third event-log feed** (D1) | **10c / owner** | open — `LogEntryKind` is `lib/client/events.ts`'s and was outside 10b's file scope. ⚠ `event-sentence.ts`'s exhaustive switch makes the new kind a **compile error** in the panel the day it lands, so the panel half is future-proofed |
+| ~~**render `unknownStanding`** (D3)~~ | — | **closed by 10b** — one SAFETY row per malformed entry, `severity={null}` (O12's explicit no-band), kept out of that panel's head chip. Backed by `10b-SP3` |
 | ~~**the independent age tick** (D2)~~ | — | **closed by 10a** — `app/use-now-tick.ts`, **and** the caller-side test that catches its deletion |
 | ~~The header: dot + count + paused/stale mode (O2)~~ | — | **closed by 10a** — and it was a live defect, not just an obligation: the first build split the dot from the count. §0.3 |
 | ~~A `state === null` wrapper written once~~ | — | **closed by 10a** — one guard, in `app/dashboard-shell.tsx`, nowhere else. ⚠ Open question **10a-S-D** about what it covers |
@@ -1389,15 +1486,22 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | ~~**Q1** — the ⚠-scanner back-port~~ | — | **closed 2026-09-07** — 771 mutations, 689 marks, eight harnesses green. §0.1 |
 | **Q1-F4** — assert every ⚠-bearing test file is in some `LEDGER_FILES` | ⚠ **10c** | open — §0.1. The union it was waiting on has now changed: 10a added the **ninth** harness and hand-wrote its `LEDGER_FILES`, which is exactly the step a cross-harness runner would check |
 | ~~**Q2** — §6.2's hover layer and table view~~ | — | **closed 2026-09-08** — 13 findings adjudicated, `components/` harness at 93 mutations. §0.2 |
-| **Q2-S2** — the table view's height, against §6.1's no-scroll promise | **owner**, then **10b/10c** | ⚠ open. **Answered for the stopgap, not for the layout:** `--table-scroll-max: 40vh` still stands, and 10a's grid gives a panel body a bounded ancestor for the **first time**, so SCOPE 2.5f's `max-height: 100%` replacement is now possible — **10c**, with a browser |
+| **Q2-S2** — the table view's height, against §6.1's no-scroll promise | **owner**, then **10c** | ⚠ open, and ⚠ **still not reachable in the UI**: no panel sets `view`, and none can, because a self-toggling leaf would need the hook `purity.test.ts` forbids. The toggle has to live in `app/`, so it lands with 10c's wiring. The session event log DOES use `--table-scroll-max` for its own scroll region. **Answered for the stopgap, not for the layout:** `--table-scroll-max: 40vh` still stands, and 10a's grid gives a panel body a bounded ancestor for the **first time**, so SCOPE 2.5f's `max-height: 100%` replacement is now possible — **10c**, with a browser |
 | **Q2-S1** — §6.2's per-mark tooltip clause vs the crosshair layer that occludes it | **owner** | open — §8 |
-| **Q2-F9** — the chart clamps out-of-domain points; the domain's containment is a precondition it neither states as a prop rule nor checks | **10b** | open — §4. Untouched by 10a, which mounts no chart |
+| **Q2-F9** — the chart clamps out-of-domain points; the domain's containment is a precondition it neither states as a prop rule nor checks | **owner**, then 10c | open. ⚠ **Sidestepped, not resolved, by 10b**: `chartDomainOf` computes the same window `traceFor` uses, so no panel in this loop can feed an out-of-domain instant. The *rendering* decision (clamp vs drop) is still unmade for a future caller without that property |
+| ~~**10b — the nine panel bodies**~~ | — | **closed 2026-09-08** pending the parent's review — 14 findings adjudicated (11 accepted, 1 in part, 2 deferred, 0 rejected outright). **92 files · 2559 tests · step 10's harness at 129 mutations · 150 ⚠ marks.** `10b-reconciliation.md` |
+| ⚠ **Wire the nine panels into `app/dashboard-shell.tsx`** | **10c** | ⚠ open, and it is the biggest single gap left in step 10: the panels exist, typecheck and are tested, and **nothing mounts them**. Until they are mounted, nothing proves the nine compose — SVG ids across the real page, layout, and that the real hook's state satisfies `PanelProps` end to end. ⚠ **`<GpuPanel {...props} />` takes NO `index`** (F12) |
+| **10b-F1-guard** — forbid the document-wide `toContain` shape mechanically | **10c** | open. Q1-F4's family (a cross-cutting test-quality guard). The behavioural half exists now — `valueCells` + six per-panel guards — and should live a while before a lint is written against its shape. §0.4 |
+| **10b-F11 / 10b-S-F** — a panel head reading `normal` over one of its own em dashes | **owner**, then 10b/10c | open — §8. Deferred deliberately: it changes what every panel head means, which is not a reconciler's call |
+| **10b-F14b** — at 1280–1599px (the design target) the GPU and CPU traces cannot hatch a gap | **10c**, with L9 | open. `Sparkline` takes no `gaps` prop by design, so HANDOVER's *"hatch `state.gaps`, never a hole in a series"* holds only above 1600px, where the promoted chart receives them. The fix is a new prop on **step 9's** primitive or a different primitive at the design breakpoint — both are L9's sizing question, and 10c owns L9 and the browser pass that would show which |
+| **10b-F14a** — SERVING's composite row value reads `:— · — · ctx — · health —` for an identity-only instance | **owner** | open, cosmetic. Not an O14 violation (it concatenates whole formatter outputs, never splits one); changing it means inventing a composition rule §6.6 does not state |
+| **10b-S-E · S-F · S-G · S-H** — four spec questions | **owner** | §8. Three implemented conservatively, S-F not implemented |
 | ~~**10a — the shell**~~ | — | **closed 2026-09-08** — 18 findings adjudicated (16 accepted, 2 deferred, 1 half-rejected). 79 files · 2399 tests · nine harnesses · 875 mutations. `10a-reconciliation.md` |
 | ⚠ **10a-F17 — `pnpm verify` is not deterministic** | **10c** | ⚠ open, and it undermines every ledger in the project. **§0.3 — read it before trusting a green run.** Fix with an injected clock in `lib/collectors/serving.test.ts:592`, never a wider margin |
 | ⚠ **10a-F4 — nothing in the pipeline runs a browser** | **10c** | open. The step owes **two** things: (1) the test phase's seven measurements re-run headlessly — `getBoundingClientRect` at 820/899/900/1150/1279/1280/1920, asserting COOLING's `y`/`height`/`x` span at ≥1280 and the `y`-order at <900; **(2) a way to force an alarm-level condition client-side.** Without (2) the banner never mounts, which is exactly why the manual pass could not see F13 — the one element §6.4 makes normative was the one element the browser check could not reach |
 | **10a-S-A · S-B · S-C · S-D** — four spec questions | **owner** | §8. Three implemented conservatively, S-C not implemented |
 | **10a — SCOPE 2.5f**: replace `--table-scroll-max: 40vh` with `max-height: 100%` | **10c** | open — now unblocked by 10a's grid, but wants a browser to confirm |
-| **10b — the nine panel bodies** | **10b** | next. §3.6 is the contract; SCOPE §2.1 is the list and its traps |
+| **10c — the backlog** | **10c** | next. SCOPE §5's third loop, plus everything marked 10c in this table |
 | **O20 · O21 · O22 · D8** — the four silent-failure obligations | **step 11** | §4.1 |
 | **`dashboard.sh check`**: an unparseable `PASSWORD_HASH`; a `SESSION_SECRET` short or quoted; a `STANDING` entry matching nothing; the env file's mode and owner | **step 11** | the only place any of them can be caught, because nothing is logged |
 | **F7 — `LIMITS` bounds scrypt's memory but not its time** (measured 1 720 ms vs 58 ms at the worst accepted parameters) | **step 11** | with `check` |

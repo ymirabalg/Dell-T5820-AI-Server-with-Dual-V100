@@ -1,0 +1,47 @@
+/* Mirrors `row.module.css` exactly, plus `.noteWatch`. See `status-row.tsx`'s module doc for
+   why this is a sibling file rather than an edit to that one. */
+
+.row {
+  display: flex;
+  /* ⚠ Load-bearing, not tidiness — see `row.module.css`'s identical comment and
+     `components/styles.test.ts`, which asserts every `flex-basis: 100%` in this directory
+     sits inside a `flex-wrap: wrap` container. */
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5em;
+  padding: 0.15em 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.chip {
+  flex: 0 0 auto;
+}
+
+.label {
+  color: var(--ink-muted);
+  flex: 1 1 auto;
+}
+
+.value {
+  color: var(--ink-primary);
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.note {
+  color: var(--ink-secondary);
+  flex-basis: 100%;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+/* §6.5's stale row (S-B, ruled 2026-09-08): watch-coloured, matching `alarm-banner.module.css`'s
+   `.stale` exactly — the condition keeps its true severity; this says only that nobody has been
+   able to look since. */
+.noteWatch {
+  color: var(--status-watch);
+  flex-basis: 100%;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}

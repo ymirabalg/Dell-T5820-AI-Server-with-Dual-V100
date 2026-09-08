@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Step 10a's deliberate regressions — evidence that the shell's tests bite.
+"""Step 10's deliberate regressions — evidence that the shell's AND the panels' tests bite.
 
 Same harness as steps 2–9, including the per-mutation **red-test ledger** (HANDOVER §5.2) and
 the corrected ⚠-scanner (paren-balanced, string-, comment- and generic-aware) step 9's
@@ -7,9 +7,13 @@ reconciliation produced. **Copied from `pipeline/steps/09-ui-primitives/regressi
 verbatim** except for `LEDGER_FILES` and `REGRESSIONS` — the handoff for this step says not to
 write a scanner from scratch, and all eight+ existing harnesses are byte-identical here.
 
-Scope: **10a, the shell** — the assembly seams, the header, the sticky alarm banner, the grid,
-`app/`'s wiring, and D6 (`use-telemetry.ts`). The nine panel bodies are 10b's; this harness
-does not touch `components/panels/` because it does not exist yet.
+Scope: **10a, the shell** (assembly seams, header, sticky alarm banner, grid, `app/`'s wiring,
+D6) **plus 10b, the nine panel bodies** under `components/panels/` — SCOPE.md's three-loop
+split shares this one harness rather than each loop writing its own, so `LEDGER_FILES` and
+`REGRESSIONS` below carry both loops' entries, distinguished by their `10a-`/`10b-` id prefix
+and by a `# === 10b ===`-style banner comment marking where 10b's additions start. 10c's
+backlog items, when they land, will extend this file the same way rather than starting a
+tenth harness.
 
 Two kinds of check:
 
@@ -67,10 +71,33 @@ PAGE_TEST = "app/page.test.tsx"
 # the test is inert and should be given a body matching its name, or renamed to what it
 # actually checks. The second is that the property has no plausible wrong implementation, in
 # which case drop the ⚠ rather than the standard.
+# ⚠ 10b's nine panel bodies + their shared support files. Every `components/panels/*.test.*`
+# file lives in THIS harness's `LEDGER_FILES` and no other's — "ledger ownership follows the
+# FILE" (HANDOVER §5.2 rule 6) — because `components/panels/` did not exist before this loop
+# and this is the harness `components/` files owe.
+STATUS_ROW_TEST = "components/panels/status-row.test.tsx"
+CONDITION_LOOKUP_TEST = "components/panels/condition-lookup.test.ts"
+EVENT_SENTENCE_TEST = "components/panels/event-sentence.test.ts"
+PANEL_CHART_TEST = "components/panels/panel-chart.test.ts"
+GPU_PANEL_TEST = "components/panels/gpu-panel.test.tsx"
+CPU_PANEL_TEST = "components/panels/cpu-panel.test.tsx"
+MEMORY_PANEL_TEST = "components/panels/memory-panel.test.tsx"
+COOLING_PANEL_TEST = "components/panels/cooling-panel.test.tsx"
+STORAGE_NETWORK_PANEL_TEST = "components/panels/storage-network-panel.test.tsx"
+SERVING_PANEL_TEST = "components/panels/serving-panel.test.tsx"
+SAFETY_PANEL_TEST = "components/panels/safety-panel.test.tsx"
+SESSION_EVENT_LOG_PANEL_TEST = "components/panels/session-event-log-panel.test.tsx"
+# ⚠ Added by 10b's RECONCILIATION, 2026-09-08 — §6.5's panel-level `errors[]` explanations.
+PANEL_NOTES_TEST = "components/panels/panel-notes.test.tsx"
+
 LEDGER_FILES = [
     HEADER_STATUS_TEST, BANNER_TEST, HEADER_TEST, ALARM_BANNER_TEST, GRID_TEST,
     PANEL_PLACEHOLDER_TEST, USE_TELEMETRY_TEST, USE_TELEMETRY_SSR_TEST, USE_NOW_TICK_TEST,
     DASHBOARD_SHELL_SSR_TEST, DASHBOARD_SHELL_TEST, PAGE_TEST,
+    STATUS_ROW_TEST, CONDITION_LOOKUP_TEST, EVENT_SENTENCE_TEST, PANEL_CHART_TEST,
+    GPU_PANEL_TEST, CPU_PANEL_TEST, MEMORY_PANEL_TEST, COOLING_PANEL_TEST,
+    STORAGE_NETWORK_PANEL_TEST, SERVING_PANEL_TEST, SAFETY_PANEL_TEST,
+    SESSION_EVENT_LOG_PANEL_TEST, PANEL_NOTES_TEST,
 ]
 
 # `test`/`it`, optionally `.each(<PAREN-BALANCED ARGS>)`, optionally `<A GENERIC ARG>`, then `(`.
@@ -208,6 +235,22 @@ USE_NOW_TICK_SRC = "app/use-now-tick.ts"
 DASHBOARD_SHELL_SRC = "app/dashboard-shell.tsx"
 GRID_CSS_SRC = "components/grid.module.css"
 PAGE_SRC = "app/page.tsx"
+
+# ==================================================== 10b's panel bodies
+STATUS_ROW_SRC = "components/panels/status-row.tsx"
+CONDITION_LOOKUP_SRC = "components/panels/condition-lookup.ts"
+EVENT_SENTENCE_SRC = "components/panels/event-sentence.ts"
+GPU_PANEL_SRC = "components/panels/gpu-panel.tsx"
+CPU_PANEL_SRC = "components/panels/cpu-panel.tsx"
+MEMORY_PANEL_SRC = "components/panels/memory-panel.tsx"
+COOLING_PANEL_SRC = "components/panels/cooling-panel.tsx"
+STORAGE_NETWORK_PANEL_SRC = "components/panels/storage-network-panel.tsx"
+SERVING_PANEL_SRC = "components/panels/serving-panel.tsx"
+SAFETY_PANEL_SRC = "components/panels/safety-panel.tsx"
+SESSION_EVENT_LOG_PANEL_SRC = "components/panels/session-event-log-panel.tsx"
+# ⚠ Added by 10b's RECONCILIATION, 2026-09-08.
+PANEL_CHART_SRC = "components/panels/panel-chart.ts"
+PANEL_NOTES_SRC = "components/panels/panel-notes.tsx"
 
 # (name, source file, old, new, check) — or (name, source file, [(old, new), …], check)
 REGRESSIONS = [
@@ -645,6 +688,390 @@ REGRESSIONS = [
      "formatUptime(seconds(Math.max(0, nowMs - sinceMs) / 1000), 'for');",
      "formatUptime(seconds(Math.max(0, sinceMs - nowMs) / 1000), 'for');",
      [DASHBOARD_SHELL_TEST]),
+
+    # ============================================== 10b — the nine panel bodies
+    # components/panels/status-row.tsx
+    ("10b-SR1 a stale note and an errors[] note share one CSS class, so the two can no longer be told apart",
+     STATUS_ROW_SRC,
+     "className={noteTone === 'watch' ? styles.noteWatch : styles.note}",
+     "className={styles.note}",
+     [STATUS_ROW_TEST]),
+    ("10b-SR2 severity===undefined loosens to ==null, so an explicit severity={null} (O12's no-band chip) silently renders no chip at all",
+     STATUS_ROW_SRC,
+     "{severity === undefined ? null : (",
+     "{severity == null ? null : (",
+     [STATUS_ROW_TEST]),
+
+    # components/panels/condition-lookup.ts
+    ("10b-CL1 the stale age is measured from sinceMs (when the band was CONFIRMED) instead of lastSeenMs (when it was last SEEN)",
+     CONDITION_LOOKUP_SRC,
+     "`last read ${formatAge(nowMs - condition.lastSeenMs)} ago`",
+     "`last read ${formatAge(nowMs - condition.sinceMs)} ago`",
+     [CONDITION_LOOKUP_TEST]),
+
+    # components/panels/event-sentence.ts — one mutation per LogEntryKind branch this
+    # step's tests hold a property of.
+    ("10b-ES1 a first sighting (from===null) grows a transition arrow it never earned",
+     EVENT_SENTENCE_SRC,
+     "return from === null ? `${label} ${detail}` : `${label} ${detail} (${from} → ${to})`;",
+     "return `${label} ${detail} (${from} → ${to})`;",
+     [EVENT_SENTENCE_TEST]),
+    ("10b-ES2 a band transition names the two states in the WRONG order",
+     EVENT_SENTENCE_SRC,
+     "return from === null ? `${label} ${detail}` : `${label} ${detail} (${from} → ${to})`;",
+     "return from === null ? `${label} ${detail}` : `${label} ${detail} (${to} → ${from})`;",
+     [EVENT_SENTENCE_TEST]),
+    ("10b-ES3 a standing entry's transitional form drops the visible \"standing\" marker",
+     EVENT_SENTENCE_SRC,
+     "        : `${label} ${detail} (${from} → ${to}) · standing`;",
+     "        : `${label} ${detail} (${from} → ${to})`;",
+     [EVENT_SENTENCE_TEST]),
+    ("10b-ES4 source-lost always appends \" — \" plus the detail, even when there is none",
+     EVENT_SENTENCE_SRC,
+     "return detail === '' ? `${label} stopped answering` : `${label} stopped answering — ${detail}`;",
+     "return `${label} stopped answering — ${detail}`;",
+     [EVENT_SENTENCE_TEST]),
+    ("10b-ES5 a retirement always names the band it left, even a never-confirmed one (from===null)",
+     EVENT_SENTENCE_SRC,
+     "return `${label} retired${from === null ? '' : ` (was ${from})`}`;",
+     "return `${label} retired (was ${from})`;",
+     [EVENT_SENTENCE_TEST]),
+    ("10b-ES6 mode-stale always appends \" — \" plus the reason, even when there is none",
+     EVENT_SENTENCE_SRC,
+     "return detail === '' ? 'dashboard stale' : `dashboard stale — ${detail}`;",
+     "return `dashboard stale — ${detail}`;",
+     [EVENT_SENTENCE_TEST]),
+
+    # components/panels/gpu-panel.tsx
+    ("10b-GP1 the bus id is trimmed to nvidia-smi's short form, undoing §6.6's full-domain rule",
+     GPU_PANEL_SRC,
+     "const subtitle = `${formatText(gpu?.name ?? null)} · ${formatText(gpu?.bus ?? null)}`;",
+     "const subtitle = `${formatText(gpu?.name ?? null)} · ${(gpu?.bus ?? '').split(':').slice(-2).join(':')}`;",
+     [GPU_PANEL_TEST]),
+    ("10b-GP2 a missing GPU temperature reading defaults to 0 °C instead of —, invariant 1's exact conflation",
+     GPU_PANEL_SRC,
+     '<Row label="temperature" value={formatCelsius(gpu?.tempC ?? null)} severity={severityGpuTemp(gpu?.tempC ?? null)} />',
+     '<Row label="temperature" value={formatCelsius(gpu?.tempC ?? celsius(0))} severity={severityGpuTemp(gpu?.tempC ?? celsius(0))} />',
+     [GPU_PANEL_TEST]),
+
+    # components/panels/cpu-panel.tsx
+    ("10b-CP1 the CPU model subtitle skips §3.2's trim, leaking the untrimmed marketing string",
+     CPU_PANEL_SRC,
+     "const subtitle = `${formatCpuModel(host?.cpuModel ?? null)} · ${coreThread(host?.cores ?? null)}C / ${coreThread(host?.threads ?? null)}T`;",
+     "const subtitle = `${host?.cpuModel ?? '—'} · ${coreThread(host?.cores ?? null)}C / ${coreThread(host?.threads ?? null)}T`;",
+     [CPU_PANEL_TEST]),
+    ("10b-CP2 coreThread stops guarding null, so a missing core/thread count prints the literal word \"null\"",
+     CPU_PANEL_SRC,
+     "const coreThread = (n: number | null): string => (n === null ? EM_DASH : String(n));",
+     "const coreThread = (n: number | null): string => String(n);",
+     [CPU_PANEL_TEST]),
+    ("10b-CP3 a missing CPU temperature defaults to 0 °C instead of —, invariant 1's exact conflation",
+     CPU_PANEL_SRC,
+     [
+         ("const chip = severityCpuTemp(host?.cpuTempC ?? null);",
+          "const chip = severityCpuTemp(host?.cpuTempC ?? celsius(0));"),
+         ('        value={formatCelsius(host?.cpuTempC ?? null)}',
+          '        value={formatCelsius(host?.cpuTempC ?? celsius(0))}'),
+     ],
+     [CPU_PANEL_TEST]),
+
+    # components/panels/memory-panel.tsx
+    ("10b-MP1 the swap row renders at 1dp (formatGiB) instead of §6.6's 2dp, rounding a small swap to 0.0",
+     MEMORY_PANEL_SRC,
+     '<Row label="swap" value={formatSwapGiB(swap)} severity={severitySwap(swap)} />',
+     '<Row label="swap" value={formatGiB(swap)} severity={severitySwap(swap)} />',
+     [MEMORY_PANEL_TEST]),
+    ("10b-MP2 the panel head's chip drops the swap trigger, banding on RAM% alone",
+     MEMORY_PANEL_SRC,
+     "const chip = host === null ? null : severityMemory(host);",
+     "const chip = host === null ? null : severityRam(used, total);",
+     [MEMORY_PANEL_TEST]),
+    ("10b-MP3 a missing RAM reading defaults to 0.0 GiB instead of —, invariant 1's exact conflation",
+     MEMORY_PANEL_SRC,
+     [
+         ("import type { Host, TelemetrySnapshot } from '@/lib/types';",
+          "import { gib } from '@/lib/types';\nimport type { Host, TelemetrySnapshot } from '@/lib/types';"),
+         ("const used = host?.memUsedGiB ?? null;",
+          "const used = host?.memUsedGiB ?? gib(0);"),
+     ],
+     [MEMORY_PANEL_TEST]),
+
+    # components/panels/storage-network-panel.tsx
+    # ⚠ Two pairs, each anchored on its OWN disk's surrounding text (`root.totalGiB` /
+    # `home.totalGiB`) rather than on the bare `severity={rootSeverity}` / `severity={homeSeverity}`
+    # tokens — those two are each other's replacement text, so a naive swap's second `.replace(…, 1)`
+    # would silently undo the first and ship a no-op mutation.
+    ("10b-SN1 the / and /home meters swap severities, so a full root disk bands the WRONG bar",
+     STORAGE_NETWORK_PANEL_SRC,
+     [
+         ("total={storage?.root.totalGiB ?? null}\n        severity={rootSeverity}",
+          "total={storage?.root.totalGiB ?? null}\n        severity={homeSeverity}"),
+         ("total={storage?.home.totalGiB ?? null}\n        severity={homeSeverity}",
+          "total={storage?.home.totalGiB ?? null}\n        severity={rootSeverity}"),
+     ],
+     [STORAGE_NETWORK_PANEL_TEST]),
+    ("10b-SN2 a stale link condition drops its age note, showing only the (stale) errors[] message if any",
+     STORAGE_NETWORK_PANEL_SRC,
+     "note={linkAge}\n        noteTone={linkAge === null ? 'muted' : 'watch'}",
+     "note={null}\n        noteTone={linkAge === null ? 'muted' : 'watch'}",
+     [STORAGE_NETWORK_PANEL_TEST]),
+    ("10b-SN3 a missing root-disk reading defaults to 0.0 GiB instead of —, invariant 1's exact conflation",
+     STORAGE_NETWORK_PANEL_SRC,
+     [
+         ("import type { Storage, TelemetrySnapshot } from '@/lib/types';",
+          "import { gib } from '@/lib/types';\nimport type { Storage, TelemetrySnapshot } from '@/lib/types';"),
+         ("const rootSeverity = severityDiskFree(storage?.root.usedGiB ?? null, storage?.root.totalGiB ?? null);",
+          "const rootSeverity = severityDiskFree(storage?.root.usedGiB ?? gib(0), storage?.root.totalGiB ?? null);"),
+         ("formattedValue={`${formatGiB(storage?.root.usedGiB ?? null)} / ${formatGiB(storage?.root.totalGiB ?? null)}`}\n        used={storage?.root.usedGiB ?? null}",
+          "formattedValue={`${formatGiB(storage?.root.usedGiB ?? gib(0))} / ${formatGiB(storage?.root.totalGiB ?? null)}`}\n        used={storage?.root.usedGiB ?? gib(0)}"),
+     ],
+     [STORAGE_NETWORK_PANEL_TEST]),
+
+    # components/panels/cooling-panel.tsx
+    ("10b-CO1 the derived-mode row (EC auto/unavailable) is given a hard-coded alarm chip, violating O13",
+     COOLING_PANEL_SRC,
+     '<Row label="mode" value={cooling === null ? formatText(null) : formatCh5Pwm(cooling)} />',
+     '<Row label="mode" value={cooling === null ? formatText(null) : formatCh5Pwm(cooling)} severity="alarm" />',
+     [COOLING_PANEL_TEST]),
+    ("10b-CO2 the fan5 headline row drops its severity entirely, so a dead fan (0 RPM) never alarms",
+     COOLING_PANEL_SRC,
+     "severity={fan5Severity}",
+     "severity={null}",
+     [COOLING_PANEL_TEST]),
+    ("10b-CO3 the fan 2 row's severity is hard-coded away, so a stopped fan 2 (0 RPM) never alarms",
+     COOLING_PANEL_SRC,
+     'severity={severityFanStopped(cooling?.fan2Rpm ?? null)}',
+     'severity={null}',
+     [COOLING_PANEL_TEST]),
+    ("10b-CO4 the fan-service row drops its stale-age note, so an outage reads as a plain (stale) reading",
+     COOLING_PANEL_SRC,
+     "note={serviceAge}\n        noteTone={serviceAge === null ? 'muted' : 'watch'}",
+     "note={null}\n        noteTone={serviceAge === null ? 'muted' : 'watch'}",
+     [COOLING_PANEL_TEST]),
+    # ⚠ S11/G5, settled 2026-09-08 (ruled while this loop was building SAFETY/COOLING):
+    # widened §6.5 exception — a fan5 em dash beside the "unavailable" mode neighbour needs no
+    # entry of its own, and the two rejected alternatives are both "invent copy in the panel".
+    # This mutation reintroduces exactly the rejected fallback-sentence alternative.
+    ("10b-CO5 the fan5 row invents a fallback \"no reading reported\" sentence when neither a stale age nor an errors[] entry exists, violating the widened S11/G5 exception",
+     COOLING_PANEL_SRC,
+     "note={fan5Age}\n          noteTone={fan5Age === null ? 'muted' : 'watch'}\n          detail={dellSmmError}",
+     "note={fan5Age}\n          noteTone={fan5Age === null ? 'muted' : 'watch'}\n          detail={dellSmmError ?? 'channel 5 is not reporting a tach'}",
+     [COOLING_PANEL_TEST]),
+
+    # components/panels/serving-panel.tsx
+    ("10b-SV1 a token rate leaks back into the instance row, violating decision 13",
+     SERVING_PANEL_SRC,
+     "    `health ${formatText(instance.health)}`,\n  ].join(' · ');",
+     "    `health ${formatText(instance.health)}`,\n    '32 t/s',\n  ].join(' · ');",
+     [SERVING_PANEL_TEST]),
+    ("10b-SV2 the takeover branch drops its null check, so serving: null renders no rows and no explanation",
+     SERVING_PANEL_SRC,
+     "{instances === null || instances.length === 0 ? (",
+     "{instances !== null && instances.length === 0 ? (",
+     [SERVING_PANEL_TEST]),
+    ("10b-SV3 an instance row drops its stale-age note, so an outage reads as a plain (stale) reading",
+     SERVING_PANEL_SRC,
+     "note={age}\n      noteTone={age === null ? 'muted' : 'watch'}",
+     "note={null}\n      noteTone={age === null ? 'muted' : 'watch'}",
+     [SERVING_PANEL_TEST]),
+
+    # components/panels/safety-panel.tsx
+    ("10b-SP1 yesNo stops translating booleans, so the three checks print true/false/null instead of yes/no/—",
+     SAFETY_PANEL_SRC,
+     "const yesNo = (value: boolean | null): string => (value === null ? formatText(null) : value ? 'yes' : 'no');",
+     "const yesNo = (value: boolean | null): string => String(value);",
+     [SAFETY_PANEL_TEST]),
+    ("10b-SP2 the pwm5 row is wired to ufw's severity instead of its own, a copy-paste cross-wire",
+     SAFETY_PANEL_SRC,
+     '''        value={yesNo(safety?.pwm5Present ?? null)}
+        severity={pwm5Severity}''',
+     '''        value={yesNo(safety?.pwm5Present ?? null)}
+        severity={ufwSeverity}''',
+     [SAFETY_PANEL_TEST]),
+    ("10b-SP3 an unknownStanding row is given a hard-coded watch chip, inventing a band O12 forbids",
+     SAFETY_PANEL_SRC,
+     '<Chip severity={null} size="sm" />',
+     '<Chip severity="watch" size="sm" />',
+     [SAFETY_PANEL_TEST]),
+    ("10b-SP4 the fan-service row drops its stale-age note, so an outage reads as a plain (stale) reading",
+     SAFETY_PANEL_SRC,
+     "note={fanServiceAge}\n        noteTone={fanServiceAge === null ? 'muted' : 'watch'}",
+     "note={null}\n        noteTone={fanServiceAge === null ? 'muted' : 'watch'}",
+     [SAFETY_PANEL_TEST]),
+
+    # components/panels/session-event-log-panel.tsx
+    ("10b-SE1 the entry list is reversed before rendering, so the log reads oldest-first",
+     SESSION_EVENT_LOG_PANEL_SRC,
+     "{state.events.entries.map((entry) => (",
+     "{[...state.events.entries].reverse().map((entry) => (",
+     [SESSION_EVENT_LOG_PANEL_TEST]),
+    ("10b-SE2 the panel head is given a hard-coded watch chip instead of the explicit no-band state",
+     SESSION_EVENT_LOG_PANEL_SRC,
+     'subtitle="state transitions since page load" chip={null}>',
+     'subtitle="state transitions since page load" chip="watch">',
+     [SESSION_EVENT_LOG_PANEL_TEST]),
+
+    # ========================================= 10b's RECONCILIATION, 2026-09-08
+    # Twenty mutations backing the fixes for adversarial F1a-F1c, F2-F10 and F12-F14. Every one
+    # of the six invariant-1 entries below is a mutation the ADVERSARIAL ran by hand and watched
+    # pass with the whole suite green; they are permanent regressions now rather than a finding.
+
+    # ---- F1a/F1b/F1c: invariant 1, on the fields that had no null-side fixture at all.
+    ("10b-CO6 the fan5 headline defaults a MISSING tach to 0 RPM - invariant 1's own example sentence, in the panel PLAN.md names it in",
+     COOLING_PANEL_SRC,
+     "value={staleValueOr(fan5Condition, formatRpm(cooling?.fan5Rpm ?? null))}",
+     "value={staleValueOr(fan5Condition, formatRpm(cooling?.fan5Rpm ?? rpm(0)))}",
+     [COOLING_PANEL_TEST]),
+    ("10b-CO7 fan 2 defaults a missing tach to 0 RPM, rendering a FABRICATED red alarm on a fan nobody could read",
+     COOLING_PANEL_SRC,
+     [
+         ('          value={formatRpm(cooling?.fan2Rpm ?? null)}\n          severity={severityFanStopped(cooling?.fan2Rpm ?? null)}',
+          '          value={formatRpm(cooling?.fan2Rpm ?? rpm(0))}\n          severity={severityFanStopped(cooling?.fan2Rpm ?? rpm(0))}'),
+     ],
+     [COOLING_PANEL_TEST]),
+    ("10b-GP3 a missing power reading defaults to 0.0 W - the second field on the card, untested on the null side before this",
+     GPU_PANEL_SRC,
+     [
+         ("import { celsius } from '@/lib/types';",
+          "import { celsius, watts } from '@/lib/types';"),
+         ('value={`${formatWatts(gpu?.powerW ?? null)} of ${formatWatts(gpu?.powerCapW ?? null)} cap`}',
+          'value={`${formatWatts(gpu?.powerW ?? watts(0))} of ${formatWatts(gpu?.powerCapW ?? null)} cap`}'),
+     ],
+     [GPU_PANEL_TEST]),
+    ("10b-CP4 a missing CPU utilisation defaults to 0.0 %, so an unread /proc/stat reads as an idle box",
+     CPU_PANEL_SRC,
+     '        value={formatPercent(host?.cpuPct ?? null)}',
+     '        value={formatPercent(host?.cpuPct ?? percent(0))}',
+     [CPU_PANEL_TEST]),
+    ("10b-MP4 a missing swap reading defaults to 0.00 GiB, so an unread /proc/meminfo reads as no swap in use",
+     MEMORY_PANEL_SRC,
+     [
+         ("import type { Host, TelemetrySnapshot } from '@/lib/types';",
+          "import { gib } from '@/lib/types';\nimport type { Host, TelemetrySnapshot } from '@/lib/types';"),
+         ("const swap = host?.swapUsedGiB ?? null;", "const swap = host?.swapUsedGiB ?? gib(0);"),
+     ],
+     [MEMORY_PANEL_TEST]),
+    ("10b-SN4 a missing eno1 rx rate defaults to 0 KB/s, so an unread /proc/net/dev reads as a silent link",
+     STORAGE_NETWORK_PANEL_SRC,
+     [
+         ("import type { Storage, TelemetrySnapshot } from '@/lib/types';",
+          "import { bytesPerSecond } from '@/lib/types';\nimport type { Storage, TelemetrySnapshot } from '@/lib/types';"),
+         ("        value={formatBytesPerSecond(storage?.net.rxBytesPerSec ?? null)}",
+          "        value={formatBytesPerSecond(storage?.net.rxBytesPerSec ?? bytesPerSecond(0))}"),
+     ],
+     [STORAGE_NETWORK_PANEL_TEST]),
+
+    # ---- F2: SERVING attaches an entry to a row that entry is not about.
+    ("10b-SV4 every serving errors[] entry attaches to EVERY instance row, so a healthy instance 0 prints instance 1's ECONNREFUSED",
+     SERVING_PANEL_SRC,
+     "    for (const e of servingErrors) if (namesInstance(e, instance)) bySource.set(e.source, e.message);",
+     "    for (const e of servingErrors) bySource.set(e.source, e.message);",
+     [SERVING_PANEL_TEST]),
+
+    # ---- F3: the stale age displaces the errors[] explanation.
+    ("10b-SR3 StatusRow drops its second note slot, so a stale row goes silent about its cause again",
+     STATUS_ROW_SRC,
+     "      {!shown(detail) ? null : <span className={styles.note}>{detail}</span>}\n",
+     "",
+     [STATUS_ROW_TEST, COOLING_PANEL_TEST, SAFETY_PANEL_TEST, STORAGE_NETWORK_PANEL_TEST, SERVING_PANEL_TEST]),
+
+    # ---- F4: SS6.5's "a stale condition shows its LAST VALUE, unchanged".
+    ("10b-CL2 the panel's stale sentence is reworded, drifting from the banner's (S-B's whole point)",
+     CONDITION_LOOKUP_SRC,
+     "`last read ${formatAge(nowMs - condition.lastSeenMs)} ago`",
+     "`last seen ${formatAge(nowMs - condition.lastSeenMs)} ago`",
+     [CONDITION_LOOKUP_TEST]),
+    ("10b-CL3 staleValueOr blanks a stale reading to an em dash, contradicting the banner's own value for the same condition",
+     CONDITION_LOOKUP_SRC,
+     "  condition !== undefined && condition.stale && current === EM_DASH ? condition.value : current;",
+     "  current;",
+     [CONDITION_LOOKUP_TEST, COOLING_PANEL_TEST, STORAGE_NETWORK_PANEL_TEST]),
+
+    # ---- F5: sources with no rendering path to the screen.
+    ("10b-CP5 the CPU panel stops rendering coretemp's explanation, leaving a blanked temperature unexplained",
+     CPU_PANEL_SRC,
+     "        note={messageFor('coretemp')}",
+     "        note={null}",
+     [CPU_PANEL_TEST]),
+    ("10b-MP5 the MEMORY panel drops proc-meminfo's explanation, so a blanked RAM pair is unexplained anywhere on the page",
+     MEMORY_PANEL_SRC,
+     "<PanelNotes messages={snapshot === null ? [] : errorsForPanel(snapshot, 'memory')} />",
+     "<PanelNotes messages={[]} />",
+     [MEMORY_PANEL_TEST]),
+    ("10b-SN5 the STORAGE panel drops statvfs's explanation, so both mounts blank with no cause shown",
+     STORAGE_NETWORK_PANEL_SRC,
+     "const diskErrors = storageErrors.filter((e) => e.source === 'statvfs');",
+     "const diskErrors: typeof storageErrors = [];",
+     [STORAGE_NETWORK_PANEL_TEST]),
+    ("10b-PN1 PanelNotes renders an empty container for an empty list instead of nothing",
+     PANEL_NOTES_SRC,
+     "  if (messages.length === 0) return null;\n",
+     "",
+     [PANEL_NOTES_TEST]),
+
+    ("10b-CP6 the CPU panel drops proc-cpuinfo's explanation, so a blanked SUBTITLE is unexplained anywhere",
+     CPU_PANEL_SRC,
+     "<PanelNotes messages={identityErrors} />",
+     "<PanelNotes messages={[]} />",
+     [CPU_PANEL_TEST]),
+    ("10b-SN6 the STORAGE panel drops proc-net-dev's explanation, so both blanked counters are unexplained",
+     STORAGE_NETWORK_PANEL_SRC,
+     "        note={netError}",
+     "        note={null}",
+     [STORAGE_NETWORK_PANEL_TEST]),
+    ("10b-CL4 staleValueOr drops its em-dash guard, so a stale condition overrides a reading that IS present",
+     CONDITION_LOOKUP_SRC,
+     "  condition !== undefined && condition.stale && current === EM_DASH ? condition.value : current;",
+     "  condition !== undefined && condition.stale ? condition.value : current;",
+     [CONDITION_LOOKUP_TEST]),
+
+    # ---- F7: a card absent from an enumeration that WAS read.
+    ("10b-GP4 an absent card renders identically to a present card whose readings all failed, and still asserts a served model",
+     GPU_PANEL_SRC,
+     "  const absent = snapshot !== null && snapshot.gpus !== null && gpu === null;",
+     "  const absent = false;",
+     [GPU_PANEL_TEST]),
+
+    # ---- F12: index and panelId could disagree; index is now derived from panelId.
+    ("10b-GP5 the derived card index ignores panelId, so the gpu1 slot renders GPU 0's card under a GPU 0 heading",
+     GPU_PANEL_SRC,
+     "  const index: 0 | 1 = panelId === 'gpu0' ? 0 : 1;",
+     "  const index: 0 | 1 = 0;",
+     [GPU_PANEL_TEST]),
+
+    # ---- F8: a fictitious axis before the first poll.
+    ("10b-PC1 the chart domain loses its empty-ring branch, drawing a plausible half-hour ending at epoch 0 before any poll lands",
+     PANEL_CHART_SRC,
+     "  if (newest === null) return { startMs: 0, endMs: 0 };\n",
+     "",
+     [PANEL_CHART_TEST]),
+
+    # ---- F10: first vs last errors[] entry per source.
+    ("10b-CO9 the fan5 row shows the FIRST dell-smm message where the event log shows the LAST - two sentences for one fault in one session",
+     COOLING_PANEL_SRC,
+     "const dellSmmError = coolingErrors.findLast((e) => e.source === 'dell-smm')?.message ?? null;",
+     "const dellSmmError = coolingErrors.find((e) => e.source === 'dell-smm')?.message ?? null;",
+     [COOLING_PANEL_TEST]),
+
+    # ---- F13: panelId is an id namespace, not display copy.
+    ("10b-SE3 the log's accessible name is prefixed with a state value again, so it stutters the way the slot id did",
+     SESSION_EVENT_LOG_PANEL_SRC,
+     'aria-label="session event log"',
+     'aria-label={`${state.mode} session event log`}',
+     [SESSION_EVENT_LOG_PANEL_TEST]),
+
+    # ---- F14: the branches that append an em-dashed detail.
+    ("10b-ES7 the stale branch stops guarding an empty detail, ending the sentence with a dangling dash",
+     EVENT_SENTENCE_SRC,
+     "return detail === '' ? `${label} stale` : `${label} stale — last value ${detail}`;",
+     "return `${label} stale — last value ${detail}`;",
+     [EVENT_SENTENCE_TEST]),
+    ("10b-ES8 the reading-returned branch stops guarding an empty detail, ending the sentence with a dangling dash",
+     EVENT_SENTENCE_SRC,
+     "return detail === '' ? `${label} reading returned` : `${label} reading returned — ${detail}`;",
+     "return `${label} reading returned — ${detail}`;",
+     [EVENT_SENTENCE_TEST]),
+
 ]
 
 # ---------------------------------------------------------------------------
@@ -659,9 +1086,14 @@ def _assert_unique_ids() -> None:
     dupes = sorted(k for k, n in seen.items() if n > 1)
     if dupes:
         raise SystemExit(f"!!! duplicate mutation ids, which make the failure lists ambiguous: {', '.join(dupes)}")
-    bad_prefix = sorted(k for k in seen if not k.startswith("10a-"))
+    # ⚠ SCOPE.md's three-loop split (10a/10b/10c) shares this one harness, so more than one
+    # creating-step prefix is expected here — unlike a harness inherited unchanged from an
+    # earlier step. Widen this set as each further loop lands its own mutations.
+    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-")))
     if bad_prefix:
-        raise SystemExit(f"!!! mutation ids must carry the creating step's prefix (10a-): {', '.join(bad_prefix)}")
+        raise SystemExit(
+            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-): {', '.join(bad_prefix)}"
+        )
 
 
 _assert_unique_ids()
