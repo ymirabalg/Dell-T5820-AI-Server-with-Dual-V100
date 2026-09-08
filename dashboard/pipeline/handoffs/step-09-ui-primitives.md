@@ -86,10 +86,26 @@ the method consumes them unchanged."*
 | dark mode is *selected*, not flipped | Decision 9: **single dark theme**, background painted explicitly. There is no light variant |
 | text wears text tokens, never the series colour | keep it |
 
-⚠ **One place the skill asks for something `SPEC.md` does not mention: the hover layer.** The
+~~⚠ **One place the skill asks for something `SPEC.md` does not mention: the hover layer.** The
 skill ships crosshair+tooltip by default. This is a **single-screen wall panel** (decision 7)
 that nobody hovers, and §6.2 lists exactly four controls. **Do not invent an interaction the
-spec does not ask for — record it as a gap** (invariant 7) and let the owner decide.
+spec does not ask for — record it as a gap** (invariant 7) and let the owner decide.~~
+
+> **⚠ SUPERSEDED — struck through by step 9's RECONCILIATION, 2026-09-07 (finding H2).**
+> `SPEC.md` §6.2 was amended (same day, after the BUILD phase had run) with a paragraph
+> written to pre-empt exactly this reasoning: *"**⚠ Charts carry a hover layer and a table
+> view, and both are DEFAULTS rather than requests.** … Earlier drafts of this section listed
+> exactly four controls and said nothing about any of that, **which made the silence read as a
+> prohibition — it was not one.**"* It adds *"**The table view is an accessibility floor**, not
+> a convenience"*, and §9's *Chart interaction* row now reads *"**Hover layer and table view
+> are the default**."* The "outside §6.2's four controls" sentence is in the spec too, and it
+> is a statement about the *page's controls*, not a refusal of the chart's own affordances.
+>
+> HANDOVER's standing rule applies: **where this handoff disagrees with `SPEC.md`, the spec
+> wins.** Neither was built in step 9 — the scope was the primitives, and the paragraph above
+> is what the BUILD phase was told — so **both are owed work, and they belong to step 10**
+> along with the panels that host the charts. See
+> `pipeline/steps/09-ui-primitives/reconciliation.md` §"What step 10 inherits".
 
 ## 6. ⚠ The twelve rules that must not leak — HANDOVER §6, reproduced
 

@@ -31,6 +31,8 @@
  * this one's contract.
  */
 
+import { Fragment } from 'react';
+
 import styles from './sparkline.module.css';
 import './tokens.css';
 
@@ -93,13 +95,19 @@ export function Sparkline({ points, color, width = 96, height = 24 }: SparklineP
   const values = readable.map((p) => p.v);
   const min = Math.min(...values);
   const max = Math.max(...values);
-  // A flat series (min === max, including a single point) still needs a finite denominator.
-  const span = max - min === 0 ? 1 : max - min;
+  // ⚠ A flat series has no span to place anything within, and `(v - min) / 1` is 0 for every
+  // point — which put the whole line on `y = height`, the BOTTOM edge, the one position that
+  // everywhere else in the same trace means "coldest reading in the window". A card idling at
+  // a constant 66 °C is not at the bottom of anything. Draw it on the centre line instead,
+  // which is where `StackedTimeSeriesChart` puts the identical input, so the two primitives
+  // cannot be read against each other and disagree.
+  const flat = max - min === 0;
 
   const n = points.length;
   // A single point has nowhere to span; anchor it at the left edge rather than dividing by 0.
   const xFor = (index: number): number => (n <= 1 ? 0 : (index / (n - 1)) * width);
-  const yFor = (v: number): number => height - ((v - min) / span) * height;
+  const yFor = (v: number): number =>
+    flat ? height / 2 : height - ((v - min) / (max - min)) * height;
 
   const last = readable[readable.length - 1];
 
@@ -113,12 +121,27 @@ export function Sparkline({ points, color, width = 96, height = 24 }: SparklineP
       aria-label="trend over the selected window"
     >
       {runs.map((run, i) => (
-        <polyline
-          key={i}
-          className={styles.line}
-          stroke={color}
-          points={run.map((p) => `${xFor(p.index)},${yFor(p.v)}`).join(' ')}
-        />
+        <Fragment key={i}>
+          <polyline
+            className={styles.line}
+            stroke={color}
+            points={run.map((p) => `${xFor(p.index)},${yFor(p.v)}`).join(' ')}
+          />
+          {/* ⚠ A one-point run has no geometry — an SVG polyline with a single vertex paints
+              nothing — so an isolated reading between two nulls vanished entirely. The
+              polyline still stands for the run (one polyline per run, invariant 1's shape);
+              this dot is what makes the reading visible. */}
+          {run.length === 1 && (
+            <circle
+              className={styles.point}
+              cx={xFor((run[0] as IndexedPoint).index)}
+              cy={yFor((run[0] as IndexedPoint).v)}
+              r={1.5}
+              fill={color}
+              data-role="lone-point"
+            />
+          )}
+        </Fragment>
       ))}
       {last === undefined ? null : (
         <circle className={styles.end} cx={xFor(last.index)} cy={yFor(last.v)} r={2.5} fill={color} />

@@ -625,3 +625,94 @@ is right; the code was wrong. `collectGpus` now files an entry naming the imposs
 exit 0 with no output — and step 3's `S68` backs it, with `S67` re-aimed onto the new return.
 
 **Everything in §7.3 is now done, and §7.1's queue is empty.**
+
+
+---
+
+# 10. Step 9's queue — from the reconciliation, 2026-09-07
+
+Step 9's loop ran **build → test → adversarial → reconcile**. The adversarial phase raised 25
+findings; the reconciliation **accepted 20, rejected 3, deferred 2**, and found four more the
+adversarial had missed. Everything accepted is fixed and in the commit. **This section is what
+is left.**
+
+## 10.1 ⚠ Q1 — the red-test ledger has been under-counting since step 2. **Do this first.**
+
+The reconciliation found that the ledger's own scanner **cannot see a multi-line
+`test.each(...)`** — its regex ends the `.each(` argument list at the first newline. A ⚠ mark it
+cannot see is a mark it never checks, which means the ledger has been reporting "every ⚠-marked
+test went red" over a set that was **smaller than the real one**.
+
+**Steps 2–8 all carry the old regex.** Measured by running step 9's corrected scanner against
+each step's own `LEDGER_FILES`:
+
+| step | marks the old scanner sees | marks that actually exist | **invisible** |
+|---|---:|---:|---:|
+| 02-format-severity | 11 | 13 | **2** |
+| 03-collectors-gpu-host | 22 | 24 | **2** |
+| 04-collector-cooling | 83 | 83 | 0 |
+| 05-collectors-serving-storage-safety | 94 | 97 | **3** |
+| 06-telemetry-route | 56 | 56 | 0 |
+| **07-auth-login** | 108 | 129 | **21** |
+| 08-client-runtime | 210 | 219 | **9** |
+| | | | **37 total** |
+
+⚠ **Twenty-one of them are in step 7** — scrypt, the session cookie, the rate limiter, the gate.
+That is the step where an inert test is worth the most, and it is the step with the most
+unchecked marks.
+
+**This is not a claim that 37 tests are inert.** It is a claim that **nobody knows**, because
+the mechanism built to answer that question could not see them. Some will be backed already by
+mutations that redden them incidentally; the ones that are not are exactly what the ledger
+exists to find.
+
+**The work:** back-port step 9's scanner — paren-balanced, string-aware **and comment-aware**
+(the fixtures contain `'useState('` and an apostrophe in a comment, both of which break a naive
+scan) — into steps 2–8, then **re-run all seven harnesses and read the ledger**. Expect
+failures; that is the point. Each one is then §5.2 rule 1: give the test a body matching its
+name, or drop the ⚠ and record why.
+
+⚠ **A second, smaller defect rides along.** The corrected scanner emits four
+`⚠ test name is unmatchably short` warnings the old one never printed — `test.each` names whose
+first `%` falls too early for the ledger to match on (`collect.test.ts`, `safety.test.ts`,
+`config.test.ts`, `wire.test.ts`). Those names need the placeholder moved later in the sentence.
+
+## 10.2 Q2 — §6.2 now requires a hover layer and a table view; the primitives have neither
+
+The build phase ran **before** §6.2 was amended, and correctly recorded the absence as a gap
+under invariant 7. §6.2 and §9 now say the hover layer and table view are **defaults rather than
+requests**, and call the table view an accessibility floor. So this is no longer a question — it
+is unbuilt work with a spec behind it.
+
+**Scope note:** it is genuinely step 9's (they are chart primitives), but it is *new build work*,
+not something a reconcile pass should have smuggled in. Give it its own loop.
+
+## 10.3 Deferred to step 10, in writing
+
+| # | Finding | Why it is not step 9's |
+|---|---|---|
+| **L9** | The sparkline's fixed dimensions | Sizing is the grid's decision (§6.1), and a primitive that picked its own size would be deciding layout from a leaf |
+| **L11** | No guard stops a component hard-coding a unit string (`' RPM'`) instead of calling a formatter | There is no canonical unit-name constant in `lib/` to point a guard at, and `lib/` was out of bounds for this phase. Needs one first |
+
+## 10.4 Rejected — recorded so the owner can disagree
+
+| # | Finding | The argument for rejecting |
+|---|---|---|
+| **L2** | dataviz's ≥ 8px marker floor is violated by the sparkline's `r=2.5` end dot | That floor is for **interactive / dot-plot** marks, where the mark is the hit target. `r=4` on a 24px-tall sparkline makes the dot a third of the chart's height. §9 fixes colour, dash and label — not radius |
+| **L4** | The chart does not guarantee unique SVG `id`s across instances | Unenforceable in a leaf: the hook that would do it is `useId`, and `purity.test.ts` forbids every hook by design. Now stated as the **caller's** obligation in the prop docs — which makes it step 10's |
+| **L10** | The sparkline does not use a dash pattern | A dash distinguishes one series **from another in the same frame**. A sparkline has exactly one |
+
+## 10.5 What the adversarial missed — found by the reconciliation, already fixed
+
+Recorded because each is a defect class worth recognising again:
+
+- **`Meter` encoded severity by colour alone** — no glyph, no word. §6.3 and the dataviz skill
+  both forbid it, and it survived build, test *and* adversarial. Now carries `Chip`'s
+  `SEVERITY_WORD`.
+- **`yDomainOf` discarded an explicit `yMin` for a FLAT series**, not only an empty one — the
+  same bug one branch over from where it was reported.
+- **The sparkline had the isolated-point defect too** (a one-vertex polyline paints nothing),
+  reported only against the chart. Fixed symmetrically.
+
+**The pattern in all three: a finding was fixed where it was reported and the sibling case was
+not checked.** Worth a habit — when a fix lands, grep for the same shape elsewhere.

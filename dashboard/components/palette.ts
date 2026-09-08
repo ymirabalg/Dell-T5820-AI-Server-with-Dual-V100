@@ -27,7 +27,15 @@ export interface SeriesStyle {
   readonly dashed: boolean;
 }
 
-/** §9's dash assignment. GPU 1 is the only dashed series; identity is colour + dash + label. */
+/**
+ * §9's dash assignment. GPU 1 is the only dashed series; identity is colour + dash + label.
+ *
+ * ⚠ `dashed` is meaningful only where two series share ONE frame, which is why `Sparkline`
+ * takes a `color` and no dash flag: a sparkline draws a single series behind a single number,
+ * so there is nothing for a dash pattern to distinguish it FROM. §9's requirement is about
+ * telling GPU 0 from GPU 1 on the cooling chart. A caller spreading a `SeriesStyle` into a
+ * `ChartSeries` gets both; a caller feeding a sparkline uses `.color` and that is complete.
+ */
 export const SERIES_STYLES: Readonly<Record<keyof typeof SERIES_COLORS, SeriesStyle>> = {
   gpu0: { color: SERIES_COLORS.gpu0, dashed: false },
   gpu1: { color: SERIES_COLORS.gpu1, dashed: true },

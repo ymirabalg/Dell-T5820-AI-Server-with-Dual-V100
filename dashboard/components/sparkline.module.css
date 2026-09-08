@@ -14,3 +14,10 @@
   stroke: var(--surface-1);
   stroke-width: 1;
 }
+
+/* A run holding exactly one readable point — see the component's note on one-vertex
+   polylines. Small enough not to read as the end dot. */
+.point {
+  stroke: var(--surface-1);
+  stroke-width: 0.5;
+}

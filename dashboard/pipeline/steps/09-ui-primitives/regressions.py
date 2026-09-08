@@ -14,10 +14,34 @@ Two kinds of check:
   that only `tsc` can see. (Steps 2–8's `types`-kind entries exist because `lib/` carries
   branded units and closed-vocabulary switches; `components/` carries neither.)
 
+The entries below the RECONCILIATION banner were added by step 9's reconciliation phase. Each
+one restores a defect that actually shipped from the BUILD phase and that the adversarial
+found, so the mutation is evidence the new test would have caught the real thing rather than a
+hypothetical one.
+
 ⚠ HANDOVER §5.1 is honoured: every boundary comparison here (`used > total`, `total <= 0`,
 `series.length >= 2`, `domainEndMs <= domainStartMs`) has a mutation on **both** sides where
 a "both sides" fixture is meaningful — the legend threshold (`T3a`/`T3b`) is the clearest
-case, one mutation losing the legend at 2 series and one gaining it at 1.
+case, one mutation losing the legend at 2 series and one gaining it at 1. The reconciliation
+block adds the same pattern to the new geometry: the end dot pinned right (`T14`) and pinned
+left (`T14b`), a gap with no minimum width (`T21`) and one that is nothing BUT the minimum
+(`T21b`), a meter that names no band (`ME1`) and one that names a band that does not exist
+(`ME3`).
+
+⚠ **Three mutations target a TEST file rather than a component** — `PU3` and `PU4`. That is
+deliberate and not a category error: for `purity.test.ts` the *guard is the code*, so the only
+way to show its two halves (the hook pattern and the directory walk) are load-bearing is to
+weaken them and watch its own fixtures go red. They restore the file exactly as any other
+mutation does.
+
+⚠ **The ledger's `marked_tests` scanner was CORRECTED here**, and steps 2–8 still carry the
+old one. Its `.each([^\n]*)` could not span a newline, so a ⚠ name on a MULTI-LINE
+`test.each([...])(...)` was invisible to the ledger — it did not count as marked, and nothing
+ever required a mutation to redden it. `chip.test.tsx`'s *"⚠ the visually-hidden word survives
+even with colour and glyph removed: %s"* had been in that state since the day it was written.
+The replacement skips the `.each(…)` argument list paren-balanced, string-aware AND
+comment-aware (HANDOVER §5.3 note 1), because this step's own fixtures contain `'useState('`
+— an unbalanced paren inside a string — and an apostrophe inside a comment.
 
 Run from ``dashboard/`` with pnpm on PATH, and **never concurrently with `pnpm verify`**:
 
@@ -41,6 +65,7 @@ PANEL_SHELL = "components/panel-shell.test.tsx"
 SPARKLINE = "components/sparkline.test.tsx"
 CHART = "components/stacked-time-series-chart.test.tsx"
 PURITY = "components/purity.test.ts"
+STYLES = "components/styles.test.ts"
 
 # ---------------------------------------------------------------------------
 # ⚠ The per-mutation red-test ledger  (copied verbatim from steps 2–8; only
@@ -64,13 +89,60 @@ PURITY = "components/purity.test.ts"
 # actually checks. The second is that the property has no plausible wrong implementation, in
 # which case drop the ⚠ rather than the standard.
 LEDGER_FILES = [
-    PALETTE, CHIP, ROW, METER, PANEL_SHELL, SPARKLINE, CHART, PURITY,
+    PALETTE, CHIP, ROW, METER, PANEL_SHELL, SPARKLINE, CHART, PURITY, STYLES,
 ]
 
-# `test('…')`, `it('…')` and `test.each(…)('…')`, single- or double-quoted.
-MARKED = re.compile(
-    r"""(?:^|\s)(?:test|it)(?:\.each\([^\n]*\))?\(\s*(['"])((?:(?!\1).)*⚠(?:(?!\1).)*)\1"""
-)
+# ⚠ CORRECTED IN STEP 9's RECONCILIATION — the regex this used to be could not see a
+# MULTI-LINE `test.each([...])(...)`, because its `\.each\([^\n]*\)` stopped at the first
+# newline. `chip.test.tsx`'s "⚠ the visually-hidden word survives even with colour and glyph
+# removed: %s" was therefore invisible to the ledger from the day it was written: it counted
+# as unmarked, so nothing required a mutation to redden it. That is the ledger failing at
+# exactly the job it exists to do, and it is silent — the harness printed a smaller number
+# and passed. Steps 2–8 carry the same regex and should be re-run against this scanner.
+#
+# The replacement finds each `test`/`it` call, skips a `.each(…)` argument list
+# PAREN-BALANCED and STRING-AWARE (HANDOVER §5.3 note 1: extract paren-balanced, not by
+# regex — and this file's own fixtures contain `'useState('`, an unbalanced paren inside a
+# string), then reads the first string literal of the call itself.
+CALL = re.compile(r"(?:^|\s)(?:test|it)(\.each)?\s*\(")
+FIRST_STRING = re.compile(r"""\s*(['"])((?:\\.|(?!\1).)*)\1""")
+
+
+def _skip_balanced(text, i):
+    """`text[i]` is `(`; index just past its matching `)`, skipping strings AND comments.
+
+    ⚠ Comments are not decoration here: an apostrophe inside one (`step 8's runtime`) opens a
+    string as far as a naive scanner is concerned, and everything after it is mis-parsed.
+    """
+    depth = 0
+    while i < len(text):
+        ch = text[i]
+        if text.startswith("//", i):
+            nl = text.find("\n", i)
+            i = len(text) if nl == -1 else nl
+            continue
+        if text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            i = len(text) if end == -1 else end + 2
+            continue
+        if ch in "'\"`":
+            quote = ch
+            i += 1
+            while i < len(text):
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == quote:
+                    break
+                i += 1
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return None
 
 
 def marked_tests():
@@ -78,8 +150,22 @@ def marked_tests():
     found = []
     for rel in LEDGER_FILES:
         text = pathlib.Path(rel).read_text()
-        for m in MARKED.finditer(text):
-            name = m.group(2)
+        for m in CALL.finditer(text):
+            at = m.end() - 1  # the `(` of either `test(` or `test.each(`
+            if m.group(1):  # `.each(…)` — skip its argument list, then expect `(`
+                after = _skip_balanced(text, at)
+                if after is None:
+                    continue
+                after = len(text) - len(text[after:].lstrip())
+                if after >= len(text) or text[after] != "(":
+                    continue
+                at = after
+            s = FIRST_STRING.match(text, at + 1)
+            if s is None:
+                continue
+            name = s.group(2)
+            if "⚠" not in name:
+                continue
             prefix = name.split("%")[0].strip()
             if len(prefix) < 12:
                 print(f"!!! {rel}: ⚠ test name is unmatchably short: {name!r}")
@@ -151,8 +237,8 @@ REGRESSIONS = [
      METER_SRC, "  return Math.min(100, Math.max(0, (used / total) * 100));",
      "  return Math.min(99, Math.max(0, (used / total) * 100));", [METER]),
     ("M2 a zero-width fill is \"helpfully\" treated as no reading at all",
-     METER_SRC, "data-severity={severity ?? 'none'}\n        role=\"img\"",
-     "data-severity={fillPercent === 0 ? 'none' : severity ?? 'none'}\n        role=\"img\"",
+     METER_SRC, "<div className={styles.track} data-severity={severity ?? 'none'}",
+     "<div className={styles.track} data-severity={fillPercent === 0 ? 'none' : severity ?? 'none'}",
      [METER]),
     ("M3 the null/non-finite guards are dropped, so a null total silently claims 100% used",
      METER_SRC,
@@ -162,8 +248,8 @@ REGRESSIONS = [
      "  return Math.min(100, Math.max(0, ((used as number) / (total as number)) * 100));",
      [METER]),
     ("M4 severity=null renders the good colour on the track instead of the no-band state",
-     METER_SRC, "className={styles.track}\n        data-severity={severity ?? 'none'}",
-     "className={styles.track}\n        data-severity={severity ?? 'normal'}", [METER]),
+     METER_SRC, "data-severity={severity ?? 'none'} aria-hidden",
+     "data-severity={severity ?? 'normal'} aria-hidden", [METER]),
 
     # ============================================== components/sparkline.tsx
     ("SP1 the empty-series guard is disabled, so zero and all-null points fall through",
@@ -189,41 +275,34 @@ REGRESSIONS = [
     # ============================================== components/stacked-time-series-chart.tsx
     ("T1 the x-axis is rendered once PER PLOT instead of once, shared",
      CHART_SRC,
-     "      <g transform={`translate(0, ${plotsHeight})`} data-role=\"x-axis\">\n"
-     "        {ticksBetween(domainStartMs, domainEndMs, X_TICKS).map((t, i) => (\n"
-     "          <text key={i} x={xFor(t)} y={14} className={styles.tickLabel} textAnchor=\"middle\">\n"
-     "            {formatTime(t)}\n"
-     "          </text>\n"
-     "        ))}\n"
-     "      </g>",
-     "      {plots.map((_, pi) => (\n"
-     "      <g key={pi} transform={`translate(0, ${plotsHeight})`} data-role=\"x-axis\">\n"
-     "        {ticksBetween(domainStartMs, domainEndMs, X_TICKS).map((t, i) => (\n"
-     "          <text key={i} x={xFor(t)} y={14} className={styles.tickLabel} textAnchor=\"middle\">\n"
-     "            {formatTime(t)}\n"
-     "          </text>\n"
-     "        ))}\n"
-     "      </g>\n"
-     "      ))}",
+     [
+         ("      <g transform={`translate(0, ${plotsHeight})`} data-role=\"x-axis\">",
+          "      {plots.map((_, pi) => (\n"
+          "      <g key={pi} transform={`translate(0, ${plotsHeight})`} data-role=\"x-axis\">"),
+         ("        ))}\n      </g>\n    </svg>", "        ))}\n      </g>\n      ))}\n    </svg>"),
+     ],
      [CHART]),
     ("T2 a series' dash flag is ignored, so identity drops to colour alone",
      CHART_SRC,
-     "                        strokeDasharray={s.dashed === true ? '5 4' : undefined}\n"
-     "                        points={run.points.map((p) => `${xFor(p.tMs)},${yFor(p.v)}`).join(' ')}",
-     "                        strokeDasharray={undefined}\n"
-     "                        points={run.points.map((p) => `${xFor(p.tMs)},${yFor(p.v)}`).join(' ')}",
+     "                          strokeDasharray={s.dashed === true ? '5 4' : undefined}\n"
+     "                          points={run.points.map((p) => `${xFor(p.tMs)},${yFor(p.v)}`).join(' ')}",
+     "                          strokeDasharray={undefined}\n"
+     "                          points={run.points.map((p) => `${xFor(p.tMs)},${yFor(p.v)}`).join(' ')}",
      [CHART]),
     ("T3a the legend threshold moves to 3, so a 2-series plot loses its legend",
-     CHART_SRC, "const legendNeeded = plot.series.length >= 2;",
-     "const legendNeeded = plot.series.length >= 3;", [CHART]),
+     CHART_SRC,
+     "          plot.series.length >= 2 || plot.series.some((s) => s.endLabel == null);",
+     "          plot.series.length >= 3 || plot.series.some((s) => s.endLabel == null);", [CHART]),
     ("T3b the legend renders unconditionally, so a single-series plot gets one too",
-     CHART_SRC, "const legendNeeded = plot.series.length >= 2;",
-     "const legendNeeded = true;", [CHART]),
+     CHART_SRC,
+     "        const legendNeeded =\n"
+     "          plot.series.length >= 2 || plot.series.some((s) => s.endLabel == null);",
+     "        const legendNeeded = true;", [CHART]),
     ("T4 a gap is hatched only where a series ALSO happens to hold a null — rule 3, inverted",
      CHART_SRC,
-     "          if (toX <= fromX) return null;\n"
+     "          const gapWidth = Math.max(MIN_GAP_WIDTH, toX - fromX);\n"
      "          return (",
-     "          if (toX <= fromX) return null;\n"
+     "          const gapWidth = Math.max(MIN_GAP_WIDTH, toX - fromX);\n"
      "          const anySeriesHasNull = plots.some((p) =>\n"
      "            p.series.some((s) =>\n"
      "              s.points.some(\n"
@@ -235,15 +314,19 @@ REGRESSIONS = [
      "          return (",
      [CHART]),
     ("T5 an open gap (toMs: null) collapses to zero width instead of reaching the domain end",
-     CHART_SRC, "const toX = xFor(gap.toMs ?? domainEndMs);",
-     "const toX = xFor(gap.toMs ?? gap.fromMs);", [CHART]),
+     CHART_SRC, "          const toMs = gap.toMs ?? domainEndMs;",
+     "          const toMs = gap.toMs ?? gap.fromMs;", [CHART]),
+    ("T5b an open gap stops PART WAY — width > 0, which the old assertion could not tell from 'to the end'",
+     CHART_SRC, "          const toMs = gap.toMs ?? domainEndMs;",
+     "          const toMs = gap.toMs ?? domainStartMs + (domainEndMs - domainStartMs) * 0.9;",
+     [CHART]),
     ("T6 the empty-domain guard is off by one, so equal start/end bounds are drawn anyway",
      CHART_SRC, "if (plots.length === 0 || domainEndMs <= domainStartMs) {",
      "if (plots.length === 0 || domainEndMs < domainStartMs) {", [CHART]),
     ("T7 a series' points are silently truncated to 100, undoing traceFor's own budget",
      CHART_SRC,
-     "                        points={run.points.map((p) => `${xFor(p.tMs)},${yFor(p.v)}`).join(' ')}",
-     "                        points={run.points.slice(0, 100).map((p) => `${xFor(p.tMs)},${yFor(p.v)}`).join(' ')}",
+     "                          points={run.points.map((p) => `${xFor(p.tMs)},${yFor(p.v)}`).join(' ')}",
+     "                          points={run.points.slice(0, 100).map((p) => `${xFor(p.tMs)},${yFor(p.v)}`).join(' ')}",
      [CHART]),
     ("T8 a null run is bridged across instead of breaking the line into two polylines",
      CHART_SRC,
@@ -304,43 +387,18 @@ REGRESSIONS = [
      [CHART]),
     ("T11 one 600-point budget is shared across every series in a plot, instead of one per series",
      CHART_SRC,
-     "              <g data-role=\"series\">\n"
-     "                {plot.series.map((s) => (\n"
-     "                  <g key={s.id} data-series={s.id}>\n"
-     "                    {runsOf(s.points).map((run, i) => (\n"
-     "                      <polyline\n"
-     "                        key={i}\n"
-     "                        className={styles.line}\n"
-     "                        stroke={s.color}\n"
-     "                        strokeDasharray={s.dashed === true ? '5 4' : undefined}\n"
-     "                        points={run.points.map((p) => `${xFor(p.tMs)},${yFor(p.v)}`).join(' ')}\n"
-     "                      />\n"
-     "                    ))}\n"
-     "                  </g>\n"
-     "                ))}\n"
-     "              </g>",
-     "              <g data-role=\"series\">\n"
-     "                {(() => {\n"
-     "                  let sharedBudget = 600;\n"
-     "                  return plot.series.map((s) => (\n"
-     "                    <g key={s.id} data-series={s.id}>\n"
-     "                      {runsOf(s.points).map((run, i) => {\n"
-     "                        const take = run.points.slice(0, Math.max(0, sharedBudget));\n"
-     "                        sharedBudget -= take.length;\n"
-     "                        return (\n"
-     "                          <polyline\n"
-     "                            key={i}\n"
-     "                            className={styles.line}\n"
-     "                            stroke={s.color}\n"
-     "                            strokeDasharray={s.dashed === true ? '5 4' : undefined}\n"
-     "                            points={take.map((p) => `${xFor(p.tMs)},${yFor(p.v)}`).join(' ')}\n"
-     "                          />\n"
-     "                        );\n"
-     "                      })}\n"
-     "                    </g>\n"
-     "                  ));\n"
-     "                })()}\n"
-     "              </g>",
+     [
+         ("  const plotTops = plots.map((_, i) => i * (plotHeight + PLOT_GAP));",
+          "  let sharedBudget = 600; // MUTATION T11: one budget for the whole chart\n"
+          "  const plotTops = plots.map((_, i) => i * (plotHeight + PLOT_GAP));"),
+         ("                          points={run.points.map((p) => `${xFor(p.tMs)},${yFor(p.v)}`).join(' ')}",
+          "                          points={((take) => {\n"
+          "                            sharedBudget -= take.length;\n"
+          "                            return take;\n"
+          "                          })(run.points.slice(0, Math.max(0, sharedBudget)))\n"
+          "                            .map((p) => `${xFor(p.tMs)},${yFor(p.v)}`)\n"
+          "                            .join(' ')}"),
+     ],
      [CHART]),
     ("T12 the chart's null check is falsy-based, so a v=0 point wrongly breaks the run",
      CHART_SRC,
@@ -369,6 +427,212 @@ REGRESSIONS = [
           "  void heldSeverity;\n"
           "  const glyph = severity === null ? EM_DASH : GLYPH[severity];"),
      ],
+     [PURITY]),
+
+    # =========================================================================
+    # ⚠ Added by step 9's RECONCILIATION. Every one of these is the code as it
+    #   actually shipped from the BUILD phase — each mutation restores a defect
+    #   the adversarial found and this phase fixed, so the mutation proves the
+    #   new test would have caught it.
+    # =========================================================================
+
+    # -------------------------------------------- H1: the aria-label
+    ("T13 every chart announces itself as the COOLING chart, whatever it is drawing",
+     CHART_SRC,
+     [
+         ("aria-label={`${ariaLabel} — no time range to plot`}",
+          'aria-label="no time range to plot"'),
+         ("aria-label={ariaLabel}",
+          'aria-label="cooling: temperature and fan speed over the selected window"'),
+     ],
+     [CHART]),
+
+    # -------------------------------------------- H3: the end dot's x
+    ("T14 the end dot and its value label are pinned to 'now', whatever the data says",
+     CHART_SRC, "                  x: xFor(lastPoint.tMs),", "                  x: plotWidth,",
+     [CHART]),
+    ("T14b the end dot is pinned to the LEFT edge — the other side of the same mistake",
+     CHART_SRC, "                  x: xFor(lastPoint.tMs),", "                  x: 0,", [CHART]),
+
+    # -------------------------------------------- M1: y is not clamped
+    ("T15 y is unclamped, so §6.3's 14,451 RPM is drawn off-canvas and cropped away",
+     CHART_SRC,
+     "        const yFor = (v: number): number =>\n"
+     "          clamp(chartHeight - ((v - yMin) / (yMax - yMin)) * chartHeight, 0, chartHeight);",
+     "        const yFor = (v: number): number =>\n"
+     "          chartHeight - ((v - yMin) / (yMax - yMin)) * chartHeight;",
+     [CHART]),
+
+    # -------------------------------------------- M2: the fabricated flat domain
+    ("T16 a flat series fabricates a ±1 domain, so a stopped fan gets a `-1 RPM` axis mid-plot",
+     CHART_SRC,
+     "  if (min === max) {\n"
+     "    const lo = min - 1;\n"
+     "    return [min >= 0 ? Math.max(0, lo) : lo, max + 1];\n"
+     "  }",
+     "  if (min === max) {\n"
+     "    return [min - 1, max + 1];\n"
+     "  }",
+     [CHART]),
+
+    # -------------------------------------------- M3: raw, evenly-divided y ticks
+    ("T17 y-ticks divide the domain evenly again, so two gridlines carry the same label",
+     CHART_SRC,
+     "                {yTicksFor(yMin, yMax, Y_TICKS, plot.formatTick).map((v, i) => {",
+     "                {ticksBetween(yMin, yMax, Y_TICKS).map((v, i) => {",
+     [CHART]),
+
+    # -------------------------------------------- M4: end labels leave the plot box
+    ("T18 end-labels are pushed apart with no bound, onto the next plot's legend",
+     CHART_SRC,
+     "        const spacedYs = spaceApart(\n"
+     "          endRows.map((r) => r.y),\n"
+     "          END_LABEL_MIN_GAP,\n"
+     "          chartHeight,\n"
+     "        );",
+     "        const spacedYs = spaceApart(\n"
+     "          endRows.map((r) => r.y),\n"
+     "          END_LABEL_MIN_GAP,\n"
+     "          Number.POSITIVE_INFINITY,\n"
+     "        );",
+     [CHART]),
+
+    # -------------------------------------------- M5: clipped labels
+    ("T19 the top y-tick label is drawn at y = -2, entirely above the viewBox",
+     CHART_SRC,
+     "                  const labelY =\n"
+     "                    y - TICK_LABEL_OFFSET < TICK_LABEL_HEIGHT\n"
+     "                      ? y + TICK_LABEL_HEIGHT\n"
+     "                      : y - TICK_LABEL_OFFSET;",
+     "                  const labelY = y - TICK_LABEL_OFFSET;",
+     [CHART]),
+    ("T20 every time tick anchors 'middle', so the window's start time is cropped at x = 0",
+     CHART_SRC,
+     "            textAnchor={i === 0 ? 'start' : i === X_TICKS - 1 ? 'end' : 'middle'}",
+     '            textAnchor="middle"',
+     [CHART]),
+
+    # -------------------------------------------- M9: gap width
+    ("T21 a gap has no minimum width, so one failed poll in a 2 h window is invisible",
+     CHART_SRC,
+     "          const gapWidth = Math.max(MIN_GAP_WIDTH, toX - fromX);",
+     "          const gapWidth = toX - fromX;",
+     [CHART]),
+    ("T21b every gap is drawn at the minimum width — the floor becomes a resize",
+     CHART_SRC,
+     "          const gapWidth = Math.max(MIN_GAP_WIDTH, toX - fromX);",
+     "          const gapWidth = MIN_GAP_WIDTH;",
+     [CHART]),
+    ("T21c the out-of-window guard is dropped, so a gap that ended before the window is hatched",
+     CHART_SRC,
+     "          if (toMs < domainStartMs || fromMs > domainEndMs) return null;\n",
+     "",
+     [CHART]),
+
+    # -------------------------------------------- M10: a one-point run
+    ("T22 a one-point run is left as a polyline with a single vertex, which paints nothing",
+     CHART_SRC,
+     "                        {run.points.length === 1 && (",
+     "                        {run.points.length === 0 && (",
+     [CHART]),
+
+    # -------------------------------------------- L1: an explicit bound is discarded
+    ("T23 an explicit yMin/yMax is thrown away the moment no value is readable",
+     CHART_SRC,
+     "  if (values.length === 0) {\n"
+     "    const lo = plot.yMin ?? 0;\n"
+     "    const hi = plot.yMax ?? lo + 1;\n"
+     "    return hi > lo ? [lo, hi] : [lo, lo + 1];\n"
+     "  }",
+     "  if (values.length === 0) {\n"
+     "    return [0, 1];\n"
+     "  }",
+     [CHART]),
+
+    # -------------------------------------------- L3: identity by colour alone
+    ("T24 a lone series with no end-label loses its legend, leaving colour as its only identity",
+     CHART_SRC,
+     "          plot.series.length >= 2 || plot.series.some((s) => s.endLabel == null);",
+     "          plot.series.length >= 2;",
+     [CHART]),
+
+    # -------------------------------------------- L8: legend pitch
+    ("T25 legend entries go back to a fixed 90px pitch, so long labels overlap",
+     CHART_SRC,
+     "                  legendX +=\n"
+     "                    LEGEND_SWATCH +\n"
+     "                    LEGEND_TEXT_GAP +\n"
+     "                    s.label.length * MONO_CHAR_WIDTH +\n"
+     "                    LEGEND_ENTRY_GAP;",
+     "                  legendX += 90;",
+     [CHART]),
+
+    # -------------------------------------------- M6 / M10, the sparkline's half
+    ("SP5 a flat sparkline is drawn along the bottom edge, where 'coldest' lives",
+     SPARKLINE_SRC,
+     "  const yFor = (v: number): number =>\n"
+     "    flat ? height / 2 : height - ((v - min) / (max - min)) * height;",
+     "  const yFor = (v: number): number =>\n"
+     "    height - ((v - min) / (flat ? 1 : max - min)) * height;",
+     [SPARKLINE]),
+    ("SP6 a one-point sparkline run is left invisible",
+     SPARKLINE_SRC, "          {run.length === 1 && (", "          {run.length === 0 && (",
+     [SPARKLINE]),
+
+    # -------------------------------------------- L5 / L7 and the colour-only meter
+    ("C4 the no-band chip claims the READING is missing, beside a value that is a reading",
+     CHIP_SRC, "const NO_BAND_WORD = 'no severity band';",
+     "const NO_BAND_WORD = 'no reading';", [CHIP]),
+    ("ME1 the meter's band is a fill colour and nothing else — colour-only encoding",
+     METER_SRC,
+     "        {severity === null ? null : <span className=\"sr-only\">{SEVERITY_WORD[severity]}</span>}\n",
+     "", [METER]),
+    ("ME2 the bar re-announces the label and value already read out above it",
+     METER_SRC,
+     "<div className={styles.track} data-severity={severity ?? 'none'} aria-hidden=\"true\">",
+     "<div className={styles.track} data-severity={severity ?? 'none'} role=\"img\""
+     " aria-label={`${label}: ${formattedValue}`}>",
+     [METER]),
+    ("ME3 a null severity invents a band word where there is no band",
+     METER_SRC,
+     "{severity === null ? null : <span className=\"sr-only\">{SEVERITY_WORD[severity]}</span>}",
+     "{severity === null ? <span className=\"sr-only\">no severity band</span>"
+     " : <span className=\"sr-only\">{SEVERITY_WORD[severity]}</span>}",
+     [METER]),
+
+    # -------------------------------------------- M7: a CSS declaration that does nothing
+    ("CS1 `.row` loses `flex-wrap: wrap`, so `.note`'s `flex-basis: 100%` silently stops wrapping",
+     "components/row.module.css", "  flex-wrap: wrap;\n", "", ["components/styles.test.ts"]),
+
+    # -------------------------------------------- H4: the purity guard itself
+    ("PU2 Chip subscribes to the store with useSyncExternalStore — the hook the old guard missed",
+     CHIP_SRC,
+     [
+         ("import { EM_DASH } from '@/lib/format';\nimport type { Severity } from '@/lib/types';",
+          "import { useSyncExternalStore } from 'react';\n\n"
+          "import { EM_DASH } from '@/lib/format';\nimport type { Severity } from '@/lib/types';"),
+         ("export function Chip({ severity, label, size = 'md' }: ChipProps) {\n"
+          "  const glyph = severity === null ? EM_DASH : GLYPH[severity];",
+          "export function Chip({ severity, label, size = 'md' }: ChipProps) {\n"
+          "  const held = useSyncExternalStore(sub, get, getServer); // the DEBOUNCED band\n"
+          "  void held;\n"
+          "  const glyph = severity === null ? EM_DASH : GLYPH[severity];"),
+     ],
+     [PURITY]),
+    ("PU3 the component walk stops at the top level, so a future components/panels/ escapes it",
+     PURITY,
+     "    if (entry.isDirectory()) {\n"
+     "      out.push(...componentFilesUnder(join(dir, entry.name)).map((f) => join(entry.name, f)));\n"
+     "      continue;\n"
+     "    }",
+     "    if (entry.isDirectory()) {\n"
+     "      continue;\n"
+     "    }",
+     [PURITY]),
+    ("PU4 the hook pattern goes back to enumerating eight names, and misses every other hook",
+     PURITY,
+     r"const HOOK_CALL = /\buse(?:[A-Z]\w*)?\s*\(/;",
+     r"const HOOK_CALL = /\buse(?:State|Effect|Ref|Memo|Callback|Reducer|LayoutEffect|ImperativeHandle)\s*\(/;",
      [PURITY]),
 ]
 

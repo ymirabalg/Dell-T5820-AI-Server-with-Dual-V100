@@ -23,6 +23,15 @@
  * `name` failed to parse does not lose its subtitle; it shows what it has."* So there is no
  * branch here that hides an empty-looking subtitle — the caller has already run it through
  * `lib/format.ts`, and whatever comes back is what renders.
+ *
+ * ### `data-severity` on the `<section>` is a hook with no rule behind it yet
+ *
+ * `panel-shell.module.css` carries no `.panel[data-severity=…]` selector, so today the
+ * attribute is a **contract**, not a visual channel: it renders, `PS3` guards that it never
+ * defaults `null` to the good band, and nothing is painted from it. Whatever a whole panel's
+ * severity looks like — a rule on the border, the head, nothing at all — is §6.1/§6.2's grid
+ * question and belongs to step 10, which owns the panels. Stated so that nobody reads the
+ * attribute's presence as evidence a style exists.
  */
 
 import type { Severity } from '@/lib/types';

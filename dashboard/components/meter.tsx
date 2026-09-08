@@ -23,10 +23,24 @@
  * `severity` colours the fill via `data-severity`, the same closed, finite vocabulary `Chip`
  * selects on — never an inline colour, because unlike a chart series this is one of three
  * fixed bands, not an arbitrary hex (see the step notes on the CSS approach).
+ *
+ * ### ⚠ The band is a WORD as well as a colour, and the bar itself is not announced twice
+ *
+ * The track used to carry `role="img"` with `aria-label={`${label}: ${formattedValue}`}` —
+ * the label and the value that are already visible text directly above it, so a screen
+ * reader read the whole meter twice. Worse, everything the bar added over that text was the
+ * **colour of the fill**: unlike `Chip`, `Meter` paired its band with no glyph and no word,
+ * which is precisely the colour-only encoding §6.3 ("distinguishable without relying on
+ * colour alone") and the dataviz reference ("status colours … always ship with an icon +
+ * label, never colour alone") both forbid. The bar is now `aria-hidden` — it is a picture of
+ * text that is already present — and the band travels as a visually-hidden word beside the
+ * value, in `Chip`'s own vocabulary. `severity === null` adds nothing: there is no band to
+ * name, and the value is already there.
  */
 
 import type { Severity } from '@/lib/types';
 
+import { SEVERITY_WORD } from './chip';
 import styles from './meter.module.css';
 import './tokens.css';
 
@@ -54,13 +68,9 @@ export function Meter({ label, formattedValue, used, total, severity }: MeterPro
       <div className={styles.head}>
         <span className={styles.label}>{label}</span>
         <span className={styles.value}>{formattedValue}</span>
+        {severity === null ? null : <span className="sr-only">{SEVERITY_WORD[severity]}</span>}
       </div>
-      <div
-        className={styles.track}
-        data-severity={severity ?? 'none'}
-        role="img"
-        aria-label={`${label}: ${formattedValue}`}
-      >
+      <div className={styles.track} data-severity={severity ?? 'none'} aria-hidden="true">
         <div
           className={styles.fill}
           style={{ width: fillPercent === null ? '0%' : `${fillPercent}%` }}

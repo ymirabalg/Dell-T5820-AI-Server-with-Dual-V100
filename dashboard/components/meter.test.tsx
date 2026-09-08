@@ -89,3 +89,44 @@ describe('label and value render verbatim', () => {
     expect(html).toContain('26,452 / 32,768 MiB');
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// Step 9 RECONCILIATION — L7, and the colour-only encoding found underneath it.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ the band is a word as well as a colour, and nothing is announced twice', () => {
+  /*
+   * ⚠ `Meter` paired its band with NO glyph and NO word — the fill colour was the only
+   * carrier, which is exactly what §6.3 ("distinguishable without relying on colour alone")
+   * and the dataviz reference ("status colours … always ship with an icon + label, never
+   * colour alone") forbid. `Chip` had this right from the start; the meter did not.
+   */
+  test.each([
+    ['normal', 'normal'],
+    ['watch', 'watch'],
+    ['alarm', 'alarm'],
+  ] as const)('⚠ the band travels as text, not only as a fill colour: %s', (severity, word) => {
+    const html = renderToStaticMarkup(
+      <Meter label="VRAM" formattedValue="31,000 / 32,768 MiB" used={31000} total={32768} severity={severity} />,
+    );
+    expect(html).toContain('class="sr-only"');
+    expect(html).toContain(`>${word}<`);
+  });
+
+  test('⚠ severity=null adds no word — there is no band to name (the other side)', () => {
+    const html = renderToStaticMarkup(
+      <Meter label="VRAM" formattedValue={EM_DASH} used={null} total={null} severity={null} />,
+    );
+    expect(html).not.toContain('class="sr-only"');
+  });
+
+  test('⚠ the bar does not repeat the label and value a screen reader has already read', () => {
+    const html = renderToStaticMarkup(
+      <Meter label="/" formattedValue="116.3 / 232.6 GiB" used={116.3} total={232.6} severity="normal" />,
+    );
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).not.toContain('aria-label');
+    // the visible text is still there, exactly once
+    expect((html.match(/116\.3 \/ 232\.6 GiB/g) ?? []).length).toBe(1);
+  });
+});

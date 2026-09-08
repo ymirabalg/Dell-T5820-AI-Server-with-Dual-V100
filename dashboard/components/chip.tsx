@@ -37,12 +37,28 @@ const GLYPH: Readonly<Record<Severity, string>> = {
   alarm: '✕', // ✕ — login-form.tsx's own alarm glyph
 };
 
-/** The accessible word behind each glyph, read by assistive tech even with colour removed. */
-const WORD: Readonly<Record<Severity, string>> = {
+/**
+ * The accessible word behind each glyph, read by assistive tech even with colour removed.
+ * Exported so `Meter` — which otherwise carries its band as a fill colour and nothing else —
+ * announces a band in the same words rather than a second spelling of them.
+ */
+export const SEVERITY_WORD: Readonly<Record<Severity, string>> = {
   normal: 'normal',
   watch: 'watch',
   alarm: 'alarm',
 };
+
+/**
+ * ⚠ The no-band case says **"no severity band"**, not "no reading".
+ *
+ * `severity === null` means this reading has no §6.3 row to band it — which is NOT the same
+ * as there being no reading. §6.3 is full of readings that exist and carry no severity:
+ * `/health: null` is *"not probed this cycle"*, `ch5Mode: null` renders **`unavailable`, not
+ * `—`** (§6.6), and invariant 3 says *"`EC auto` and `unavailable` are not severities"*. A
+ * `Row` with `value="unavailable"` and `severity={null}` announced "no reading" beside a
+ * value that is a reading. The chip only ever knows about bands, so that is all it claims.
+ */
+const NO_BAND_WORD = 'no severity band';
 
 export type ChipSize = 'sm' | 'md';
 
@@ -57,7 +73,7 @@ export interface ChipProps {
 /** §6.2/§6.3's severity indicator — a glyph, an accessible word, and an optional label. */
 export function Chip({ severity, label, size = 'md' }: ChipProps) {
   const glyph = severity === null ? EM_DASH : GLYPH[severity];
-  const word = severity === null ? 'no reading' : WORD[severity];
+  const word = severity === null ? NO_BAND_WORD : SEVERITY_WORD[severity];
 
   return (
     <span className={styles.chip} data-severity={severity ?? 'none'} data-size={size}>

@@ -58,9 +58,17 @@ describe('accessibility — the glyph is never the only carrier', () => {
     },
   );
 
-  test('the no-band case names itself "no reading", not a blank', () => {
+  /*
+   * ⚠ The no-band case names itself "no severity band", NOT "no reading". §6.3 is full of
+   * readings that exist and carry no band — `/health: null` is "not probed this cycle",
+   * `ch5Mode: null` renders `unavailable` (§6.6), and invariant 3 says "`EC auto` and
+   * `unavailable` are not severities". A `Row` with `value="unavailable" severity={null}`
+   * announced "no reading" beside a value that is a reading.
+   */
+  test('⚠ the no-band case names the missing BAND, never claims the reading is missing', () => {
     const html = renderToStaticMarkup(<Chip severity={null} />);
-    expect(html).toContain('>no reading<');
+    expect(html).toContain('>no severity band<');
+    expect(html).not.toContain('no reading');
   });
 });
 

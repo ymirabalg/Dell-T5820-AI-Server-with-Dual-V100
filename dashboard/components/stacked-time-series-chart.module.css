@@ -47,3 +47,16 @@
   stroke: var(--gridline);
   stroke-width: 2;
 }
+
+/* A run holding exactly one readable point: a polyline with one vertex paints nothing, so
+   an isolated reading is drawn as a dot instead of disappearing. */
+.point {
+  stroke: var(--surface-1);
+  stroke-width: 1;
+}
+
+/* Drawn only when an end-label had to be moved off its own dot to clear a neighbour — the
+   dataviz reference's remedy for "nudging labels apart detaches them from their lines". */
+.leader {
+  stroke-width: 1;
+}

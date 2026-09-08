@@ -1,5 +1,14 @@
 .row {
   display: flex;
+  /* ⚠ Load-bearing, not tidiness: `.note` below asks for `flex-basis: 100%` to get its own
+     line, and `flex-basis` only wraps an item onto a new line in a WRAP container. In the
+     default `nowrap` container it merely gives the note a huge hypothetical size, which then
+     shrinks against its siblings — and every flex item's `min-width: auto` floors it at
+     min-content, so chip + label + value + a 34-character monospace note stayed on one line
+     whose min-content width exceeds a §6.1 2x2 small panel (~300 px) and spilled out of it.
+     §6.2: "Each row carries its `errors[]` explanation beside it, and that is not
+     decoration." Removing this silently un-wraps every note. */
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 0.5em;
   padding: 0.15em 0;
@@ -26,4 +35,7 @@
   color: var(--ink-secondary);
   flex-basis: 100%;
   font-size: 0.85em;
+  /* §6.5's DKMS entry names the running kernel release, which is one long unbroken token in
+     a monospace face; without this it establishes a min-content width the panel cannot meet. */
+  overflow-wrap: anywhere;
 }
