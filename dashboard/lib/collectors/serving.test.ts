@@ -12,7 +12,7 @@
  * fakes below, byte for byte.
  */
 
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import { servingIdentityOnly, servingInstances, servingPopulated } from '../fixtures';
 import { severityHealth, severityUnitState } from '../severity';
@@ -589,39 +589,67 @@ describe('the budget is never evidence about a subject (§6.7)', () => {
    * classifies them as "started and timed out" and reports `unreachable` again. The fix is
    * structural — whose budget ran out — and it makes the mapping unreachable rather than
    * caught.
+   *
+   * ⚠ 10a-F17, 2026-09-08: this test used to sleep a REAL 95 ms inside a REAL 100 ms budget
+   * — i.e. it raced `deadline()`'s own `setTimeout(reject, 100)` against a second, unrelated
+   * timer for margin, on the OS scheduler. `setTimeout` is a *minimum* delay, not an exact
+   * one, so under CPU contention the 95 ms sleep could itself take >100 ms of wall clock and
+   * lose a race the test meant to always win — measured 2/6 under load, 0/10 idle, and it
+   * failed one unprompted `pnpm verify`. **Do not "fix" this by widening the 95/100 margin**
+   * — that only makes the flake rarer.
+   *
+   * The fix is `vi.useFakeTimers()`, not a clock argument threaded into `deadline()`.
+   * Vitest's fake timers replace `setTimeout` **and** `performance.now()` together, advanced
+   * in lockstep by `vi.advanceTimersByTimeAsync()` (verified directly against this file's
+   * `deadline()` before relying on it here — see the harness notes) — so the 95-vs-100
+   * relationship becomes an EXACT ordering fact (95 fires before 100, always) instead of two
+   * independent clocks racing. `deadline.ts` itself is untouched: it still reads the real
+   * `performance.now()` in production, and its monotonic-vs-wall-clock property (see its
+   * docstring) is not exercised by this test at all. This seam is entirely test-side.
    */
   test('⚠ a slow discovery cannot band an alarm on a healthy instance', async () => {
-    const slowIo: CollectorIo = {
-      ...liveBox.io(),
-      readDir: async (path) => {
-        await new Promise((resolve) => setTimeout(resolve, 95));
-        return liveBox.io().readDir(path);
-      },
-    };
-    const requested: string[] = [];
-    // ⚠ The probes must take measurable time. With an instant fake, a probe handed the
-    // ~5 ms left of the discovery budget still WINS the race, and the defect is invisible —
-    // the adversarial's own reproduction used a 20 ms fake for exactly this reason.
-    const unhurried: HttpIo = {
-      get: async (url, timeoutMs) => {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        return liveBox.http(requested).get(url, timeoutMs);
-      },
-    };
-    const { serving, errors } = await collectServing({
-      io: slowIo,
-      dbus: liveBox.dbus(),
-      http: unhurried,
-      discoveryTimeoutMs: 100,
-    });
+    vi.useFakeTimers();
+    try {
+      const slowIo: CollectorIo = {
+        ...liveBox.io(),
+        readDir: async (path) => {
+          await new Promise((resolve) => setTimeout(resolve, 95));
+          return liveBox.io().readDir(path);
+        },
+      };
+      const requested: string[] = [];
+      // ⚠ The probes must take measurable (virtual) time. With an instant fake, a probe
+      // handed the ~5 ms left of a REINTRODUCED shared budget would still WIN the race, and
+      // the defect would be invisible again — the adversarial's own reproduction used a
+      // 20 ms fake for exactly this reason, and it stays 20 ms here.
+      const unhurried: HttpIo = {
+        get: async (url, timeoutMs) => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return liveBox.http(requested).get(url, timeoutMs);
+        },
+      };
+      const collected = collectServing({
+        io: slowIo,
+        dbus: liveBox.dbus(),
+        http: unhurried,
+        discoveryTimeoutMs: 100,
+      });
+      // Enough virtual time for the 95 ms readDir plus two SEQUENTIAL 20 ms probes per
+      // instance (both instances run concurrently) — comfortably short of the 4 s default
+      // probe budget, which must never fire either.
+      await vi.advanceTimersByTimeAsync(1000);
+      const { serving, errors } = await collected;
 
-    // Both instances answered. Nothing about them was in doubt, and nothing may say it was.
-    expect(serving?.map((s) => s.health)).toEqual(['ok', 'ok']);
-    expect(serving?.map((s) => s.model)).toEqual(['qwen3.6-27b', 'qwen3.6-27b']);
-    expect(requested).toHaveLength(4);
-    expect(errors.filter((e) => e.source === 'llama-health')).toEqual([]);
-    expect(severityHealth(serving?.[0]?.health ?? null)).toBe('normal');
-    expect(severityHealth(serving?.[1]?.health ?? null)).toBe('normal');
+      // Both instances answered. Nothing about them was in doubt, and nothing may say it was.
+      expect(serving?.map((s) => s.health)).toEqual(['ok', 'ok']);
+      expect(serving?.map((s) => s.model)).toEqual(['qwen3.6-27b', 'qwen3.6-27b']);
+      expect(requested).toHaveLength(4);
+      expect(errors.filter((e) => e.source === 'llama-health')).toEqual([]);
+      expect(severityHealth(serving?.[0]?.health ?? null)).toBe('normal');
+      expect(severityHealth(serving?.[1]?.health ?? null)).toBe('normal');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('⚠ a discovery budget spent on the env files blanks the port, and health is `null`', async () => {
