@@ -96,60 +96,49 @@ tree**, or you ship whatever an agent happens to be mid-edit on. Full account in
 **Q2 is CLOSED, 2026-09-08** — build → test → adversarial → reconcile, **13 findings adjudicated
 (ten accepted, two rejected, one split accept/defer)**, plus the parent's review. §6.2's hover
 layer and table view now exist on both chart primitives. See
-`pipeline/steps/Q2-hover-and-table/reconciliation.md`; the suite is **67 files · 2258 tests** and
-the `components/` harness is **93 mutations · 103 ⚠ marks**, 32 of them `Q2-`.
+`pipeline/steps/Q2-hover-and-table/reconciliation.md`; the suite is **67 files · 2260 tests** and
+the `components/` harness is **95 mutations · 105 ⚠ marks**.
 
-⚠ **Q2 handed up two SPEC QUESTIONS the owner has to answer, and step 10 is blocked on the
-second of them** (`reconciliation.md` §4):
+### ⚠ Q2's two spec questions are ANSWERED and IMPLEMENTED — 2026-09-08. Step 10 is NOT blocked.
 
-- **Q2-S1** — §6.2's "per-mark tooltip on bars and dots" is **entirely unmet, not partially**.
-  The crosshair layer tiles the plot at `pointer-events: all` and is painted last, so it shadows
-  every mark's own `<title>`; the two requirements are in structural tension on a line chart.
-  `build.md` §7 recorded this as partially satisfied and has been corrected.
-- **Q2-S2** — the table view has **no height bound**: ~722 `<tr>` at the default 30-minute
-  window and 1,202 at 120 minutes, in a fixed grid cell, against §6.1's no-scroll promise. §6.2's
-  own justification ("they cost nothing when unused") is true of the tooltip and silent about the
-  table. The three fixes — cap rows, decimate again, scroll in the panel — each trade against a
-  different part of the spec, so it needs §6.1 or §6.2 reworded before step 10 implements it.
+The owner ruled on both, the parent wrote the wording into `SPEC.md` (three amendments — §6.2,
+§6.1 and §9's decision row), and the code half is in. **`SPEC.md` has now been amended by the
+owner's ruling for the second time in this project; it is not frozen.**
 
-**Next is step 10** (panels & assembly): the nine panels, header controls, banner, grid and
-breakpoints. It is the first phase to write a real caller for the primitives, which is where
-`Sparkline`'s three now-REQUIRED props (`ariaLabel`, `formatValue`, `formatTime`) and the
-chart's `view` prop get their first exercise. It also owns F9's deferred half — a caller must
-supply a domain containing the points it passes; `traceFor` does, and the component neither
-requires nor checks it.
+- **Q2-S1 — the crosshair's tooltip discharges the per-mark requirement on line and area plots.**
+  They cannot both be reached: a full-body crosshair needs hover zones tiling the plot, and those
+  zones necessarily occlude every mark beneath them. §6.2's "per-mark on bars and dots" clause now
+  **scopes to bar and dot charts**, which `components/` does not contain — so it goes live when one
+  is built rather than standing as permanently unmet. The per-mark `<title>`s stay: correct markup,
+  no cost, reachable again if paint order ever changes. **No code change was needed.**
+- **Q2-S2 — the table view scrolls inside its own container** (`max-height` + `overflow-y`).
+  §6.1's promise governs the **page**, not every component, and the spec already specified the
+  session event log as "a compact scrolling list"; §6.1 now says that outright, because the
+  implicitness is exactly what made this read as a violation rather than a design choice.
+  ⚠ **Capping or decimating rows was considered and REJECTED** — a decimated table is no longer a
+  complete substitute for the chart, which is both the ground on which it is an accessibility floor
+  and the ground on which `build.md` §3.6 declined keyboard parity. **Every row stays in the DOM.
+  Do not re-propose a cap.**
 
-#### What Q1 turned out to be, for the record
+**What step 10 inherits from S2, and owes:** `--table-scroll-max: 40vh` in `tokens.css` is a
+**viewport-relative stopgap, not a considered layout value**. §6.1 says sizing is the grid's
+decision and step 9 deferred the sparkline's sizing (L9) for the same reason. When a panel body
+has a real bounded height, replace it with `max-height: 100%`. It is recorded as owed rather than
+left looking deliberate.
 
-The red-test ledger's scanner could not see a multi-line `test.each(...)` — its regex ended the
-argument list at the first newline — so ⚠ marks it could not see were marks it never checked.
-Step 9's corrected scanner (paren-balanced, string-aware **and** comment-aware) was back-ported
-into steps 2–8 and **all eight** harnesses re-run.
+Also from S2, worth copying rather than re-deriving: the scroll container is a **keyboard tab
+stop** (a scrollable region only a mouse can reach fails the floor it exists to hold up), sticky
+headers need **`border-collapse: separate`** to work around a WebKit bug where sticky table cells
+do nothing under `collapse`, and **the CSS was verified in a real Chrome browser** rather than
+asserted. That last one is the standing answer to this area's recurring problem: `:hover`,
+`position: sticky` and `overflow` are **not observable in jsdom**, so a passing suite says nothing
+about whether any of it works. Open a browser.
 
-⚠ **The figure this section used to carry — 37 invisible marks, 21 in step 7 — was wrong, and
-wrong in an instructive way.** It was measured with step 9's scanner, which has a *second* blind
-spot of identical shape: a **generic type argument** (`test.each<[string, LoginState]>(…)`)
-defeats the regex completely, matching nothing and printing nothing. Q1's build measured with the
-same scanner and reported the prediction "matched exactly" — two numbers agreeing because they
-share a defect. The true counts are **39 invisible, 23 of them in step 7**. Both extra marks were
-backed incidentally.
+### The queue
 
-Where it stands now, all measured by Q1's reconciliation:
-
-| | |
-|---|---|
-| harnesses | **eight**, all carrying a byte-identical corrected scanner, all exit 0 |
-| mutations | **771** total; **710** across steps 2–8 |
-| ⚠ marks checked | **689** total; **622** across steps 2–8, against 584 before Q1 |
-| new mutations | `SC1`, `K8`, `W19` (step 7) · `W21` (step 8) |
-| one ⚠ dropped | `session.test.ts`'s "verifies as null rather than throwing" — no plausible single wrong implementation; upheld twice under independent challenge |
-| new: the scanner now **reports** what it cannot read | five backtick-named tests, none marked today |
-
-⚠ **The find nobody predicted:** renaming a ⚠ test name is a *ledger* change. `wire.test.ts`'s
-old name gave a ledger prefix of the single character `⚠`, matching every ⚠ FAIL line, so its
-mark scored covered for free in every run this project has done. Renaming it exposed a genuinely
-inert mark — `wire.ts`'s `calendarMatches` guard had never had a mutation — now backed by `W21`.
-**Re-run the owning harness after any ⚠ rename.**
+**Step 10 is next and nothing blocks it.** Still open and recorded in `HANDOVER.md`: F9's deferred
+half (domain containment — an out-of-domain instant is a clamp-vs-drop *rendering* decision, not a
+one-line guard), F4's orphan-file guard from Q1, D1/D2/D3/D6, L9 and L11.
 
 ## 3. Toolchain
 
