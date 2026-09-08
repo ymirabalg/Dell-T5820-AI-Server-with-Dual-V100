@@ -54,6 +54,13 @@ export function CpuPanel({ state }: PanelProps) {
   const messageFor = (source: string): string | null =>
     cpuErrors.findLast((e) => e.source === source)?.message ?? null;
   const identityErrors = cpuErrors.filter((e) => e.source === 'proc-cpuinfo');
+  // ⚠ 10b-S-F does not reach this panel, deliberately left as `severityCpuTemp` alone rather
+  // than routed through `panelChip`. CPU's chip has exactly ONE §6.3-banded leaf — temperature;
+  // utilisation and load average are unbanded (this file's own module doc: "neither reading is
+  // banded by §6.3 except temperature"). A single-leaf chip can never be `'normal'` while a
+  // DIFFERENT leaf of its own is `null`, because there is no different leaf: if `cpuTempC` is
+  // `null` the chip is already `null`, not a false `'normal'`. `panelChip(chip)` would be a
+  // no-op here — recorded per invariant 7 rather than added as inert wrapping.
   const chip = severityCpuTemp(host?.cpuTempC ?? null);
   const subtitle = `${formatCpuModel(host?.cpuModel ?? null)} · ${coreThread(host?.cores ?? null)}C / ${coreThread(host?.threads ?? null)}T`;
 

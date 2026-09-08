@@ -29,7 +29,7 @@
 import { errorsForPanel } from '@/lib/client/observations';
 import { latestSample } from '@/lib/client/runtime';
 import { formatText } from '@/lib/format';
-import { severityDkms, severityPwm5Present, severityUfw, severityUnitState, worstSeverity } from '@/lib/severity';
+import { severityDkms, severityPwm5Present, severityUfw, severityUnitState } from '@/lib/severity';
 import type { Safety, TelemetrySnapshot } from '@/lib/types';
 import { FAN_SERVICE_UNIT } from '@/lib/units';
 import { conditionId } from '@/lib/conditions';
@@ -38,6 +38,7 @@ import { PanelShell } from '../panel-shell';
 import type { PanelProps } from '../panel-props';
 import { Chip } from '../chip';
 import { findDisplayed, staleAgeNote, staleValueOr } from './condition-lookup';
+import { panelChip } from './panel-chip';
 import { StatusRow } from './status-row';
 
 import styles from './safety-panel.module.css';
@@ -53,7 +54,11 @@ export function SafetyPanel({ state, nowMs }: PanelProps) {
   const pwm5Severity = severityPwm5Present(safety?.pwm5Present ?? null);
   const dkmsSeverity = severityDkms(safety?.dkmsForRunningKernel ?? null);
   const fanServiceSeverity = severityUnitState(safety?.fanServiceState ?? null);
-  const chip = worstSeverity(ufwSeverity, pwm5Severity, dkmsSeverity, fanServiceSeverity);
+  // ⚠ 10b-S-F: `ufwSeverity`/`pwm5Severity`/`dkmsSeverity` are TOTAL (§6.3 puts `null` in
+  // their own watch column, so they never contribute a `null` here) — `fanServiceSeverity` is
+  // the one leaf that can, when `fanServiceState` is unreadable. `panelChip` downgrades a
+  // resulting `normal` to no band in exactly that case; it leaves `watch`/`alarm` untouched.
+  const chip = panelChip(ufwSeverity, pwm5Severity, dkmsSeverity, fanServiceSeverity);
 
   const safetyErrors = snapshot === null ? [] : errorsForPanel(snapshot, 'safety');
   // ⚠ LAST, not first — `lib/client/events.ts:400` keys a `Map` by source, so the log shows the

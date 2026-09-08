@@ -89,6 +89,10 @@ SAFETY_PANEL_TEST = "components/panels/safety-panel.test.tsx"
 SESSION_EVENT_LOG_PANEL_TEST = "components/panels/session-event-log-panel.test.tsx"
 # ⚠ Added by 10b's RECONCILIATION, 2026-09-08 — §6.5's panel-level `errors[]` explanations.
 PANEL_NOTES_TEST = "components/panels/panel-notes.test.tsx"
+# ⚠ Added by 10b-S-F, 2026-09-08 — the shared panel-head chip override the owner's ruling
+# requires (§6.2). One file, imported by every panel that can reach the case, so its own unit
+# tests carry the ⚠-marked load-bearing coverage rather than one per panel.
+PANEL_CHIP_TEST = "components/panels/panel-chip.test.ts"
 
 LEDGER_FILES = [
     HEADER_STATUS_TEST, BANNER_TEST, HEADER_TEST, ALARM_BANNER_TEST, GRID_TEST,
@@ -97,7 +101,7 @@ LEDGER_FILES = [
     STATUS_ROW_TEST, CONDITION_LOOKUP_TEST, EVENT_SENTENCE_TEST, PANEL_CHART_TEST,
     GPU_PANEL_TEST, CPU_PANEL_TEST, MEMORY_PANEL_TEST, COOLING_PANEL_TEST,
     STORAGE_NETWORK_PANEL_TEST, SERVING_PANEL_TEST, SAFETY_PANEL_TEST,
-    SESSION_EVENT_LOG_PANEL_TEST, PANEL_NOTES_TEST,
+    SESSION_EVENT_LOG_PANEL_TEST, PANEL_NOTES_TEST, PANEL_CHIP_TEST,
 ]
 
 # `test`/`it`, optionally `.each(<PAREN-BALANCED ARGS>)`, optionally `<A GENERIC ARG>`, then `(`.
@@ -251,6 +255,8 @@ SESSION_EVENT_LOG_PANEL_SRC = "components/panels/session-event-log-panel.tsx"
 # ⚠ Added by 10b's RECONCILIATION, 2026-09-08.
 PANEL_CHART_SRC = "components/panels/panel-chart.ts"
 PANEL_NOTES_SRC = "components/panels/panel-notes.tsx"
+# ⚠ Added by 10b-S-F, 2026-09-08 — the owner's ruling on §6.2's chip.
+PANEL_CHIP_SRC = "components/panels/panel-chip.ts"
 
 # (name, source file, old, new, check) — or (name, source file, [(old, new), …], check)
 REGRESSIONS = [
@@ -781,10 +787,14 @@ REGRESSIONS = [
      '<Row label="swap" value={formatSwapGiB(swap)} severity={severitySwap(swap)} />',
      '<Row label="swap" value={formatGiB(swap)} severity={severitySwap(swap)} />',
      [MEMORY_PANEL_TEST]),
+    # ⚠ Re-aimed by 10b-S-F (2026-09-08): the source line changed from `severityMemory(host)`
+    # to `panelChip(severityRam(…), severitySwap(…))` — see panel-chip.ts's module doc for why
+    # the composed helper had to be replaced with its two leaves. The mutation's INTENT is
+    # unchanged: drop the swap leaf, banding on RAM% alone.
     ("10b-MP2 the panel head's chip drops the swap trigger, banding on RAM% alone",
      MEMORY_PANEL_SRC,
-     "const chip = host === null ? null : severityMemory(host);",
-     "const chip = host === null ? null : severityRam(used, total);",
+     "const chip = panelChip(severityRam(used, total), severitySwap(swap));",
+     "const chip = panelChip(severityRam(used, total));",
      [MEMORY_PANEL_TEST]),
     ("10b-MP3 a missing RAM reading defaults to 0.0 GiB instead of —, invariant 1's exact conflation",
      MEMORY_PANEL_SRC,
@@ -1071,6 +1081,41 @@ REGRESSIONS = [
      "return detail === '' ? `${label} reading returned` : `${label} reading returned — ${detail}`;",
      "return `${label} reading returned — ${detail}`;",
      [EVENT_SENTENCE_TEST]),
+
+    # ============================================== components/panels/panel-chip.ts (10b-S-F)
+    # The owner's ruling on §6.2's chip, 2026-09-08: the worst band among a panel's own
+    # readings, skipping nulls — EXCEPT a panel that would read `normal` while one of those same
+    # readings is `null` shows NO BAND instead, and — this is the part a careless fix breaks —
+    # `watch`/`alarm` are returned untouched. Three mutations, one per way to get that WRONG;
+    # `MEMORY_PANEL_TEST` rides along on the two that a real MEMORY snapshot can distinguish, so
+    # the shared helper's own tests double as evidence the panel that found the bug is wired to
+    # it, without a second implementation of the same logic to keep in sync.
+    ("10b-PH1 the downgrade fires on ANY null regardless of the worst band, so an alarm loses its colour to an unrelated unreadable field",
+     PANEL_CHIP_SRC,
+     "  return worst === 'normal' && severities.includes(null) ? null : worst;",
+     "  return severities.includes(null) ? null : worst;",
+     [PANEL_CHIP_TEST, MEMORY_PANEL_TEST]),
+    ("10b-PH2 the downgrade never fires at all, so a panel goes green over its own em dash exactly like the finding",
+     PANEL_CHIP_SRC,
+     "  return worst === 'normal' && severities.includes(null) ? null : worst;",
+     "  return worst;",
+     [PANEL_CHIP_TEST, MEMORY_PANEL_TEST]),
+    ("10b-PH3 normal is downgraded to no band even with no null reading at all, so a fully-read panel can never show green",
+     PANEL_CHIP_SRC,
+     "  return worst === 'normal' && severities.includes(null) ? null : worst;",
+     "  return worst === 'normal' ? null : worst;",
+     [PANEL_CHIP_TEST]),
+
+    # components/panels/memory-panel.tsx (10b-S-F) — the WIRING, guarded separately from
+    # panel-chip.ts's own logic above: this reintroduces `worstSeverity`'s null-skip at the call
+    # site via `??`, the exact shape `severityMemory` had before this ruling, without touching
+    # panel-chip.ts at all. `10b-PH1`/`10b-PH2` above would not catch a regression here if
+    # `panelChip` itself stayed correct but MEMORY stopped calling it correctly.
+    ("10b-MP6 the chip falls back from a null RAM reading to swap via ??, reintroducing the exact null-skip the ruling forbids at the call site",
+     MEMORY_PANEL_SRC,
+     "const chip = panelChip(severityRam(used, total), severitySwap(swap));",
+     "const chip = severityRam(used, total) ?? severitySwap(swap);",
+     [MEMORY_PANEL_TEST]),
 
 ]
 

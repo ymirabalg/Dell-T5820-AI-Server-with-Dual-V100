@@ -18,10 +18,11 @@ import type { PanelProps } from '../panel-props';
 import { errorsForPanel } from '@/lib/client/observations';
 import { latestSample } from '@/lib/client/runtime';
 import { formatGiB, formatSwapGiB } from '@/lib/format';
-import { severityMemory, severityRam, severitySwap } from '@/lib/severity';
+import { severityRam, severitySwap } from '@/lib/severity';
 import type { Host, TelemetrySnapshot } from '@/lib/types';
 
 import { PanelNotes } from './panel-notes';
+import { panelChip } from './panel-chip';
 
 export function MemoryPanel({ state }: PanelProps) {
   const snapshot: TelemetrySnapshot | null = latestSample(state)?.snapshot ?? null;
@@ -29,7 +30,11 @@ export function MemoryPanel({ state }: PanelProps) {
   const used = host?.memUsedGiB ?? null;
   const total = host?.memTotalGiB ?? null;
   const swap = host?.swapUsedGiB ?? null;
-  const chip = host === null ? null : severityMemory(host);
+  // ⚠ 10b-S-F: the two LEAF severities, never `severityMemory` — that helper's own
+  // `worstSeverity` already discards a `null` RAM reading in favour of a present, normal swap
+  // reading before this file ever sees the result. `panelChip` needs to see both leaves itself
+  // to catch the case the ruling is about (`panel-chip.ts`'s module doc has the full argument).
+  const chip = panelChip(severityRam(used, total), severitySwap(swap));
 
   return (
     <PanelShell title="memory" subtitle="/proc/meminfo" chip={chip}>

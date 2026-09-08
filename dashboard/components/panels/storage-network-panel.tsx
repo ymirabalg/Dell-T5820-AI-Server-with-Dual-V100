@@ -23,7 +23,7 @@
 import { errorsForPanel } from '@/lib/client/observations';
 import { latestSample } from '@/lib/client/runtime';
 import { formatBytesPerSecond, formatGiB, formatText } from '@/lib/format';
-import { severityDiskFree, severityLink, worstSeverity } from '@/lib/severity';
+import { severityDiskFree, severityLink } from '@/lib/severity';
 import type { Storage, TelemetrySnapshot } from '@/lib/types';
 
 import { Meter } from '../meter';
@@ -32,6 +32,7 @@ import type { PanelProps } from '../panel-props';
 import { Row } from '../row';
 import { findDisplayed, staleAgeNote, staleValueOr } from './condition-lookup';
 import { PanelNotes } from './panel-notes';
+import { panelChip } from './panel-chip';
 import { StatusRow } from './status-row';
 
 export function StorageNetworkPanel({ state, nowMs }: PanelProps) {
@@ -41,7 +42,9 @@ export function StorageNetworkPanel({ state, nowMs }: PanelProps) {
   const rootSeverity = severityDiskFree(storage?.root.usedGiB ?? null, storage?.root.totalGiB ?? null);
   const homeSeverity = severityDiskFree(storage?.home.usedGiB ?? null, storage?.home.totalGiB ?? null);
   const linkSeverity = severityLink(storage?.net.link ?? null);
-  const chip = worstSeverity(rootSeverity, homeSeverity, linkSeverity);
+  // ⚠ 10b-S-F: `panelChip`, not `worstSeverity` — a panel that would read `normal` while one
+  // of the three leaves (root free%, home free%, link state) is `null` shows no band instead.
+  const chip = panelChip(rootSeverity, homeSeverity, linkSeverity);
 
   const linkCondition = findDisplayed(state.displayed, 'link');
   const linkAge = staleAgeNote(linkCondition, nowMs);

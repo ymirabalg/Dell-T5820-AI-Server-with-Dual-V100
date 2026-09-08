@@ -305,6 +305,14 @@ performed, **including a box with genuinely no cards**. `gpus: []` = the command
 and produced no parseable rows, and **always carries an `errors[]` entry**, so it is never
 silent. Both render "no GPUs enumerated"; only the second is evidence of a bug in us.
 
+⚠ **A card ABSENT from a `gpus[]` that was read renders `card not enumerated` — ruled 2026-09-08
+(10b-S-E).** It is a body takeover with **no served-model row**, and it is a different fact from
+the whole enumeration failing: §6.5 already rules the condition (*"absent from a collection that
+was read → the subject has left the machine, and that is an answer"*), so the panel must not
+borrow `no GPUs enumerated`, which says the read failed when it succeeded. Rendering the ordinary
+body of em dashes was rejected: it is **byte-identical** to a present card whose readings all
+failed, which collapses the retired/stale distinction §3.1 and §9 spend paragraphs on.
+
 **Degraded case:** `nvidia-smi` missing or returning nothing is not an error state to hide.
 The GPU panels render as "no GPUs enumerated" with the timestamp of the last successful
 read — **or, when there has been no successful read this session at all, "never read this
@@ -530,6 +538,20 @@ values this table does not list (`0x10` among them) and may gain more. Silently 
 unrecognised bit is exactly the failure that decoding the mask exists to prevent: it would
 report a throttling card as unthrottled. Watch rather than alarm, because an unknown reason
 is not evidence of a thermal event.
+
+**⚠ `errors[].instance` — an OPTIONAL subject, ruled 2026-09-08 (10b-S-G).** §6.5 requires that
+one `llama-server` instance's row show *"the unit state and the reason"* while the other is
+unaffected. That is a **structural** requirement, and until now §4's error shape could not express
+it: an entry carries a `source` and no subject, so a panel could only attribute a reason by
+**reading the message text** for a unit name, an `<i>.env` path or a port. That heuristic was
+implemented and tested and it is still a heuristic — it mis-attributes silently the moment a
+collector rewords a message, because a substring match cannot fail loudly. An entry that concerns
+one instance now names it. It is **optional**: most sources have no instance, and an absent field
+means the entry concerns the panel rather than one row.
+
+⚠ **This is a §4 WIRE CHANGE**, the second in this project after O19's `GB`→`GiB`. An old server
+against a new client yields a snapshot the browser refuses, so the box is redeployed in the same
+change — and the deploy is already scheduled for step 10's completion.
 
 **`errors[].source`** — a **closed vocabulary**, because §6.5 requires matching an error to
 the figure it explains: `nvidia-smi`, `coretemp`, `proc-stat`, `proc-meminfo`,
@@ -923,6 +945,15 @@ on carrying with nowhere to be rendered.
   | cooling | `dell_smm · channel 5 = FAN_HDD (PCIe/GPU)` |
   | memory · serving · safety · storage & network | a fixed source label — `/proc/meminfo`, `statvfs · eno1` |
 
+- ⚠ **chip — never green over its own em dash. Ruled 2026-09-08 (10b-S-F).** The head is the
+  **worst band among the readings that exist**, skipping `null`s — but a panel that would read
+  **`normal` while any of its own readings is `—` shows no band instead.** §9's *"a dashboard that
+  goes green because it stopped being able to look"* is written about the aggregate, which
+  conditions protect; this applies the same refusal one level down, to the specific claim §9
+  objects to. It deliberately does **not** drop to no-band for `warn` or `alarm`: a panel must not
+  lose its alarm colour because one unrelated field failed to parse. So a red GPU stays red with an
+  unreadable SM clock, and a MEMORY panel with `RAM — / —` and a healthy swap shows **no band**,
+  never a green tick.
 - **chip** — the panel's own severity, from §6.3 on the current reading (§6.4: a cell's colour
   is not debounced).
 
@@ -1231,6 +1262,15 @@ Rules, each of which closes a real hole:
   panel derives the unit name from the index rather than the two being matched by string.
 - An id that matches no kind is reported as unknown. Silence is not acceptable
   for a mechanism whose whole job is suppressing alarms.
+
+**⚠ One source that blanks several figures states its message ONCE — ruled 2026-09-08
+(10b-S-H).** `errorsForPanel`'s granularity is per **source**, not per figure, so a source
+blanking several readings on one panel is *one fact, stated once*, placed under the figures it
+blanks. §3.7's *"beside it"* is satisfied by the panel, not by each cell. **The consequence,
+stated plainly rather than discovered:** with `dell-smm` down, fans 1–4 read `—` with the
+explanation sitting on fan 5. Repeating the same sentence six times in one panel was rejected —
+repetition in an alarm panel is its own kind of noise, and §3.7 exists so an alarm is actionable,
+not so every cell carries prose.
 
 **The banner's "when it started" is the first observation of the CONFIRMED band** — not the
 instant confirmation completed, which would always read 10 s late.

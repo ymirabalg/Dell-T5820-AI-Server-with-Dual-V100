@@ -22,6 +22,11 @@
  * 2. **§6.2 gives every panel a chip, and this one has no §6.3 reading to band.** `chip={null}`
  *    is the explicit no-band state (O12) rather than an invented "all clear" green — the log
  *    is not itself a measurement, so there is nothing for §6.3 to have an opinion about.
+ *
+ * ⚠ **10b-S-F does not reach this panel.** Its chip is the constant `null`, never `'normal'`,
+ * so the ruling's downgrade (`normal` + a null reading → no band) has no `'normal'` to ever
+ * downgrade. Recorded rather than left to be re-derived the next time this file is read next
+ * to the ruling.
  */
 
 import { PanelShell } from '../panel-shell';

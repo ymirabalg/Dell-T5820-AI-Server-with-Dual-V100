@@ -57,7 +57,7 @@ import { errorsForPanel } from '@/lib/client/observations';
 import { traceFor } from '@/lib/client/series';
 import { latestSample } from '@/lib/client/runtime';
 import { formatCh5Pwm, formatRpm, formatText } from '@/lib/format';
-import { severityFan5, severityFanStopped, severityUnitState, worstSeverity } from '@/lib/severity';
+import { severityFan5, severityFanStopped, severityUnitState } from '@/lib/severity';
 import { celsius, rpm } from '@/lib/types';
 import type { Cooling, TelemetrySnapshot } from '@/lib/types';
 import { FAN_SERVICE_UNIT } from '@/lib/units';
@@ -71,6 +71,7 @@ import { Row } from '../row';
 import { StackedTimeSeriesChart } from '../stacked-time-series-chart';
 import { chartDomainOf, formatTimeOfDayMs } from './panel-chart';
 import { findDisplayed, staleAgeNote, staleValueOr } from './condition-lookup';
+import { panelChip } from './panel-chip';
 import { StatusRow } from './status-row';
 
 import styles from './cooling-panel.module.css';
@@ -83,16 +84,19 @@ export function CoolingPanel({ state, nowMs, panelId }: PanelProps) {
 
   const fan5Severity = cooling === null ? null : severityFan5(cooling);
   const serviceSeverity = cooling === null ? null : severityUnitState(cooling.serviceState);
-  const fan1234Severity =
-    cooling === null
-      ? null
-      : worstSeverity(
-          severityFanStopped(cooling.fan1Rpm),
-          severityFanStopped(cooling.fan2Rpm),
-          severityFanStopped(cooling.fan3Rpm),
-          severityFanStopped(cooling.fan4Rpm),
-        );
-  const chip = worstSeverity(fan5Severity, fan1234Severity, serviceSeverity);
+  // ⚠ 10b-S-F: `panelChip` over the four fan1-4 LEAVES directly, not a pre-combined
+  // `worstSeverity` of them (the old `fan1234Severity`) — a lone `null` among the four would
+  // otherwise be thrown away by that inner combination before `panelChip` ever saw it. See
+  // `panel-chip.ts`'s module doc. `fan5Severity` is passed whole: it is `severityFan5`'s own
+  // documented job not to lose a `null` this way.
+  const chip = panelChip(
+    fan5Severity,
+    severityFanStopped(cooling?.fan1Rpm ?? null),
+    severityFanStopped(cooling?.fan2Rpm ?? null),
+    severityFanStopped(cooling?.fan3Rpm ?? null),
+    severityFanStopped(cooling?.fan4Rpm ?? null),
+    serviceSeverity,
+  );
 
   const fan5Condition = findDisplayed(state.displayed, 'fan5_absolute');
   const serviceCondition = findDisplayed(state.displayed, FAN_SERVICE_ID);

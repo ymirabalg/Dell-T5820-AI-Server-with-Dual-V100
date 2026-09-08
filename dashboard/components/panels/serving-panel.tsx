@@ -57,6 +57,7 @@ import { PanelShell } from '../panel-shell';
 import type { PanelProps } from '../panel-props';
 import { findDisplayed, staleAgeNote } from './condition-lookup';
 import { PanelNotes } from './panel-notes';
+import { panelChip } from './panel-chip';
 import { StatusRow } from './status-row';
 
 import styles from './serving-panel.module.css';
@@ -113,10 +114,15 @@ export function ServingPanel({ state, nowMs }: PanelProps) {
   const snapshot: TelemetrySnapshot | null = latestSample(state)?.snapshot ?? null;
   const instances = snapshot?.serving ?? null;
 
+  // ⚠ 10b-S-F: `panelChip`, not `worstSeverity` — each instance already contributes its
+  // `unitState`/`health` as two separate leaves via `flatMap`, so a panel that would read
+  // `normal` while one instance's `health` (say) is unreadable shows no band instead. The
+  // per-row severity below (`instanceRow`'s own `worstSeverity` call) is untouched: the ruling
+  // is about the panel HEAD, not a row's own colour.
   const chip =
     instances === null || instances.length === 0
       ? null
-      : worstSeverity(
+      : panelChip(
           ...instances.flatMap((i) => [severityUnitState(i.unitState), severityHealth(i.health)]),
         );
 

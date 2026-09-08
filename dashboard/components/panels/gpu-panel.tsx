@@ -63,11 +63,12 @@ import {
   formatText,
   formatWatts,
 } from '@/lib/format';
-import { severityGpuTemp, severityVram, worstSeverity } from '@/lib/severity';
+import { severityGpuTemp, severityVram } from '@/lib/severity';
 import { celsius } from '@/lib/types';
 import type { Gpu, ServingInstance, TelemetrySnapshot } from '@/lib/types';
 
 import { PanelNotes } from './panel-notes';
+import { panelChip } from './panel-chip';
 
 import styles from './gpu-panel.module.css';
 
@@ -106,7 +107,11 @@ export function GpuPanel({ state, panelId }: GpuPanelProps) {
   const absent = snapshot !== null && snapshot.gpus !== null && gpu === null;
   const decode = decodeThrottleMask(gpu?.throttleReasons ?? null);
 
-  const chip = worstSeverity(
+  // ⚠ 10b-S-F: `panelChip`, not `worstSeverity` — a panel that would read `normal` while one
+  // of these three LEAF readings (temperature, throttle, VRAM) is `null` shows no band instead.
+  // See `panel-chip.ts`'s module doc for why these three specifically, and why passing something
+  // pre-combined would be too late to catch it.
+  const chip = panelChip(
     severityGpuTemp(gpu?.tempC ?? null),
     decode?.severity ?? null,
     severityVram(gpu?.memUsedMiB ?? null, gpu?.memTotalMiB ?? null),

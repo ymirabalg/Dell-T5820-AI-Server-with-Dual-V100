@@ -61,7 +61,44 @@ describe('§6.2 — the MEMORY card', () => {
     const html = renderToStaticMarkup(<MemoryPanel state={stateWith(snapshot)} nowMs={0} panelId="memory" />);
     expect(html).toContain('— / 61.0 GiB');
     expect(html).not.toContain('0.0 GiB / 61.0 GiB');
+    // ⚠ This unscoped assertion is true for the WRONG reason before 10b-S-F: the Meter's own
+    // `severity={severityRam(used, total)}` is `null` regardless of the HEAD chip, so this line
+    // alone would have kept passing under the finding's exact bug (RAM —/— rendering a GREEN
+    // head over it) — the same document-wide `toContain` shape ANCHOR §9 has now caught three
+    // times elsewhere in this project. The head-scoped assertion below is the one that matters.
     expect(html).toContain('data-severity="none"');
+  });
+
+  describe('⚠ 10b-S-F — the panel HEAD never bands normal over its own em dash', () => {
+    test('⚠ the finding, reproduced and fixed: RAM —/— with a healthy (normal) swap → head shows NO BAND, never green', () => {
+      const snapshot = snapshotWith({ memUsedGiB: null, memTotalGiB: gib(61), swapUsedGiB: gib(0) });
+      const html = renderToStaticMarkup(<MemoryPanel state={stateWith(snapshot)} nowMs={0} panelId="memory" />);
+      const head = html.slice(0, html.indexOf('</header>'));
+      expect(head).toContain('data-severity="none"');
+      expect(head).not.toContain('data-severity="normal"');
+    });
+
+    // Not ⚠: the mirror case — every reading present and normal still bands green ordinarily.
+    // Documentation that the downgrade does not over-fire, not a ledger obligation (same
+    // reasoning as this file's other "Not ⚠" mirror notes).
+    test('RAM readable and normal, swap readable and normal → head bands normal, ordinarily', () => {
+      const snapshot = snapshotWith({ memUsedGiB: gib(10), memTotalGiB: gib(61), swapUsedGiB: gib(0) });
+      const html = renderToStaticMarkup(<MemoryPanel state={stateWith(snapshot)} nowMs={0} panelId="memory" />);
+      const head = html.slice(0, html.indexOf('</header>'));
+      expect(head).toContain('data-severity="normal"');
+    });
+
+    test('⚠ RAM unreadable + an ALARM-band swap → head STAYS ALARM — a null does not erase an alarm', () => {
+      // The ruling's whole point, and the case a careless "any null anywhere ⇒ no band" fix
+      // breaks: "it does not drop to no-band for warn or alarm … a red GPU stays red with an
+      // unreadable SM clock." MEMORY's own version: it stays alarm with an unreadable RAM pair
+      // and 2 GiB of swap in use.
+      const snapshot = snapshotWith({ memUsedGiB: null, memTotalGiB: gib(61), swapUsedGiB: gib(2) });
+      const html = renderToStaticMarkup(<MemoryPanel state={stateWith(snapshot)} nowMs={0} panelId="memory" />);
+      const head = html.slice(0, html.indexOf('</header>'));
+      expect(head).toContain('data-severity="alarm"');
+      expect(head).not.toContain('data-severity="none"');
+    });
   });
 
   // Not ⚠: the mirror case — documentation, not a ledger obligation (see gpu-panel.test.tsx's
