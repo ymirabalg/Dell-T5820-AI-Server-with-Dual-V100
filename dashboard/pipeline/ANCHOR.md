@@ -27,78 +27,66 @@ adversarial and review phases and fixed before they became wrong code. Several w
 
 ---
 
-## 2. State at the moment of writing — READ CAREFULLY
+## 2. State — READ CAREFULLY. Updated 2026-09-07, end of session two.
 
-**Steps 1–8 are closed and verified.** Steps 9–12 have not started.
+**Steps 1–8 are closed and verified. Step 9's full loop is closed.** Steps 10–12 have not started.
 
-| Step | Scope | State |
-|---|---|---|
-| 1 | Scaffold & contract (`lib/types.ts`) | **closed** |
-| 2 | Format & severity (`format/severity/throttle/conditions`) | **closed** |
-| 3 | GPU & host collectors | **closed** |
-| 4 | Cooling collector | **closed** |
-| 5 | Serving / storage / safety collectors | **closed** |
-| 6 | Telemetry route (`/api/telemetry`, cache, gate, ceiling) | **closed** |
-| 7 | Auth & login (scrypt, cookie, limiter, `/login`, `proxy.ts`) | **closed** |
-| 8 | Client runtime (`lib/client/`) | **closed** |
-| 9–12 | UI primitives, panels, packaging, deploy | **not started — OUT OF SCOPE, see §8** |
+### ⚠ There are now TWO branches, and you are on the second
 
-### Step 8 closed 2026-09-07 — what the close-out did
+```
+dashboard-backend    3f06e98   [origin/dashboard-backend]   PUSHED, 18 commits ahead of main
+dashboard-frontend   06a09cb   branched off it              LOCAL ONLY, never pushed
+main                 29b07bb   [origin/main]                untouched
+```
 
-Step 8's reconciliation ran across **three contexts**. The first two are recorded in
-`steps/08-client-runtime/reconciliation-progress.md`, which remains the detailed record of
-*what changed and why*. **`steps/08-client-runtime/reconciliation.md` is the close-out and the
-authoritative summary**, and `pipeline/HANDOVER.md` is rewritten for step 9.
+**`dashboard-frontend` is the working branch.** It carries `components/` and step 9's harness and
+nothing else; the spec, the collectors, the client runtime and every earlier harness live on
+`dashboard-backend` and arrive here by inheritance. **Do not commit UI to the backend branch** —
+that mistake was made once and had to be split apart with a soft reset.
 
-| Piece | State |
+⚠ **Pushing `dashboard-frontend` needs the owner's approval** — `git push` is gated by a
+permission classifier in this environment and was refused once before the owner allowed it.
+
+### What exists
+
+| | |
 |---|---|
-| All 12 MUSTs + 14 SHOULDs from `review.md` | **implemented, with tests** |
-| `pnpm verify` | **green — 1990 tests, 57 files, exit 0**, ten consecutive runs |
-| Step 8's harness | **158 mutations, all bite; ledger clean, 191 ⚠ tests checked** |
-| Harnesses 2–7 | pass. Step 6's was re-run in the last context; see `reconciliation.md` §5 for why the other five did not need to be |
-| `steps/08-client-runtime/reconciliation.md` | **written** |
-| `pipeline/HANDOVER.md` | **rewritten — "after step 8, before step 9"** |
-| `SPEC.md` | **untouched** (md5 unchanged). Five new gaps recorded for the owner |
+| steps 1–8 | closed. 705 mutations across seven harnesses, every one biting |
+| step 9 | **closed** — build → test → adversarial → reconcile, 25 findings adjudicated |
+| suite | **67 files · 2210 tests · `pnpm verify` exit 0 · `pnpm build` clean** |
+| step 9's harness | 61 mutations, ledger clean over 67 ⚠ marks |
+| the box | **running the backend natively**, see §2.1 |
 
-#### ⚠ Three findings from the close-out worth carrying, because none is step-8-specific
+### 2.1 ⚠ The backend is DEPLOYED and running on `ai-server` right now
 
-1. **A fix that adds a second, independent defence silently voids the first one's mutation.**
-   `W4` removes `wire.ts`'s ISO-shape guard and had bitten for three phases. F13 then added a
-   calendar round-trip that independently refuses every row the test table held — so the
-   mutation applied, the property stayed true, and the shape guard's coverage went to **zero**
-   with no signal. **Whenever a fix adds a defence, re-run the harness and read what stopped
-   biting.**
-2. **A guard can be invisible under one kind of input and load-bearing under another.**
-   `events.ts`'s `if (condition.stale) continue;` changes nothing for a continuous metric — the
-   frozen band always equals the logged one, so a second guard covers it — and is load-bearing
-   for a **value-band** condition, which can carry a pending run across an outage and confirm it
-   on time nobody sampled. Every fixture in that file used `gpu_temp`. The ⚠ mark was moved to a
-   value-band fixture and the old one dropped per HANDOVER §5.2 rule 1.
-3. **A process-wide measurement must be attributed, not counted.** The ten-run evidence
-   requirement caught a **pre-existing 15 % flake** in step 6's suite:
-   `process.getActiveResourcesInfo()` counts the test runner's own timers, and one expiring
-   during a dynamic import failed an assertion about a property that held. Fixed one-sided, with
-   the residual stated. **Six earlier `pnpm verify` runs had missed it** — which is the whole
-   argument for running ten.
+Not §2.5's container — a native run, put there deliberately as the cheapest thing that exercises
+the real endpoint. **Node 24.16.0 in `~/.local/node24`** (checksum-verified), source at
+`~/aid-deploy`, serving **`127.0.0.1:8090` only**, so ufw is untouched and nothing is exposed.
 
-Two findings from the earlier contexts still worth carrying forward:
-
-- Retrofitting the red-test ledger to **step 2's** harness found **six pre-existing ⚠ marks
-  with no mutation behind them**, five on `severity.ts`'s fan-stopped rows — including the
-  `-0` / `Object.is` trap. All six are now backed. **Step 3's harness still has no ledger**, and
-  it is the only one without.
-- **`FakeEnv`'s two fake clocks were in different years** (browser 2023, server 2026).
-  Invisible until `mode` became a function of `now − ts`. Now coupled, and a test that wants
-  skew has to ask for it.
-
-### The commit is taken
-
-```
-branch   dashboard-backend      (branched from main; main is untouched)
-commit   71a2f7d                183 files, working tree clean
+```bash
+pnpm probe          # from dashboard/ on the Mac — validates + renders the live snapshot
 ```
 
-**The next session is on `dashboard-backend`, not `main`.** Nothing has been pushed.
+It last read **zero `errors[]`** with all 25 conditions banding normal. ⚠ **It is serving commit
+`b3969cd` and is now behind** — it has O19, D4 and D5 but not the time formatter or S11/G5.
+Redeploy with `git archive HEAD:dashboard | ssh ai-server '…'` — **deploy a commit, not a working
+tree**, or you ship whatever an agent happens to be mid-edit on. Full account in
+`pipeline/FIRST-DEPLOY.md`. Everything is under `~`; `rm -rf` undoes it.
+
+⚠ The deployed password is `dashboard1`, set for testing. Step 11 replaces it properly.
+
+### 2.2 ⚠ What to do next — `pipeline/WORK-ITEMS.md` §10 is the queue
+
+**Q1 first, and it is not step 9 work — it is a defect in the mechanism every step's evidence
+rests on.** The red-test ledger's scanner cannot see a multi-line `test.each(...)`; its regex
+ends the argument list at the first newline. **37 ⚠ marks across steps 2–8 are invisible to it,
+21 of them in step 7** (scrypt, the cookie, the limiter, the gate). That is not a claim that 37
+tests are inert — it is a claim that nobody knows, because the thing built to answer it could not
+see them. Step 9's harness has the corrected scanner: paren-balanced, string-aware **and**
+comment-aware. Back-port it, re-run all seven, expect failures.
+
+Then **Q2** (§6.2 now requires a hover layer and table view; the primitives have neither, because
+the build ran before the spec was amended), then **step 10**.
 
 ## 3. Toolchain
 
@@ -223,82 +211,72 @@ some `S`-prefixed ids in steps 3–5 are *harness mutation ids*, not gaps.
 A cached extract of the DEFER tables for steps 1–7 may still exist at
 `/private/tmp/claude-501/.../scratchpad/defers.md`; regenerate it if not.
 
-### Already-identified and still open — the sweep at (3) should start here, not rediscover them
+### ⚠ S49–S53 are CLOSED — the owner ruled on all five and `SPEC.md` was edited
 
-**Spec gaps awaiting the owner's wording** (found in step 8's reconciliation; `SPEC.md` was
-not edited, and the code's current choice is recorded beside each in `reconciliation.md` §4 and
-in `HANDOVER.md` §8):
+That was the first time the spec had ever been changed in this project. **`SPEC.md` is no
+longer frozen**: the owner delegates wording, and ten edits are logged in
+`pipeline/WORK-ITEMS.md` §9. So when the spec is silent, invariant 7 still says STOP and
+record — but the recording now has somewhere to go, and the owner answers.
 
-| # | Gap |
-|---|---|
-| **S49** | §6.7 does not say whether the 600-point decimation budget is **per series or per chart**. The review ruled per series; the sentence never reached the spec. Code draws up to 1,800 points on §6.2's stacked chart |
-| **S50** | §6.5 says a stale condition's row "names the age of the reading" but **not which clock measures it** — §6.7 splits server `ts` from browser `now`, and "the age of a reading we did not take" is cleanly neither |
-| **S51** | §6.5 does not say what a stale condition's **value** shows. Code keeps the last reading; §6.6's "`null` renders `—`" could be misread as requiring a blank |
-| **S52** | §6.4 does not say whether `loggedStanding` **survives a mid-session `STANDING` change**. Code does not reset it — it belongs to the session, not the configuration |
-| **S53** | §4 does not say what a **duplicate entry in `STANDING`** means. Echoed verbatim; harmless because the client builds a `Set`. Recorded so nobody "fixes" it server-side |
+The amendments worth knowing before touching the UI: §6.7's 600-point budget is **per
+series**; a stale row's clock is the **browser's** and its value is the **last reading**;
+§6.2 gained a panel-head convention (`title · subtitle · chip`), an exhaustive header list, the
+GPU↔instance join, and — added late, after step 9's primitives were already built — **a hover
+layer and a table view as accepted defaults** (the owner's ruling: *do not fight `dataviz` to
+strip its defaults; amend the spec instead*). That last one is why Q2 exists.
 
-**Deferred work items with owning steps** (from step 8's §9.4 list — most are 9/10 and
-therefore **out of scope**, listed only so they are not lost):
+**Deferred work items with owning steps** (from step 8's §9.4 list):
 
-- **In scope (backend):** **D8** `STANDING` env plumbing → step 11, verified step 12 · the
-  **red-test ledger retrofit for step 3's harness**, which still has none and is the only
-  harness without one · ~~the six ⚠ marks on `severity.ts` that step 2's retrofit found
-  unbacked~~ — **backed and confirmed**, `R51`–`R55` in step 2 and `T51` in step 4.
-- **Out of scope (UI, steps 9–12):** D1 S40's third event-log feed · D2 the independent age
-  tick · D3 rendering `unknownStanding` · D4 `errorsForPanel` · D5 `traceFor` · D6 jsdom +
-  `useTelemetry` unmount · D7 S11/G5, S19, S30 · ~~O19~~ **closed 2026-09-07**.
+- **Backend, still open:** **D8** `STANDING` env plumbing → step 11, verified step 12 · the
+  **red-test ledger retrofit for step 3's harness**, which still has none — **folded into Q1**.
+- **Closed 2026-09-07:** ~~O19~~ (GB→GiB, a §4 wire change), ~~D4~~ `errorsForPanel`,
+  ~~D5~~ `traceFor`, ~~D7~~ (S11/G5, S19, S30), ~~the six unbacked `severity.ts` marks~~.
+- **Still open for steps 10–12:** D1 S40's third event-log feed · D2 the independent age tick ·
+  D3 rendering `unknownStanding` · D6 jsdom + `useTelemetry` unmount · L9 sparkline sizing ·
+  L11 the unit-name constant guard.
 
 ---
 
-## 8. The plan from here — this is what "start 3" means
+## 8. The plan from here
 
-The owner's instruction, numbered as given:
+Steps 1–8's sweep and step 9 are done. The queue is `pipeline/WORK-ITEMS.md` §10 (see §2.2).
 
-0. ~~Prerequisite: finish step 8's reconciliation~~ — **done 2026-09-07.** `HANDOVER.md` now
-   describes the world as it is, and step 8's harness re-aims and ledger are clean, so (3)–(7)
-   can proceed against a document that can be trusted.
-1. ~~Commit `dashboard/`~~ — **done**, `71a2f7d` on `dashboard-backend`.
-2. ~~Write this anchor~~ — done, and updated.
-3. ~~Read `SPEC.md` and resolve remaining ambiguities in the steps 1–8 surface only.~~
-4. ~~Create atomic work items~~ from those ambiguities *plus* every open finding and
-   obligation recorded by the adversarial and review phases across steps 1–8.
-5. ~~Run an adversarial review of the work-item list itself~~ — complete? genuinely atomic?
-   anything wrong, unnecessary, or missing?
-6. ~~Reconcile those findings into the final list.~~
-7. ~~Execute one item at a time~~, each in a **fresh context with a hand-off from the
-   previous**, in the loop: **build → test → adversarial review → reconciliation**.
+### ⚠ The loop the owner wants, and it is not PLAN.md's
 
-**Items (3)–(7) were done on 2026-09-07 and are recorded in `pipeline/WORK-ITEMS.md`:** the
-sweep, the list, an adversarial review of the list, the reconciled queues, and the execution
-log. **Seven items executed, one owner decision taken (A1 — `STANDING` is captured once; a
-change needs a container restart), and seven `SPEC.md` wordings are still owed to the owner**
-(WORK-ITEMS §7.3). Three findings worth carrying:
+Each work item is **one agent loop**, one item at a time, each phase a **fresh agent with clean
+context** receiving a written handoff:
 
-- **§4 promised a live `STANDING` change the deployment cannot make.** `--env-file` is read
-  once at `docker run`, so the per-sample re-read answered the same value every time while the
-  code's own comment said otherwise. Fixed in `source.ts`, pinned, and backed by a mutation.
-- **Step 3's harness got its ledger** and it immediately found four ⚠ marks with nothing behind
-  them — the same result step 2's retrofit produced. All seven harnesses now carry one.
-- **All seven harnesses reported an anchor miss under the label `DID NOT BITE`**, which
-  HANDOVER §1 says is a different finding with a different first hypothesis. Now two lines.
+| phase | model | does |
+|---|---|---|
+| **build** | **Sonnet 5, high effort** | implements + tests. Load the `dataviz` skill for anything with a chart, meter or stat row |
+| **test** | **Sonnet 5, high effort** | reads every test name against its body; fixture symmetry; hunts equivalent and probabilistic mutations |
+| **adversarial** | default | tries to break it, **fixes nothing**, writes findings with concrete failure scenarios |
+| **reconcile** | default (the parent) | adjudicates every finding ACCEPTED/REJECTED/DEFERRED **with reasons**, re-runs everything, commits |
 
-### ⚠ Scope constraint — absolute
+**Handoffs live in `pipeline/handoffs/`.** Write one before spawning; the agent's quality tracks
+the handoff's. The step 9 handoff is the model to copy.
 
-**Backend only. Do not touch anything belonging to steps 9–12**: UI primitives, charts,
-panels, packaging (Dockerfile, `dashboard.sh`, systemd), or deployment to the box. Roughly
-eleven deferred items name those steps — **record them, do not build them.** If a work item
-turns out to be UI-shaped, defer it explicitly rather than starting it.
+⚠ **Write down what you have already verified yourself**, so the agent does not re-litigate it —
+and be honest when the agent corrects you. It did, four times this session, and every correction
+was right.
 
-Sections of `SPEC.md` in scope for the sweep: **§1–§5, §6.3, §6.4, §6.6, §6.7, §9, §3.x**.
-Out of scope: §6.1, §6.2's panel list, §6.5's *rendering* prescriptions, §2.3/§2.5's
-packaging rows, §8.
+### ⚠ Scope — the backend-only constraint is LIFTED, and a new one replaces it
+
+Steps 1–8 are closed, so the old "do not touch steps 9–12" rule has expired. **The live
+constraint is the branch**: UI work belongs on `dashboard-frontend`, and nothing outside
+`dashboard/` changes. Q1 is the exception worth naming — it edits the *harnesses* of steps
+2–8, which live on the backend branch's history but are inherited here; do it on
+`dashboard-frontend` like everything else and let the merge sort it out.
+
+Invariant 7 still binds: **if the spec is silent, STOP and record it.** What changed is that
+recording it now leads somewhere — see §7.
 
 ---
 
 ## 9. Standing constraints
 
-- **Commit only when asked** (repo convention, root `CLAUDE.md`). The commit in §8.1 *was*
-  asked for.
+- **Commit only when asked** (repo convention, root `CLAUDE.md`). Each reconciliation has been
+  an explicit ask; `git push` is separately gated and needs its own.
 - **The server `ai-server` is reachable over SSH and is read-only to this work.** Reads are
   encouraged — several findings were settled by measuring the real box. **Never write to it**:
   no `pwmN`, no mutating D-Bus call (`LoadUnit` is forbidden — `GetUnit` is the read-only
@@ -306,3 +284,9 @@ packaging rows, §8.
 - **`ufw` now enforces on the box** (`ENABLED=yes`, verified 2026-09-06). Port **8090 has no
   allow rule**, so the dashboard will be unreachable until step 12 adds one. Do not add it now.
 - Nothing outside `dashboard/` should change, except the root `.gitignore` (already modified).
+- **`pnpm verify` exiting 0 is the only definition of green.** Not a printed summary, not an
+  agent's report. Re-run it yourself before every commit — an agent has claimed green on a
+  tree that failed.
+- **Never `sleep`-poll a background harness.** `until ! pgrep -f regressions.py` never exits:
+  the pattern matches the waiting shell's own command line. Write `pgrep -f "regressions[.]py"`.
+  Seven orphaned shells were found this way.
