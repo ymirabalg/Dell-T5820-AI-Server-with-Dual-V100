@@ -1,15 +1,70 @@
-# Handover — after 10c-2, before 10c-3
+# Handover — after 10c-3. **Step 10 is closed WITH A KNOWN FAILURE. Next is step 11.**
 
-**Rewritten 2026-09-08 by 10c-2's reconciliation** (the guards loop: five mechanism guards, four
-of them new `lib/*.test.ts` files), on top of 10c-1's. Steps 1–8 are closed, **step 9** is closed,
-**Q1** and **Q2** are closed, **10a — the shell**, **10b — the nine panel bodies**, **10b-S-G**,
-**10c-1 — the wiring** and now **10c-2 — the guards** are closed pending the parent's review.
-This file is the whole inheritance: the next phase's agents get clean context and read it as fact.
+**Rewritten 2026-09-09 by 10c-3's reconciliation** (sizing and visual — the loop step 10 closes
+with), on top of 10c-2's. Steps 1–8 are closed, **step 9** is closed, **Q1** and **Q2** are
+closed, and every loop of **step 10** — 10a, 10b, 10b-S-G, 10c-1, 10c-2 and now **10c-3** — is
+closed pending the parent's review. This file is the whole inheritance: the next phase's agents
+get clean context and read it as fact.
 
-⚠ **Read §0.3 FIRST.** It says why `pnpm verify` is **not deterministic today**, and it changes
-what a green harness run is allowed to be taken as evidence of. ⚠ **It is still open** — §9's row
-said 10c-2 owned it and 10c-2's own handoff never scoped it; **it is re-owned to 10c-3** and
-nothing about it has changed. §0.1, §0.2, §0.4, §0.5, §0.6 and the new **§0.7** remain true.
+---
+
+## 0.0 ⚠⚠ READ THIS FIRST — §6.1's ONLY quantitative promise is measured FALSE. It is the OWNER'S to settle, and step 11 packages a page that breaks it.
+
+`SPEC.md` §6.1: *"The 'no scroll' promise holds at ≥1280px **wide and ≥1024px tall** … At
+1920×1080 it fits comfortably."* Clarified by the owner on 2026-09-08: *"what the promise forbids
+is the **grid** growing past the viewport and the reader having to scroll the dashboard to see a
+panel."*
+
+**Measured in real headless Chrome, logged in, default `chart` view, every panel populated,
+2026-09-09** (`node pipeline/steps/10-panels-assembly/measure-breakpoints.mjs`, measurement 9):
+
+| viewport | `documentElement.scrollHeight` | `clientHeight` | **overflow** |
+|---|---|---|---|
+| **1280 × 1024** | 1620 | 1024 | **scrolls by 596 px** |
+| **1600 × 1024** | 1656 | 1024 | **scrolls by 632 px** |
+| **1920 × 1080** | 1640 | 1080 | **scrolls by 560 px** |
+
+**It is the grid itself, not a dev-server artefact.** The only two body children with any height
+are the sticky header+banner band (49 px) and `.grid` (1571 / 1607 / 1591 px). Everything else in
+`<body>` is a zero-height `<script>` or an absolutely-positioned route announcer.
+
+**Where the height is**, at 1920×1080, so the owner can see what would have to change: GPU 0 and
+GPU 1 **485 px each** (row 1) · COOLING **868** (spanning rows 2–3) · CPU and MEMORY **458** ·
+SAFETY and STORAGE & NETWORK **397** · SERVING and SESSION EVENT LOG **190**. Keeping the promise
+means the grid loses **~35 %** of its height at 1920×1080 and **~38 %** at 1280×1024. That is not
+padding.
+
+⚠ **And this is the most favourable state the app has.** The measurement runs with no alarm
+banner pinned (§6.4's banner adds to the 49 px band) and with every panel in its **chart** view —
+toggling one to `table` adds up to `--table-scroll-max: 40vh` = **432 px at 1080** to that cell,
+and the table view has never been measured in a browser at any width (**Q2-S2**, still open).
+
+**The concrete failure:** §1 decision 7's wall panel — a fixed display nobody stands at — hides
+SERVING and SESSION EVENT LOG below the fold at 1920×1080, and cuts into SAFETY, *"the panel that
+earns the dashboard's existence"*, at 1280×1024. Nobody scrolls a wall panel.
+
+**Three repairs exist and all three are the owner's**, which is why nothing was changed:
+
+1. **Shrink the panels** — §6.2 fixes their content; choosing what to drop is inventing.
+2. **Bound the grid and scroll inside it** — that keeps the *viewport* clean by conceding the
+   page, and it is entangled with SCOPE 2.5f's `--table-scroll-max` stopgap.
+3. **Change §6.1's numbers** — the owner's, and forbidden to a phase agent (ANCHOR §8, rule 3).
+
+**How this went unnoticed until the last loop of step 10:** none of the seven §6.1 measurements
+10a-F4 asked for checked it — six measure column counts and relative positions, the seventh a
+`display` toggle — and the script measured the 1280 checkpoint at height **900**, below the 1024
+the promise is conditioned on, so it could not have observed it even incidentally. One
+`page.evaluate` would have. **It is measurement 9 now**, and it is the only reason that script
+exits non-zero.
+
+---
+
+⚠ **§0.3's determinism problem is CLOSED** (`3c37107`, 2026-09-08) and this paragraph used to
+say otherwise — it read *"`pnpm verify` is not deterministic today … re-owned to 10c-3"*, which
+is the stale-in-the-dangerous-direction shape this file warns about two paragraphs down, still
+present in the very sentence pointing at it. `10a-F17` was **not** in 10c-3's scope because it
+was already fixed. §0.3 is worth reading for the reasoning; it is not a live warning.
+§0.1, §0.2, §0.4, §0.5, §0.6, §0.7 and the new **§0.8** remain true.
 
 ⚠ **§0.7 is new and it is the most transferable thing 10c-2 cost: a guard can be written so that
 it fails when the project SUCCEEDS.** One test file stood between a green suite and a red one,
@@ -17,9 +72,18 @@ and the failing message would have read as though the guard were broken. It also
 measured answer to *"can the bare-word `toContain` case be mechanised?"* — **yes, in a matcher,
 at 9.5 %**, which contradicts what three earlier documents said.
 
-**Next is 10c-3 — sizing and visual** (see §9): **L9**, `10b-F14b`, SCOPE 2.5f's
-`max-height: 100%`, **Q2-F9**'s clamp-vs-drop, **10a-F4**'s remaining half (the seven viewport
-measurements, headless), `10c1-A9-paint`'s scoping, and the banner-item wrapping question. **Step 10 closes with it.**
+**Next is step 11 — packaging** (`pipeline/INSTALL-SPEC.md` specifies `dashboard.sh` before it
+is written). ⚠ **But read §0.0 first**: step 10 closed with §6.1's promise broken, and if the
+owner's answer is "shrink the panels" or "bound the grid", that is a change to the artifact step
+11 packages and it should land before the image is specified rather than after.
+
+**10c-3 closed these**, all of them recorded open in earlier versions of this file: **L9**
+(`CHART_SIZE`, ⚠ with A7's correction to its recorded justification), **`10b-F14b`** (the
+sparkline's `gaps` prop, ⚠ then corrected three ways by A4/A5/A9), **SCOPE 2.5f** (verified, not
+changed — and A1 strengthens the reason), **Q2-F9** (decided DROP, `clipPlotsToDomain`),
+**10a-F4's remaining half** (a real headless browser: **9 pass · 3 fail · 0 blocked**, the three
+failures being §0.0), **`10c1-A9-paint`** (paint-tier only, by construction) and the
+**banner-item wrapping question** (recorded for the owner, no CSS invented).
 
 ⚠ **`10a-F17` is NOT on that list — it was FIXED and committed at `3c37107` on 2026-09-08**, ahead
 of 10b landing, at the owner's instruction. Three rows in this document said otherwise and sent
@@ -580,6 +644,81 @@ the implementation.
 
 ---
 
+## 0.8 ⚠ NEW — what 10c-3 found, and the four rules to carry out of it
+
+Twelve adversarial findings, **all twelve accepted** (two in part), zero rejected outright, two
+sub-parts deferred with owners. Full adjudication in
+`pipeline/steps/10-panels-assembly/10c3-reconciliation.md`. Four things generalise past this loop.
+
+### ⚠ THE RULE — a measurement that names a subject must prove the subject EXISTS
+
+`measure-breakpoints.mjs` printed `PASS  6. <900px: panel priority order (… -> STORAGE -> LOG)`
+for two years' worth of reader-confidence and had looked at **nothing**. It asked for
+`[data-slot="storage"]` and `[data-slot="log"]`; the grid renders `storage-and-network` and
+`session-event-log`. Attribute selectors are exact-match, both `querySelector`s returned `null`,
+and the ordering predicate was written null-tolerant:
+
+```js
+ys.every((y, i) => i === 0 || y === null || ys[i - 1] === null || y >= (ys[i - 1] ?? 0))
+```
+
+so both comparisons involving them were **skipped**. With every slot `null` it returns `true`: a
+fully vacuous PASS was one rename away. **Two phases read that line as evidence.** The same
+script had a second instance: `getComputedStyle(el).gridTemplateColumns` computes to the literal
+`'none'` on a non-grid element, and `'none'.split(/\s+/).filter(Boolean).length === 1`, so the
+"1 column" measurement passed on an element that was not a grid at all.
+
+This is the **fifth** instance of §0.6's shape (*an assertion whose subject does not render
+cannot fail*) and the first outside the test suite. The fix has two halves and both are the
+point: name the subject correctly, **and make a missing subject fail loudly instead of being
+skipped**. There is now a measurement 0 whose whole job is to assert all nine slots exist.
+
+### ⚠ A browser measurement does not need production code to fabricate its precondition
+
+Two documents concluded that observing the ≥1600px chart promotion required extending
+`force-alarm.ts` — production-adjacent code, shipped in the bundle, behind two gates — to
+fabricate a `gpus` array, because this dev Mac's `/api/telemetry` returns `gpus: null` and the
+GPU panel takes its takeover branch. **The measuring browser can rewrite the response itself**
+(`page.route` → `route.fetch` → `route.fulfill`), and then the wire validator, the ring,
+`traceFor`, the severity bands and the panel all run **completely unmodified** against a real
+response with one collection substituted. Nothing ships. Invariant 2 is untouched — a response is
+reshaped in the browser's memory; no request is built.
+
+Consequence beyond this loop: *"we cannot observe X without hardware"* deserves one look at the
+seam between the server and the client before it is recorded as blocked. Measurements 7 and 8
+both pass now, and the second one — the 1280–1599px side of the same media query, the **design
+target** — had never been observed in either direction by anything.
+
+### ⚠ Two views of one dataset must be computed from ONE derivation, not two agreeing ones
+
+`Sparkline` computed gap marks per **adjacent point-pair**; `StackedTimeSeriesChart` computes
+them per **gap**. Nothing linked the two, and three separate defects fell out of the mismatch: a
+gap flanked by a `null` produced no mark **and no table row** (so the accessibility floor said
+less than the chart it substitutes for); a gap spanning several pairs drew three marks and listed
+**three identical outages** where the chart lists one — in §6.7's explicitly blessed case, which
+says such a reading leaves the gap *"neither closed nor split"*; and an open gap (`toMs: null`,
+which extends to `+Infinity`) matched every pair, falsifying the module doc's claim that an
+out-of-window gap is *"excluded by construction"*.
+
+One `gapSpansFor(points, gaps)` now feeds both the marks and the table rows. Q2-F9's
+`clipPlotsToDomain` is the same rule applied one component over — one derivation above the `view`
+branch, both branches reading it. **Where two renderings of one fact are computed separately,
+they will disagree; the only question is when someone notices.**
+
+### ⚠ Wiring a prop is a property, and an optional prop makes it an untested one
+
+`Sparkline.gaps` is optional; `StackedTimeSeriesChart.gaps` is required — for the identical fact.
+Deleting `gaps={state.gaps}` from **both** CPU call sites left `pnpm verify` at **2801/2801
+green** with both harnesses silent, silently restoring the F14b defect (a smooth line across
+ground nobody sampled) in the band §6.1 calls the design target. The build's own note called that
+*"worth a code-review habit, not a guard"*; **L11 was the same shape in the previous loop and got
+a guard.** It is now three mutations and two behavioural fixtures, one per production call site.
+The enabling fixture change is §0.6's rule again: `test-support.ts`'s state builder always
+carried `gaps: []`, and a fixture whose two subjects are identical cannot discriminate between
+them.
+
+---
+
 ## 1. How to run anything
 
 `pnpm` is installed through corepack into a directory that is **not** on this machine's
@@ -671,8 +810,8 @@ python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 13
 python3 pipeline/steps/06-telemetry-route/regressions.py                    #  63 mutations + ledger
 python3 pipeline/steps/07-auth-login/regressions.py                         # 128 mutations + ledger
 python3 pipeline/steps/08-client-runtime/regressions.py                     # 174 mutations + ledger
-python3 pipeline/steps/09-ui-primitives/regressions.py                      #  95 mutations + ledger
-python3 pipeline/steps/10-panels-assembly/regressions.py                    # 172 mutations + ledger
+python3 pipeline/steps/09-ui-primitives/regressions.py                      # 102 mutations + ledger
+python3 pipeline/steps/10-panels-assembly/regressions.py                    # 175 mutations + ledger
 ```
 
 ⚠ **10c-2 touched THREE and re-ran three — steps 2, 3 and 10 — and its reconcile phase re-ran
@@ -861,7 +1000,7 @@ Everything under `dashboard/`. Nothing outside it has been created or modified e
 | **`lib/client/force-alarm.ts`** | **New in 10c-1.** 10a-F4's alarm-forcing escape hatch — a pure function of `(body, search, nodeEnv)` wrapped around `RuntimeEnv.fetchTelemetry`, so a forced alarm runs the real validation, severity, debounce and banner path. Gated on `NODE_ENV !== 'production'` **and** an undocumented query string; the production gate is now a **behaviour** (`use-telemetry.force-alarm.test.tsx`, `10c-UT1`), not just a token |
 | **`lib/tocontain-scope.test.ts` · `cross-harness-ledger.test.ts` · `dangling-css-class.test.ts` · `unit-suffix.test.ts`** | **New in 10c-2.** Four mechanism guards over the source tree, not over the product: the document-wide `toContain` lint, the cross-harness `LEDGER_FILES` runner, the dangling-CSS-class audit and L11's unit-suffix guard. All four walk the tree, all four are comment-blind, all four are in step 10's `LEDGER_FILES` with one `10c-G*` mutation apiece. ⚠ What each is blind to: §5.3 |
 | **`lib/format.ts`'s `UNIT_*` constants** | **New in 10c-2.** `UNIT_CELSIUS`/`WATTS`/`MIB`/`GIB`/`RPM`/`MHZ`/`PERCENT`/`MB_PER_S`/`KB_PER_S` — the nine §6.6 suffixes, and every formatter now builds its suffix from one of them rather than from an inline literal. **Not `lib/units.ts`**, which means systemd unit names |
-| **99 test files** | **2775 tests** (10c-2: 2627 → 2745 build+test → **2775** reconcile, +30 guard fixtures) |
+| **99 test files** | **2793 tests** (10c-2 left 2775; 10c-3's build → 2788; its reconciliation → **2793**: the A6 wiring fixtures and A5's replacement for an inert test) |
 | `package.json` · `pnpm-lock.yaml` · `tsconfig.json` · `next.config.mjs` · `vitest.config.mts` | pinned toolchain; `strict` + seven more flags, all asserted |
 | `app/layout.tsx` · `app/page.tsx` | ⚠ **No longer placeholders.** `page.tsx` renders `<DashboardShell />` and nothing else; `layout.tsx` imports `components/tokens.css` and paints the ground from tokens. ⚠ **`app/page.tsx` must stay free of telemetry** — see §6 — and it is now tested (`app/page.test.tsx`) |
 
@@ -1042,8 +1181,10 @@ its own view.
 | Component | Surface worth knowing |
 |---|---|
 | `PanelShell` · `Chip` · `Meter` · `Row` | step 9's. `Meter`'s bar is `aria-hidden` with its value as adjacent visible text (a deliberate anti-double-announcement decision) — which is why it is **not** a per-mark-tooltip site |
-| `Sparkline` | `points` · **`ariaLabel`** · `color` · `formatValue` · `formatTime` (all **required**) · `width?` `height?` · **`view?: 'chart' \| 'table'`** (default `'chart'`) |
-| `StackedTimeSeriesChart` | `id` · **`ariaLabel`** · `plots` · `gaps` · `domainStartMs` · `domainEndMs` · `formatTime` · `width?` `plotHeight?` · **`view?: 'chart' \| 'table'`** (default `'chart'`) |
+| `Sparkline` | `points` · **`ariaLabel`** · `color` · `formatValue` · `formatTime` (all **required**) · `width?` `height?` · **`view?: 'chart' \| 'table'`** (default `'chart'`) · ⚠ **`gaps?`** — new in 10c-3 (F14b). Optional, unlike the chart's **required** `gaps`, so a new caller inherits the defect by omission: pass `state.gaps`, always, and see §0.8 |
+| ⚠ **Gap rendering, both primitives** | **One mark and one table row per GAP** — never per adjacent point-pair, never suppressed because a `null` sits beside it. `Sparkline.gapSpansFor` and `StackedTimeSeriesChart`'s `gaps.map` must keep agreeing; three defects came out of them disagreeing (§0.8). ⚠ `Sparkline` also BREAKS the polyline across a gap; the chart draws through and hatches behind, because it positions by real time and the sparkline positions by index |
+| `StackedTimeSeriesChart` | `id` · **`ariaLabel`** · `plots` · `gaps` · `domainStartMs` · `domainEndMs` · `formatTime` · `width?` `plotHeight?` · **`view?: 'chart' \| 'table'`** (default `'chart'`). ⚠ **It now enforces its own domain precondition** (`clipPlotsToDomain`, Q2-F9): an out-of-domain point is DROPPED from the polyline, the marks, the hover layer and the table, once, above the `view` branch |
+| ⚠ **`CHART_SIZE` (`components/grid.tsx`)** | The one place a chart's pixel box comes from (L9). ⚠ **`sparkline.height` is a total `<svg>` height; `cooling.plotHeight` and `gpuPromoted.plotHeight` are PER PLOT** — the field was called `height` on all three until 10c-3's A7, and COOLING's chart paints **450px** for a declared 210. A new panel adds a named export here, never a literal at the call site |
 
 **Five things about them that will bite a caller, all learned the expensive way:**
 
@@ -1836,7 +1977,7 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | ~~**`errorsForPanel(snapshot, panel)`**~~ (D4) | — | **closed 2026-09-07** — `lib/client/observations.ts:350`. ⚠ Carried as open here until Q2 checked |
 | ~~**`traceFor(state, pick)`**~~ (D5) | — | **closed 2026-09-07** — `lib/client/series.ts:201`. Same |
 | ~~The GB → GiB rename~~ (O19) | — | **closed 2026-09-07** — a deletion; `GiB` already existed |
-| **Formatter `parts` variant** (O14) | ⚠ **10c-3** (was step 9, step 10, 10b) | open — re-checked by 10b: the nine panels render headline figures and still never split a formatted string, so the ask has not arisen. §4 |
+| **Formatter `parts` variant** (O14) | ⚠ **step 11 / owner** (was step 9, step 10, 10b, 10c-3) | open — re-checked by 10c-3: still nothing splits a formatted string, and 10c-3 added no styled unit. **The ask has not arisen in four consecutive loops**; it should be closed as a non-item or re-scoped by the owner rather than carried forward a fifth time |
 | ~~**jsdom** (D6)~~ | — | **closed by 10a** — `jsdom@30.0.1`, both halves tested, and `next build` re-run to confirm it does not reach `.next/standalone`. ⚠ jsdom still cannot see `:hover`, `position: sticky`, `matchMedia` or layout — that is the browser item below, not this one |
 | ~~S11/G5's **panel-rendering residue**~~ | — | **closed by 10b** — by construction, and the guard rebuilt to assert the ruling rather than three substrings. §8 |
 | **S40's third event-log feed** (D1) | **10c / owner** | open — `LogEntryKind` is `lib/client/events.ts`'s and was outside 10b's file scope. ⚠ `event-sentence.ts`'s exhaustive switch makes the new kind a **compile error** in the panel the day it lands, so the panel half is future-proofed |
@@ -1850,40 +1991,45 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | ~~**Q1** — the ⚠-scanner back-port~~ | — | **closed 2026-09-07** — 771 mutations, 689 marks, eight harnesses green. §0.1 |
 | ~~**Q1-F4** — assert every ⚠-bearing test file is in some `LEDGER_FILES`~~ | — | **closed by 10c-2** — `lib/cross-harness-ledger.test.ts`, union and real set both walked every run (96 ⊆ 97 today, one orphan left: `lib/throttle.test.ts`, mark-free). It adopted `lib/contract.test.ts` into step 3's ledger (`10c-G1`) and caught its own four siblings as orphans the moment it was written. ⚠ Its anti-vacuity check was **inverted** and is fixed — §0.7 |
 | ~~**Q2** — §6.2's hover layer and table view~~ | — | **closed 2026-09-08** — 13 findings adjudicated, `components/` harness at 93 mutations. §0.2 |
-| **Q2-S2** — the table view's height, against §6.1's no-scroll promise | **owner**, then **10c-3** | ⚠ open — but **now reachable**: 10c-1 gave the toggle its `app/`-owned home, so four panels really do render a table view in a mounted page. The session event log also uses `--table-scroll-max` for its own scroll region. **Answered for the stopgap, not for the layout:** `--table-scroll-max: 40vh` still stands, and the grid now gives a panel body a bounded ancestor, so SCOPE 2.5f's `max-height: 100%` replacement is possible — **10c-3**, with a browser |
+| **Q2-S2** — the table view's height, against §6.1's no-scroll promise | ⚠ **owner** — and it is now PART OF §0.0 | ⚠ open, and **materially worse than when it was written**. 10c-3 verified 2.5f: **no panel body has a bounded ancestor**, so `max-height: 100%` would compute as unconstrained and silently uncap the table — `--table-scroll-max: 40vh` stays, correctly. But §0.0 measures the page scrolling by 560–632 px **with every panel in its chart view**, and a single toggle to `table` adds up to 40vh (432 px at 1080) on top. The two questions are now one: whoever decides §6.1's answer decides this. **The table view has never been measured in a browser at any width** |
 | **Q2-S1** — §6.2's per-mark tooltip clause vs the crosshair layer that occludes it | **owner** | open — §8 |
-| **Q2-F9** — the chart clamps out-of-domain points; the domain's containment is a precondition it neither states as a prop rule nor checks | **owner**, then 10c | open. ⚠ **Sidestepped, not resolved, by 10b**: `chartDomainOf` computes the same window `traceFor` uses, so no panel in this loop can feed an out-of-domain instant. The *rendering* decision (clamp vs drop) is still unmade for a future caller without that property |
+| ~~**Q2-F9** — clamp vs drop for an out-of-domain instant~~ | — | **closed by 10c-3 — DROP.** `clipPlotsToDomain` filters every series once, above the `view` branch, so the chart, the hover layer and the table cannot disagree about which points exist. Reasoning: a mark's x **is** its claimed instant, so pegging it to a rail is a positional lie with no "capped but recognisable" story (unlike §6.3's magnitude clamp, which keeps the real time and puts the real number in the tooltip). ⚠ It also closed a gap F9 was never scoped to: `tableRowsFor`'s sample rows had **no** domain filter at all. `Q2-H10` retired (unreachable through the public component), `10c-F9-1`/`F9-2` added |
 | ~~**10b — the nine panel bodies**~~ | — | **closed 2026-09-08** pending the parent's review — 14 findings adjudicated (11 accepted, 1 in part, 2 deferred, 0 rejected outright). **92 files · 2559 tests · step 10's harness at 129 mutations · 150 ⚠ marks.** `10b-reconciliation.md` |
 | ~~⚠ **Wire the nine panels into `app/dashboard-shell.tsx`**~~ | — | **closed by 10c-1, 2026-09-08** — nine real panels mounted, `PanelPlaceholder` deleted, SVG ids distinct per cell, and the composition itself found five defects no isolated panel test could see (§0.6). `10c1-reconciliation.md` |
 | ~~**Q2-S2's toggle needs a home in `app/`**~~ | — | **closed by 10c-1** — `chartViews` in `app/dashboard-shell.tsx`, one entry per chart-bearing panel, the control rendered beside each chart per §6.2. ⚠ Granularity (one per panel, not per chart) is an **invariant-7 recording**, not a spec ruling |
 | ~~**10a-F4, half two: force an alarm client-side**~~ | — | **closed by 10c-1** — `lib/client/force-alarm.ts`, wrapped around `RuntimeEnv.fetchTelemetry` so the real validation/severity/debounce/banner path runs and a forced alarm takes the same two-poll confirmation a genuine one does. ⚠ Its **production unreachability is now a test** (`10c-UT1`), not an unwatched `process.env.NODE_ENV` token — the adversarial replaced that token and reached a real `pnpm build` chunk with everything green |
 | ~~⚠ **10c1-A8-audit** — a static check that every `styles.X` names a rule its sibling `.module.css` declares~~ | — | **closed by 10c-2** — `lib/dangling-css-class.test.ts`, 18/18 CSS-module imports audited, quote- and namespace-agnostic, proportional population check (`10c-G3`). Was: **A CSS-module import is a Proxy: every key resolves, including keys with no rule** (§0.6), so a deleted or misspelled class is invisible to `tsc` and to the whole suite. The one live instance (`alarm-banner.tsx`'s `styles.item`) is **fixed**; the mechanism that hid it is not. ~15 lines, no browser, no runtime — it belongs beside `10b-F1-guard` and `L11` |
-| ⚠ **10c1-A9-paint** — scope the browser step to **paint only** | **10c-3** | open. Binding is observable in jsdom today and a dangling reference is statically checkable; only cascade, specificity, media queries, the ≥1600px `display:none` promotion, overflow and stacking need a real browser. §0.6's three-tier table. **Do not ask the browser step to carry the other two tiers** |
-| ⚠ **Banner items: should a condition be forbidden from wrapping mid-condition?** | **10c-3**, with the owner | open, raised by 10c-1's A8 fix and **deliberately not answered**. `alarm-banner.tsx`'s per-condition `<span>` now carries no class; the layout works on `.rest`'s `flex-wrap: wrap; gap: .4em 1em` — **by luck rather than by design**. Declaring a `white-space: nowrap` rule would be inventing; look at it in the browser pass and decide |
+| ~~⚠ **10c1-A9-paint** — scope the browser step to **paint only**~~ | — | **closed by 10c-3, by construction.** `measure-breakpoints.mjs` reads exactly two kinds of fact: `getBoundingClientRect` (where something painted) and `getComputedStyle`'s `display`/`gridTemplateColumns` (what rendered post-cascade, post-media-query). It never asserts which class an element carries (jsdom's tier) and never checks that a `styles.X` resolves (10c-2's static audit). §0.6's three-tier table held |
+| ⚠ **Banner items: should a condition be forbidden from wrapping mid-condition?** | ⚠ **owner** (was 10c-3) | open. 10c-3 looked at it in the browser pass and **still declined to invent a rule**, which is the right outcome: §6.4 specifies the banner's content and its collapsing rule and says nothing about an individual item's text wrapping. Both answers are real trade-offs — `white-space: nowrap` risks clipping or a horizontal scrollbar in the <900px band where several conditions are likeliest; free wrapping risks a label reading as separated from its own value in the one component whose job is an unambiguous glance. **A sentence in §6.4 settles it**; if it forbids wrapping, `.item { white-space: nowrap }` (or a `min-width`) is the fix and someone must also say what happens to an item too long for the narrowest supported width |
 | ~~**10b-F1-guard** — forbid the document-wide `toContain` shape mechanically~~ | **PARTLY closed by 10c-2** | `lib/tocontain-scope.test.ts` closes **two of the four** founding shapes (bare `data-severity`, bare em dash) inside composite panels; it found 8 real hits, and its own reconcile-phase narrowing found a 9th (§0.7). ⚠ **The bare-WORD half is open and is now measured** — see the new row below |
 | **10b-F11 / 10b-S-F** — a panel head reading `normal` over one of its own em dashes | **owner**, then 10b/10c | open — §8. Deferred deliberately: it changes what every panel head means, which is not a reconciler's call |
-| **10b-F14b** — at 1280–1599px (the design target) the GPU and CPU traces cannot hatch a gap | **10c-3**, with L9 | open. `Sparkline` takes no `gaps` prop by design, so HANDOVER's *"hatch `state.gaps`, never a hole in a series"* holds only above 1600px, where the promoted chart receives them. The fix is a new prop on **step 9's** primitive or a different primitive at the design breakpoint — both are L9's sizing question, and 10c owns L9 and the browser pass that would show which |
+| ~~**10b-F14b** — at 1280–1599px the GPU and CPU traces cannot hatch a gap~~ | — | **closed by 10c-3, then CORRECTED THREE WAYS by its own adversarial.** `Sparkline` gained an optional `gaps` prop. ⚠ The failure was worse than "no hatch": with no null placeholder in the ring, the points either side of a gap are **adjacent in the array**, so index-positioning drew one smooth unbroken line across unsampled ground. The build's first implementation then computed marks per adjacent PAIR where the promoted chart computes them per GAP — A4/A5/A9, all three fixed by `gapSpansFor`. See §0.8 |
 | **10b-F14a** — SERVING's composite row value reads `:— · — · ctx — · health —` for an identity-only instance | **owner** | open, cosmetic. Not an O14 violation (it concatenates whole formatter outputs, never splits one); changing it means inventing a composition rule §6.6 does not state |
 | **10b-S-E · S-F · S-H** — three spec questions (~~S-G~~ is **ruled and implemented**) | **owner** | §8. Two implemented conservatively, S-F not implemented |
 | ~~**10b-S-G** — `errors[]` gains an optional `instance`~~ | — | **closed 2026-09-08** pending the parent's review — build → test → adversarial → reconcile, **11 findings adjudicated** (6 accepted of which 3 in part, 1 rejected, 2 deferred). The `errors[]`→`llama-server` join is **structural**, not a substring match. `10b-sg-reconciliation.md` |
 | ⚠ **S-G-Q1** — several entries from one source about one instance: only the last is rendered, anywhere | **owner** | open — §8. `readEnv` files one entry per parse problem, so this loses a real reason on a real box. The doc that claimed otherwise is corrected; **the behaviour is unchanged and deliberate**, because §6.5 says "the reason", singular |
 | ⚠ **S-G-Q2** — a `dbus` entry with **no** instance conflates a bus-wide failure with `collectSafety`'s per-unit one | **owner**, then whoever owns §4 | open — §8. ⚠ **This is the residue of the A2 fix and it is named at both call sites in the code.** COOLING and SAFETY now ignore entries that name an instance; entries that name none still reach all three panels, so SERVING prints `gpu-fan-control.service`'s failure under its rows. Needs a second structural subject or two sources — not a reconciler's call |
 | **S-G-Q3** — which of the eighteen sources may carry an `instance` is a judgement in a document | **owner** | open — §8. Enforced today by a test per path (`10b-SF1`, `10b-SG1`, `10b-SG2`). A type-level constraint was **rejected** as the fix here: it means a discriminated union over eighteen sources and a per-source rule in `wire.ts` that `SPEC.md` never states |
-| **S-G-Q4** — duplicate `instance` values in `serving[]` validate and render twice under one React key | **owner**, then **10c-3** (10c-2 was a guards loop and did not touch `wire.ts`) | open — §8. The collector prevents it; `wire.ts` does not, and its own header says its purpose is not to trust the other side |
+| **S-G-Q4** — duplicate `instance` values in `serving[]` validate and render twice under one React key | **owner**, then **step 11** (was 10c-2, then 10c-3; both were scoped elsewhere and neither touched `wire.ts`) | ⚠ open — §8, and **carried unactioned through two loops now**, which is the shape a row acquires just before it is forgotten. The collector prevents it; `wire.ts` does not, and its own header says its purpose is not to trust the other side |
 | **S-G-A10** — should the session event log be per-instance? | **owner** (was "10c-2 / owner"; 10c-2 built guards only) | open, low. `events.ts:400` folds `errors[]` last-per-source across **all** instances while a SERVING row is now last-per-source **per** instance, so with both instances failing `/health` the log's one sentence is instance 1's while row 0 shows instance 0's. `events.ts` has no row to hang an instance on, which is why this is a question and not a bug. The comment that cited the two as agreeing is corrected |
 | ~~**S-G-A11** — turn on `exactOptionalPropertyTypes`~~ | — | **closed by 10c-2 as a NON-ITEM.** ⚠ The flag has been `true` since the **first commit** and `guardrails.test.ts` has asserted it as text since then; `{ ...base, instance: maybeUndefined }` reports `TS2375` today. The earlier measurement ran `tsc` with a flag that was already on and proved nothing. `tsconfig.json` unchanged; the two source comments carrying the wrong reason are corrected — §0.5 |
 | ~~**10a — the shell**~~ | — | **closed 2026-09-08** — 18 findings adjudicated (16 accepted, 2 deferred, 1 half-rejected). 79 files · 2399 tests · nine harnesses · 875 mutations. `10a-reconciliation.md` |
 | ~~**10a-F17**~~ | ✅ **CLOSED** | Fixed and committed `3c37107`, 2026-09-08, ahead of 10b landing. Fake timers; `deadline.ts`/`serving.ts` byte-identical; 60/60 under load; still fails when the defect returns. **This row previously said "open and untouched" and was wrong** — it sent 10c-2's reconciliation to re-own a closed item |
-| ⚠ **10a-F4 — nothing in the pipeline runs a browser AUTOMATICALLY** | **10c-3** | ⚠ **half closed.** (2) — the alarm-forcing hatch — is **built and tested** by 10c-1. (1) is still open: the seven measurements re-run headlessly, `getBoundingClientRect` at 820/899/900/1150/1279/1280/1920, asserting COOLING's `y`/`height`/`x` span at ≥1280 and the `y`-order at <900. ⚠ **10c-1 ran a real Chrome by hand and five of the seven passed**, but `resize_window` could not set the viewport — `window.innerWidth` read a constant 3440 across every call — so measurements 1–4 and 6 are unexercised. That is a **tooling** limit, cleanly separated from the app, and it is the concrete argument in `10c1-build.md` §3.3 for a purpose-built harness (Playwright/Puppeteer, verified absent from `.next/standalone` the way jsdom was) rather than half-solving it with the wrong tool. ⚠ **Scope it to paint only** — see `10c1-A9-paint` above |
+| ⚠ **10a-F4 — nothing in the pipeline runs a browser AUTOMATICALLY** | ⚠ **half CLOSED by 10c-3; the "automatically" half is step 11/12's** | ✅ The measurements exist and run: `pipeline/steps/10-panels-assembly/measure-breakpoints.mjs`, `playwright-core` driving the **system** Chrome over CDP, **12 measurements: 9 pass · 3 fail · 0 blocked**. The three failures are §0.0 and they are the spec's. ⚠ **Nothing runs it automatically and it must not join `pnpm verify`** (ANCHOR §4: one deterministic command, no browser prerequisite) — wiring it into a CI step is **step 11/12's**. ⚠ It is macOS-only (hardcoded Chrome path) and measures `next dev`, **not** the standalone build step 11 ships — **step 12** should point it at the built artifact. Prior wording, for the record: | ⚠ **half closed.** (2) — the alarm-forcing hatch — is **built and tested** by 10c-1. (1) is still open: the seven measurements re-run headlessly, `getBoundingClientRect` at 820/899/900/1150/1279/1280/1920, asserting COOLING's `y`/`height`/`x` span at ≥1280 and the `y`-order at <900. ⚠ **10c-1 ran a real Chrome by hand and five of the seven passed**, but `resize_window` could not set the viewport — `window.innerWidth` read a constant 3440 across every call — so measurements 1–4 and 6 are unexercised. That is a **tooling** limit, cleanly separated from the app, and it is the concrete argument in `10c1-build.md` §3.3 for a purpose-built harness (Playwright/Puppeteer, verified absent from `.next/standalone` the way jsdom was) rather than half-solving it with the wrong tool. ⚠ **Scope it to paint only** — see `10c1-A9-paint` above |
 | **10a-S-A · S-B · S-C · S-D** — four spec questions | **owner** | §8. Three implemented conservatively, S-C not implemented |
-| **10a — SCOPE 2.5f**: replace `--table-scroll-max: 40vh` with `max-height: 100%` | **10c-3** | open — now unblocked by 10a's grid, but wants a browser to confirm |
+| **10a — SCOPE 2.5f**: replace `--table-scroll-max: 40vh` with `max-height: 100%` | ⚠ **whoever answers §0.0** (was 10c-3) | ⚠ **VERIFIED AND DELIBERATELY NOT CHANGED**, twice independently (10c-3's build and its test phase, by re-grepping every `height`/`min-height`/`max-height` under `components/` and `app/`). `grid.module.css` sets `grid-template-columns` at every breakpoint and **never `grid-template-rows`** — rows are `auto`. `min-height: 0` appears throughout and bounds nothing (it removes an implicit minimum). So **no panel body has a definite-height ancestor**, and `max-height: 100%` would compute as unconstrained per CSS's percentage-height rule and silently uncap the table again. `tokens.css` now records the verification. ⚠ Giving the grid a real bounded height is not a token flip — it is one of §0.0's three repairs |
 | ~~**10c-1 — the wiring**~~ | — | **closed 2026-09-08** pending the parent's review — **12 findings adjudicated: 10 accepted, 0 rejected, 2 deferred.** 95 files · 2627 tests · step 10's harness at **168 mutations · 196 ⚠ marks**. `10c1-reconciliation.md`, and §0.6 for the rule it leaves behind |
 | ~~**10c-2 — the guards**~~ | — | **closed 2026-09-08** pending the parent's review — **11 findings adjudicated: 11 accepted (2 in part), 0 rejected outright, 2 sub-parts rejected on measurement, 1 deferred build (F7).** 99 files · **2775 tests** · step 10's harness at **172 mutations · 200 ⚠ marks**. `10c2-reconciliation.md`, and §0.7 for the rules it leaves behind |
-| **10c-3 — sizing and visual** | **10c-3** | ⚠ **NEXT, and step 10 closes with it.** ⚠ It does **NOT** carry `10a-F17`, which is closed (`3c37107`). `L9` · `10b-F14b` · SCOPE 2.5f's `max-height` · `Q2-F9` · `10a-F4`'s remaining half · `10c1-A9-paint`'s scoping · the banner-item wrapping question |
+| ~~**10c-3 — sizing and visual**~~ | — | ⚠ **closed 2026-09-09 pending the parent's review — CLOSED WITH A KNOWN FAILURE (§0.0), not green.** **12 findings adjudicated: 12 accepted (2 in part), 0 rejected outright, 2 sub-parts deferred with owners.** 99 files · **2793 tests** · step 9's harness at **102** mutations / 114 ⚠ marks · step 10's at **175** / 203. `10c3-reconciliation.md`, and §0.8 for the rules it leaves behind |
 | ~~**L11** — a guard against a component hard-coding `' RPM'` instead of calling a formatter~~ | — | **closed by 10c-2** — `lib/format.ts` now exports nine `UNIT_*` constants and every formatter builds from them; `lib/unit-suffix.test.ts` scans every non-test `.ts`/`.tsx` under `components/`/`app/` for a unit spelled around a value, in a literal **or in JSX text** (`10c-G4`). Vocabulary is DERIVED from the `UNIT_*` exports, so a tenth unit is in scope automatically. ⚠ Blind to `` `${pct}%` `` — deliberately, with a counter-example: §0.7 |
 | ⚠ **F7 — the runtime `toContain` matcher** (10c-2's adversarial) | ⚠ **a dedicated loop, NOT 10c-3** — the owner places it in `WORK-ITEMS.md` §10 | **open, and MEASURED so nobody re-derives it: 43/454 calls (9.5 %) flagged, 7 already exempt, 36 to adjudicate, against 198 for the source-lint version — and it catches 4 of the 4 founding failures where the shipped lint catches 2.** The rule is *"the needle occurs more than once in the subject"*, decided at run time from the subject alone, so none of the static bypasses apply. It is a `test.setupFiles` change (project-wide harness mechanics, which must itself be mutation-proven) plus a staged report-then-gate adoption — a loop with its own build/test/adversarial phases, not a bolt-on. §0.7 |
 | ⚠ **Mutation coverage for the four guards' anti-vacuity nets** | ⚠ **a later loop / the owner** | open. No `10c-G*` mutation breaks a file-walk, so nothing requires any of the four nets to be able to fail; all four were proven functional **by hand** (10c-2's test phase, then its reconciliation). Four mutations, one per guard, each blinding that guard's walk. §0.7 |
 | **10c-2's `dashboard-shell.tsx` scope gap** | **whoever writes the next `toContain` guard** | open, recorded per invariant 7. `app/dashboard-shell.tsx` renders all nine panels — the most multi-carrier context in the project — and is outside the lint's scope because it imports panel *components*, not `PanelShell`. Harmless today only because `dashboard-shell.ssr.test.tsx` happens to assert neither dangerous literal |
+| ⚠ **§6.1's no-scroll promise is broken — the layout or the spec must change** | ⚠ **owner**, then whoever implements the answer (10-series or step 11) | ⚠ **open, and it is why step 10 closed with a known failure.** Measured 596/632/560 px of page overflow at 1280×1024 / 1600×1024 / 1920×1080. **Stated in full in §0.0 with per-panel heights**, deliberately not in this table |
+| ⚠ **The gap mark's contrast, in BOTH chart primitives** (10c-3 A8) | **owner** | open. `Sparkline`'s gap tint measured **1.120:1** against the panel ground; the reconciliation dropped its opacity so it now matches `StackedTimeSeriesChart`'s own blessed hatch stroke at **1.245:1**. Neither clears WCAG 2.2 SC 1.4.11's 3:1 for a non-text UI component, and **`SPEC.md` adopts no contrast standard** — §9's colour rule is about *series identity* (colour + dash + end-label), which a gap mark is not. Raising either is a token-level decision across both components. ⚠ What IS discharged: a gap is never carried by colour alone — the polyline breaks across every gap and the table carries a row for every gap in every case |
+| ⚠ **Nothing has loaded the STANDALONE build's CSS in a browser** (10c-3 A10) | **step 12** | open. Every browser fact in step 10 comes from `next dev` on a GPU-less macOS host. CSS modules behave the same in both, so the risk is low — but it is unmeasured, and `measure-breakpoints.mjs` is the tool that would measure it if pointed at the built artifact |
+| ⚠ **Wire the breakpoint measurements into something that runs them** (10c-3 A10) | **step 11 / 12** | open. Not `pnpm verify` (ANCHOR §4). ⚠ Its exit code means something again — `BLOCKED` is a third state now — so it *can* gate something; today it exits 1 for exactly one reason, §0.0 |
+| **Make `Sparkline.gaps` REQUIRED, like `StackedTimeSeriesChart.gaps`** (10c-3 A6, the option not taken) | **a later loop** | open, low. The behavioural fixtures + `10c-P1`/`P2`/`P3` close the live hole; requiring the prop is compile-time and strictly stronger, but it forces a prop into every render in `sparkline.test.tsx` that does not care, and it still would not prove the value passed is `state.gaps` rather than `[]`. §0.8 |
 | **O20 · O21 · O22 · D8** — the four silent-failure obligations | **step 11** | §4.1 |
 | **`dashboard.sh check`**: an unparseable `PASSWORD_HASH`; a `SESSION_SECRET` short or quoted; a `STANDING` entry matching nothing; the env file's mode and owner | **step 11** | the only place any of them can be caught, because nothing is logged |
 | **F7 — `LIMITS` bounds scrypt's memory but not its time** (measured 1 720 ms vs 58 ms at the worst accepted parameters) | **step 11** | with `check` |
@@ -2009,6 +2155,20 @@ reductions, `app/dashboard-shell*`, `app/use-now-tick*`, `app/page.test.tsx`,
 `pipeline/steps/10-panels-assembly/` and `pipeline/handoffs/`. **A phase agent stages nothing**
 (`ANCHOR.md` §8), and its green is not the green — the parent re-runs `pnpm verify` itself.
 (Q1 did the same before it: 15 modified files and two untracked directories.)
+
+⚠ **10c-3 leaves the tree dirty on purpose too**, on top of everything below. **Modified by the
+10c-3 loop** (build + reconciliation): `components/sparkline.tsx` · `sparkline.module.css` ·
+`sparkline.test.tsx` · `stacked-time-series-chart.tsx` · `stacked-time-series-chart.test.tsx` ·
+`grid.tsx` · `tokens.css` (comment only) · `panels/{gpu,cpu,cooling}-panel.tsx` ·
+`panels/{gpu,cpu}-panel.test.tsx` · `panels/test-support.ts` · `package.json` + `pnpm-lock.yaml`
+(one devDependency, **`playwright-core`**, verified NOT to reach `.next/standalone`) ·
+`pipeline/steps/09-ui-primitives/regressions.py` · `pipeline/steps/10-panels-assembly/regressions.py`.
+**Untracked:** `pipeline/steps/10-panels-assembly/10c3-{build,test,adversarial,reconciliation}.md`,
+`pipeline/steps/10-panels-assembly/measure-breakpoints.mjs` and `pipeline/handoffs/10c3-*.md`.
+⚠ **`next-env.d.ts` is NOT in that list and must not be** — `next dev` rewrites it on every
+browser run, and the script now restores it itself in `finally` rather than leaving a prose
+instruction to `git checkout --` it (A11). **A phase agent stages nothing**, and its green is not
+the green.
 
 ⚠ **10c-2 leaves the tree dirty on purpose too**, on top of what 10a/10c-1 left. Modified by the
 10c-2 loop: six `components/panels/*.test.tsx` (the eight scoped `toContain` assertions, plus

@@ -1058,9 +1058,13 @@ describe('⚠ Q2/F1 — the hover geometry IS the snap-to-nearest behaviour', ()
     expect(last[0] + last[1]).toBeCloseTo(plotWidth, 5);
   });
 
-  test('⚠ a hover column that collapses to zero width is not emitted at all — a dead node satisfies every count assertion', () => {
-    // `xFor` clamps, so instants outside the domain pile onto the same edge. Three points
-    // before the window and one inside it: the first two collapse.
+  test('⚠ 10c-3/F9 — out-of-domain instants are DROPPED, not clamped, so none of them can collapse a hover column to zero width', () => {
+    // Three points before the [0, 60000] domain, one inside it. Before 10c-3 this component
+    // CLAMPED `xFor`, so the three out-of-domain instants piled onto x=0 and produced
+    // zero-width, unhoverable columns that the `.filter((col) => col.xEnd > col.xStart)`
+    // guard below had to strip out after the fact. Now they are gone before that guard ever
+    // runs — see `clipPlotsToDomain`'s module doc — so exactly ONE hover zone exists: the one
+    // in-domain instant, spanning the WHOLE plot width (nothing else survives to bound it).
     const plot: ChartPlot = {
       id: 'temp',
       formatTick,
@@ -1080,9 +1084,67 @@ describe('⚠ Q2/F1 — the hover geometry IS the snap-to-nearest behaviour', ()
     };
     const html = render({ plots: [plot] });
     const zones = hoverZones(html);
-    expect(zones.every(([, w]) => w > 0)).toBe(true);
-    expect(zones.length).toBe(2);
-    expect(crosshairCount(html)).toBe(2);
+    expect(zones.length).toBe(1);
+    expect(crosshairCount(html)).toBe(1);
+    const [x, w] = zones[0] as [number, number];
+    expect(x).toBe(0);
+    expect(x + w).toBeCloseTo(554, 5); // plotWidth = 600 (default) − 46 (END_LABEL_MARGIN)
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// 10c-3 / Q2-F9, closed — an out-of-domain instant is DROPPED, never clamped to the rail.
+// Clamping pegged a mark at the domain's edge while its tooltip (built from the point's own
+// real `tMs`) named a DIFFERENT instant than where it visually sat — the reconciliation's own
+// "trading a wrong reading for a wrong reading". See `clipPlotsToDomain`'s module doc for the
+// full decision and why the Y-axis clamp (§6.3) is not a counter-example.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ 10c-3/F9 — an out-of-domain point is dropped from every surface, not clamped to the rail', () => {
+  const withOutOfDomain: ChartPlot = {
+    id: 'temp',
+    formatTick,
+    series: [
+      {
+        id: 'a',
+        label: 'Series A',
+        color: '#3987e5',
+        endLabel: '63 °C',
+        points: [
+          { tMs: -30_000, v: 60 }, // before the [0, 60000] domain
+          { tMs: 5_000, v: 61 },
+          { tMs: 15_000, v: 62 },
+          { tMs: 90_000, v: 63 }, // after the domain
+        ],
+      },
+    ],
+  };
+
+  test('⚠ the polyline carries only the two IN-DOMAIN points — never a coordinate for the dropped ones', () => {
+    const html = render({ plots: [withOutOfDomain] });
+    const coords = coordsOf(html);
+    expect(coords).toHaveLength(2);
+  });
+
+  test('⚠ the hover layer has no column for a dropped instant — hovering the domain edge cannot report a reading that was never inside it', () => {
+    const html = render({ plots: [withOutOfDomain] });
+    expect(hoverZoneCount(html)).toBe(2);
+    const titles = [...html.matchAll(/<title>([\s\S]*?)<\/title>/g)].map((m) => m[1] ?? '');
+    expect(titles.some((t) => t.includes('TIME(-30000)'))).toBe(false);
+    expect(titles.some((t) => t.includes('TIME(90000)'))).toBe(false);
+  });
+
+  test('⚠ the table view has no sample row for a dropped instant either — chart and table cannot disagree about which points exist', () => {
+    const html = render({ plots: [withOutOfDomain], view: 'table' });
+    expect(html).not.toContain('TIME(-30000)');
+    expect(html).not.toContain('TIME(90000)');
+    expect(html).toContain('TIME(5000)');
+    expect(html).toContain('TIME(15000)');
+  });
+
+  test('a domain containing every point behaves exactly as before — nothing is dropped that should not be', () => {
+    const html = render({ plots: [gpuPlot()] });
+    expect(coordsOf(html)).toHaveLength(10);
   });
 });
 

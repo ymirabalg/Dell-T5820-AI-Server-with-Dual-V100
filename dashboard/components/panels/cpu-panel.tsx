@@ -98,6 +98,7 @@ export function CpuPanel({ state, view = 'chart', onToggleView }: CpuPanelProps)
         view={view}
         formatValue={(v) => formatCelsius(celsius(v))}
         formatTime={formatTimeOfDayMs}
+        gaps={state.gaps}
       />
       <Row
         label="utilisation"
@@ -113,6 +114,7 @@ export function CpuPanel({ state, view = 'chart', onToggleView }: CpuPanelProps)
         view={view}
         formatValue={(v) => formatPercent(percent(v))}
         formatTime={formatTimeOfDayMs}
+        gaps={state.gaps}
       />
       <Row
         label="load average"

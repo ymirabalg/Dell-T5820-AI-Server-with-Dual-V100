@@ -9,6 +9,7 @@
 import type { DisplayedCondition } from '@/lib/conditions';
 import { EMPTY_CONDITION_STATE } from '@/lib/conditions';
 import { startEventLog } from '@/lib/client/events';
+import type { Gap } from '@/lib/client/gaps';
 import { DEFAULT_CADENCE_SECONDS } from '@/lib/client/prefs';
 import type { WindowMinutes } from '@/lib/client/prefs';
 import { EMPTY_RING, appendSample } from '@/lib/client/ring';
@@ -27,10 +28,34 @@ export const ringOf = (snapshot: TelemetrySnapshot, ms: number = BASE_MS): Sampl
     tsMs: ms,
   });
 
+/**
+ * ⚠ A ring holding SEVERAL accepted samples, stamped `stepMs` apart — the fixture a chart or
+ * sparkline needs, since one sample draws no line and two adjacent points are what a gap has
+ * to fall between. Added by 10c-3's reconciliation for the `gaps`-wiring tests (A6).
+ */
+export const ringOfSeries = (
+  snapshots: readonly TelemetrySnapshot[],
+  stepMs = 60_000,
+  startMs: number = BASE_MS,
+): SampleRing =>
+  snapshots.reduce<SampleRing>(
+    (ring, snapshot, i) =>
+      appendSample(ring, {
+        snapshot: { ...snapshot, ts: isoTimestamp(new Date(startMs + i * stepMs).toISOString()) },
+        tsMs: startMs + i * stepMs,
+      }),
+    EMPTY_RING,
+  );
+
 export interface StateOverrides {
   readonly windowMinutes?: WindowMinutes;
   readonly displayed?: readonly DisplayedCondition[];
   readonly unknownStanding?: readonly string[];
+  /** ⚠ Added by 10c-3's reconciliation (A6). §6.7's un-sampled spans — the value every
+   *  chart-bearing panel must hand down to its chart primitive. A fixture that always carries
+   *  `[]` cannot tell a wired panel from an unwired one, which is exactly how deleting
+   *  `gaps={state.gaps}` from both CPU call sites left the whole suite green. */
+  readonly gaps?: readonly Gap[];
 }
 
 /** A full `RuntimeState`, exactly as `dashboard-shell.tsx` would hand it to a panel. */
@@ -40,7 +65,7 @@ export const stateOf = (ring: SampleRing, overrides: StateOverrides = {}): Runti
   conditions: EMPTY_CONDITION_STATE,
   displayed: overrides.displayed ?? [],
   events: startEventLog(BASE_MS),
-  gaps: [],
+  gaps: overrides.gaps ?? [],
   paused: false,
   hidden: false,
   consecutiveFailures: 0,

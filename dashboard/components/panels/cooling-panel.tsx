@@ -194,7 +194,7 @@ export function CoolingPanel({ state, nowMs, panelId, view = 'chart', onToggleVi
           domainEndMs={domain.endMs}
           formatTime={formatTimeOfDayMs}
           width={CHART_SIZE.cooling.width}
-          plotHeight={CHART_SIZE.cooling.height}
+          plotHeight={CHART_SIZE.cooling.plotHeight}
           view={view}
         />
       </div>

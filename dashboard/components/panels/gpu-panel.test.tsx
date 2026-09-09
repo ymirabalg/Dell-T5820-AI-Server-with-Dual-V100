@@ -6,7 +6,8 @@ import { celsius, mib, throttleMask, watts } from '@/lib/types';
 import type { Gpu, ServingInstance, TelemetrySnapshot } from '@/lib/types';
 
 import { GpuPanel } from './gpu-panel';
-import { allReadingsNull, emptyState, stateWith, valueCells } from './test-support';
+import { BASE_MS, allReadingsNull, emptyState, ringOfSeries, stateOf, stateWith, valueCells } from './test-support';
+import type { Gap } from '@/lib/client/gaps';
 
 /**
  * §6.2's GPU card, the traps the handoff names each already having bitten a draft:
@@ -316,5 +317,43 @@ describe('⚠ 10c1 — the chart/table toggle (Q2-S2), now shell-owned', () => {
       />,
     );
     expect(withHandler).toContain('table view');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// ⚠ 10c-3 reconciliation / A6 — the same wiring check `cpu-panel.test.tsx` carries, for this
+// panel's THIRD `<Sparkline>` mount (rendered twice, as GPU 0 and GPU 1). See that file's
+// header block for why the primitive's own tests are not enough.
+//
+// Note this panel ALSO mounts `StackedTimeSeriesChart` for the ≥1600px promotion, whose `gaps`
+// is a required prop — so only the sparkline half can regress silently, which is the half
+// asserted here.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ 10c-3/A6 — state.gaps reaches the GPU card’s sparkline', () => {
+  const GAP: readonly Gap[] = [
+    { fromMs: BASE_MS + 10_000, toMs: BASE_MS + 1_490_000, reason: 'paused' },
+  ];
+
+  const gappyState = (gaps: readonly Gap[]) =>
+    stateOf(
+      ringOfSeries(
+        [rawGpuSnapshot({ tempC: celsius(60) }), rawGpuSnapshot({ tempC: celsius(70) })],
+        1_500_000,
+      ),
+      { gaps },
+    );
+
+  test('⚠ the sparkline marks the gap, and the promoted chart hatches the same one', () => {
+    const html = renderToStaticMarkup(<GpuPanel state={gappyState(GAP)} nowMs={0} panelId="gpu0" />);
+    // The sparkline's flat tint…
+    expect(html).toContain('data-role="gap"');
+    // …and the promoted chart's hatch, which is always in the DOM (only CSS hides it).
+    expect(html).toContain('data-gap-reason="paused"');
+  });
+
+  test('with no gap in state the sparkline invents none', () => {
+    const html = renderToStaticMarkup(<GpuPanel state={gappyState([])} nowMs={0} panelId="gpu0" />);
+    expect(html).not.toContain('data-role="gap"');
   });
 });

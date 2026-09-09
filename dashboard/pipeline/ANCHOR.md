@@ -30,10 +30,10 @@ adversarial and review phases and fixed before they became wrong code. Several w
 ## 2. State — READ CAREFULLY. Updated 2026-09-08 by 10c-1's reconciliation.
 
 **Steps 1–8 are closed and verified. Step 9's full loop is closed. Q1 and Q2 are closed.
-Step 10 is UNDER WAY: 10a — the shell — is closed, 10b — the nine panel bodies — is closed,
-10b-S-G (the owner's `errors[].instance` ruling) is closed, and **10c-1 — the wiring — is closed**.
-⚠ 10c was cut into three: **10c-2 (guards) is next, then 10c-3 (sizing/visual)**, and step 10
-closes with 10c-3.** Steps 11–12 have not started.
+⚠ STEP 10 IS CLOSED — 10a, 10b, 10b-S-G, 10c-1, 10c-2 and 10c-3 — but it is
+**closed-with-a-known-failure, not green**: §6.1's no-scroll promise is measured false and the
+repair is the owner's. See §2.2 and `HANDOVER.md` §0.0 before starting anything.** Steps 11–12
+have not started.
 
 ### ⚠ The backend has LANDED ON `main` — 2026-09-07. Two branches remain.
 
@@ -69,12 +69,13 @@ permission classifier in this environment and was refused once before the owner 
 | **Q1** | **closed 2026-09-07** — the ledger scanner, seven findings adjudicated. §2.2 |
 | **Q2** | **closed 2026-09-08** — §6.2's hover layer + table view, 13 findings adjudicated. §2.2 |
 | **10a** | build → test → adversarial → **reconcile done 2026-09-08**, 18 findings adjudicated; **the parent's review is the phase that closes it** (§8). §2.2 |
+| **10c-3 — the last loop of step 10** | ⚠ **reconcile done 2026-09-09 — 12 findings adjudicated (12 accepted, 2 in part, 0 rejected outright, 2 sub-parts deferred).** ⚠ **Step 10 closes with a RECORDED FAILURE**, not green — §2.2 |
 | **10b / 10b-S-G** | closed 2026-09-08 — 14 and 11 findings adjudicated. §2.2 |
 | **10c-1 — the wiring** | **closed 2026-09-08** — the nine panels mounted, `PanelPlaceholder` deleted, Q2-S2's toggle housed in `app/`, 10a-F4's alarm-forcing hatch built. **12 findings adjudicated: 10 accepted, 0 rejected, 2 deferred.** §2.2 |
-| suite | **95 files · 2627 tests · `pnpm verify` exit 0** (10c-1, 2026-09-08; was 93 · 2594 after 10b-S-G) |
-| step 9's harness | **95** mutations, ledger clean over its ⚠ marks |
-| step 10's harness | **168** mutations · **196** ⚠ marks — new in 10a (70/86), grown by 10b, 10b-S-G and 10c-1. The first harness to mutate a CSS file |
-| all **nine** harnesses | **977 mutations · every harness exit 0** — 714 across steps 2–8 (step 5 is **130**, step 8 **174**, both grown by 10b-S-G), 95 in `components/`, **168** in step 10's. ⚠ Steps 2–9's figures are carried from 10b-S-G's derivation; step 10's is 10c-1's own harness output |
+| suite | **99 files · 2793 tests · `pnpm verify` exit 0** (10c-3, 2026-09-09; was 99 · 2775 after 10c-2) |
+| step 9's harness | **102** mutations, ledger clean over its ⚠ marks (10c-3 retired `10c-SP3`, re-anchored `10c-SP4`, added `10c-SP6`/`SP7`) |
+| step 10's harness | **175** mutations · **203** ⚠ marks — new in 10a (70/86), grown by 10b, 10b-S-G, 10c-1, 10c-2 and 10c-3 (`10c-P1`/`P2`/`P3`, the panels' `gaps` wiring). The first harness to mutate a CSS file |
+| all **nine** harnesses | **~991 mutations · every harness exit 0** (10c-3 re-ran steps 9 and 10 only: 102 and 175) — 714 across steps 2–8 (step 5 is **130**, step 8 **174**, both grown by 10b-S-G), 95 in `components/`, **168** in step 10's. ⚠ Steps 2–9's figures are carried from 10b-S-G's derivation; step 10's is 10c-1's own harness output |
 | the box | **running the backend natively**, see §2.1 |
 
 ### 2.1 ⚠ The backend is DEPLOYED and running on `ai-server` right now
@@ -95,7 +96,66 @@ tree**, or you ship whatever an agent happens to be mid-edit on. Full account in
 
 ⚠ The deployed password is `dashboard1`, set for testing. Step 11 replaces it properly.
 
-### 2.2 ⚠ What to do next — **10c-3, sizing and visual**, and step 10 CLOSES with it
+### 2.2 ⚠ What to do next — **step 11, packaging.** ⚠ Step 10 is CLOSED **WITH A KNOWN FAILURE**, not green.
+
+### ⚠⚠ STEP 10 IS CLOSED-WITH-A-KNOWN-FAILURE — 2026-09-09. Read this before step 11.
+
+**10c-3 — sizing and visual — is done**, and with it every loop of step 10. All twelve of its
+adversarial findings were adjudicated (12 accepted, 2 in part, 0 rejected outright, 2 sub-parts
+deferred with owners), `pnpm verify` exits 0 at **99 files / 2793 tests**, step 9's harness is at
+**102** mutations and step 10's at **175**, both clean over every ⚠ mark. §8's fifth phase — the
+parent re-runs `pnpm verify`, audits the adjudication table, spot-checks, commits — is what
+actually closes it.
+
+**But it does not close green, and the honest statement is this:**
+
+> ⚠ **`SPEC.md` §6.1's only quantitative promise is measured FALSE at every size it applies to.**
+> The loop's own deliverable was the seven §6.1 breakpoint measurements; none of them checked the
+> promise, and the script measured the 1280 checkpoint at height 900, below the ≥1024 the promise
+> is conditioned on. Measured now, in real headless Chrome, with every panel populated:
+> **1280×1024 → the page scrolls by 596 px · 1600×1024 → 632 px · 1920×1080 → 560 px.** It is the
+> **grid** growing past the viewport — exactly what §6.1's own 2026-09-08 clarification forbids —
+> not a dev-server overlay: the only body children with height are the 49 px sticky band and
+> `.grid` at 1571/1607/1591 px.
+
+**This is invariant 7 in its strongest form: the spec makes a measurable promise the build does
+not keep.** Three repairs exist — shrink the panels, bound the grid and scroll inside it, or
+change §6.1's numbers — and **all three are the owner's**, so the reconciliation changed neither
+the layout nor the spec and recorded it instead. **`HANDOVER.md` §0.0** states it in full, with
+per-panel heights, and it is deliberately not in a table.
+
+**What step 11 inherits, concretely:**
+
+1. ⚠ **The §6.1 decision is upstream of packaging.** If the answer is "shrink the panels" or
+   "bound the grid", that changes the artifact step 11 packages; it should land before the image
+   is specified, not after.
+2. **A new devDependency, `playwright-core`**, verified absent from `.next/standalone` (nothing
+   under `app/`, `lib/`, `components/` or `proxy.ts` imports it). The image needs no browser.
+3. **`pipeline/steps/10-panels-assembly/measure-breakpoints.mjs` is dev-machine tooling** — not
+   in `pnpm verify` (ANCHOR §4: one deterministic command, no browser prerequisite), macOS-only
+   by hardcoded Chrome path, and it measures `next dev`. **Nothing has ever loaded the standalone
+   build's CSS in a browser** — that is step 12's, and this is the tool for it.
+4. **Everything else in `HANDOVER.md` §9**, where every deferral now names an owner. The ones
+   with a step-11/12 owner are the four silent-failure obligations (O20/O21/O22/D8), the ufw rule
+   for 8090, and the two browser items above.
+
+**What 10c-3 actually closed**, so nobody re-opens it: L9 (`CHART_SIZE`, ⚠ its recorded
+justification corrected — `height` meant two different measurements and the lower two entries are
+`plotHeight`, per plot), 10b-F14b (the sparkline's `gaps` prop — then corrected three ways by its
+own adversarial), SCOPE 2.5f (verified and deliberately unchanged: no panel body has a
+definite-height ancestor, so `max-height: 100%` would silently uncap the table), Q2-F9 (decided
+**DROP**), 10a-F4's remaining half (a real headless browser — **9 pass, 3 fail, 0 blocked**; the
+three failures are §6.1's), 10c1-A9-paint (paint tier only, by construction) and the banner-item
+wrapping question (recorded for the owner; no CSS invented).
+
+⚠ **The two most transferable things it cost** are in `HANDOVER.md` §0.8, and both are new shapes
+of an old rule: **a browser measurement printed `PASS` for a panel-order check that had looked at
+nothing** (it queried `data-slot="storage"`/`"log"`; the grid renders `storage-and-network` and
+`session-event-log`, and the predicate skipped `null`s) — the fifth instance of *an assertion
+whose subject does not render cannot fail*, and the first outside the test suite. And **two
+renderings of one fact, computed separately, disagreed**: the sparkline computed gap marks per
+adjacent point-pair where the chart computes them per gap, which produced three distinct wrong
+renderings including one that contradicts §6.7 in as many words.
 
 ### ⚠ 10c-2 — THE GUARDS — is CLOSED, 2026-09-08. ONE loop remains in step 10.
 
@@ -120,7 +180,7 @@ this loop entirely — do not read that as a regression.
 |---|---|---|
 | **10c-1 — the wiring** | mount the nine, the toggle's home, the alarm-forcing hatch | ✅ **closed 2026-09-08** |
 | **10c-2 — the guards** | `10b-F1-guard` · **Q1-F4** · **L11** · **S-G-A11** (a non-item) · **`10c1-A8-audit`** | ✅ **closed 2026-09-08** |
-| **10c-3 — sizing and visual** | **L9** · `10b-F14b` (no gap hatching at 1280–1599px) · SCOPE 2.5f's `max-height: 100%` · **Q2-F9**'s clamp-vs-drop · **10a-F4**'s remaining half (the seven viewport measurements, headless) · `10c1-A9-paint`'s scoping · the banner-item wrapping question · ⚠ **10a-F17** | **NEXT — and step 10 closes with it** |
+| **10c-3 — sizing and visual** | **L9** · `10b-F14b` · SCOPE 2.5f · **Q2-F9** · **10a-F4**'s remaining half · `10c1-A9-paint` · the banner-item wrapping question | ⚠ **closed 2026-09-09 — WITH A KNOWN FAILURE (§6.1's no-scroll promise). 12 findings adjudicated.** See the top of §2.2 |
 
 ⚠ **10a-F17 moved into 10c-3, and it did not move because it was done.** The row above used to
 list `pnpm verify`'s non-determinism under 10c-2; **10c-2's own handoff never scoped it**, so
@@ -311,15 +371,19 @@ about whether any of it works. Open a browser.
 
 ### The queue
 
-**10c-2 is next and nothing blocks it.** ⚠ **Updated 2026-09-08 by 10c-1's reconciliation** —
-this list was originally written before 10a and most of it is now closed. The wiring is done;
-below is what is left, and `HANDOVER.md` §9 is the authoritative form of it.
+⚠ **Step 11 is next. Updated 2026-09-09 by 10c-3's reconciliation** — every 10c row below is
+now closed, and `HANDOVER.md` §9 is the authoritative form of what is left. ⚠ **The largest open
+item is not in this table**: §6.1's no-scroll promise is measured false and the repair is the
+owner's — §2.2, and `HANDOVER.md` §0.0.
 
 | item | owner |
 |---|---|
 | ~~wire the nine panels into `app/dashboard-shell.tsx`~~ · ~~Q2-S2's toggle needs an `app/` home~~ · ~~10a-F4's alarm-forcing hatch~~ | ✅ **closed by 10c-1** |
 | **10a-F17** `pnpm verify`'s non-determinism · **Q1-F4** the cross-harness ledger runner · **10b-F1-guard** the document-wide-`toContain` lint · **L11** the unit-name constant · **S-G-A11** `exactOptionalPropertyTypes` (measured free) · ⚠ **10c1-A8-audit** every `styles.X` against its sibling stylesheet | **10c-2** |
-| **L9** sizing (with **10b-F14b**: no gap hatching at 1280–1599px) · SCOPE 2.5f's `max-height` · **Q2-F9** clamp-vs-drop · **10a-F4**'s remaining half (seven viewport measurements, headless) · **O14** the formatter `parts` variant (re-checked by 10b and 10c-1; **still has not arisen**) · whether a banner item may wrap mid-condition | **10c-3**, with a browser |
+| ~~**L9** sizing~~ · ~~**10b-F14b**~~ · ~~SCOPE 2.5f~~ (verified, deliberately unchanged) · ~~**Q2-F9**~~ (DROP) · ~~**10a-F4**'s remaining half~~ (9 pass / 3 fail / 0 blocked) · ~~**10c1-A9-paint**~~ | ✅ **closed by 10c-3** |
+| **O14** the formatter `parts` variant — **has not arisen in four consecutive loops**; close it as a non-item or re-scope it · whether a banner item may wrap mid-condition (§6.4 is silent; 10c-3 looked and still declined to invent) · the gap mark's contrast in **both** chart primitives (1.12:1 → 1.245:1 applied; 3:1 is a token decision) | **owner** |
+| ⚠ **§6.1's no-scroll promise: shrink the panels, bound the grid, or change the numbers** | ⚠ **owner** — §2.2 |
+| Point `measure-breakpoints.mjs` at the **standalone build** and run it from something · wire it into a CI step (never `pnpm verify`) | **step 11 / 12** |
 | **D1** S40's third event-log feed (`LogEntryKind` is `lib/client/events.ts`'s; the panel's exhaustive switch will force the case) | 10c-2 / owner |
 | **Q2-S1** the per-mark tooltip clause · **Q2-S2** the table view's height — ⚠ **now reachable**, 10c-1 gave the toggle a home | owner, then 10c-3 |
 | **10a-S-A/S-B/S-C/S-D** and **10b-S-E/S-F/S-H** — seven spec questions, five implemented conservatively (**S-G is RULED, implemented and closed**) | **owner** |
@@ -496,7 +560,7 @@ strip its defaults; amend the spec instead*). That last one is why Q2 exists.
   S11/G5's **panel-rendering** residue, owned by step 10.
 - **Still open for steps 10–12:** D1 S40's third event-log feed · ~~D2 the independent age
   tick~~ (closed by 10a) · ~~D3 rendering `unknownStanding`~~ (closed by 10b) · ~~D6 jsdom +
-  `useTelemetry` unmount~~ (closed by 10a) · **L9 sparkline sizing** (10c-3) · ~~L11 the
+  `useTelemetry` unmount~~ (closed by 10a) · ~~**L9 sparkline sizing**~~ (closed by 10c-3 — `CHART_SIZE`, ⚠ with A7's correction: its lower two entries are `plotHeight`, per plot) · ~~L11 the
   unit-name constant guard~~ (**closed by 10c-2** — `lib/format.ts`'s nine `UNIT_*` constants and
   `lib/unit-suffix.test.ts`). ⚠ Corrected 2026-09-08 by 10c-2's reconciliation: this line had gone
   stale in the safe direction on four of its six entries. `HANDOVER.md` §9 is authoritative.

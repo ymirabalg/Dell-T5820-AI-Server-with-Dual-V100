@@ -335,18 +335,22 @@ REGRESSIONS = [
     ("09-SP1 the empty-series guard is disabled, so zero and all-null points fall through",
      SPARKLINE_SRC, "  if (points.length === 0 || readable.length === 0) {",
      "  if (false) {", [SPARKLINE]),
+    # ⚠ Re-anchored by 10c-3/F14b, which rewrote `runsOf` to ALSO break on a `gaps` boundary
+    # (see `sparkline.tsx`'s module doc). The property this mutation defends is unchanged — a
+    # null reading must FLUSH the current run, not be silently skipped — only the surrounding
+    # shape moved from an if/else to a single flush condition.
     ("09-SP2 a null reading is silently dropped instead of breaking the run, bridging the line",
      SPARKLINE_SRC,
-     "    if (p.v === null || !Number.isFinite(p.v)) {\n"
+     "    if (!readable || gapBreak) {\n"
      "      if (current.length > 0) runs.push(current);\n"
      "      current = [];\n"
-     "    } else {\n"
-     "      current.push({ index, v: p.v });\n"
-     "    }",
-     "    if (p.v === null || !Number.isFinite(p.v)) {\n"
-     "      return;\n"
      "    }\n"
-     "    current.push({ index, v: p.v });",
+     "    if (readable) current.push({ index, v: p.v as number });",
+     "    if (gapBreak) {\n"
+     "      if (current.length > 0) runs.push(current);\n"
+     "      current = [];\n"
+     "    }\n"
+     "    if (readable) current.push({ index, v: p.v as number });",
      [SPARKLINE]),
     ("09-SP3 the end dot marks the last point overall, including an unreadable trailing one",
      SPARKLINE_SRC, "  const last = readable[readable.length - 1];",
@@ -497,10 +501,12 @@ REGRESSIONS = [
      [CHART]),
 
     # ============================================== components/sparkline.tsx (invariant 1)
+    # ⚠ Re-anchored by 10c-3/F14b — see the identical note on 09-SP2 above; the property
+    # ("readable" must not be falsy-based, or v=0 wrongly breaks the run) is unchanged.
     ("09-SP4 the sparkline's null check is falsy-based, so a v=0 point wrongly breaks the run",
      SPARKLINE_SRC,
-     "    if (p.v === null || !Number.isFinite(p.v)) {",
-     "    if (!p.v || !Number.isFinite(p.v)) {",
+     "    const readable = p.v !== null && Number.isFinite(p.v);",
+     "    const readable = Boolean(p.v) && Number.isFinite(p.v);",
      [SPARKLINE]),
 
     # ============================================== components/purity.test.ts's subject: chip.tsx
@@ -899,15 +905,18 @@ REGRESSIONS = [
      "    return (\n"
      "      <SparklineTableView",
      [SPARKLINE]),
+    # ⚠ Re-anchored by 10c-3/F14b, which restructured the table body around a `TableRow` union
+    # (sample rows plus gap rows) so a gap could get its own row (see the module doc). The cell
+    # now reads `row.point.v` instead of `p.v`; the property under test is unchanged.
     ("Q2-SP5 a null reading in the table renders through the formatter, printing a numeral for no reading",
      SPARKLINE_SRC,
-     "            <td>{p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}</td>",
-     "            <td>{p.v === undefined ? EM_DASH : formatValue(p.v as number)}</td>",
+     "                <td>{row.point.v !== null && Number.isFinite(row.point.v) ? formatValue(row.point.v) : EM_DASH}</td>",
+     "                <td>{row.point.v === undefined ? EM_DASH : formatValue(row.point.v as number)}</td>",
      [SPARKLINE]),
     ("Q2-SP6 a table cell is blanked by a falsy check, so a genuine zero reading renders the em dash",
      SPARKLINE_SRC,
-     "            <td>{p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}</td>",
-     "            <td>{!p.v ? EM_DASH : formatValue(p.v)}</td>",
+     "                <td>{row.point.v !== null && Number.isFinite(row.point.v) ? formatValue(row.point.v) : EM_DASH}</td>",
+     "                <td>{!row.point.v ? EM_DASH : formatValue(row.point.v)}</td>",
      [SPARKLINE]),
     # ⚠ Q2, test phase, 2026-09-08: same rationale as Q2-H6 on the full chart — the
     # adjacent-sibling CSS selector needs the crosshair group to be the hover zone's very next
@@ -986,10 +995,31 @@ REGRESSIONS = [
        "      const xStart = prev === undefined ? 0 : xFor(prev);\n"
        "      const xEnd = next === undefined ? plotWidth : xFor(next);")],
      [CHART]),
-    ("Q2-H10 a zero-width hover column is emitted anyway — a dead node that satisfies every count assertion while being unhoverable",
+    # ⚠ RETIRED by 10c-3/F9, not merely edited: `Q2-H10` mutated the zero-width hover-column
+    # guard, whose only reachable trigger THROUGH THE PUBLIC COMPONENT was an out-of-domain
+    # point clamped onto the same rail as another. `clipPlotsToDomain` (below) now drops such
+    # points before `hoverColumnsFor` ever sees them, so that trigger no longer exists — the
+    # guard's own updated doc calls it "a second line of defence", and a defence with no
+    # remaining attacker cannot be exercised by any test this suite can construct through the
+    # component's props. Mutating it now returns `run.returncode == 0` ("DID NOT BITE"), which
+    # is this harness's own failure signal for a mutation that no longer reddens anything —
+    # keeping it would make `regressions.py` permanently red for a reason unrelated to a defect.
+    # The two mutations below replace it: they target `clipPlotsToDomain` itself, which is the
+    # actual fix and the thing every new ⚠ test in this section defends.
+
+    # ============================================== 10c-3 / Q2-F9 (`pipeline/handoffs/10c3-sizing.md`)
+    # An out-of-domain instant used to be CLAMPED (`xFor` pinned its x into `[0, plotWidth]`);
+    # it is now DROPPED before the chart, the hover layer, or the table ever see it. See
+    # `clipPlotsToDomain`'s module doc for the full decision.
+    ("10c-F9-1 clipPlotsToDomain stops filtering by domain — every point survives regardless of the caller's declared window",
      CHART_SRC,
-     "    .filter((col) => col.xEnd > col.xStart);",
-     "    .filter(() => true);",
+     "      points: s.points.filter((p) => p.tMs >= domainStartMs && p.tMs <= domainEndMs),",
+     "      points: s.points,",
+     [CHART]),
+    ("10c-F9-2 the chart stops calling clipPlotsToDomain at all, so an out-of-domain point reaches xFor's clamp again",
+     CHART_SRC,
+     "  const plots = clipPlotsToDomain(rawPlots, domainStartMs, domainEndMs);",
+     "  const plots = rawPlots;",
      [CHART]),
 
     # ---------------------------------- F6: a non-finite reading is not a reading
@@ -1062,17 +1092,20 @@ REGRESSIONS = [
       ("      aria-label={ariaLabel}\n",
        '      aria-label="trend over the selected window"\n')],
      [SPARKLINE]),
+    # ⚠ Re-anchored by 10c-3/F14b — see the identical note above `Q2-SP5`; only the indentation
+    # and the `row.point.` prefix moved, the property (a row header, and a finite-only reading)
+    # is unchanged.
     ("Q2-SP11 the sparkline's time cell is a plain data cell, so a reading announces no instant",
      SPARKLINE_SRC,
-     '              <th scope="row">{formatTime(p.tMs)}</th>',
-     "              <td>{formatTime(p.tMs)}</td>",
+     '                <th scope="row">{formatTime(row.point.tMs)}</th>',
+     "                <td>{formatTime(row.point.tMs)}</td>",
      [SPARKLINE]),
     ("Q2-SP12 a non-finite reading reaches the caller's formatter on the sparkline too, in the tooltip and the table",
      SPARKLINE_SRC,
      [("                <title>{`${formatTime(p.tMs)}\\n${p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}`}</title>",
        "                <title>{`${formatTime(p.tMs)}\\n${p.v !== null ? formatValue(p.v) : EM_DASH}`}</title>"),
-      ("              <td>{p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}</td>",
-       "              <td>{p.v !== null ? formatValue(p.v) : EM_DASH}</td>")],
+      ("                <td>{row.point.v !== null && Number.isFinite(row.point.v) ? formatValue(row.point.v) : EM_DASH}</td>",
+       "                <td>{row.point.v !== null ? formatValue(row.point.v) : EM_DASH}</td>")],
      [SPARKLINE]),
 
     # ---------------------------------- Q2-S2 (2026-09-08): §6.2's owner ruling that the table
@@ -1092,6 +1125,62 @@ REGRESSIONS = [
      SPARKLINE_SRC,
      '    <div className={styles.tableView} role="group" aria-label={ariaLabel} tabIndex={0} data-role="table-view">',
      '    <div className={styles.tableView} role="group" aria-label={ariaLabel} data-role="table-view">',
+     [SPARKLINE]),
+
+    # ============================================== 10c-3 / F14b (`pipeline/handoffs/10c3-sizing.md`)
+    # `Sparkline` gained an optional `gaps` prop, closing the failure L9's handoff named: two
+    # readable points straddling a real sampling gap used to draw one smooth, unbroken line
+    # between them — worse than an un-hatched hole, since it looked like a genuine reading.
+    # Ids carry the creating step's prefix (`10c-`), per the 2026-09-08 convention, even though
+    # they live in this step's harness (same precedent as Q2's mutations above).
+
+    ("10c-SP1 a real gap between two readable points no longer breaks the polyline — the exact failure this loop fixed",
+     SPARKLINE_SRC,
+     "  gaps.find((g) => g.fromMs < b.tMs && (g.toMs ?? Number.POSITIVE_INFINITY) > a.tMs) ?? null;",
+     "  gaps.find((g) => g.fromMs > b.tMs && (g.toMs ?? Number.POSITIVE_INFINITY) > a.tMs) ?? null;",
+     [SPARKLINE]),
+    ("10c-SP2 an OPEN gap (toMs: null) is treated as already closed at time zero, so it never breaks anything",
+     SPARKLINE_SRC,
+     "  gaps.find((g) => g.fromMs < b.tMs && (g.toMs ?? Number.POSITIVE_INFINITY) > a.tMs) ?? null;",
+     "  gaps.find((g) => g.fromMs < b.tMs && (g.toMs ?? 0) > a.tMs) ?? null;",
+     [SPARKLINE]),
+    # ⚠ `10c-SP3` IS RETIRED — 10c-3's reconciliation, finding A4. It defended the
+    # `bothReadable` guard in `gapMarksFor`: "a gap abutting a null reading draws no mark,
+    # because the null already breaks the line". That reasoning covered the CHART form only. In
+    # the TABLE form nothing breaks, no row was emitted, and a reader could not tell "one poll
+    # failed" from "thirty minutes went unsampled" — while the promoted chart, at ≥1600px,
+    # hatched and listed that same gap. The guard was removed, so the code the mutation anchored
+    # on no longer exists; its property was wrong, not merely relocated. `10c-SP6`/`10c-SP7`
+    # below defend the corrected behaviour. (Same disposition, and same reasoning, as `Q2-H10`'s
+    # retirement earlier in this file: a mutation whose property is retired is deleted with a
+    # note, never left to report DID NOT BITE.)
+    ("10c-SP6 one gap spanning several point-pairs is drawn once per PAIR again, splitting a gap §6.7 says is never split",
+     SPARKLINE_SRC,
+     "      if (firstIndex < 0) firstIndex = index;\n      lastIndex = index;",
+     "      firstIndex = index;\n      lastIndex = index;",
+     [SPARKLINE]),
+    ("10c-SP7 the table emits a gap row for every straddled pair instead of one per gap, listing one outage three times",
+     SPARKLINE_SRC,
+     "      if (firstIndex !== index) continue;",
+     "      if (index < firstIndex) continue;",
+     [SPARKLINE]),
+    ("10c-SP4 the table view's gap row is dropped, so a reader sees two adjacent readings with no sign time passed unsampled between them",
+     SPARKLINE_SRC,
+     # ⚠ Re-anchored by 10c-3's reconciliation when `tableRowsFor` moved to per-gap spans
+     # (A5). Same property, same failure: the table stops carrying gap rows at all.
+     "      rows.push({\n"
+     "        kind: 'gap',\n"
+     "        key: `gap-${gap.fromMs}-${gap.toMs ?? 'open'}`,\n"
+     "        reason: gap.reason,\n"
+     "        fromMs: gap.fromMs,\n"
+     "        toMs: gap.toMs,\n"
+     "      });",
+     "      void gap;",
+     [SPARKLINE]),
+    ("10c-SP5 an open gap's table row formats `toMs` through the caller's formatter instead of reading \"ongoing\", crashing on null",
+     SPARKLINE_SRC,
+     "                  {row.toMs === null ? 'ongoing' : formatTime(row.toMs)}",
+     "                  {formatTime(row.toMs as number)}",
      [SPARKLINE]),
 ]
 

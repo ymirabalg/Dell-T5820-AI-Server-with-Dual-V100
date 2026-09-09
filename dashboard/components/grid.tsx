@@ -39,10 +39,62 @@ import './tokens.css';
  * for 10b, not mandated): render both the sparkline and the promoted chart and let a
  * `min-width: 1600px` media query in the panel's own stylesheet show one and hide the other,
  * so no viewport-tracking state has to be invented on either side of the hook boundary.
+ *
+ * ### ⚠ L9, closed by 10c-3 — `gpuPromoted` replaces a literal that had drifted out of this file
+ *
+ * 10b built the ≥1600px promotion (see `gpu-panel.tsx`'s module doc) and gave it a defensible
+ * default — 480×140 — but wrote it as bare literals at the call site instead of a named export
+ * here, so the ONE place sizing is supposed to live had a silent second copy of a size
+ * decision the moment that code was written. This entry is that default, moved to where every
+ * other chart size already lives, with nothing about the number changed: 480px wide (matching
+ * `cooling.width`, so a promoted GPU card and COOLING's own chart do not disagree about how
+ * wide a "big" chart is on this page) and 140px per plot (see the A7 correction on `CHART_SIZE`
+ * itself: 140 vs COOLING's 210 is NOT explained by "COOLING stacks two plots", since both
+ * numbers are per-plot). **The canonical answer to L9 is this file**: a
+ * chart or sparkline primitive never picks its own size — it takes one as a prop, and the
+ * value comes from exactly one of these three named exports, so a future panel asking "how big
+ * should my chart be" has one place to look rather than a literal to invent or copy.
+ */
+/**
+ * ⚠ **10c-3 reconciliation / A7 — `height` and `plotHeight` are NOT the same measurement, and
+ * this object used to spell both `height`.** `Sparkline`'s `height` is the whole rendered
+ * `<svg>`. `StackedTimeSeriesChart`'s `plotHeight` is **per plot**:
+ * `plotsHeight = plots.length * plotHeight + (plots.length - 1) * PLOT_GAP`, plus
+ * `AXIS_HEIGHT`. Measured, rendered:
+ *
+ * | entry | declared | actually painted |
+ * |---|---|---|
+ * | `sparkline` | 220 x 44 | 220 x **44** |
+ * | `cooling` | 480 x 210 | 480 x **450** (two stacked plots + gap + axis) |
+ * | `gpuPromoted` | 480 x 140 | 480 x **160** (one plot + axis) |
+ *
+ * L9's deliverable is *"the one place a future panel gets a chart's pixel box from"*, and a
+ * panel asking this file how tall COOLING's chart is was told 210 for a 450px element — under
+ * a key named `height`, beside an entry where `height` does mean height. The field is now named
+ * for what it is, so the type checker refuses the confusion at every call site.
+ *
+ * ⚠ **And the reasoning recorded for `gpuPromoted` was derived from that misreading** — see
+ * `10c3-build.md` §1's correction. *"140, shorter than COOLING's 210 because COOLING stacks two
+ * plots and this is one"* is not a valid derivation: if 210 is per-plot, stacking two plots is a
+ * reason for COOLING's TOTAL to be larger and says nothing about its per-plot box; taken at face
+ * value that argument would give `gpuPromoted` the same **210**. The NUMBER is unchanged from
+ * 10b and nothing regressed — what is corrected is the justification, which L9 explicitly asked
+ * for ("say what computes it and where"). The honest statement is below.
+ *
+ * **What actually computes these numbers.** Nothing does: they are AUTHORED here, once, in the
+ * module that owns layout, and every chart-bearing panel asks for one rather than inventing it.
+ * A live, measured size would need `ResizeObserver` + `useState`, which `purity.test.ts` forbids
+ * anywhere under `components/`. `gpuPromoted`'s real justification is empirical: 480 wide to
+ * match `cooling` (so a "big" chart is one width on this page) and a 160px painted total, which
+ * is what fits a GPU card's remaining height beside its headline row, toggle, meter and rows.
  */
 export const CHART_SIZE = {
+  /** Total `<svg>` height — `Sparkline` draws no axis. */
   sparkline: { width: 220, height: 44 },
-  cooling: { width: 480, height: 210 },
+  /** PER PLOT. COOLING stacks two, so it paints 450px in total. */
+  cooling: { width: 480, plotHeight: 210 },
+  /** PER PLOT. One plot, so it paints 160px in total (140 + the 20px axis). */
+  gpuPromoted: { width: 480, plotHeight: 140 },
 } as const;
 
 export interface GridProps {

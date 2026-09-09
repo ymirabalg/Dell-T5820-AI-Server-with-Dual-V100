@@ -10,6 +10,31 @@
   stroke-linecap: round;
 }
 
+/* 10c-3/F14b — a real sampling gap between two rendered points. A flat, muted tint rather
+   than `StackedTimeSeriesChart`'s diagonal hatch: that pattern needs a per-instance SVG `id`
+   (see `sparkline.tsx`'s module doc for why this component has never needed one), and a
+   6px-repeat weave is illegible across the 2-8px a gap mark typically spans on a sparkline's
+   own canvas anyway. `pointer-events: none` so it never intercepts the hover layer painted
+   after it. */
+/* ⚠ 10c-3 reconciliation / A8 — CONTRAST, measured, and what is and is not fixed here.
+   `--gridline` at `opacity: .55` composites to #242422 over `--surface-1`, a contrast ratio of
+   **1.12:1** — WCAG 2.2 SC 1.4.11's floor for a non-text UI component is 3:1. Re-derived here:
+   the arithmetic is right. What it does NOT support is treating this as a defect introduced by
+   this mark, because `StackedTimeSeriesChart`'s own blessed diagonal hatch is `--gridline` at
+   full opacity over the same ground = **1.245:1**, and only about a sixth of its area is the
+   line at all. Both gap signals in this project are near-invisible on their own, and raising
+   either to 3:1 is a token-level design decision across both components — the owner's, not a
+   reconciliation's. See `HANDOVER.md` §0 for the recorded item.
+   Two things ARE done: the opacity is dropped so this mark is at least the same 1.245:1 as the
+   chart's hatch stroke rather than dimmer than it, and — the part that actually answers §9 —
+   a gap is never carried by colour ALONE here: the polyline breaks across every gap
+   (`runsOf`), and the table view now carries a `gap (reason) — from to` row for every gap in
+   every case, including the null-abutting one that used to suppress it (A4). */
+.gap {
+  fill: var(--gridline);
+  pointer-events: none;
+}
+
 .end {
   stroke: var(--surface-1);
   stroke-width: 1;
@@ -104,4 +129,11 @@
 .table tbody th {
   color: var(--ink-secondary);
   font-weight: normal;
+}
+
+/* 10c-3/F14b — the table's gap row, same treatment as `StackedTimeSeriesChart`'s `.gapRow`. */
+.gapRow td {
+  color: var(--ink-muted);
+  font-style: italic;
+  white-space: normal;
 }

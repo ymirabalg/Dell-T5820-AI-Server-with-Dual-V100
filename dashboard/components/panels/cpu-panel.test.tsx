@@ -6,7 +6,8 @@ import { celsius, percent } from '@/lib/types';
 import type { TelemetrySnapshot } from '@/lib/types';
 
 import { CpuPanel } from './cpu-panel';
-import { allReadingsNull, emptyState, stateWith, valueCells } from './test-support';
+import { BASE_MS, allReadingsNull, emptyState, ringOfSeries, stateOf, stateWith, valueCells } from './test-support';
+import type { Gap } from '@/lib/client/gaps';
 
 const snapshotWith = (overrides: Partial<TelemetrySnapshot['host']>): TelemetrySnapshot => ({
   ...everythingZero,
@@ -185,5 +186,60 @@ describe('⚠ 10c1 — the chart/table toggle (Q2-S2), now shell-owned', () => {
       <CpuPanel state={stateWith(everythingZero)} nowMs={0} panelId="cpu" onToggleView={() => undefined} />,
     );
     expect(withHandler).toContain('table view');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// ⚠ 10c-3 reconciliation / A6 — THE WIRING, not the primitive.
+//
+// `Sparkline` learned to hatch `state.gaps` this loop and `sparkline.test.tsx` proves the
+// primitive does it. Nothing proved the PANEL hands it down: deleting `gaps={state.gaps}` from
+// both of this file's call sites left `pnpm verify` fully green (2801/2801, measured) and both
+// harnesses silent, restoring the exact F14b defect — a smooth line drawn across ground nobody
+// sampled — on CPU temperature and CPU utilisation, at the 1280-1599px band §6.1 calls the
+// design target.
+//
+// The build's answer was "worth a code-review habit, not a guard". This project's own precedent
+// says otherwise twice: L11 was the same shape ("nothing stops a component hard-coding ' RPM'")
+// and got a guard in 10c-2, and `StackedTimeSeriesChart.gaps` is a REQUIRED prop for the
+// identical fact. A behavioural fixture is the cheapest of the three options and the only one
+// that also proves the value arrives intact rather than merely being mentioned.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ 10c-3/A6 — state.gaps reaches BOTH sparklines, or the design-target band lies about unsampled ground', () => {
+  /** Two readable samples 30 minutes apart with a gap between them: the F14b fixture, at the
+   *  panel level. Both traces (temperature and utilisation) are readable at both instants, so
+   *  each sparkline has exactly one adjacent pair for the gap to fall between. */
+  const gappyState = (gaps: readonly Gap[]) =>
+    stateOf(
+      ringOfSeries(
+        [
+          snapshotWith({ cpuTempC: celsius(60), cpuPct: percent(20) }),
+          snapshotWith({ cpuTempC: celsius(70), cpuPct: percent(40) }),
+        ],
+        1_500_000,
+      ),
+      { gaps },
+    );
+
+  const GAP: readonly Gap[] = [
+    { fromMs: BASE_MS + 10_000, toMs: BASE_MS + 1_490_000, reason: 'hidden' },
+  ];
+
+  test('⚠ both sparklines mark the gap — one `data-role="gap"` each', () => {
+    const html = renderToStaticMarkup(<CpuPanel state={gappyState(GAP)} nowMs={0} panelId="cpu" />);
+    expect((html.match(/data-role="gap"/g) ?? []).length).toBe(2);
+  });
+
+  test('⚠ and both list it in the table view, the accessibility floor', () => {
+    const html = renderToStaticMarkup(
+      <CpuPanel state={gappyState(GAP)} nowMs={0} panelId="cpu" view="table" />,
+    );
+    expect((html.match(/data-role="gap-row"/g) ?? []).length).toBe(2);
+  });
+
+  test('with no gap in state, neither sparkline invents one — the negative half of the fixture', () => {
+    const html = renderToStaticMarkup(<CpuPanel state={gappyState([])} nowMs={0} panelId="cpu" />);
+    expect(html).not.toContain('data-role="gap"');
   });
 });

@@ -235,6 +235,60 @@ const MONO_CHAR_WIDTH = 5.4;
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
+/**
+ * 10c-3 / Q2-F9, closed — DROP, never clamp, an out-of-domain instant.
+ *
+ * Q2 left this deferred: `xFor` clamps a point's X into `[0, plotWidth]`, so a reading whose
+ * real `tMs` falls outside `[domainStartMs, domainEndMs]` used to get drawn PEGGED to the
+ * domain's edge — a mark whose visual position asserts a time it was not read at, while its
+ * hover tooltip (built from the same real `tMs`) correctly names its actual, different
+ * instant. The reconciliation's own words for the alternative half-measure (dropping only the
+ * hover column while still drawing the clamped mark) were "trading a wrong reading for a
+ * wrong reading": the mark would then be right where it always was, but hovering it would
+ * report a NEIGHBOURING in-domain instant's reading instead of its own.
+ *
+ * **The decision:** drop the point entirely — from the polyline, from the lone-point/end-dot
+ * marks, from the hover layer, and from the table's sample rows — rather than clamp its X.
+ * This is not a new invention; it EXTENDS a rule this codebase already applies twice:
+ *
+ * 1. The end dot already refuses to sit at the right edge for a trace that stopped early
+ *    ("nothing is drawn at a time it was not read" — see the module doc). Clamping an
+ *    out-of-domain point to the LEFT or RIGHT rail is the same lie in the other direction:
+ *    asserting a reading exists at a time it was not taken.
+ * 2. `traceFor`'s own pipeline (`samplesWithin` → `seriesFrom` → `decimateSeries`) already
+ *    drops every sample outside the selected window before a chart ever sees it. A caller
+ *    that respects `chartDomainOf` — every caller in this project, today — never produces an
+ *    out-of-domain point in the first place, so this filter is normally a no-op; it exists as
+ *    the same defensive precondition-enforcement `runsOf`'s null handling already is, for a
+ *    FUTURE caller that does not maintain that property (SCOPE 2.4 / Q2-F9).
+ *
+ * The alternative NOT taken — clamp the mark but keep its own hover column truthful — was
+ * available and rejected: a mark drawn at a false position with a truthful tooltip is still a
+ * false claim by construction, since the position IS part of what a time-series chart asserts.
+ * §6.3's Y-axis clamp (a reading pegged to the top rail when its VALUE exceeds the plotted
+ * scale) is not a counter-example: that clamp preserves the reading's real TIME position and
+ * only truncates its magnitude, with the real value still in the tooltip — a value axis has a
+ * "pegged but still recognisable" story a time axis does not, since a mark's x IS its claimed
+ * instant.
+ *
+ * Applied ONCE, to every plot's every series, before `runsOf`, `hoverInstantsFor` or the
+ * table's row derivation ever see the points — the same "one decimation pipeline" shape the
+ * module doc already asks for, so a caller cannot fix the chart branch and leave the table
+ * branch (or vice versa) still capable of showing a dropped point.
+ */
+const clipPlotsToDomain = (
+  plots: readonly ChartPlot[],
+  domainStartMs: number,
+  domainEndMs: number,
+): readonly ChartPlot[] =>
+  plots.map((plot) => ({
+    ...plot,
+    series: plot.series.map((s) => ({
+      ...s,
+      points: s.points.filter((p) => p.tMs >= domainStartMs && p.tMs <= domainEndMs),
+    })),
+  }));
+
 interface Run {
   readonly points: readonly { readonly tMs: number; readonly v: number }[];
 }
@@ -427,14 +481,14 @@ const hoverColumnsFor = (
       const xEnd = next === undefined ? plotWidth : (x + xFor(next)) / 2;
       return { atMs, x, xStart: clamp(xStart, 0, plotWidth), xEnd: clamp(xEnd, 0, plotWidth) };
     })
-    // ⚠ `xFor` CLAMPS, so two instants that both fall outside the domain collapse onto the
-    // same edge and yield xStart === xEnd — a zero-width, unhoverable `<rect>` that still
-    // emits its own crosshair `<g>`. Every count assertion (`hoverZoneCount === crosshairCount`)
-    // is satisfied by such dead nodes, which is exactly why they must not be emitted. This does
-    // NOT make the component safe against a domain that excludes its own points — the last
-    // out-of-domain instant still owns the span up to the first in-domain midpoint (Q2
-    // reconciliation, F9, deferred to step 10): the caller must supply a domain containing the
-    // points it passes, as `traceFor` does by windowing the ring before decimating.
+    // ⚠ Belt-and-suspenders, not the fix: `clipPlotsToDomain` (10c-3/F9, see the module doc)
+    // now drops every out-of-domain point before it reaches this function at all, so `instants`
+    // never legitimately contains one and `xFor` never legitimately clamps a real point's `x`
+    // any more. This filter stays because a caller that bypasses the exported component (a
+    // future direct call to an internal helper, or a test) could still hand `hoverColumnsFor`
+    // an out-of-domain instant, and a zero-width, unhoverable `<rect>` that still emits its own
+    // crosshair `<g>` would satisfy every count assertion (`hoverZoneCount === crosshairCount`)
+    // while being dead. Kept as a second line of defence, not the primary one.
     .filter((col) => col.xEnd > col.xStart);
 
 /**
@@ -622,7 +676,7 @@ function ChartTableView({
 export function StackedTimeSeriesChart({
   id,
   ariaLabel,
-  plots,
+  plots: rawPlots,
   gaps,
   domainStartMs,
   domainEndMs,
@@ -631,6 +685,11 @@ export function StackedTimeSeriesChart({
   plotHeight = 110,
   view = 'chart',
 }: StackedTimeSeriesChartProps) {
+  // 10c-3 / Q2-F9 — dropped, not clamped. See `clipPlotsToDomain`'s own doc. Applied once,
+  // before EITHER branch below, so the chart and the table can never disagree about which
+  // points exist.
+  const plots = clipPlotsToDomain(rawPlots, domainStartMs, domainEndMs);
+
   if (view === 'table') {
     return (
       <ChartTableView

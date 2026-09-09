@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { EM_DASH } from '@/lib/format';
 
 import { Sparkline } from './sparkline';
-import type { SparklinePoint } from './sparkline';
+import type { SparklineGap, SparklinePoint } from './sparkline';
 
 const polylineCount = (html: string): number => (html.match(/<polyline/g) ?? []).length;
 
@@ -490,5 +490,167 @@ describe('⚠ Q2-S2 — the scrolling table view is reachable by keyboard', () =
     expect(opening).toContain('role="group"');
     expect(opening).toContain('aria-label="CPU: temperature over the selected window"');
     expect(opening).toContain('tabindex="0"');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// 10c-3 / F14b — `gaps` closes the failure index-positioning left open: two READABLE points
+// straddling a real sampling gap used to draw one smooth, unbroken line between them, which
+// reads as a genuine continuous reading over ground nobody measured. See the module doc's
+// F14b section for the full argument.
+// ---------------------------------------------------------------------------------------
+
+const gapRectCount = (html: string): number => (html.match(/data-role="gap"/g) ?? []).length;
+
+describe('⚠ 10c-3/F14b — a gap between two readable points breaks the run, even though neither point is null', () => {
+  const points: SparklinePoint[] = [
+    { tMs: 0, v: 60 },
+    { tMs: 1000, v: 62 },
+    // A real sampling gap sits between 1000 and 100000 — the ring simply has no samples
+    // there, so these two points are ADJACENT in the array despite being 99 seconds apart.
+    { tMs: 100_000, v: 90 },
+    { tMs: 101_000, v: 91 },
+  ];
+
+  test('without a matching gap entry, the four points still draw as ONE polyline — the pre-existing (wrong) behaviour, kept as the baseline this fix changes', () => {
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={points} color="#3987e5" formatValue={formatValue} formatTime={formatTime} />,
+    );
+    expect(polylineCount(html)).toBe(1);
+    expect(gapRectCount(html)).toBe(0);
+  });
+
+  test('⚠ a gap overlapping the span between two points breaks the polyline into two AND draws a gap mark', () => {
+    const gaps: SparklineGap[] = [{ fromMs: 5000, toMs: 90_000, reason: 'hidden' }];
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={points} color="#3987e5" formatValue={formatValue} formatTime={formatTime} gaps={gaps} />,
+    );
+    expect(polylineCount(html)).toBe(2);
+    expect(gapRectCount(html)).toBe(1);
+  });
+
+  // ⚠ 10c-3 reconciliation / A5 — REPLACES a test whose fixture was byte-identical to the ⚠
+  // test above it and whose assertions were a strict subset of that test's, so it could not go
+  // red independently of it, while its NAME promised a property (unrelated pairs are not
+  // double-broken) that no assertion in its body distinguished. The fixture the name described
+  // is this one: a gap spanning SEVERAL adjacent pairs.
+  test('⚠ ONE gap spanning several pairs draws ONE mark, not one per pair — §6.7: a reading landing inside a gap leaves it "neither closed nor split"', () => {
+    // §6.7's blessed case, verbatim: paused at 1 s, `refresh now` taken twice while paused
+    // (both readings kept, neither closing nor splitting the gap), resumed at 60 s.
+    const acrossRefreshes: SparklinePoint[] = [
+      { tMs: 0, v: 60 },
+      { tMs: 20_000, v: 61 },
+      { tMs: 40_000, v: 62 },
+      { tMs: 60_000, v: 63 },
+    ];
+    const gaps: SparklineGap[] = [{ fromMs: 1000, toMs: 60_000, reason: 'paused' }];
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={acrossRefreshes} color="#3987e5" formatValue={formatValue} formatTime={formatTime} gaps={gaps} />,
+    );
+    // One gap in, one mark out — `StackedTimeSeriesChart` draws exactly one `<rect>` for this
+    // same input, and the two forms of the same data must not disagree about how many outages
+    // there were.
+    expect(gapRectCount(html)).toBe(1);
+    // ⚠ And it spans the WHOLE range the gap covers, not just the last pair it straddles: a
+    // mark collapsed onto one pair would still count as "one mark" while lying about extent.
+    const mark = /<rect[^>]*data-role="gap"[^>]*>/.exec(html)?.[0] ?? '';
+    const markWidth = Number(/width="([\d.]+)"/.exec(mark)?.[1] ?? '0');
+    // The default width is 96px and the gap covers all three intervals, so the mark must be
+    // essentially the full canvas — a per-pair mark would be a third of it.
+    expect(markWidth).toBeGreaterThan(90);
+
+    // ⚠ And the TABLE says it once too. This is the half an operator actually counts: the
+    // per-pair implementation listed `gap (paused) — TIME(1000) to TIME(60000)` three times,
+    // identically worded, for one outage — three rows on a 1280px display against the promoted
+    // chart's one on a 1600px display, for the same data.
+    const table = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={acrossRefreshes} color="#3987e5" view="table" formatValue={formatValue} formatTime={formatTime} gaps={gaps} />,
+    );
+    expect((table.match(/data-role="gap-row"/g) ?? []).length).toBe(1);
+  });
+
+  test('⚠ a gap abutting a NULL reading is still marked and still listed — the table is the accessibility floor and must not say less than the chart', () => {
+    // 10c-3/A4: one poll returned no reading (invariant 5's ordinary partial snapshot), then
+    // the tab was hidden for the rest of the span. The `null` breaks the LINE, which the chart
+    // form makes visible — but the table has no line to break, so suppressing the gap there
+    // left a reader unable to tell "one reading failed" from "thirty minutes went unsampled".
+    const withNull: SparklinePoint[] = [
+      { tMs: 0, v: 60 },
+      { tMs: 1000, v: null },
+      { tMs: 100_000, v: 90 },
+    ];
+    const gaps: SparklineGap[] = [{ fromMs: 5000, toMs: 90_000, reason: 'hidden' }];
+    const chart = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={withNull} color="#3987e5" formatValue={formatValue} formatTime={formatTime} gaps={gaps} />,
+    );
+    expect(gapRectCount(chart)).toBe(1);
+    const table = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={withNull} color="#3987e5" view="table" formatValue={formatValue} formatTime={formatTime} gaps={gaps} />,
+    );
+    expect(table).toContain(`gap (hidden) — ${formatTime(5000)} to ${formatTime(90_000)}`);
+  });
+
+  test('⚠ an OPEN gap (toMs: null) still breaks the boundary into it — a reading landing INSIDE an ongoing gap (gaps.ts rule 3) is not bridged to what came before', () => {
+    const beforeAndInsideOpenGap: SparklinePoint[] = [
+      { tMs: 0, v: 60 },
+      { tMs: 1000, v: 62 },
+      // A reading landed INSIDE the still-open gap without closing it — real per gaps.ts's
+      // own rule 3 ("a reading may land inside a gap, and does not split it").
+      { tMs: 6000, v: 61 },
+    ];
+    const gaps: SparklineGap[] = [{ fromMs: 5000, toMs: null, reason: 'failed' }];
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={beforeAndInsideOpenGap} color="#3987e5" formatValue={formatValue} formatTime={formatTime} gaps={gaps} />,
+    );
+    expect(polylineCount(html)).toBe(2);
+  });
+
+  test('a gap that resolved entirely BEFORE the first point does not break anything — no adjacent pair straddles it', () => {
+    const gaps: SparklineGap[] = [{ fromMs: -500, toMs: -100, reason: 'paused' }];
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={points} color="#3987e5" formatValue={formatValue} formatTime={formatTime} gaps={gaps} />,
+    );
+    expect(polylineCount(html)).toBe(1);
+    expect(gapRectCount(html)).toBe(0);
+  });
+
+});
+
+describe('⚠ 10c-3/F14b — the table view now carries a gap row, matching the chart form', () => {
+  const points: SparklinePoint[] = [
+    { tMs: 0, v: 60 },
+    { tMs: 100_000, v: 90 },
+  ];
+
+  test('⚠ a gap between two table rows renders as its own row, spanning both columns', () => {
+    const gaps: SparklineGap[] = [{ fromMs: 5000, toMs: 90_000, reason: 'hidden' }];
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={points} color="#3987e5" view="table" formatValue={formatValue} formatTime={formatTime} gaps={gaps} />,
+    );
+    expect(html).toContain('data-role="gap-row"');
+    expect(html).toContain('colSpan="2"');
+    expect(html).toContain(`gap (hidden) — ${formatTime(5000)} to ${formatTime(90_000)}`);
+    // Three rows total: sample, gap, sample — in that order.
+    const tbody = /<tbody>([\s\S]*?)<\/tbody>/.exec(html)?.[1] ?? '';
+    expect((tbody.match(/<tr/g) ?? []).length).toBe(3);
+    expect(html.indexOf(`${formatTime(0)}`)).toBeLessThan(html.indexOf('gap (hidden)'));
+    expect(html.indexOf('gap (hidden)')).toBeLessThan(html.indexOf(formatTime(100_000)));
+  });
+
+  test('⚠ an OPEN gap’s row reads "ongoing" rather than formatting a null time', () => {
+    const gaps: SparklineGap[] = [{ fromMs: 5000, toMs: null, reason: 'failed' }];
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={points} color="#3987e5" view="table" formatValue={formatValue} formatTime={formatTime} gaps={gaps} />,
+    );
+    expect(html).toContain('to ongoing');
+  });
+
+  test('no `gaps` prop at all renders exactly as before — no gap row, two sample rows only', () => {
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={points} color="#3987e5" view="table" formatValue={formatValue} formatTime={formatTime} />,
+    );
+    expect(html).not.toContain('data-role="gap-row"');
+    const tbody = /<tbody>([\s\S]*?)<\/tbody>/.exec(html)?.[1] ?? '';
+    expect((tbody.match(/<tr/g) ?? []).length).toBe(2);
   });
 });

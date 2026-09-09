@@ -29,11 +29,18 @@
  * `grid.tsx`'s own doc records the mechanism as "recommended, not mandated": render BOTH the
  * sparkline and the promoted `StackedTimeSeriesChart`, and let a `min-width: 1600px` media
  * query in this file's own stylesheet show one and hide the other — so no viewport-tracking
- * state has to cross the hook boundary `purity.test.ts` enforces. **Size is a defensible
- * default, recorded rather than assumed** (L9's canonical value is 10c's, per the handoff):
- * 480px wide, matching `grid.tsx`'s `CHART_SIZE.cooling` width so a promoted GPU card and the
- * COOLING panel's own chart do not disagree about how wide a "big" chart is on this page, and
- * 140px tall — shorter than COOLING's 210px, because COOLING stacks two plots and this is one.
+ * state has to cross the hook boundary `purity.test.ts` enforces. **Size now comes from
+ * `grid.tsx`'s `CHART_SIZE.gpuPromoted`** (L9, closed by 10c-3) — 480px wide, matching
+ * `CHART_SIZE.cooling`'s width so a promoted GPU card and the COOLING panel's own chart do not
+ * disagree about how wide a "big" chart is on this page, and 140px PER PLOT (⚠ 10c-3/A7: that
+ * field is `plotHeight`, not `height` — this chart paints 160px in total, and COOLING's 210
+ * paints 450; the two numbers are not comparable the way an earlier draft of this paragraph
+ * claimed, and `grid.tsx`'s own doc now carries the correction). The NUMBERS are unchanged
+ * from 10b's original default; what changed is that they are no longer bare literals at this
+ * call site — 10b wrote `width={480} plotHeight={140}` here directly, which meant the one file
+ * meant to hold every chart size (`grid.tsx`'s own module doc: *"a panel that wants a bigger or
+ * smaller chart than the default asks for a new named export here rather than picking a number
+ * itself"*) did not actually hold this one.
  *
  * ⚠ **CSS media-query behaviour is not observable from `renderToStaticMarkup`** (HANDOVER §6:
  * "CSS and layout are not observable in jsdom"). This file's tests can prove both elements
@@ -160,7 +167,12 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
           {onToggleView === undefined ? null : (
             <ChartViewToggle view={view} onToggle={onToggleView} label={ariaLabel} />
           )}
-          <div className={styles.sparklineWrap}>
+          {/* ⚠ 10c-3/A2: the two wrappers carry a stable `data-role` so a browser measurement
+              identifies them BY NAME. `measure-breakpoints.mjs` used to take `svgs[0]` and
+              `svgs[1]` inside this card positionally, which held only while these two files
+              were the only `<svg>` emitters in the tree — one icon or badge added here and the
+              measurement silently checked the wrong pair, in the direction that PASSES. */}
+          <div className={styles.sparklineWrap} data-role="gpu-sparkline-wrap">
             <Sparkline
               points={trace}
               ariaLabel={ariaLabel}
@@ -170,9 +182,10 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
               view={view}
               formatValue={(v) => formatCelsius(celsius(v))}
               formatTime={formatTimeOfDayMs}
+              gaps={state.gaps}
             />
           </div>
-          <div className={styles.fullChartWrap}>
+          <div className={styles.fullChartWrap} data-role="gpu-full-chart-wrap">
             <StackedTimeSeriesChart
               id={`${panelId}-temp-chart`}
               ariaLabel={ariaLabel}
@@ -187,8 +200,8 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
               domainStartMs={domain.startMs}
               domainEndMs={domain.endMs}
               formatTime={formatTimeOfDayMs}
-              width={480}
-              plotHeight={140}
+              width={CHART_SIZE.gpuPromoted.width}
+              plotHeight={CHART_SIZE.gpuPromoted.plotHeight}
               view={view}
             />
           </div>

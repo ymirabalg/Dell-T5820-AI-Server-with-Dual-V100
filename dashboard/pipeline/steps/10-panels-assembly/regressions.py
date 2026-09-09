@@ -1307,8 +1307,8 @@ REGRESSIONS = [
      [COOLING_PANEL_TEST]),
     ("10c-CO3 the shared-time chart is pinned to chart view, so the toggle changes only its own control's label",
      COOLING_PANEL_SRC,
-     "          width={CHART_SIZE.cooling.width}\n          plotHeight={CHART_SIZE.cooling.height}\n          view={view}",
-     "          width={CHART_SIZE.cooling.width}\n          plotHeight={CHART_SIZE.cooling.height}\n          view=\"chart\"",
+     "          width={CHART_SIZE.cooling.width}\n          plotHeight={CHART_SIZE.cooling.plotHeight}\n          view={view}",
+     "          width={CHART_SIZE.cooling.width}\n          plotHeight={CHART_SIZE.cooling.plotHeight}\n          view=\"chart\"",
      [COOLING_PANEL_TEST]),
     # ⚠ Added by 10c1's TEST phase — found while chasing the handoff's "are there other fixtures
     # with the single-GPU assumption" question. `everythingZero` enumerates only GPU 0, so this
@@ -1425,6 +1425,32 @@ REGRESSIONS = [
      "    GPU_PANEL_TEST, CPU_PANEL_TEST, MEMORY_PANEL_TEST, COOLING_PANEL_TEST,\n",
      "    GPU_PANEL_TEST, MEMORY_PANEL_TEST, COOLING_PANEL_TEST,\n",
      [CROSS_HARNESS_LEDGER_TEST]),
+
+    # ----------------------------------------------------------------------------------
+    # 10c-3 reconciliation / A6 — THE PANELS' `gaps` WIRING.
+    #
+    # `Sparkline` gained a `gaps` prop in 10c-3 and step 9's harness covers the PRIMITIVE.
+    # Nothing covered the three production call sites: deleting `gaps={state.gaps}` from both
+    # CPU mounts left `pnpm verify` green at 2801/2801 and BOTH harnesses silent, restoring
+    # F14b's defect (a smooth line across unsampled ground) in the 1280-1599px band §6.1 calls
+    # the design target. `gaps` is optional on this primitive by design, so the type checker
+    # cannot catch it either — these three mutations are what does.
+    # ----------------------------------------------------------------------------------
+    ("10c-P1 the CPU temperature sparkline stops receiving state.gaps, so an unsampled span draws as one smooth line",
+     CPU_PANEL_SRC,
+     "        formatValue={(v) => formatCelsius(celsius(v))}\n        formatTime={formatTimeOfDayMs}\n        gaps={state.gaps}\n",
+     "        formatValue={(v) => formatCelsius(celsius(v))}\n        formatTime={formatTimeOfDayMs}\n",
+     [CPU_PANEL_TEST]),
+    ("10c-P2 the CPU utilisation sparkline stops receiving state.gaps — the sibling call site, which a fixture covering only the first would miss",
+     CPU_PANEL_SRC,
+     "        formatValue={(v) => formatPercent(percent(v))}\n        formatTime={formatTimeOfDayMs}\n        gaps={state.gaps}\n",
+     "        formatValue={(v) => formatPercent(percent(v))}\n        formatTime={formatTimeOfDayMs}\n",
+     [CPU_PANEL_TEST]),
+    ("10c-P3 the GPU card's sparkline stops receiving state.gaps while its promoted chart still hatches, so the two breakpoints disagree",
+     GPU_PANEL_SRC,
+     "              formatValue={(v) => formatCelsius(celsius(v))}\n              formatTime={formatTimeOfDayMs}\n              gaps={state.gaps}\n",
+     "              formatValue={(v) => formatCelsius(celsius(v))}\n              formatTime={formatTimeOfDayMs}\n",
+     [GPU_PANEL_TEST]),
 ]
 
 # ---------------------------------------------------------------------------

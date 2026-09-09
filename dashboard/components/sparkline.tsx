@@ -22,13 +22,71 @@
  * hatches real gaps from `state.gaps`, because that chart is where §9's "engage/release …
  * legible at a glance" and the shared-time cooling story live. A sparkline is a compressed
  * shape behind a number at a few dozen pixels — sub-pixel timing differences are not legible
- * at that size, so this positions its points by their order rather than carrying `tMs`,
- * `state.gaps`, or a domain through a second code path. **This is a recorded decision, not
- * an oversight**: SPEC.md does not fix a sparkline's internal geometry, and index-positioning
- * is the conservative reading, since it cannot mis-locate a spike in TIME (there is no time
- * axis to get wrong) at the cost of not showing gap hatching at this size. If a future
- * reviewer wants gap-aware sparklines, that is a real, separate primitive, not a change to
- * this one's contract.
+ * at that size, so this positions its points by their order rather than carrying `tMs` or a
+ * domain through a second code path. **This is a recorded decision, not an oversight**:
+ * SPEC.md does not fix a sparkline's internal geometry, and index-positioning is the
+ * conservative reading, since it cannot mis-locate a spike in TIME (there is no time axis to
+ * get wrong).
+ *
+ * ### ⚠ 10c-3 / F14b — `gaps` IS now a prop, closing the failure index-positioning left open
+ *
+ * §6.1 promotes the sparkline to `StackedTimeSeriesChart` only at ≥1600px; 1280–1599px (the
+ * design target) draws THIS component, which took no `gaps` prop at all until this loop. The
+ * failure that left open was measured, not assumed: `traceFor`'s output has NO entry for a
+ * span the client was not sampling — the ring simply holds no sample there — so the point
+ * immediately before a hidden-tab/paused/failed-poll gap and the point immediately after it
+ * are ADJACENT in the array `runsOf` walks. Index-positioning then draws one unbroken
+ * polyline straight across them: not a hole with no hatch, but a smooth line that reads as a
+ * genuine continuous reading over ground nobody measured — the worse of the two failures named
+ * in the 10c-3 handoff ("a hole in a series that looks like a reading is worse than a visible
+ * hatch"), because this shipped with no hole at all.
+ *
+ * The fix stays inside this component's own contract rather than adopting the full chart's
+ * time-domain machinery: `gaps` is optional, structurally compatible with `lib/client/gaps.ts`'s
+ * `Gap` (this file still does not import it — see the sibling note on `SparklinePoint` for why
+ * a structural type is preferred here) but comparable against each pair of ADJACENT points by
+ * their own real `tMs`, which every point already carries regardless of its compressed x. A
+ * gap that falls between two consecutive rendered points now breaks the run there — same
+ * mechanism as a `null` reading, so `runsOf` grew one more reason to flush — and a `<rect>`
+ * marks the pixel span between them, in the table view as a `colSpan={2}` row using the same
+ * `gap (reason) — from to` wording as the full chart's.
+ *
+ * **Why a flat tint, not the full chart's diagonal hatch.** A `<pattern>` needs an `id`, and
+ * an SVG `id` is only unique if something assigns one per instance — `StackedTimeSeriesChart`
+ * takes an explicit `id` prop for exactly this reason (2.5d), and this component has never
+ * needed one because it draws no `<pattern>`, no `<clipPath>`, nothing an id could collide
+ * over. Adding a required `id` prop here to support a decoration that would be a handful of
+ * diagonal lines across 2–8px of a 44px-tall box — narrower than the hatch's own 6px repeat —
+ * is a worse trade than a solid, muted `<rect>`: at this scale a weave is noise, not signal,
+ * and the flat tint is still strictly more honest than the smooth line it replaces. A future
+ * reviewer who wants the identical hatch here is free to add that id; it is not free today.
+ *
+ * **What this does NOT attempt.** A gap that opens after the LAST point in the window (the
+ * client is still not sampling as the window ends) draws nothing past that point, which is
+ * already correct — it is §6.5's "the trace freezes rather than plotting zeros", the same
+ * behaviour a trailing null already produced here. Only a gap that falls strictly BETWEEN two
+ * points still inside the window is a new case, and it is the only case that was ever silently
+ * wrong.
+ *
+ * **No separate domain filtering is needed, unlike the full chart's `tableRowsFor`.** That
+ * component draws hatches against a fixed pixel domain independent of which points exist, so
+ * `state.gaps` (which legitimately holds entries up to 110 minutes older than a 30-minute
+ * default window — `lib/client/runtime.ts` prunes only against the LONGEST selectable window)
+ * needs an explicit domain-bounds filter there or a stale gap paints on an axis that does not
+ * span it. Here a gap only ever matters between two points that are BOTH already in the
+ * caller's windowed `points` array — a CLOSED gap entirely outside the window has no such pair
+ * to fall between — so it is excluded by construction, not by a second check.
+ *
+ * ⚠ **10c-3/A9 — that argument covers two of the three shapes a `Gap` can take, and the doc
+ * used to claim all three.** An OPEN gap (`toMs: null`) extends to `+Infinity`, so it is never
+ * outside any window: one that opened before the first rendered point overlaps EVERY pair. It
+ * is not excluded, and it should not be — the client genuinely is not sampling, and every
+ * reading in view landed inside it (§6.7's rule 3). What was wrong was the per-pair drawing
+ * that fact produced (a mark and a table row between every pair); {@link gapSpansFor} now
+ * collapses each gap to ONE mark and ONE row spanning the range it covers, which is what
+ * `StackedTimeSeriesChart` draws for the identical input. So the claim stands as "no domain
+ * filter is needed", but not for the reason it gave, and the open case is handled by the
+ * collapse rather than by an exclusion.
  *
  * ### ⚠ Q2 — the hover layer and the table view
  *
@@ -60,11 +118,16 @@
  *   three tables with identical names and a column called "value", leaving which card a table
  *   belongs to recoverable from DOM order alone — while §9 requires identity never rest on
  *   position or colour, and §6.2 promotes the table view to the thing that discharges it.
- * - **The table has no gap column.** HANDOVER's "a table view must represent gaps and nulls
- *   as honestly as the chart does" is satisfied by symmetry: this chart form does not
- *   represent gaps EITHER (the decision above), so a table claiming to show gaps this
- *   component cannot draw would say more than the chart it stands in for. Nulls still render
- *   `EM_DASH`, matching the broken polyline.
+ * - **⚠ CORRECTED by 10c-3/F14b: the table now HAS a gap row.** This used to read "the table
+ *   has no gap column" on the ground that the chart form did not represent gaps either, so a
+ *   table claiming to would say more than the chart it stands in for. That symmetry argument
+ *   flips the moment the chart side gains gap-awareness (see the module doc's F14b section
+ *   above) — leaving the table silent would then make the table say LESS than the chart it is
+ *   supposed to be a complete substitute for, the exact failure §6.2's table-as-accessibility-
+ *   floor reasoning exists to prevent. A gap row spans both columns (`colSpan={2}`), reusing
+ *   `StackedTimeSeriesChart`'s own `gap (reason) — from to` wording so a reader does not learn
+ *   two different vocabularies for the same fact. Nulls still render `EM_DASH`, matching the
+ *   broken polyline — that part is unchanged.
  *
  * ### ⚠ Q2-S2 -- the table view SCROLLS within its own container, and every row stays in the DOM
  *
@@ -107,6 +170,20 @@ export interface SparklinePoint {
   readonly v: number | null;
 }
 
+/**
+ * 10c-3/F14b. Structurally identical to `lib/client/gaps.ts`'s `Gap` (`fromMs`, `toMs`,
+ * `reason`) but, like {@link SparklinePoint} above, its own type rather than an import — same
+ * reasoning: this file does not pull the client runtime in for a shape it can state itself.
+ * `state.gaps` (a `readonly Gap[]`) typechecks here directly; `Gap`'s `reason: GapReason` is a
+ * string-literal union, assignable to this field's plain `string`.
+ */
+export interface SparklineGap {
+  readonly fromMs: number;
+  /** `null` while the gap is still open — see `Gap`'s own doc. */
+  readonly toMs: number | null;
+  readonly reason: string;
+}
+
 export interface SparklineProps {
   readonly points: readonly SparklinePoint[];
   /**
@@ -137,6 +214,13 @@ export interface SparklineProps {
    * (see the module doc), but the tooltip and table report the actual instant regardless.
    */
   readonly formatTime: (ms: number) => string;
+  /**
+   * 10c-3/F14b, OPTIONAL and defaulted to none — a caller with nothing to hatch (every test in
+   * this file before this loop) renders exactly as before. `state.gaps`, typically. See the
+   * module doc's F14b section for what this closes: without it, two rendered points straddling
+   * a real sampling gap draw one smooth, unbroken line between them.
+   */
+  readonly gaps?: readonly SparklineGap[];
 }
 
 interface IndexedPoint {
@@ -145,24 +229,135 @@ interface IndexedPoint {
 }
 
 /**
+ * Does a gap fall strictly between two adjacent, REAL instants? An open gap (`toMs === null`)
+ * extends to `+Infinity`, matching `StackedTimeSeriesChart`'s `g.toMs ?? domainEndMs` at this
+ * component's own scale (no domain here, so no upper bound to clamp to).
+ */
+const gapBetween = (
+  a: SparklinePoint,
+  b: SparklinePoint,
+  gaps: readonly SparklineGap[],
+): SparklineGap | null =>
+  gaps.find((g) => g.fromMs < b.tMs && (g.toMs ?? Number.POSITIVE_INFINITY) > a.tMs) ?? null;
+
+/**
  * Maximal runs of consecutive readable points, each becoming one polyline — carrying each
  * point's position in the ORIGINAL array, so a run extracted after filtering nulls out still
  * places its points at their true x-position rather than a compacted one.
+ *
+ * ⚠ 10c-3/F14b: a run ALSO breaks between two readable points whose real `tMs` straddles a
+ * `gaps` entry — the same flush this function already does for a `null` reading, at one more
+ * trigger. `previous` is the immediately preceding ARRAY entry, not "the last point still in
+ * the current run": when that entry is itself `null`, `current` is already empty from the
+ * null-triggered flush, so the gap check below is a no-op there — nothing to double-break.
  */
-const runsOf = (points: readonly SparklinePoint[]): (readonly IndexedPoint[])[] => {
+const runsOf = (
+  points: readonly SparklinePoint[],
+  gaps: readonly SparklineGap[] = [],
+): (readonly IndexedPoint[])[] => {
   const runs: IndexedPoint[][] = [];
   let current: IndexedPoint[] = [];
   points.forEach((p, index) => {
-    if (p.v === null || !Number.isFinite(p.v)) {
+    const readable = p.v !== null && Number.isFinite(p.v);
+    const previous = index > 0 ? points[index - 1] : undefined;
+    const gapBreak = readable && previous !== undefined && gapBetween(previous, p, gaps) !== null;
+    if (!readable || gapBreak) {
       if (current.length > 0) runs.push(current);
       current = [];
-    } else {
-      current.push({ index, v: p.v });
     }
+    if (readable) current.push({ index, v: p.v as number });
   });
   if (current.length > 0) runs.push(current);
   return runs;
 };
+
+/**
+ * The index span one GAP covers — the first and last adjacent point-pair its interval overlaps.
+ *
+ * ⚠ **10c-3 reconciliation (A4/A5): one span per GAP, not one per PAIR.** The first
+ * implementation walked adjacent pairs and emitted a mark for each pair a gap straddled, which
+ * produced two defects with one cause:
+ *
+ * - **A5 — a gap spanning several pairs was drawn N times**, and its table listed N identical
+ *   rows for one outage. §6.7's blessed case produces exactly that: paused at t=1 s, two
+ *   *refresh now* readings kept inside the gap, resumed at 60 s is ONE `Gap`, and the spec says
+ *   in as many words that a reading landing inside a gap leaves it *"neither closed nor split"*.
+ *   The sparkline split it three ways; `StackedTimeSeriesChart` (`gaps.map`, one `<rect>` per
+ *   entry) drew one. An operator counting outages in the table read three on a 1280px display
+ *   and one on a 1600px display, for the same data.
+ * - **A4 — a gap was drawn ZERO times when a `null` reading abutted it.** The per-pair walk
+ *   required both endpoints readable, on the reasoning that *"the null already breaks the
+ *   line"*. True of the chart form; **false of the table**, where nothing breaks, no row is
+ *   emitted, and the reader cannot tell "one poll failed" from "thirty minutes were never
+ *   sampled". The table is §6.2's accessibility floor and must not say LESS than the chart it
+ *   substitutes for — and the promoted chart hatches and lists that gap.
+ *
+ * Readability is therefore not consulted here at all: a gap is a fact about *time nobody
+ * sampled*, and whether the readings on its shoulders happened to parse is a different fact,
+ * carried by the polyline break and the em dash. {@link runsOf} still consults it, correctly —
+ * it is deciding where a LINE may be drawn, not where ground went unmeasured.
+ */
+interface GapSpan {
+  readonly gap: SparklineGap;
+  /** The array index at whose left edge this gap starts — always ≥ 1. */
+  readonly firstIndex: number;
+  /** The array index at whose position it ends. `>= firstIndex`. */
+  readonly lastIndex: number;
+}
+
+/**
+ * One span per gap that overlaps at least one adjacent pair, in `gaps` order.
+ *
+ * ⚠ **10c-3/A9 corrects the module doc's "excluded by construction" claim for the OPEN case.**
+ * A closed gap outside the window overlaps no pair and is dropped here, exactly as documented.
+ * An **open** gap (`toMs: null`) extends to `+Infinity`, so one that opened before the window
+ * overlaps *every* pair — it is not excluded, and under the per-pair implementation it drew a
+ * mark between every pair of points. It now collapses to ONE mark spanning the whole rendered
+ * range, which is what `StackedTimeSeriesChart` draws for the same input (`toMs ?? domainEndMs`,
+ * one hatch across the domain, points drawn on top). The two forms agree.
+ */
+const gapSpansFor = (points: readonly SparklinePoint[], gaps: readonly SparklineGap[]): readonly GapSpan[] => {
+  const spans: GapSpan[] = [];
+  for (const gap of gaps) {
+    let firstIndex = -1;
+    let lastIndex = -1;
+    for (let index = 1; index < points.length; index += 1) {
+      const a = points[index - 1] as SparklinePoint;
+      const b = points[index] as SparklinePoint;
+      if (gapBetween(a, b, [gap]) === null) continue;
+      if (firstIndex < 0) firstIndex = index;
+      lastIndex = index;
+    }
+    if (firstIndex >= 0) spans.push({ gap, firstIndex, lastIndex });
+  }
+  return spans;
+};
+
+/** One marker per gap — see {@link GapSpan} for why it is per gap and not per point-pair. */
+interface GapMark {
+  readonly key: string;
+  readonly x: number;
+  readonly width: number;
+}
+
+/** ⚠ No hatch below this width at this scale is legible — see the module doc's F14b section
+ *  on why a flat tint, not a pattern, is drawn here. Smaller than `StackedTimeSeriesChart`'s
+ *  own `MIN_GAP_WIDTH` (6) because this canvas is itself a fraction of that chart's width. */
+const MIN_GAP_MARK_WIDTH = 2;
+
+const gapMarksFor = (
+  spans: readonly GapSpan[],
+  xFor: (index: number) => number,
+): readonly GapMark[] =>
+  spans.map(({ gap, firstIndex, lastIndex }) => {
+    const x0 = xFor(firstIndex - 1);
+    const x1 = xFor(lastIndex);
+    return {
+      key: `${gap.fromMs}-${gap.toMs ?? 'open'}-${firstIndex}`,
+      x: Math.min(x0, x1),
+      width: Math.max(MIN_GAP_MARK_WIDTH, Math.abs(x1 - x0)),
+    };
+  });
 
 /** Q2's hover columns — one per array INDEX (this file positions by index; see the module
  * doc), bounded to the midpoints of its neighbours so the pointer always lands on exactly one
@@ -188,18 +383,62 @@ const hoverColumnsFor = (
     return { index, x, xStart, xEnd };
   });
 
-/** §6.2's table view — see the module doc for why there is no gap column. */
+/** 10c-3/F14b — a gap row between two sample rows, or a sample row itself. See `tableRowsFor`. */
+type TableRow =
+  | { readonly kind: 'sample'; readonly point: SparklinePoint }
+  | {
+      readonly kind: 'gap';
+      readonly key: string;
+      readonly reason: string;
+      readonly fromMs: number;
+      readonly toMs: number | null;
+    };
+
+/**
+ * 10c-3/F14b: one row per point, plus a gap row wherever the chart form now draws a hatch
+ * (the SAME {@link gapSpansFor} spans, so the two forms cannot disagree about how many gaps
+ * there were or where they fell — the table is the chart's accessibility floor and a reader
+ * switching views must see the same gaps in both).
+ */
+const tableRowsFor = (
+  points: readonly SparklinePoint[],
+  gaps: readonly SparklineGap[],
+): readonly TableRow[] => {
+  const spans = gapSpansFor(points, gaps);
+  const rows: TableRow[] = [];
+  points.forEach((p, index) => {
+    // ⚠ 10c-3/A5: `firstIndex`, so ONE row per gap — the chart form draws one `<rect>` for the
+    // same span, and the table must agree with it. Emitting a row per straddled pair listed one
+    // outage three times, identically worded, which an operator counting outages reads as three.
+    for (const { gap, firstIndex } of spans) {
+      if (firstIndex !== index) continue;
+      rows.push({
+        kind: 'gap',
+        key: `gap-${gap.fromMs}-${gap.toMs ?? 'open'}`,
+        reason: gap.reason,
+        fromMs: gap.fromMs,
+        toMs: gap.toMs,
+      });
+    }
+    rows.push({ kind: 'sample', point: p });
+  });
+  return rows;
+};
+
+/** §6.2's table view. 10c-3/F14b: now WITH a gap row — see the module doc's correction. */
 function SparklineTableView({
   points,
   ariaLabel,
   formatValue,
   formatTime,
-}: Pick<SparklineProps, 'points' | 'ariaLabel' | 'formatValue' | 'formatTime'>) {
+  gaps = [],
+}: Pick<SparklineProps, 'points' | 'ariaLabel' | 'formatValue' | 'formatTime' | 'gaps'>) {
   if (points.length === 0) {
     return (
       <p className={styles.tableEmpty}>{`${ariaLabel} — no readings in the selected window`}</p>
     );
   }
+  const rows = tableRowsFor(points, gaps);
   return (
     // Q2-S2: this div is the scroll container AND the keyboard tab stop (see the module doc's
     // Q2-S2 section) — `role="group"`/`aria-label` name it, `tabIndex={0}` makes it reachable
@@ -216,17 +455,26 @@ function SparklineTableView({
           </tr>
         </thead>
         <tbody>
-          {points.map((p) => (
-            <tr key={p.tMs}>
-              {/* ⚠ A row HEADER, not a data cell — see the identical note in
-                  `stacked-time-series-chart.tsx` (Q2 reconciliation, F4). */}
-              <th scope="row">{formatTime(p.tMs)}</th>
-              {/* ⚠ `Number.isFinite` matches this file's OWN chart-path guard in `runsOf`: a
-                  non-finite reading is a break in the polyline, so it must not be a printed
-                  `NaN` in the table beside it (Q2 reconciliation, F6). */}
-              <td>{p.v !== null && Number.isFinite(p.v) ? formatValue(p.v) : EM_DASH}</td>
-            </tr>
-          ))}
+          {rows.map((row) =>
+            row.kind === 'gap' ? (
+              <tr key={row.key} className={styles.gapRow} data-role="gap-row">
+                <td colSpan={2}>
+                  {`gap (${row.reason}) — ${formatTime(row.fromMs)} to `}
+                  {row.toMs === null ? 'ongoing' : formatTime(row.toMs)}
+                </td>
+              </tr>
+            ) : (
+              <tr key={row.point.tMs}>
+                {/* ⚠ A row HEADER, not a data cell — see the identical note in
+                    `stacked-time-series-chart.tsx` (Q2 reconciliation, F4). */}
+                <th scope="row">{formatTime(row.point.tMs)}</th>
+                {/* ⚠ `Number.isFinite` matches this file's OWN chart-path guard in `runsOf`: a
+                    non-finite reading is a break in the polyline, so it must not be a printed
+                    `NaN` in the table beside it (Q2 reconciliation, F6). */}
+                <td>{row.point.v !== null && Number.isFinite(row.point.v) ? formatValue(row.point.v) : EM_DASH}</td>
+              </tr>
+            ),
+          )}
         </tbody>
       </table>
     </div>
@@ -242,6 +490,7 @@ export function Sparkline({
   view = 'chart',
   formatValue,
   formatTime,
+  gaps = [],
 }: SparklineProps) {
   if (view === 'table') {
     return (
@@ -250,11 +499,12 @@ export function Sparkline({
         ariaLabel={ariaLabel}
         formatValue={formatValue}
         formatTime={formatTime}
+        gaps={gaps}
       />
     );
   }
 
-  const runs = runsOf(points);
+  const runs = runsOf(points, gaps);
   const readable = runs.flat();
 
   if (points.length === 0 || readable.length === 0) {
@@ -290,6 +540,7 @@ export function Sparkline({
 
   const last = readable[readable.length - 1];
   const hoverColumns = hoverColumnsFor(n, xFor, width);
+  const gapMarks = gapMarksFor(gapSpansFor(points, gaps), xFor);
 
   return (
     <svg
@@ -300,6 +551,22 @@ export function Sparkline({
       role="img"
       aria-label={ariaLabel}
     >
+      {/* 10c-3/F14b — painted FIRST, under the polylines: a hatched-ground rect would be
+          nothing to hatch here (see the module doc), so this is a flat, muted tint instead.
+          `pointer-events: none` so it never competes with the hover layer painted last. */}
+      <g data-role="sparkline-gaps">
+        {gapMarks.map((mark) => (
+          <rect
+            key={mark.key}
+            className={styles.gap}
+            data-role="gap"
+            x={mark.x}
+            y={0}
+            width={mark.width}
+            height={height}
+          />
+        ))}
+      </g>
       {runs.map((run, i) => (
         <Fragment key={i}>
           <polyline

@@ -64,7 +64,25 @@
      panel body a genuine bounded height, this should become `max-height: 100%` inheriting it
      — recorded for step 10 in `pipeline/steps/Q2-hover-and-table/s2-table-scroll.md`. One
      token, one place to change, used identically by both table views so the two components
-     do not each carry their own independently-guessed number. */
+     do not each carry their own independently-guessed number.
+
+     ⚠ RE-CHECKED by 10c-3, SCOPE 2.5f, after the grid actually landed (10a) — STILL NO
+     bounded ancestor, so the stopgap is UNCHANGED. `grid.module.css` sets `min-height: 0` down
+     the whole chain (`.grid` → each named slot → `panel-shell.module.css`'s `.panel`/`.body`)
+     but never a `height`, `max-height` or `grid-template-rows` track size — grid rows are
+     `auto`, sized to content. Nor does `app/layout.tsx`'s `<body>`, `app/dashboard-shell.tsx`,
+     or anything else up the tree set a height. Verified by grepping every `.css`/`.module.css`
+     under `components/`+`app/` for `height`: the only matches besides this comment and
+     `min-height: 0` are `meter.module.css`'s own 6px bar (unrelated) and this file's own 1px
+     `.sr-only` trick — none of them bound a panel body. Concretely: `max-height: 100%` on an
+     element whose parent chain has no explicit height computes as unconstrained (CSS's own
+     rule for a percentage height with no definite containing-block height), so switching to it
+     today would silently un-cap the table again — precisely the regression the 2026-09-04
+     stopgap was written to prevent. This is deliberate: §6.1's own "no-scroll promise" is about
+     the PAGE, not a component, and below 1280px the page is EXPECTED to scroll — giving the
+     grid a real height (e.g. `height: 100vh` with internal scrolling) would fight that, so it
+     is not a small addition step 10 merely forgot; it is a bigger layout decision for whoever
+     next touches §6.1's breakpoints, and it stays open. */
   --table-scroll-max: 40vh;
 }
 
