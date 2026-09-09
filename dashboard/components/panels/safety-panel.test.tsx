@@ -53,8 +53,13 @@ describe('§6.2 — SAFETY: the four checks', () => {
 
   test('§6.3 — pwm5Present: false is the ALARM, and it carries its own errors[] explanation', () => {
     const html = renderToStaticMarkup(<SafetyPanel state={stateWith(pwm5NodeAbsent)} nowMs={0} panelId="safety" />);
-    expect(html).toContain('data-severity="alarm"');
-    expect(html).toContain('no pwm5 on hwmon dell_smm');
+    // Scoped to the row — SAFETY's own head chip is a reduction over its four checks (same
+    // shape as `rowContaining(html, 'pwm5 present')` two tests below), so a whole-document
+    // check cannot tell "this row shows alarm" from "the head merely does" (10c2's
+    // toContain-scope guard).
+    const row = rowContaining(html, 'pwm5 present');
+    expect(row).toContain('data-severity="alarm"');
+    expect(row).toContain('no pwm5 on hwmon dell_smm');
   });
 
   test('⚠ pwm5Present: null (could not check) is WATCH, never the alarm', () => {
@@ -139,7 +144,16 @@ describe('before the first poll', () => {
   test('every row renders — rather than throwing, and the three total checks read watch', () => {
     const html = renderToStaticMarkup(<SafetyPanel state={emptyState()} nowMs={0} panelId="safety" />);
     expect(html).toContain('—');
-    expect(html).toContain('data-severity="watch"');
+    // ⚠ Scoped by 10c-2's RECONCILIATION (adversarial F10). The whole-document
+    // `expect(html).toContain('data-severity="watch"')` that stood here was exempted from the
+    // toContain guard by the blanket `"throwing"` rule — an exemption justified by "an em dash
+    // anywhere proves nothing crashed", which says nothing about a BAND. And the band claim is
+    // the second half of this test's own name: `SafetyPanel`'s head chip is a reduction over
+    // these very rows, so the head alone satisfied it and "the three checks read watch" was
+    // never actually asserted. The exemption is now em-dash-only, and this is the fix it forced.
+    for (const label of ['ufw enforcing', 'pwm5 present', 'DKMS for running kernel']) {
+      expect(rowContaining(html, label), label).toContain('data-severity="watch"');
+    }
   });
 });
 

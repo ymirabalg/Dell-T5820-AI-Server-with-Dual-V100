@@ -53,8 +53,14 @@ describe('§6.2 — the CPU card', () => {
   test('temperature is banded by §6.3, and the chip matches the row', () => {
     const hot = stateWith(snapshotWith({ cpuTempC: celsius(95) }));
     const html = renderToStaticMarkup(<CpuPanel state={hot} nowMs={0} panelId="cpu" />);
-    expect(html).toContain('data-severity="alarm"');
-    expect(html).toContain('95 °C');
+    // Scoped to the row — the PanelShell HEAD renders the identical `data-severity="alarm"`
+    // from the same `chip` value, so a whole-document check cannot tell "the row shows it"
+    // from "only the head does" (10c2's toContain-scope guard; proven live by mutation —
+    // `10c2-build.md` §1 — that a Row wired to `severity={null}` while `chip` stays alarm
+    // still satisfies a document-wide `toContain('data-severity="alarm"')`).
+    const row = rowContaining(html, 'temperature');
+    expect(row).toContain('data-severity="alarm"');
+    expect(row).toContain('95 °C');
   });
 
   test('load average renders §6.6’s 2dp / -separated form', () => {

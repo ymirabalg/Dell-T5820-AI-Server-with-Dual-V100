@@ -104,6 +104,19 @@ FORCE_ALARM_TEST = "lib/client/force-alarm.test.ts"
 # real `pnpm build` chunk with the suite and the harness both green.
 FORCE_ALARM_WIRING_TEST = "lib/client/use-telemetry.force-alarm.test.tsx"
 
+# ⚠ === 10c-2's four guards ===
+# `lib/` (not `components/panels/`), because each is a project-wide mechanism guard, not a
+# panel body — same reasoning `lib/guardrails.test.ts`/`lib/client/guardrails.test.ts` already
+# use for cross-cutting checks. Each was itself an orphan under Q1-F4's own runner the moment
+# it was written (a ⚠-marked test file in no `LEDGER_FILES` list) — proof the runner works
+# before its first "real" catch. Only the ONE test.each that scans real files stays ⚠-marked
+# in each; the classifier's own fixture tests are left unmarked deliberately (10c2-build.md
+# §5) rather than each earning its own mutation here.
+TOCONTAIN_SCOPE_TEST = "lib/tocontain-scope.test.ts"
+DANGLING_CSS_CLASS_TEST = "lib/dangling-css-class.test.ts"
+UNIT_SUFFIX_TEST = "lib/unit-suffix.test.ts"
+CROSS_HARNESS_LEDGER_TEST = "lib/cross-harness-ledger.test.ts"
+
 LEDGER_FILES = [
     HEADER_STATUS_TEST, BANNER_TEST, HEADER_TEST, ALARM_BANNER_TEST, GRID_TEST,
     USE_TELEMETRY_TEST, USE_TELEMETRY_SSR_TEST, USE_NOW_TICK_TEST,
@@ -113,6 +126,7 @@ LEDGER_FILES = [
     STORAGE_NETWORK_PANEL_TEST, SERVING_PANEL_TEST, SAFETY_PANEL_TEST,
     SESSION_EVENT_LOG_PANEL_TEST, PANEL_NOTES_TEST, PANEL_CHIP_TEST,
     CHART_VIEW_TOGGLE_TEST, FORCE_ALARM_TEST, FORCE_ALARM_WIRING_TEST,
+    TOCONTAIN_SCOPE_TEST, DANGLING_CSS_CLASS_TEST, UNIT_SUFFIX_TEST, CROSS_HARNESS_LEDGER_TEST,
 ]
 
 # `test`/`it`, optionally `.each(<PAREN-BALANCED ARGS>)`, optionally `<A GENERIC ARG>`, then `(`.
@@ -1365,6 +1379,52 @@ REGRESSIONS = [
      "          body: response.body,",
      [FORCE_ALARM_WIRING_TEST]),
 
+    # ⚠ === 10c-2's four guards — each demonstrated live by hand before being wired here
+    #    (10c2-build.md), reproduced as an anchored mutation rather than left as a one-off. ===
+
+    # `10b-F1-guard` (the toContain-scope lint): un-scoping a check back to the whole document
+    # is exactly the shape all four historical bugs took. This is the SAME edit the parent
+    # made by hand to prove the guard fires, now pinned.
+    ("10c-G2 cpu-panel's temperature-severity check is un-scoped back to the whole document",
+     CPU_PANEL_TEST,
+     "    const row = rowContaining(html, 'temperature');\n"
+     "    expect(row).toContain('data-severity=\"alarm\"');\n"
+     "    expect(row).toContain('95 °C');",
+     "    const row = rowContaining(html, 'temperature');\n"
+     "    expect(html).toContain('data-severity=\"alarm\"');\n"
+     "    expect(row).toContain('95 °C');",
+     [TOCONTAIN_SCOPE_TEST]),
+
+    # `10c1-A8-audit` (the dangling-class audit): a misspelled/deleted class resolves to a
+    # plausible hash through the CSS-module Proxy and is invisible to `tsc` and every render
+    # test — this is `alarm-banner.tsx`'s own historical `styles.item` bug, reproduced on a
+    # different class so the anchor stays unique.
+    ("10c-G3 alarm-banner.tsx's outer wrapper references a class with no rule in its stylesheet",
+     ALARM_BANNER_SRC,
+     '<div className={styles.banner} role="alert">',
+     '<div className={styles.zzzNoSuchRule} role="alert">',
+     [DANGLING_CSS_CLASS_TEST]),
+
+    # L11 (the unit-suffix guard): a component hand-builds the reading instead of calling the
+    # formatter — right next to a correct `formatRpm` call on the sibling row, so this is
+    # exactly the edit an inattentive copy-paste would make.
+    ("10c-G4 cooling-panel's fan 2 row hand-builds its RPM string instead of calling formatRpm",
+     COOLING_PANEL_SRC,
+     "value={formatRpm(cooling?.fan2Rpm ?? null)}",
+     "value={`${cooling?.fan2Rpm ?? 0} RPM`}",
+     [UNIT_SUFFIX_TEST]),
+
+    # Q1-F4 (the cross-harness runner): removing a ⚠-bearing file from LEDGER_FILES is
+    # precisely what makes a test file an unprovable orphan — this mutates THIS harness's own
+    # list, not a component. `main()` restores the original text from memory in its `finally`
+    # block regardless of outcome, the same guarantee every other mutation here relies on; the
+    # `pnpm vitest run` subprocess reads the mutated file fresh from disk, which is the whole
+    # point of a text-anchored harness rather than an in-process one.
+    ("10c-G5 cpu-panel.test.tsx is dropped from this file's own LEDGER_FILES, becoming an orphan with live ⚠ marks",
+     "pipeline/steps/10-panels-assembly/regressions.py",
+     "    GPU_PANEL_TEST, CPU_PANEL_TEST, MEMORY_PANEL_TEST, COOLING_PANEL_TEST,\n",
+     "    GPU_PANEL_TEST, MEMORY_PANEL_TEST, COOLING_PANEL_TEST,\n",
+     [CROSS_HARNESS_LEDGER_TEST]),
 ]
 
 # ---------------------------------------------------------------------------

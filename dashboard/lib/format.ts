@@ -99,17 +99,54 @@ const render = (v: number | null, fmt: Intl.NumberFormat, unit: string): string 
   readable(v) ? `${fmt.format(v === 0 ? 0 : v)}${unit}` : EM_DASH;
 
 // ---------------------------------------------------------------------------
+// §6.6's unit suffixes — L11 (HANDOVER §9)
+// ---------------------------------------------------------------------------
+//
+// ⚠ NOT `lib/units.ts` — that module already exists and means something else entirely:
+// the two SYSTEMD UNIT names (`gpu-fan-control.service`, `llama-server@<i>.service`) §6.4's
+// condition ids are built from. "Unit" is overloaded between "a measurement's unit" (this
+// file) and "a systemd unit" (that one); reusing the name would make every future grep for
+// either concept return both. Recorded here rather than guessed at silently (invariant 7) —
+// `lib/format.ts`, which already is "the §6.6 formatters" module, is this constant's home.
+//
+// A component gets a COMPLETE formatted string from a `format*` function above and should
+// never need one of these directly — they exist so `lib/tocontain-scope.test.ts`'s sibling
+// guard, `lib/unit-suffix.test.ts`, has an exact, closed vocabulary to check a component
+// never hardcodes instead of calling the formatter. Exported (not merely `const`) so that
+// guard can import the same strings the formatters below actually use, rather than keeping
+// its own second copy that could drift from theirs.
+
+/** GPU/CPU temperature (§6.6). */
+export const UNIT_CELSIUS = ' °C';
+/** GPU power draw (§6.6). */
+export const UNIT_WATTS = ' W';
+/** VRAM (§6.6). */
+export const UNIT_MIB = ' MiB';
+/** RAM, disk and swap (§6.6). */
+export const UNIT_GIB = ' GiB';
+/** Fan speed (§6.6). */
+export const UNIT_RPM = ' RPM';
+/** GPU SM clock (§6.6). */
+export const UNIT_MHZ = ' MHz';
+/** CPU/disk utilisation (§6.6). */
+export const UNIT_PERCENT = ' %';
+/** Network throughput, decimal-scaled (§6.6). */
+export const UNIT_MB_PER_S = ' MB/s';
+/** Network throughput, decimal-scaled (§6.6). */
+export const UNIT_KB_PER_S = ' KB/s';
+
+// ---------------------------------------------------------------------------
 // §6.6 rows
 // ---------------------------------------------------------------------------
 
 /** GPU temp, CPU temp — integer °C. `66 °C`, `0 °C`, `—`. */
-export const formatCelsius = (v: Celsius | null): string => render(v, INTEGER, ' °C');
+export const formatCelsius = (v: Celsius | null): string => render(v, INTEGER, UNIT_CELSIUS);
 
 /** GPU power — 1 dp W, checked against `power.draw`. `249.8 W`. */
-export const formatWatts = (v: Watts | null): string => render(v, ONE_DP, ' W');
+export const formatWatts = (v: Watts | null): string => render(v, ONE_DP, UNIT_WATTS);
 
 /** VRAM — MiB, thousands separated. `26,452 MiB`. */
-export const formatMiB = (v: MiB | null): string => render(v, INTEGER, ' MiB');
+export const formatMiB = (v: MiB | null): string => render(v, INTEGER, UNIT_MIB);
 
 /**
  * VRAM as §6.6 prints it: `26,452 / 32,768 MiB`.
@@ -122,7 +159,7 @@ export const formatMiBPair = (used: MiB | null, total: MiB | null): string => {
   if (!readable(used) && !readable(total)) return EM_DASH;
   const u = readable(used) ? INTEGER.format(used === 0 ? 0 : used) : EM_DASH;
   const t = readable(total) ? INTEGER.format(total === 0 ? 0 : total) : EM_DASH;
-  return `${u} / ${t} MiB`;
+  return `${u} / ${t}${UNIT_MIB}`;
 };
 
 /**
@@ -131,7 +168,7 @@ export const formatMiBPair = (used: MiB | null, total: MiB | null): string => {
  * The separator was step 2's reading of §6.6's unconditional locale bullet before the row
  * said so; §6.6 now spells it out, matching the VRAM and fan rows.
  */
-export const formatMHz = (v: MHz | null): string => render(v, INTEGER, ' MHz');
+export const formatMHz = (v: MHz | null): string => render(v, INTEGER, UNIT_MHZ);
 
 /**
  * RAM **and disk** — 1 dp GiB. `24.3 GiB`, `232.6 GiB`.
@@ -142,7 +179,7 @@ export const formatMHz = (v: MHz | null): string => render(v, INTEGER, ' MHz');
  * `statvfs.ts` divides by `BYTES_PER_GIB` = `1024³`, which is what `df -h` and `lsblk`
  * print (`/` is 232.6 GiB, not 249.8 GB) — and until O19 only the printed suffix lied.
  */
-export const formatGiB = (v: GiB | null): string => render(v, ONE_DP, ' GiB');
+export const formatGiB = (v: GiB | null): string => render(v, ONE_DP, UNIT_GIB);
 
 /**
  * Swap — **2 dp** GiB (§6.6: "small values must not round to `0.0`").
@@ -151,13 +188,13 @@ export const formatGiB = (v: GiB | null): string => render(v, ONE_DP, ' GiB');
  * swap in use is meaningful on this box, so 40 MiB of swap must read `0.04 GiB` and not
  * `0.0 GiB`, which is indistinguishable from none.
  */
-export const formatSwapGiB = (v: GiB | null): string => render(v, TWO_DP, ' GiB');
+export const formatSwapGiB = (v: GiB | null): string => render(v, TWO_DP, UNIT_GIB);
 
 /** Fan speed — integer RPM, thousands separated. `4,308 RPM`, and `0 RPM` for a dead fan. */
-export const formatRpm = (v: Rpm | null): string => render(v, INTEGER, ' RPM');
+export const formatRpm = (v: Rpm | null): string => render(v, INTEGER, UNIT_RPM);
 
 /** Percentages — 1 dp. `81.3 %`. */
-export const formatPercent = (v: Percent | null): string => render(v, ONE_DP, ' %');
+export const formatPercent = (v: Percent | null): string => render(v, ONE_DP, UNIT_PERCENT);
 
 /** Context length — tokens, thousands separated, bare numeral. `131,072` (§6.6). */
 export const formatTokens = (v: Tokens | null): string => render(v, INTEGER, '');
@@ -219,13 +256,13 @@ const twoSigFigs = (v: number): string => {
 export const formatBytesPerSecond = (v: BytesPerSecond | null): string => {
   if (!readable(v)) return EM_DASH;
   const bytes = v === 0 ? 0 : v;
-  if (Math.abs(bytes) >= 1e6) return `${twoSigFigs(bytes / 1e6)} MB/s`;
+  if (Math.abs(bytes) >= 1e6) return `${twoSigFigs(bytes / 1e6)}${UNIT_MB_PER_S}`;
   // 999_499 B/s is 1,000 KB/s at 2 s.f., which shows four digits for a two-figure rule.
   // Auto-scaling means that reading is 1.0 MB/s.
   const kb = twoSigFigsValue(bytes / 1e3);
   return Math.abs(kb) >= 1000
-    ? `${twoSigFigs(bytes / 1e6)} MB/s`
-    : `${twoSigFigs(bytes / 1e3)} KB/s`;
+    ? `${twoSigFigs(bytes / 1e6)}${UNIT_MB_PER_S}`
+    : `${twoSigFigs(bytes / 1e3)}${UNIT_KB_PER_S}`;
 };
 
 // ---------------------------------------------------------------------------

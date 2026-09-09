@@ -29,13 +29,17 @@ import type { ErrorSource, TelemetryError } from '../types';
  * as omitting it, never a way to attach "no instance" as a distinct value.
  *
  * ⚠ **That last sentence is true of THIS function and of nothing else** (adversarial A11,
- * recorded 2026-09-08). `exactOptionalPropertyTypes` is off, so `instance?: number` admits
- * `undefined` as a *value* and `{ ...base, instance: maybeUndefined }` — built anywhere but
- * here — typechecks with the key **present**. `contract.test.ts` asserts
- * `Object.hasOwn(entry, 'instance') === false` for an entry that names no instance, and that
- * is a runtime guarantee the compiler does not carry: it holds today only because this
- * function branches on `undefined` rather than spreading it, and because `JSON.stringify`
- * drops an `undefined` value on the way out. Mint entries here.
+ * recorded 2026-09-08; **corrected 2026-09-08 by 10c-2's test phase** — `exactOptionalPropertyTypes`
+ * has been **on** since the first commit, not off; `{ ...base, instance: maybeUndefined }` with
+ * `maybeUndefined: number | undefined` fails to compile today (`tsc` reports TS2375), which is
+ * exactly what the flag being on buys). `contract.test.ts` asserts
+ * `Object.hasOwn(entry, 'instance') === false` for an entry that names no instance, and that is
+ * still a RUNTIME guarantee the type system does not fully carry on its own: `tsc` only catches a
+ * spread it can see the type of, so an entry assembled through a loosely-typed path (an `any`, a
+ * cast, a value threaded through `JSON.parse`) could still end up with the key present and
+ * holding `undefined`. It holds today only because this function branches on `undefined` rather
+ * than spreading it, and because `JSON.stringify` drops an `undefined` value on the way out.
+ * Mint entries here.
  */
 export const tag = (
   source: ErrorSource,

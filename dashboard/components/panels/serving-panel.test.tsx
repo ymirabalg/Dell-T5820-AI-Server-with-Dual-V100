@@ -28,7 +28,10 @@ describe('§6.2 — SERVING', () => {
     const snapshot = { ...everythingZero, serving: [servingIdentityOnly] };
     const html = renderToStaticMarkup(<ServingPanel state={stateWith(snapshot)} nowMs={0} panelId="serving" />);
     expect(html).toContain('llama-server@2');
-    expect(html).toContain('—');
+    // Scoped to the VALUE cells rather than the whole document, per 10c2's toContain-scope
+    // guard — "shows — for the rest" is a claim about a READING, not merely that the glyph
+    // appears somewhere (which `Chip`'s own no-band state could also satisfy).
+    expect(valueCells(html).some((cell) => cell.includes('—'))).toBe(true);
   });
 
   test('⚠ serving: null renders "unknown", never zero rows silently', () => {

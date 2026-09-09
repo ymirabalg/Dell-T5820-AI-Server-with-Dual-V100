@@ -13,6 +13,12 @@ const snapshotWith = (overrides: Partial<TelemetrySnapshot['host']>): TelemetryS
   host: { ...everythingZero.host, ...overrides },
 });
 
+/** The RAM Meter's own markup — after the head, before the swap row — so a check of its
+ *  severity cannot be satisfied by the PanelShell HEAD's own `data-severity` (a REDUCTION
+ *  over RAM's and swap's leaves, per `panelChip`) or by the swap Row's (10c2's
+ *  toContain-scope guard). */
+const ramMeterOf = (html: string): string => html.slice(html.indexOf('</header>'), html.indexOf('>swap<'));
+
 describe('§6.2 — the MEMORY card', () => {
   test('subtitle is the fixed source label', () => {
     const html = renderToStaticMarkup(<MemoryPanel state={emptyState()} nowMs={0} panelId="memory" />);
@@ -61,12 +67,12 @@ describe('§6.2 — the MEMORY card', () => {
     const html = renderToStaticMarkup(<MemoryPanel state={stateWith(snapshot)} nowMs={0} panelId="memory" />);
     expect(html).toContain('— / 61.0 GiB');
     expect(html).not.toContain('0.0 GiB / 61.0 GiB');
-    // ⚠ This unscoped assertion is true for the WRONG reason before 10b-S-F: the Meter's own
-    // `severity={severityRam(used, total)}` is `null` regardless of the HEAD chip, so this line
-    // alone would have kept passing under the finding's exact bug (RAM —/— rendering a GREEN
-    // head over it) — the same document-wide `toContain` shape ANCHOR §9 has now caught three
-    // times elsewhere in this project. The head-scoped assertion below is the one that matters.
-    expect(html).toContain('data-severity="none"');
+    // Scoped to the RAM meter, past the head — a document-wide check here would have stayed
+    // green under 10b-S-F's exact bug (RAM —/— rendering a GREEN head over it), since the
+    // head shared the same `data-severity="none"` for the wrong reason (10c2's
+    // toContain-scope guard). The head-scoped assertions below are the ones that matter for
+    // the 10b-S-F finding itself; this one is about the RAM Meter's OWN leaf severity.
+    expect(ramMeterOf(html)).toContain('data-severity="none"');
   });
 
   describe('⚠ 10b-S-F — the panel HEAD never bands normal over its own em dash', () => {
@@ -107,7 +113,9 @@ describe('§6.2 — the MEMORY card', () => {
     const snapshot = snapshotWith({ memUsedGiB: gib(0), memTotalGiB: gib(61), swapUsedGiB: gib(0) });
     const html = renderToStaticMarkup(<MemoryPanel state={stateWith(snapshot)} nowMs={0} panelId="memory" />);
     expect(html).toContain('0.0 GiB / 61.0 GiB');
-    expect(html).toContain('data-severity="normal"');
+    // Scoped — head and swap both also read normal here, so a whole-document check could not
+    // tell RAM's own leaf from either of them (10c2's toContain-scope guard).
+    expect(ramMeterOf(html)).toContain('data-severity="normal"');
   });
 
   test('before the first poll, both the bar and the swap row render — rather than throwing', () => {

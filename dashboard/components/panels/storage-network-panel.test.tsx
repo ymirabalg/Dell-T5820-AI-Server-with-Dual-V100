@@ -9,6 +9,15 @@ import type { TelemetrySnapshot } from '@/lib/types';
  *  siblings, so a whole-document check could not tell which one a bug hit. */
 const rootMeterOf = (html: string): string => html.slice(html.indexOf('>/<'), html.indexOf('>/home<'));
 
+/** The full markup of the row/div containing `needle` — hoisted to module scope (was local to
+ *  the `§6.5` describe below) so the `§6.2` tests can scope past the PanelShell HEAD too
+ *  (10c2's toContain-scope guard: the head is a reduction over root/home/link, so it can
+ *  independently satisfy the same `data-severity` value a row's own bug would fail to). */
+const rowContaining = (html: string, needle: string): string => {
+  const at = html.indexOf(needle);
+  return html.slice(html.lastIndexOf('<div', at), html.indexOf('</div>', at));
+};
+
 import { StorageNetworkPanel } from './storage-network-panel';
 import { allReadingsNull, displayedConditionOf, emptyState, stateWith, valueCells } from './test-support';
 
@@ -44,7 +53,9 @@ describe('§6.2 — STORAGE & NETWORK', () => {
       net: everythingZero.storage.net,
     });
     const html = renderToStaticMarkup(<StorageNetworkPanel state={stateWith(snapshot)} nowMs={0} panelId="storage-and-network" />);
-    expect(html).toContain('data-severity="alarm"');
+    // Scoped to root's own meter — the PanelShell HEAD reduces over root/home/link and would
+    // show the identical alarm regardless (10c2's toContain-scope guard).
+    expect(rootMeterOf(html)).toContain('data-severity="alarm"');
   });
 
   test('⚠ root’s meter shows ROOT’s own severity, never home’s (and vice versa)', () => {
@@ -78,8 +89,11 @@ describe('§6.2 — STORAGE & NETWORK', () => {
       net: { ...everythingZero.storage.net, link: 'down' },
     });
     const html = renderToStaticMarkup(<StorageNetworkPanel state={stateWith(down)} nowMs={0} panelId="storage-and-network" />);
-    expect(html).toContain('data-severity="alarm"');
-    expect(html).toContain('down');
+    // Scoped to the link row — same head-reduction risk as the disk test above (10c2's
+    // toContain-scope guard).
+    const row = rowContaining(html, 'eno1 link');
+    expect(row).toContain('data-severity="alarm"');
+    expect(row).toContain('down');
   });
 
   test("⚠ a stale link condition renders S-B's exact wording, watch-toned", () => {
@@ -144,11 +158,6 @@ describe('§6.2 — STORAGE & NETWORK', () => {
 });
 
 describe('⚠ §6.5 — statvfs and proc-net-dev had no rendering path at all', () => {
-  const rowContaining = (html: string, needle: string): string => {
-    const at = html.indexOf(needle);
-    return html.slice(html.lastIndexOf('<div', at), html.indexOf('</div>', at));
-  };
-
   test('⚠ a statvfs failure renders once beneath the two bars it blanks', () => {
     // Both mounts read `— / —` with no message anywhere on the page. `statvfs` blanks BOTH, and
     // `collectStorage` files an entry per mount under the one source, so it cannot be attributed

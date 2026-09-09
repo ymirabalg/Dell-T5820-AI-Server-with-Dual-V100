@@ -840,7 +840,10 @@ describe('bounds and hygiene', () => {
     expect(listFailed.errors).toHaveLength(1);
     // ⚠ `Object.hasOwn`, not `=== undefined`: a key PRESENT and holding `undefined` reads the
     // same way through `?.instance`, and is exactly what a careless `{ ...e, instance }` spread
-    // produces (`exactOptionalPropertyTypes` is off, so the compiler allows it — A11).
+    // produces if it slips past the type system (A11). Corrected 2026-09-08 by 10c-2's test
+    // phase: `exactOptionalPropertyTypes` is ON, not off — has been since the first commit — so
+    // `tsc` itself now rejects that spread when the type is visible; this assertion is the
+    // runtime backstop for a path where it is not (an `any`, a cast, a JSON.parse result).
     expect(Object.hasOwn(listFailed.errors[0] ?? {}, 'instance')).toBe(false);
 
     const notAnInstance = await collectServing({

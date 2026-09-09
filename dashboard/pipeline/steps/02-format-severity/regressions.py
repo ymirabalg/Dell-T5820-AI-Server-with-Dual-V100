@@ -236,9 +236,14 @@ REGRESSIONS = [
      "export const EM_DASH = '—';", "export const EM_DASH = '';", "lib/format.test.ts"),
     ("02-R2b null renders N/A", "lib/format.ts",
      "export const EM_DASH = '—';", "export const EM_DASH = 'N/A';", "lib/format.test.ts"),
+    # ⚠ Re-anchored by 10c-2 (L11): `formatSwapGiB` now builds its unit from the exported
+    # `UNIT_GIB` constant (`lib/format.ts`'s own §6.6-unit-suffixes section) rather than the
+    # inline literal `' GiB'` — same string, same behaviour, named so `lib/unit-suffix.test.ts`
+    # can import it instead of keeping a second copy. The precision this mutation targets
+    # (`TWO_DP` → `ONE_DP`) is unaffected; only the anchor text moved.
     ("02-R3 swap formatted at 1 dp like RAM", "lib/format.ts",
-     "export const formatSwapGiB = (v: GiB | null): string => render(v, TWO_DP, ' GiB');",
-     "export const formatSwapGiB = (v: GiB | null): string => render(v, ONE_DP, ' GiB');",
+     "export const formatSwapGiB = (v: GiB | null): string => render(v, TWO_DP, UNIT_GIB);",
+     "export const formatSwapGiB = (v: GiB | null): string => render(v, ONE_DP, UNIT_GIB);",
      "lib/format.test.ts"),
     # Added in step 3's reconciliation together with F1. SPEC.md §3.2 carries four uptime
     # forms; step 2's code implemented three and rendered a just-booted box `up 0 min`,

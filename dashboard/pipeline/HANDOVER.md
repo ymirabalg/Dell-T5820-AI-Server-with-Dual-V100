@@ -1,45 +1,54 @@
-# Handover — after 10c-1, before 10c-2
+# Handover — after 10c-2, before 10c-3
 
-**Rewritten 2026-09-08 by 10c-1's reconciliation** (the wiring loop: the nine panels mounted,
-`PanelPlaceholder` deleted, a shell-owned chart/table toggle, an alarm-forcing escape hatch), on
-top of 10b-S-G's. Steps 1–8 are closed, **step 9** is closed, **Q1** and **Q2** are closed,
-**10a — the shell**, **10b — the nine panel bodies**, **10b-S-G** and now **10c-1 — the wiring**
-are closed pending the parent's review. This file is the whole inheritance: the next phase's
-agents get clean context and read it as fact.
+**Rewritten 2026-09-08 by 10c-2's reconciliation** (the guards loop: five mechanism guards, four
+of them new `lib/*.test.ts` files), on top of 10c-1's. Steps 1–8 are closed, **step 9** is closed,
+**Q1** and **Q2** are closed, **10a — the shell**, **10b — the nine panel bodies**, **10b-S-G**,
+**10c-1 — the wiring** and now **10c-2 — the guards** are closed pending the parent's review.
+This file is the whole inheritance: the next phase's agents get clean context and read it as fact.
 
 ⚠ **Read §0.3 FIRST.** It says why `pnpm verify` is **not deterministic today**, and it changes
-what a green harness run is allowed to be taken as evidence of. §0.1, §0.2, §0.4, §0.5 and the
-new **§0.6** remain true.
+what a green harness run is allowed to be taken as evidence of. ⚠ **It is still open** — §9's row
+said 10c-2 owned it and 10c-2's own handoff never scoped it; **it is re-owned to 10c-3** and
+nothing about it has changed. §0.1, §0.2, §0.4, §0.5, §0.6 and the new **§0.7** remain true.
 
-⚠ **§0.6 is new and it is the single most transferable thing 10c-1 cost:
-a fixture whose two subjects are identical cannot discriminate between them.** A two-GPU test
-helper existed, was in use, and still let three separate positional-indexing defects ship with
-`pnpm verify` at exit 0 across 94 files and 2617 tests. §0.6 also carries a **correction** to a
-phase note that would have weakened a live guard if believed.
+⚠ **§0.7 is new and it is the most transferable thing 10c-2 cost: a guard can be written so that
+it fails when the project SUCCEEDS.** One test file stood between a green suite and a red one,
+and the failing message would have read as though the guard were broken. It also carries the
+measured answer to *"can the bare-word `toContain` case be mechanised?"* — **yes, in a matcher,
+at 9.5 %**, which contradicts what three earlier documents said.
 
-**Next is 10c-2 — the guards** (see §9): `10b-F1-guard`'s document-wide-`toContain` lint,
-**Q1-F4**'s cross-harness `LEDGER_FILES` runner, **L11**'s unit-name constant, **S-G-A11**'s
-`exactOptionalPropertyTypes`, and **10c1-A8-audit**'s dangling-CSS-reference check. Then
-**10c-3 — sizing and visual**: L9, `10b-F14b`, SCOPE 2.5f's `max-height`, Q2-F9's clamp-vs-drop,
-and the browser pass (**paint only** — see §0.6). `pipeline/WORK-ITEMS.md` §10 is the queue.
+**Next is 10c-3 — sizing and visual** (see §9): **L9**, `10b-F14b`, SCOPE 2.5f's
+`max-height: 100%`, **Q2-F9**'s clamp-vs-drop, **10a-F4**'s remaining half (the seven viewport
+measurements, headless), `10c1-A9-paint`'s scoping, and the banner-item wrapping question. **Step 10 closes with it.**
+
+⚠ **`10a-F17` is NOT on that list — it was FIXED and committed at `3c37107` on 2026-09-08**, ahead
+of 10b landing, at the owner's instruction. Three rows in this document said otherwise and sent
+10c-2's reconciliation to re-own an already-closed item; corrected 2026-09-09 by the parent, who
+ran the fix and verified it. **This is the FIRST time this handover has been stale in the
+DANGEROUS direction** — every previous instance named something already answered, which costs a
+re-check; this one named live work that did not exist, which costs a loop.
+`pipeline/WORK-ITEMS.md` §10 is the queue. ⚠ Two items belong in that queue and only the owner
+can place them: **F7's runtime `toContain` matcher** (§0.7) and **mutation coverage for the four
+guards' anti-vacuity nets** (§0.7).
 
 ⚠ **§0.4 remains the most important thing 10b learned.** *A document-wide `toContain` is a weak
-assertion wearing a strong name* — three instances in three loops, and one was protecting
-`PLAN.md`'s **first** invariant. §0.6 is its sibling one level up: an assertion whose *subject*
-does not render cannot fail either.
+assertion wearing a strong name* — and 10c-2 makes it **nine** instances in five loops: its lint
+found eight, and a change made in its own reconcile phase found a ninth. §0.6 is its sibling one
+level up: an assertion whose *subject* does not render cannot fail either.
 
 ⚠ **Everything below about steps 1–8's surface, the four structural rules, and the toolchain is
-inherited unchanged and is still true.** The sections **10c-1** rewrote are §0.6 (new), this
-header, §2 and §9. 10b-S-G wrote §0.5; 10b wrote §0.4, §3.6's tail, §4, §5.2's rule list and §8;
-10a wrote §0.3; Q1 wrote §0.1; Q2 wrote §0.2 and §3.5.
+inherited unchanged and is still true.** The sections **10c-2** rewrote are §0.7 (new), this
+header, §0.5's `Object.hasOwn` correction, §5.3's guard list, §9 and §11. 10c-1 wrote §0.6, §2;
+10b-S-G wrote §0.5; 10b wrote §0.4, §3.6's tail, §4, §5.2's rule list and §8; 10a wrote §0.3;
+Q1 wrote §0.1; Q2 wrote §0.2 and §3.5.
 
 ⚠ **§4 and §8 have been found stale IN THE SAFE DIRECTION seven times.** Re-check every row you
 touch against the tree and against `SPEC.md`, and mark what you did NOT re-check. Do not copy the
 tables forward. ⚠ **And 10b found the other direction too**: two *phase notes* (`10b-build.md`,
 `10b-test.md`) asserted a mutation coverage that did not exist — and 10c-1 found a third
 (`10c1-test.md` §1.2, §0.6). **A document claiming a property is not evidence of it. Read what a
-mutation replaces, and probe what a document says it probed.**
-
+mutation replaces, and probe what a document says it probed.** ⚠ 10c-2 found the fourth and fifth,
+both about a guard's REACH rather than its coverage: see §0.7.
 ---
 
 ⚠ **`MOCK.html` is a reference, never a source.** It shows four states and it predates several
@@ -206,9 +215,21 @@ the case — before relaxing any of them.
 
 ---
 
-## 0.3 ⚠ NEW — `pnpm verify` is NOT deterministic today, and what 10a found
+## 0.3 ✅ CLOSED — `pnpm verify` IS deterministic (fixed `3c37107`), and what 10a found
 
-### The determinism problem — read before trusting any green run
+### ✅ The determinism problem — FIXED 2026-09-08, `3c37107`
+
+⚠ **Do not act on the description below as if it were current.** It is kept because the *reasoning*
+is still the reference for this class of bug. **The fix:** the test uses Vitest fake timers, so the
+95/100 ms constants are unchanged and only the clock is virtual. `deadline.ts` and `serving.ts` are
+**byte-identical to their pre-fix state** — the monotonic-clock property is intact by construction,
+not by argument, which is why a clock argument threaded into `deadline()` was rejected. Measured
+**60/60 green**, 25 idle and 35 under load on a ten-core machine, against a defect that previously
+reproduced 2-in-6; the parent added a further 5/5. And it **still fails when the defect returns**:
+the historical shared-budget defect was reintroduced twice and only this test reddened, 32 of 33
+siblings staying green.
+
+### The problem as it was — kept for the reasoning, NOT as a live warning
 
 **`lib/collectors/serving.test.ts:592`** — `⚠ a slow discovery cannot band an alarm on a healthy
 instance` — sleeps a **real 95 ms** inside a **real 100 ms** `discoveryTimeoutMs`, with 20 ms HTTP
@@ -354,13 +375,27 @@ All three were written by the phase that also wrote the correct code, and the th
 only by **restoring the old implementation and running the suite**. Four loops in a row now.
 **Compare against the counterfactual that was the code, not against a weaker one.**
 
-### ⚠ `Object.hasOwn`, not `?.field === undefined`
+### ⚠ `Object.hasOwn`, not `?.field === undefined` — ⚠ **and the reason given here was WRONG**
 
-`exactOptionalPropertyTypes` is **off**, so `{ ...base, instance: maybeUndefined }` typechecks
-with the key **present** and reads identically through `?.instance`. Every assertion that a
-subjectless entry *omits* the field uses `Object.hasOwn(...) === false`. ⚠ Measured 2026-09-08:
-`npx tsc --noEmit --exactOptionalPropertyTypes` **exits 0 on this tree** — turning the flag on is
-free today (§9, 10c-2).
+Every assertion that a subjectless entry *omits* the field uses `Object.hasOwn(...) === false`,
+and that is still right. **The reason recorded for it was not.**
+
+> ~~"`exactOptionalPropertyTypes` is **off**, so `{ ...base, instance: maybeUndefined }`
+> typechecks with the key **present**."~~
+
+**It has been `true` in `tsconfig.json` since the very first commit** (`71a2f7d`, step 1's
+scaffold — `git log --oneline -- tsconfig.json` shows exactly one commit, ever), and
+`lib/guardrails.test.ts` has asserted it as text since the same commit. 10c-2's build phase
+proved it enforcing with a scratch file: that exact spread reports `TS2375`. The earlier
+measurement (*"`npx tsc --noEmit --exactOptionalPropertyTypes` exits 0, so turning it on is
+free"*) was reading a flag that was **already on**, so its result proved nothing about turning
+anything on. **S-G-A11 is therefore closed as a non-item, not as a change.**
+
+What the runtime `Object.hasOwn` checks actually defend is the path `tsc` cannot see through —
+an `any`, a cast, a `JSON.parse` result crossing the wire — not the ordinary spread, which the
+compiler has been rejecting all along. The two source comments that carried the wrong reason
+(`lib/collectors/errors.ts`, `lib/collectors/serving.test.ts`) were corrected by 10c-2's test
+phase.
 
 ---
 
@@ -454,6 +489,97 @@ the document. §0.5's rule applies: **compare against the counterfactual that wa
 
 ---
 
+## 0.7 ⚠ NEW — what 10c-2 found, and the four rules to carry out of it
+
+10c-2 built five mechanism guards — a `toContain`-scope lint, a cross-harness `LEDGER_FILES`
+runner, a dangling-CSS-class audit, L11's unit-suffix guard, and `exactOptionalPropertyTypes`
+(which turned out to need nothing done). Its adversarial raised **11 findings, 9 executed**; the
+reconciliation accepted all 11 with two sub-parts rejected on measurement.
+`10c2-reconciliation.md` has the table.
+
+### ⚠ THE RULE — a guard must not fail when the project SUCCEEDS
+
+`lib/cross-harness-ledger.test.ts` shipped with
+`expect(orphans.length).toBeGreaterThan(0)` under a comment explaining it as an anti-vacuity
+check. The effect was the opposite of the intent: **the day the last orphan is adopted into a
+`LEDGER_FILES` — the outcome the guard exists to drive toward — `pnpm verify` goes red**, with
+`expected 0 to be greater than 0`, on a file most readers will meet for the first time at that
+moment. **One file** (`lib/throttle.test.ts`) stood between today's green and that red.
+
+Two things generalise, and both are cheap:
+
+1. **Assert the INPUTS, never the output.** "Did this guard look at everything?" is a question
+   about the population it scanned. "Did it find something?" is a question about the project's
+   health, and a healthy project answers *no*. The replacement asserts every `LEDGER_FILES` path
+   is a file the walk actually found (96 ⊆ 97 today), which also closes a documented blind spot:
+   a path typo'd or renamed on one side now fails there instead of being trusted.
+2. **A guard whose failure message reads as its own breakage will be deleted, not fixed.** That
+   is the real cost of the inversion, and it applies to any assertion whose red state is the
+   success state.
+
+### ⚠ Four nets, and three of them could not see their own guard go blind
+
+Every one of the four new guards had an anti-vacuity check; only one was strong. Measured:
+`dangling-css-class`'s `audits.length > 0` survived an **18 → 1** narrowing; the ledger's
+population check survived **99 → 1**. The strongest of the four was strong by accident — a `>= 8`
+someone happened to write in a *fixture* test rather than in the net. All four are now
+proportional or named-member checks, in the net, with the reason written down.
+
+⚠ **None of the four is mutation-covered** — no `10c-G*` mutation breaks a file-walk; every one
+aims at the guard's single ⚠-marked `test.each`. Disclosed by the build, proven functional by
+hand twice, and carried in §9 as a work item rather than closed.
+
+### ⚠ The measured answer to "can the bare-word `toContain` case be mechanised?" — YES, at 9.5 %
+
+Three documents said the general case *cannot be mechanised* because the false-positive rate is
+prohibitive. **That is true of a source lint and false in general**, and the adversarial measured
+it rather than arguing it, by overriding `toContain` in a scratch vitest setup file.
+
+> **The rule:** a `toContain(X)` whose subject is a string is **ambiguous if `X` occurs more than
+> once in that subject.** Decidable at run time from the subject alone.
+
+| | |
+|---|---|
+| files / tests / string-subject `toContain` calls in `components/` | 27 / 468 / **454** |
+| needle occurs **> 1** time | **43 (9.5 %)** |
+| already covered by the `"throwing"` exemption | 7 |
+| left to adjudicate | **36** |
+| the source-lint discriminator the build rejected, for comparison | **198** |
+| founding failures caught | **4 of 4** (`'paused'` ×2, `'refresh'` ×3, both em-dash shapes ≥2) |
+
+Several of the 36 look like live instances of the trap: `safety-panel`'s `'ufw'`/`'pwm5'`/`'fan
+service'` ×2 each, `storage-network`'s `'eno1'` ×4, `cooling-panel`'s `'fan 5'` ×5 and `'0 RPM'`
+×6, `gpu-panel`'s `'GPU 0'`/`'GPU 1'` ×3. Others are plainly sound
+(`stacked-time-series-chart.test.tsx`'s `'TIME('` ×17, *because* one axis is drawn once per plot).
+
+**These numbers are recorded so nobody re-derives them.** The matcher itself is a **deferred work
+item** (§9): it is a `test.setupFiles` change — project-wide harness mechanics, which this
+project's own rules say must be mutation-proven — plus 36 adjudications and a staged
+report-then-gate adoption. **Not 10c-3**, which is sizing and visual and closes step 10.
+
+### ⚠ The ninth instance of §0.4's shape, found by the guard change itself
+
+Narrowing the `"throwing"` exemption to em-dash literals only (its justification — *an em dash
+anywhere proves nothing crashed* — never covered a severity band) immediately exposed
+`safety-panel.test.tsx`'s `'every row renders — rather than throwing, **and the three total checks
+read watch**'`: an unscoped `toContain('data-severity="watch"')` that `SafetyPanel`'s own head
+chip satisfied by itself. **A blanket exemption keyed on a test's NAME exempts every assertion in
+its BODY**, and a test name with two claims in it gets both exempted. Now scoped to the three rows.
+
+### ⚠ A guard's documentation overstates its reach, four times in one loop
+
+`.tsx`-only walks described as covering `components/`; a hand-typed membership list described as
+"never a hand-typed copy"; "the text right after the LAST interpolation" describing code that
+accepted any segment; "cannot be mechanised" for a bound that holds only in a source lint. Every
+one was written by the phase that also wrote the correct code, and every one would have made a
+later reader believe a case was covered.
+
+⚠ **The test for this is mechanical: read the guard's doc as a CLAIM and try to falsify it with
+one call.** That is exactly how the adversarial found all four, and it is cheaper than reading
+the implementation.
+
+---
+
 ## 1. How to run anything
 
 `pnpm` is installed through corepack into a directory that is **not** on this machine's
@@ -539,15 +665,26 @@ harness's `LEDGER_FILES` and to no other (ledger ownership follows the FILE, §5
 
 ```bash
 python3 pipeline/steps/02-format-severity/regressions.py                    #  55 mutations + ledger
-python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  72 mutations + ledger
+python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  73 mutations + ledger
 python3 pipeline/steps/04-collector-cooling/regressions.py                  #  92 mutations + ledger
 python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 130 mutations + ledger
 python3 pipeline/steps/06-telemetry-route/regressions.py                    #  63 mutations + ledger
 python3 pipeline/steps/07-auth-login/regressions.py                         # 128 mutations + ledger
 python3 pipeline/steps/08-client-runtime/regressions.py                     # 174 mutations + ledger
 python3 pipeline/steps/09-ui-primitives/regressions.py                      #  95 mutations + ledger
-python3 pipeline/steps/10-panels-assembly/regressions.py                    # 168 mutations + ledger
+python3 pipeline/steps/10-panels-assembly/regressions.py                    # 172 mutations + ledger
 ```
+
+⚠ **10c-2 touched THREE and re-ran three — steps 2, 3 and 10 — and its reconcile phase re-ran
+step 10's alone.** The build re-anchored step 2's `02-R3` onto `UNIT_GIB` (`lib/format.ts`'s
+literal moved into a constant), added `10c-G1` to step 3 (adopting `lib/contract.test.ts` into
+its ledger), and added `10c-G2`…`10c-G5` to step 10 → **172**, with **200 ⚠ marks**. The
+reconciliation touched only files in step 10's `LEDGER_FILES` (the four guards plus
+`safety-panel.test.tsx`) and re-ran step 10's harness only, checked by grepping every
+`pipeline/steps/*/regressions.py` for each. ⚠ **Step 2's harness exits 1 for THREE PRE-EXISTING
+broken anchors** on the uptime formatter (`02-R20`/`02-R30`/`02-R31`, orphaned when that function
+gained a `prefix` parameter long before this loop). Do not read that exit as a regression, and do
+not "fix" it inside an unrelated item.
 
 ⚠ **10c-1 touched step 10's ONLY, and re-ran step 10's only.** It went 138 → **158** (build:
 `10c-DS*`, `10c-CVT*`, `10c-GP1..3`, `10c-CP*`, `10c-CO1..3`, `10c-FA*`, minus `10a-PP1`/`PP2`
@@ -581,10 +718,11 @@ was written after them. Q1's fix to the ⚠-scanner applies to step 9's too — 
 the corrected scanner and carries the same blind spot — so an item that touches the scanner
 touches eight files and owes eight runs.
 
-**977 mutations** — 55/72/92/130/63/128/174 across steps 2–8, **95** in the `components/`
-harness, **168** in step 10's. ⚠ The step-10 figure is 10c-1's own harness output
-(`All 168 regressions failed their check`); the other eight are carried from 10b-S-G's derivation
-and were **not** re-derived by 10c-1, because it changed no file any of them mutates.
+**~982 mutations** — 55/73/92/130/63/128/174 across steps 2–8 (step 3 is **73** since `10c-G1`),
+**95** in the `components/` harness, **172** in step 10's. ⚠ The step-10 figure is 10c-2's own
+harness output (`All 172 regressions failed their check`); step 3's is 10c-2's build/test phases'
+(`All 73 …`); the rest are carried from 10b-S-G's derivation and were **not** re-derived, because
+this loop changed no file they mutate.
 ⚠ **This total and the nine above it go stale on every item that adds a mutation, and have done six times.** Do not trust them; the authoritative number is the
 `All N regressions failed their check` line each harness prints, and all **eight** can be
 re-derived at once by importing each `regressions.py` and reading `len(REGRESSIONS)`. ⚠ Do **not**
@@ -721,7 +859,9 @@ Everything under `dashboard/`. Nothing outside it has been created or modified e
 | **`app/use-now-tick.ts`** | **New in 10a.** D2's independent age interval. Never driven by any store |
 | **`components/panels/*.tsx` + `*.module.css`** | **New in 10b — the nine panel bodies**, plus `status-row.tsx`, `panel-notes.tsx`, `condition-lookup.ts`, `panel-chart.ts`, `event-sentence.ts`, `test-support.ts`, and 10c-1's `chart-view-toggle.tsx`. All pure, all inside `purity.test.ts`'s recursive walk. ⚠ **Mounted as of 10c-1** — see below |
 | **`lib/client/force-alarm.ts`** | **New in 10c-1.** 10a-F4's alarm-forcing escape hatch — a pure function of `(body, search, nodeEnv)` wrapped around `RuntimeEnv.fetchTelemetry`, so a forced alarm runs the real validation, severity, debounce and banner path. Gated on `NODE_ENV !== 'production'` **and** an undocumented query string; the production gate is now a **behaviour** (`use-telemetry.force-alarm.test.tsx`, `10c-UT1`), not just a token |
-| 95 test files | **2627 tests** (10c-1: 2594 → 2616 build → 2617 test → **2627** reconcile) |
+| **`lib/tocontain-scope.test.ts` · `cross-harness-ledger.test.ts` · `dangling-css-class.test.ts` · `unit-suffix.test.ts`** | **New in 10c-2.** Four mechanism guards over the source tree, not over the product: the document-wide `toContain` lint, the cross-harness `LEDGER_FILES` runner, the dangling-CSS-class audit and L11's unit-suffix guard. All four walk the tree, all four are comment-blind, all four are in step 10's `LEDGER_FILES` with one `10c-G*` mutation apiece. ⚠ What each is blind to: §5.3 |
+| **`lib/format.ts`'s `UNIT_*` constants** | **New in 10c-2.** `UNIT_CELSIUS`/`WATTS`/`MIB`/`GIB`/`RPM`/`MHZ`/`PERCENT`/`MB_PER_S`/`KB_PER_S` — the nine §6.6 suffixes, and every formatter now builds its suffix from one of them rather than from an inline literal. **Not `lib/units.ts`**, which means systemd unit names |
+| **99 test files** | **2775 tests** (10c-2: 2627 → 2745 build+test → **2775** reconcile, +30 guard fixtures) |
 | `package.json` · `pnpm-lock.yaml` · `tsconfig.json` · `next.config.mjs` · `vitest.config.mts` | pinned toolchain; `strict` + seven more flags, all asserted |
 | `app/layout.tsx` · `app/page.tsx` | ⚠ **No longer placeholders.** `page.tsx` renders `<DashboardShell />` and nothing else; `layout.tsx` imports `components/tokens.css` and paints the ground from tokens. ⚠ **`app/page.tsx` must stay free of telemetry** — see §6 — and it is now tested (`app/page.test.tsx`) |
 
@@ -1070,7 +1210,7 @@ O6–O9, O15–O18 are closed (steps 3–6).
 | **Q2-F13** | The table's `<tr key={tMs}>` depends on two upstream guards holding: §6.7 keys the ring on `ts` and drops repeats, and `decimateSeries` guards `secondIndex !== firstIndex`. Reachability is nil today and a composite key would be **unfalsifiable** (`renderToStaticMarkup` cannot observe a React key). Recorded so a change to either guard has a written note | whoever changes either guard |
 | **10a-F4** | ⚠ **Nothing in the pipeline runs a browser**, and the one manual pass is not repeatable. §9 | **10c** |
 | **10a-F12** | The banner's "since" carries no date — spec question **S-C**, §8 | **owner, then whoever renders it** |
-| **10a-F17** | ⚠ **`pnpm verify` is not deterministic.** §0.3 | **10c** |
+| ~~**10a-F17**~~ | ✅ **CLOSED `3c37107`** — `pnpm verify` is deterministic. §0.3 | — |
 | — | **A commit point** — `71a2f7d` was taken before step 9. The next is the owner's call | **owner** |
 
 ### 4.1 ⚠ The three step-11 obligations that fail **silently**, stated in full
@@ -1270,6 +1410,27 @@ Four practical notes:
    name is guardable; a **global** (`setInterval`, `fetch`, `require`) is **not guardable by
    text at all**. That needs a **behavioural** test and a **runtime** one, **both**, because
    neither sees what the other sees.
+
+#### ⚠ NEW — 10c-2's four `lib/*.test.ts` guards, and what each is blind to
+
+Four more source-text guards live beside `guardrails.test.ts`, all walking the tree (never a
+file list), all comment-blind via `codeOnly`, all in **step 10's** `LEDGER_FILES` with one
+`10c-`-prefixed mutation apiece:
+
+| file | rule | ⚠ blind to |
+|---|---|---|
+| `tocontain-scope.test.ts` | in `components/panels/*.test.tsx` that import `PanelShell`, no whole-document `toContain` of a bare `data-severity="…"` or a bare em dash | a bare **WORD** (`'paused'`) — two of the four founding failures, excluded by scope AND vocabulary; `app/dashboard-shell.tsx`; an aliased or helper-bound render subject |
+| `cross-harness-ledger.test.ts` | every `*.test.ts(x)` not in some step's `LEDGER_FILES` carries no ⚠ mark | a ⚠ mark on a `describe` (invisible to every ledger too); a listed file whose harness never exercises it |
+| `dangling-css-class.test.ts` | every `styles.X` names a class its sibling `.module.css` declares | dead CSS (out of scope by design); a `url(…)` value read as a class declaration |
+| `unit-suffix.test.ts` | no `.ts`/`.tsx` under `components/`/`app/` spells a §6.6 unit around a value | `' R' + 'PM'`; a percentage as `` `${pct}%` `` (a CSS length uses the same spelling — measured, §0.7); the wrong formatter called correctly |
+
+Two rules these cost, on top of §5.3's four:
+
+5. **Resolve what you can, COUNT what you cannot.** `dangling-css-class` counted the
+   `styles[expr]` it could not read; `tocontain-scope` dropped its unreadable arguments in
+   silence — in the same loop, on the same class of input. Both now count, and both assert zero.
+6. **Widen the walk before trusting the scope sentence.** Both walking guards took `.tsx` only
+   while ten non-test `.ts` files sat under their roots, two of which format values.
 
 #### ⚠ Step 8's three client guards, and the corrected claims about them
 
@@ -1687,7 +1848,7 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | **Keep the server-rendered shell free of telemetry and secrets** | ⚠ **standing, all steps** | §3.3. 10a made `app/page.tsx` four lines and **tested it** (`app/page.test.tsx`) — it had no test at all before |
 | ~~The red-test ledger retrofit for step 3's harness~~ | — | **closed** — done during step 8, confirmed 2026-09-07. All **eight** harnesses carry a ledger |
 | ~~**Q1** — the ⚠-scanner back-port~~ | — | **closed 2026-09-07** — 771 mutations, 689 marks, eight harnesses green. §0.1 |
-| **Q1-F4** — assert every ⚠-bearing test file is in some `LEDGER_FILES` | ⚠ **10c-2** | open — §0.1. The union it was waiting on has now changed: 10a added the **ninth** harness and hand-wrote its `LEDGER_FILES`, which is exactly the step a cross-harness runner would check |
+| ~~**Q1-F4** — assert every ⚠-bearing test file is in some `LEDGER_FILES`~~ | — | **closed by 10c-2** — `lib/cross-harness-ledger.test.ts`, union and real set both walked every run (96 ⊆ 97 today, one orphan left: `lib/throttle.test.ts`, mark-free). It adopted `lib/contract.test.ts` into step 3's ledger (`10c-G1`) and caught its own four siblings as orphans the moment it was written. ⚠ Its anti-vacuity check was **inverted** and is fixed — §0.7 |
 | ~~**Q2** — §6.2's hover layer and table view~~ | — | **closed 2026-09-08** — 13 findings adjudicated, `components/` harness at 93 mutations. §0.2 |
 | **Q2-S2** — the table view's height, against §6.1's no-scroll promise | **owner**, then **10c-3** | ⚠ open — but **now reachable**: 10c-1 gave the toggle its `app/`-owned home, so four panels really do render a table view in a mounted page. The session event log also uses `--table-scroll-max` for its own scroll region. **Answered for the stopgap, not for the layout:** `--table-scroll-max: 40vh` still stands, and the grid now gives a panel body a bounded ancestor, so SCOPE 2.5f's `max-height: 100%` replacement is possible — **10c-3**, with a browser |
 | **Q2-S1** — §6.2's per-mark tooltip clause vs the crosshair layer that occludes it | **owner** | open — §8 |
@@ -1696,10 +1857,10 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | ~~⚠ **Wire the nine panels into `app/dashboard-shell.tsx`**~~ | — | **closed by 10c-1, 2026-09-08** — nine real panels mounted, `PanelPlaceholder` deleted, SVG ids distinct per cell, and the composition itself found five defects no isolated panel test could see (§0.6). `10c1-reconciliation.md` |
 | ~~**Q2-S2's toggle needs a home in `app/`**~~ | — | **closed by 10c-1** — `chartViews` in `app/dashboard-shell.tsx`, one entry per chart-bearing panel, the control rendered beside each chart per §6.2. ⚠ Granularity (one per panel, not per chart) is an **invariant-7 recording**, not a spec ruling |
 | ~~**10a-F4, half two: force an alarm client-side**~~ | — | **closed by 10c-1** — `lib/client/force-alarm.ts`, wrapped around `RuntimeEnv.fetchTelemetry` so the real validation/severity/debounce/banner path runs and a forced alarm takes the same two-poll confirmation a genuine one does. ⚠ Its **production unreachability is now a test** (`10c-UT1`), not an unwatched `process.env.NODE_ENV` token — the adversarial replaced that token and reached a real `pnpm build` chunk with everything green |
-| ⚠ **10c1-A8-audit** — a static check that every `styles.X` names a rule its sibling `.module.css` declares | **10c-2** | open. **A CSS-module import is a Proxy: every key resolves, including keys with no rule** (§0.6), so a deleted or misspelled class is invisible to `tsc` and to the whole suite. The one live instance (`alarm-banner.tsx`'s `styles.item`) is **fixed**; the mechanism that hid it is not. ~15 lines, no browser, no runtime — it belongs beside `10b-F1-guard` and `L11` |
+| ~~⚠ **10c1-A8-audit** — a static check that every `styles.X` names a rule its sibling `.module.css` declares~~ | — | **closed by 10c-2** — `lib/dangling-css-class.test.ts`, 18/18 CSS-module imports audited, quote- and namespace-agnostic, proportional population check (`10c-G3`). Was: **A CSS-module import is a Proxy: every key resolves, including keys with no rule** (§0.6), so a deleted or misspelled class is invisible to `tsc` and to the whole suite. The one live instance (`alarm-banner.tsx`'s `styles.item`) is **fixed**; the mechanism that hid it is not. ~15 lines, no browser, no runtime — it belongs beside `10b-F1-guard` and `L11` |
 | ⚠ **10c1-A9-paint** — scope the browser step to **paint only** | **10c-3** | open. Binding is observable in jsdom today and a dangling reference is statically checkable; only cascade, specificity, media queries, the ≥1600px `display:none` promotion, overflow and stacking need a real browser. §0.6's three-tier table. **Do not ask the browser step to carry the other two tiers** |
 | ⚠ **Banner items: should a condition be forbidden from wrapping mid-condition?** | **10c-3**, with the owner | open, raised by 10c-1's A8 fix and **deliberately not answered**. `alarm-banner.tsx`'s per-condition `<span>` now carries no class; the layout works on `.rest`'s `flex-wrap: wrap; gap: .4em 1em` — **by luck rather than by design**. Declaring a `white-space: nowrap` rule would be inventing; look at it in the browser pass and decide |
-| **10b-F1-guard** — forbid the document-wide `toContain` shape mechanically | **10c-2** | open. Q1-F4's family (a cross-cutting test-quality guard). The behavioural half exists now — `valueCells` + six per-panel guards — and should live a while before a lint is written against its shape. §0.4 |
+| ~~**10b-F1-guard** — forbid the document-wide `toContain` shape mechanically~~ | **PARTLY closed by 10c-2** | `lib/tocontain-scope.test.ts` closes **two of the four** founding shapes (bare `data-severity`, bare em dash) inside composite panels; it found 8 real hits, and its own reconcile-phase narrowing found a 9th (§0.7). ⚠ **The bare-WORD half is open and is now measured** — see the new row below |
 | **10b-F11 / 10b-S-F** — a panel head reading `normal` over one of its own em dashes | **owner**, then 10b/10c | open — §8. Deferred deliberately: it changes what every panel head means, which is not a reconciler's call |
 | **10b-F14b** — at 1280–1599px (the design target) the GPU and CPU traces cannot hatch a gap | **10c-3**, with L9 | open. `Sparkline` takes no `gaps` prop by design, so HANDOVER's *"hatch `state.gaps`, never a hole in a series"* holds only above 1600px, where the promoted chart receives them. The fix is a new prop on **step 9's** primitive or a different primitive at the design breakpoint — both are L9's sizing question, and 10c owns L9 and the browser pass that would show which |
 | **10b-F14a** — SERVING's composite row value reads `:— · — · ctx — · health —` for an identity-only instance | **owner** | open, cosmetic. Not an O14 violation (it concatenates whole formatter outputs, never splits one); changing it means inventing a composition rule §6.6 does not state |
@@ -1708,17 +1869,21 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | ⚠ **S-G-Q1** — several entries from one source about one instance: only the last is rendered, anywhere | **owner** | open — §8. `readEnv` files one entry per parse problem, so this loses a real reason on a real box. The doc that claimed otherwise is corrected; **the behaviour is unchanged and deliberate**, because §6.5 says "the reason", singular |
 | ⚠ **S-G-Q2** — a `dbus` entry with **no** instance conflates a bus-wide failure with `collectSafety`'s per-unit one | **owner**, then whoever owns §4 | open — §8. ⚠ **This is the residue of the A2 fix and it is named at both call sites in the code.** COOLING and SAFETY now ignore entries that name an instance; entries that name none still reach all three panels, so SERVING prints `gpu-fan-control.service`'s failure under its rows. Needs a second structural subject or two sources — not a reconciler's call |
 | **S-G-Q3** — which of the eighteen sources may carry an `instance` is a judgement in a document | **owner** | open — §8. Enforced today by a test per path (`10b-SF1`, `10b-SG1`, `10b-SG2`). A type-level constraint was **rejected** as the fix here: it means a discriminated union over eighteen sources and a per-source rule in `wire.ts` that `SPEC.md` never states |
-| **S-G-Q4** — duplicate `instance` values in `serving[]` validate and render twice under one React key | **owner**, then **10c-2** | open — §8. The collector prevents it; `wire.ts` does not, and its own header says its purpose is not to trust the other side |
-| **S-G-A10** — should the session event log be per-instance? | **10c-2 / owner** | open, low. `events.ts:400` folds `errors[]` last-per-source across **all** instances while a SERVING row is now last-per-source **per** instance, so with both instances failing `/health` the log's one sentence is instance 1's while row 0 shows instance 0's. `events.ts` has no row to hang an instance on, which is why this is a question and not a bug. The comment that cited the two as agreeing is corrected |
-| **S-G-A11** — turn on `exactOptionalPropertyTypes` | **10c-2** | open, and ⚠ **measured, not guessed**: `npx tsc --noEmit --exactOptionalPropertyTypes` **exits 0 on this tree today** (2026-09-08), so it is a one-line `tsconfig.json` change with no migration. What it buys: `contract.test.ts`'s `Object.hasOwn(entry,'instance') === false` stops being a runtime-only guarantee — today `{ ...base, instance: maybeUndefined }` typechecks with the key present. `errors.ts`'s docstring records the exposure meanwhile |
+| **S-G-Q4** — duplicate `instance` values in `serving[]` validate and render twice under one React key | **owner**, then **10c-3** (10c-2 was a guards loop and did not touch `wire.ts`) | open — §8. The collector prevents it; `wire.ts` does not, and its own header says its purpose is not to trust the other side |
+| **S-G-A10** — should the session event log be per-instance? | **owner** (was "10c-2 / owner"; 10c-2 built guards only) | open, low. `events.ts:400` folds `errors[]` last-per-source across **all** instances while a SERVING row is now last-per-source **per** instance, so with both instances failing `/health` the log's one sentence is instance 1's while row 0 shows instance 0's. `events.ts` has no row to hang an instance on, which is why this is a question and not a bug. The comment that cited the two as agreeing is corrected |
+| ~~**S-G-A11** — turn on `exactOptionalPropertyTypes`~~ | — | **closed by 10c-2 as a NON-ITEM.** ⚠ The flag has been `true` since the **first commit** and `guardrails.test.ts` has asserted it as text since then; `{ ...base, instance: maybeUndefined }` reports `TS2375` today. The earlier measurement ran `tsc` with a flag that was already on and proved nothing. `tsconfig.json` unchanged; the two source comments carrying the wrong reason are corrected — §0.5 |
 | ~~**10a — the shell**~~ | — | **closed 2026-09-08** — 18 findings adjudicated (16 accepted, 2 deferred, 1 half-rejected). 79 files · 2399 tests · nine harnesses · 875 mutations. `10a-reconciliation.md` |
-| ⚠ **10a-F17 — `pnpm verify` is not deterministic** | **10c-2** | ⚠ open, and it undermines every ledger in the project. **§0.3 — read it before trusting a green run.** Fix with an injected clock in `lib/collectors/serving.test.ts:592`, never a wider margin |
+| ~~**10a-F17**~~ | ✅ **CLOSED** | Fixed and committed `3c37107`, 2026-09-08, ahead of 10b landing. Fake timers; `deadline.ts`/`serving.ts` byte-identical; 60/60 under load; still fails when the defect returns. **This row previously said "open and untouched" and was wrong** — it sent 10c-2's reconciliation to re-own a closed item |
 | ⚠ **10a-F4 — nothing in the pipeline runs a browser AUTOMATICALLY** | **10c-3** | ⚠ **half closed.** (2) — the alarm-forcing hatch — is **built and tested** by 10c-1. (1) is still open: the seven measurements re-run headlessly, `getBoundingClientRect` at 820/899/900/1150/1279/1280/1920, asserting COOLING's `y`/`height`/`x` span at ≥1280 and the `y`-order at <900. ⚠ **10c-1 ran a real Chrome by hand and five of the seven passed**, but `resize_window` could not set the viewport — `window.innerWidth` read a constant 3440 across every call — so measurements 1–4 and 6 are unexercised. That is a **tooling** limit, cleanly separated from the app, and it is the concrete argument in `10c1-build.md` §3.3 for a purpose-built harness (Playwright/Puppeteer, verified absent from `.next/standalone` the way jsdom was) rather than half-solving it with the wrong tool. ⚠ **Scope it to paint only** — see `10c1-A9-paint` above |
 | **10a-S-A · S-B · S-C · S-D** — four spec questions | **owner** | §8. Three implemented conservatively, S-C not implemented |
 | **10a — SCOPE 2.5f**: replace `--table-scroll-max: 40vh` with `max-height: 100%` | **10c-3** | open — now unblocked by 10a's grid, but wants a browser to confirm |
 | ~~**10c-1 — the wiring**~~ | — | **closed 2026-09-08** pending the parent's review — **12 findings adjudicated: 10 accepted, 0 rejected, 2 deferred.** 95 files · 2627 tests · step 10's harness at **168 mutations · 196 ⚠ marks**. `10c1-reconciliation.md`, and §0.6 for the rule it leaves behind |
-| **10c-2 — the guards** | **10c-2** | **next.** `10b-F1-guard` · `Q1-F4` · `L11` · `S-G-A11` · `10c1-A8-audit`. All mechanical, none needs a browser |
-| **10c-3 — sizing and visual** | **10c-3** | after 10c-2. `L9` · `10b-F14b` · SCOPE 2.5f's `max-height` · `Q2-F9` · `10a-F4`'s remaining half · `10c1-A9-paint`'s scoping · the banner-item wrapping question |
+| ~~**10c-2 — the guards**~~ | — | **closed 2026-09-08** pending the parent's review — **11 findings adjudicated: 11 accepted (2 in part), 0 rejected outright, 2 sub-parts rejected on measurement, 1 deferred build (F7).** 99 files · **2775 tests** · step 10's harness at **172 mutations · 200 ⚠ marks**. `10c2-reconciliation.md`, and §0.7 for the rules it leaves behind |
+| **10c-3 — sizing and visual** | **10c-3** | ⚠ **NEXT, and step 10 closes with it.** ⚠ It does **NOT** carry `10a-F17`, which is closed (`3c37107`). `L9` · `10b-F14b` · SCOPE 2.5f's `max-height` · `Q2-F9` · `10a-F4`'s remaining half · `10c1-A9-paint`'s scoping · the banner-item wrapping question |
+| ~~**L11** — a guard against a component hard-coding `' RPM'` instead of calling a formatter~~ | — | **closed by 10c-2** — `lib/format.ts` now exports nine `UNIT_*` constants and every formatter builds from them; `lib/unit-suffix.test.ts` scans every non-test `.ts`/`.tsx` under `components/`/`app/` for a unit spelled around a value, in a literal **or in JSX text** (`10c-G4`). Vocabulary is DERIVED from the `UNIT_*` exports, so a tenth unit is in scope automatically. ⚠ Blind to `` `${pct}%` `` — deliberately, with a counter-example: §0.7 |
+| ⚠ **F7 — the runtime `toContain` matcher** (10c-2's adversarial) | ⚠ **a dedicated loop, NOT 10c-3** — the owner places it in `WORK-ITEMS.md` §10 | **open, and MEASURED so nobody re-derives it: 43/454 calls (9.5 %) flagged, 7 already exempt, 36 to adjudicate, against 198 for the source-lint version — and it catches 4 of the 4 founding failures where the shipped lint catches 2.** The rule is *"the needle occurs more than once in the subject"*, decided at run time from the subject alone, so none of the static bypasses apply. It is a `test.setupFiles` change (project-wide harness mechanics, which must itself be mutation-proven) plus a staged report-then-gate adoption — a loop with its own build/test/adversarial phases, not a bolt-on. §0.7 |
+| ⚠ **Mutation coverage for the four guards' anti-vacuity nets** | ⚠ **a later loop / the owner** | open. No `10c-G*` mutation breaks a file-walk, so nothing requires any of the four nets to be able to fail; all four were proven functional **by hand** (10c-2's test phase, then its reconciliation). Four mutations, one per guard, each blinding that guard's walk. §0.7 |
+| **10c-2's `dashboard-shell.tsx` scope gap** | **whoever writes the next `toContain` guard** | open, recorded per invariant 7. `app/dashboard-shell.tsx` renders all nine panels — the most multi-carrier context in the project — and is outside the lint's scope because it imports panel *components*, not `PanelShell`. Harmless today only because `dashboard-shell.ssr.test.tsx` happens to assert neither dangerous literal |
 | **O20 · O21 · O22 · D8** — the four silent-failure obligations | **step 11** | §4.1 |
 | **`dashboard.sh check`**: an unparseable `PASSWORD_HASH`; a `SESSION_SECRET` short or quoted; a `STANDING` entry matching nothing; the env file's mode and owner | **step 11** | the only place any of them can be caught, because nothing is logged |
 | **F7 — `LIMITS` bounds scrypt's memory but not its time** (measured 1 720 ms vs 58 ms at the worst accepted parameters) | **step 11** | with `check` |
@@ -1844,6 +2009,19 @@ reductions, `app/dashboard-shell*`, `app/use-now-tick*`, `app/page.test.tsx`,
 `pipeline/steps/10-panels-assembly/` and `pipeline/handoffs/`. **A phase agent stages nothing**
 (`ANCHOR.md` §8), and its green is not the green — the parent re-runs `pnpm verify` itself.
 (Q1 did the same before it: 15 modified files and two untracked directories.)
+
+⚠ **10c-2 leaves the tree dirty on purpose too**, on top of what 10a/10c-1 left. Modified by the
+10c-2 loop: six `components/panels/*.test.tsx` (the eight scoped `toContain` assertions, plus
+`safety-panel.test.tsx`'s ninth from the reconcile phase), `lib/format.ts` (the nine `UNIT_*`
+constants), `lib/collectors/errors.ts` and `lib/collectors/serving.test.ts` (comment corrections
+only), and three `pipeline/steps/*/regressions.py` (steps 2, 3 and 10). Untracked: the four
+`lib/*.test.ts` guards, `pipeline/handoffs/10c2-*.md` and
+`pipeline/steps/10-panels-assembly/10c2-{build,test,adversarial,reconciliation}.md`.
+⚠ **`lib/collectors/errors.ts` and `lib/format.ts` are intended edits, NOT stranded mutations** —
+`errors.ts` is a step-4 mutation target (`04-T26`) and has exactly that signature in
+`git status`; both diffs were read line by line and step 4's harness re-run clean.
+**A phase agent stages nothing** (`ANCHOR.md` §8), and its green is not the green — the parent
+re-runs `pnpm verify` itself.
 
 **`dashboard/` has been committed since step 8.** Nothing has been pushed.
 That was the owner's call, taken on step 8's review recommendation (S14): a commit point

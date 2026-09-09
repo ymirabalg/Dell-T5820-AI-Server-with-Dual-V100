@@ -38,6 +38,13 @@ PROC = "lib/collectors/proc.test.ts"
 DELTA = "lib/collectors/deltas.test.ts"
 COL = "lib/collectors/collect.test.ts"
 IO = "lib/collectors/io.test.ts"
+# ⚠ Added by 10c-2 (Q1-F4's cross-harness runner). `lib/contract.test.ts` covers §4's
+# telemetry contract — the same layer `collect.test.ts` assembles — and was an ORPHAN: no
+# step's LEDGER_FILES named it, so its one ⚠ mark (`TelemetryError.instance` crossing the
+# wire as a present-or-absent key, added by 10b-S-G) could never be proven to fail by any
+# harness. Step 3 is its natural owner: `lib/contract.ts`/`lib/contract.test.ts` predate
+# step 5 and sit beside `collect.ts` in the same layer this harness already checks.
+CONTRACT = "lib/contract.test.ts"
 
 # ---------------------------------------------------------------------------
 # ⚠ The per-mutation red-test ledger  (copied from steps 4–8; only LEDGER_FILES changes)
@@ -68,7 +75,7 @@ IO = "lib/collectors/io.test.ts"
 #
 # ⚠ A `types`-kind mutation contributes NO red-test lines, so it can never cover a ⚠ test.
 # Ship a second mutation whose check is the vitest file.
-LEDGER_FILES = [NUM, NV, PROC, DELTA, COL, IO]
+LEDGER_FILES = [NUM, NV, PROC, DELTA, COL, IO, CONTRACT]
 
 # `test('…')`, `it('…')` and `test.each(…)('…')`, single- or double-quoted.
 # ⚠ BACK-PORTED from step 9's reconciliation (Q1, 2026-09-07) — this step's
@@ -600,6 +607,23 @@ REGRESSIONS += [
      "export const pathsFrom = (env: Environment): CollectorPaths => ({\n  ...DEFAULT_PATHS,\n"
      "  procStat: env[ROOT_MOUNT_KEY]?.trim() || DEFAULT_PATHS.procStat,",
      COL),
+]
+
+REGRESSIONS += [
+    # ⚠ 10c-2 (Q1-F4). The ⚠ test is fixture-driven (`servingPopulated`/`nothingReadable`,
+    # both hand-written in `lib/fixtures.ts`, round-tripped through real `JSON.stringify` —
+    # no collector runs), so the mutation that actually exercises it lives in the FIXTURE,
+    # not in `tag()`: `tag()`'s own `instance === undefined ? … : …` branch was tried first
+    # and DID NOT BITE, because `JSON.stringify` drops an explicit `instance: undefined` on
+    # its own — exactly the fact `errors.ts`'s module doc names as why the branch, not a
+    # spread, is what makes the runtime guarantee hold. What the test's SECOND half actually
+    # forbids is `nothingReadable`'s collector-wide entry naming a REAL instance (any value
+    # that survives JSON, not `undefined`) — this mutation is that.
+    ("10c-G1 a collector-wide errors[] entry (no real subject) is given a spurious instance",
+     "lib/fixtures.ts",
+     "errors: [{ source: 'dell-smm', message: 'no hwmon named dell_smm' }],",
+     "errors: [{ source: 'dell-smm', message: 'no hwmon named dell_smm', instance: 0 }],",
+     CONTRACT),
 ]
 
 

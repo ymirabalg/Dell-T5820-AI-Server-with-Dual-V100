@@ -95,63 +95,85 @@ tree**, or you ship whatever an agent happens to be mid-edit on. Full account in
 
 ⚠ The deployed password is `dashboard1`, set for testing. Step 11 replaces it properly.
 
-### 2.2 ⚠ What to do next — **10c-2, the guards**, then **10c-3, sizing and visual**
+### 2.2 ⚠ What to do next — **10c-3, sizing and visual**, and step 10 CLOSES with it
 
-### ⚠ 10c-1 — THE WIRING — is CLOSED, 2026-09-08. Two loops remain in step 10.
+### ⚠ 10c-2 — THE GUARDS — is CLOSED, 2026-09-08. ONE loop remains in step 10.
 
-SCOPE §5's third loop was cut into three when it turned out to be three unlike jobs. **10c-1
-(the wiring) is done**: the nine real panels are mounted in `app/dashboard-shell.tsx`,
-`PanelPlaceholder` is deleted, Q2-S2's chart/table toggle has a shell-owned home, and 10a-F4's
-alarm-forcing escape hatch exists. Build → test → adversarial → reconcile are done and §8's fifth
-phase (the parent re-runs `pnpm verify`, audits the adjudication table, spot-checks, commits) is
-what closes it. **12 adversarial findings adjudicated: 10 accepted, 0 rejected, 2 deferred.**
-See `pipeline/steps/10-panels-assembly/10c1-reconciliation.md`.
+**10c-2 (the guards) is done**: five mechanism guards, four of them new `lib/*.test.ts` files —
+the document-wide `toContain` lint (`10b-F1-guard`), the cross-harness `LEDGER_FILES` runner
+(`Q1-F4`), the dangling-CSS-class audit (`10c1-A8-audit`), L11's unit-suffix guard and its nine
+`UNIT_*` constants in `lib/format.ts`, and `S-G-A11`, which turned out to need **nothing**:
+`exactOptionalPropertyTypes` has been `true` since the first commit and the measurement that said
+otherwise was reading a flag that was already on. Build → test → adversarial → reconcile are done
+and §8's fifth phase (the parent re-runs `pnpm verify`, audits the adjudication table,
+spot-checks, commits) is what closes it. **11 adversarial findings adjudicated: 11 accepted (2 in
+part), 0 rejected outright, 2 sub-parts rejected on measurement, 1 build deferred (F7).**
+See `pipeline/steps/10-panels-assembly/10c2-reconciliation.md`.
 
-**Suite after 10c-1: 95 files · 2627 tests · `pnpm verify` exit 0. Step 10's harness at 168
-mutations · 196 ⚠ marks** (138 before this loop). The other eight harnesses are untouched, and
-that was established by grepping every `pipeline/steps/*/regressions.py` for each file 10c-1
-changed — step 8's sole hit is a docstring mention, not a ledger entry or an anchor. ⚠ Their
-counts are carried forward from 10b-S-G's derivation and were **not** re-derived here.
+**Suite after 10c-2: 99 files · 2775 tests · `pnpm verify` exit 0. Step 10's harness at 172
+mutations · 200 ⚠ marks** (168/196 before). **Step 3's is at 73** (`10c-G1`, adopting
+`lib/contract.test.ts`), and step 2's `02-R3` was re-anchored onto `UNIT_GIB`. ⚠ Step 2's harness
+**exits 1 on three PRE-EXISTING broken uptime anchors** (`02-R20`/`02-R30`/`02-R31`) that predate
+this loop entirely — do not read that as a regression.
 
 | loop | contents | state |
 |---|---|---|
 | **10c-1 — the wiring** | mount the nine, the toggle's home, the alarm-forcing hatch | ✅ **closed 2026-09-08** |
-| **10c-2 — the guards** | `10b-F1-guard` (the document-wide `toContain` lint) · **Q1-F4** (the cross-harness `LEDGER_FILES` runner) · **L11** (the unit-name constant) · **S-G-A11** (`exactOptionalPropertyTypes`, measured free) · **10a-F17** (`pnpm verify`'s non-determinism) · **`10c1-A8-audit`** (every `styles.X` against its sibling stylesheet) | **NEXT** |
-| **10c-3 — sizing and visual** | **L9** · `10b-F14b` (no gap hatching at 1280–1599px) · SCOPE 2.5f's `max-height: 100%` · **Q2-F9**'s clamp-vs-drop · **10a-F4**'s remaining half (the seven viewport measurements, headless) · the banner-item wrapping question | after 10c-2 |
+| **10c-2 — the guards** | `10b-F1-guard` · **Q1-F4** · **L11** · **S-G-A11** (a non-item) · **`10c1-A8-audit`** | ✅ **closed 2026-09-08** |
+| **10c-3 — sizing and visual** | **L9** · `10b-F14b` (no gap hatching at 1280–1599px) · SCOPE 2.5f's `max-height: 100%` · **Q2-F9**'s clamp-vs-drop · **10a-F4**'s remaining half (the seven viewport measurements, headless) · `10c1-A9-paint`'s scoping · the banner-item wrapping question · ⚠ **10a-F17** | **NEXT — and step 10 closes with it** |
 
-**Why this order.** 10c-2 is entirely mechanical — no browser, no design decision, and every item
-is a guard that would have caught something this project has already shipped. 10c-3 needs a real
-browser and at least one sizing decision the spec leaves open, so it wants to see what the
-composed page actually is. ⚠ **Scope 10c-3 to PAINT.** `10c1-A9` established three tiers: binding
-is observable in jsdom today, a dangling CSS reference is statically checkable with no runtime
-(that is 10c-2's `A8-audit`), and only cascade/specificity/media-queries/overflow/stacking need a
-browser. Asking the browser step to carry the other two makes it slower and no better.
+⚠ **10a-F17 moved into 10c-3, and it did not move because it was done.** The row above used to
+list `pnpm verify`'s non-determinism under 10c-2; **10c-2's own handoff never scoped it**, so
+nothing happened to it. `lib/collectors/serving.test.ts:592` still sleeps a real 95 ms inside a
+real 100 ms budget, and it undermines every ledger in the project (`HANDOVER.md` §0.3). Fix it
+with an injected clock, never a wider margin.
 
-**⚠ The four things 10c-2 and 10c-3 must inherit as fact from 10c-1, not rediscover:**
+⚠ **Two items came OUT of 10c-2 that belong in `WORK-ITEMS.md` §10, and only the owner places
+them there:**
 
-1. ⚠ **A fixture whose two subjects are identical cannot discriminate between them.** The
-   two-GPU test helper built card 1 as `{ ...gpu0, index: 1 }`, so three separate
-   positional-indexing defects (`serving[i]`, `gpus[i]`, a trace lambda hard-coded to card 0)
-   were observationally identical to correct code. Four wrong edits shipped at once with
-   `pnpm verify` at exit 0 across 94 files / 2617 tests. **Fixture presence is not fixture
-   power.** The sibling rule: an assertion whose subject does not render cannot fail either —
-   two toggle tests asserted GPU 1's independence while GPU 1 rendered §6.5's takeover.
-2. ⚠ **Both collectors return SPARSE collections and their own source says so.**
-   `llama.ts:61 discoverInstances()` returns the sorted **set** of found instance indices;
-   `nvidia-smi.ts:147` skips a row whose `index` will not parse. **Index by the `index`/`instance`
-   field, never by array position.** A hard-coded `=== 0` was already caught; only positional
-   escaped.
-3. ⚠ **A `.module.css` import under Vitest is a Proxy, not `{}`.** `Object.keys` is `[]` — hence
-   `console.log` printing `{}` — but `styles.gpu0` returns `_gpu0_e75739`. `grid.test.tsx`'s
-   tier-2 placement guard and the sticky-band assertion are **live**, and acting on
-   `10c1-test.md` §1.2 as originally written would have weakened them; that document now carries
-   a marked correction. **The real void is that every key resolves, including keys with no rule**
-   — which is what `10c1-A8-audit` is for. Probe a property access, never the object.
-4. ⚠ **The chart/table toggle is shell state, one entry per chart-bearing panel**, and the
-   control renders beside each chart because §6.2 says the header list is exhaustive.
-   **Granularity — one toggle per panel, governing every chart it draws — is an invariant-7
-   recording, not a spec ruling** (`chart-view-toggle.tsx`'s module doc). A future panel wanting
-   independent toggles is a new decision, not an extension of this one.
+1. **F7 — the runtime `toContain` matcher.** The adversarial *measured* that the bare-word case
+   (`toContain('paused')`) IS mechanisable — not in a source lint, but in a matcher: *"the needle
+   occurs more than once in the subject"* catches **4 of the 4 founding failures** at **43/454
+   calls (9.5 %)**, 7 already exempt, **36 to adjudicate**, against **198** for the source-lint
+   version. Three documents said it could not be done; the correction is now in the guard's own
+   doc and in `HANDOVER.md` §0.7 **with the numbers, so nobody re-derives them.** It is a
+   `test.setupFiles` change plus a staged report-then-gate adoption — its own loop, **not** 10c-3.
+2. **Mutation coverage for the four guards' anti-vacuity nets.** No mutation anywhere breaks a
+   guard's file-walk today; all four nets were proven functional by hand only.
+
+**Why 10c-3 last.** It needs a real browser and at least one sizing decision the spec leaves open,
+so it wants to see what the composed page actually is. ⚠ **Scope it to PAINT.** `10c1-A9`
+established three tiers: binding is observable in jsdom, a dangling CSS reference is statically
+checkable with no runtime (10c-2 built that), and only cascade/specificity/media-queries/overflow/
+stacking need a browser.
+
+⚠ **10c-1's own four inherited facts have NOT gone away** — they were listed here and are now
+carried in full in `HANDOVER.md` §0.6, because this section is the *queue*, not the archive:
+(1) a fixture whose two subjects are identical cannot discriminate between them; (2) both
+collectors return **sparse** collections — index by the `index`/`instance` field, never by array
+position; (3) a `.module.css` import under Vitest is a **Proxy** (every key resolves, including
+keys with no rule — probe a property access, never the object); (4) the chart/table toggle is
+shell state, one entry per chart-bearing panel, and that granularity is an invariant-7 recording
+rather than a spec ruling.
+
+**⚠ The four things 10c-3 must inherit as fact from 10c-2, not rediscover:**
+
+1. ⚠ **A guard must not fail when the project SUCCEEDS.** The cross-harness runner asserted
+   `orphans.length > 0` — so the day the last orphan is adopted, `pnpm verify` goes red with
+   `expected 0 to be greater than 0`, and the cheapest reading is "delete the assertion". **Assert
+   the INPUTS (what did the guard look at?), never the output (did it find something?).**
+2. ⚠ **A guard's documentation is a claim; falsify it with one call.** Four guard docs overstated
+   their own reach in one loop — a `.tsx`-only walk described as covering `components/`, a
+   hand-typed list described as drift-proof, "the text right after the LAST interpolation" for
+   code that accepted any segment, and "cannot be mechanised" for a bound that only holds in a
+   source lint. Every one was written by the phase that wrote the correct code.
+3. ⚠ **A blanket exemption keyed on a test's NAME exempts every assertion in its BODY.** The
+   `"throwing"` carve-out was justified by "an em dash anywhere proves nothing crashed" and was
+   silently covering a `data-severity` check in a test whose name carried two claims. Narrowing
+   it to em dashes found the **ninth** instance of §0.4's shape.
+4. ⚠ **Resolve what you can, COUNT what you cannot.** Two guards in the same loop met the same
+   unreadable input and one dropped it in silence. Reporting an unreadable case is free while the
+   count is zero, which is exactly when to adopt it.
 
 ### ⚠ 10b-S-G is CLOSED, 2026-09-08 — it was the last item before 10c.
 
@@ -472,9 +494,12 @@ strip its defaults; amend the spec instead*). That last one is why Q2 exists.
   `SPEC.md` (lines 1327 and 780, both marked *settled 2026-09-07*), and **S11/G5's collector half
   is settled too** (line 1208 — `collectCooling` files the entry). What remains of D7 is
   S11/G5's **panel-rendering** residue, owned by step 10.
-- **Still open for steps 10–12:** D1 S40's third event-log feed · D2 the independent age tick ·
-  D3 rendering `unknownStanding` · D6 jsdom + `useTelemetry` unmount · L9 sparkline sizing ·
-  L11 the unit-name constant guard.
+- **Still open for steps 10–12:** D1 S40's third event-log feed · ~~D2 the independent age
+  tick~~ (closed by 10a) · ~~D3 rendering `unknownStanding`~~ (closed by 10b) · ~~D6 jsdom +
+  `useTelemetry` unmount~~ (closed by 10a) · **L9 sparkline sizing** (10c-3) · ~~L11 the
+  unit-name constant guard~~ (**closed by 10c-2** — `lib/format.ts`'s nine `UNIT_*` constants and
+  `lib/unit-suffix.test.ts`). ⚠ Corrected 2026-09-08 by 10c-2's reconciliation: this line had gone
+  stale in the safe direction on four of its six entries. `HANDOVER.md` §9 is authoritative.
 
 ---
 

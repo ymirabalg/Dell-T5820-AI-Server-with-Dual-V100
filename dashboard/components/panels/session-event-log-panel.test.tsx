@@ -13,6 +13,15 @@ import { emptyState } from './test-support';
  * accessible shape, not about severity bands.
  */
 
+/** The full markup of the `<li>` containing `needle` — chip included (10c2's toContain-scope
+ *  guard: this panel's own head chip is a hardcoded `chip={null}`, so a whole-document check
+ *  is safe for THIS panel's constant, but scoping past it is still the honest way to assert
+ *  "this entry's chip", robust to a future entry being added to the same fixture). */
+const entryContaining = (html: string, needle: string): string => {
+  const at = html.indexOf(needle);
+  return html.slice(html.lastIndexOf('<li', at), html.indexOf('</li>', at));
+};
+
 const entry = (overrides: Partial<LogEntry>): LogEntry => ({
   seq: 1,
   atMs: 0,
@@ -68,7 +77,7 @@ describe('§6.4 — SESSION EVENT LOG', () => {
     const html = renderToStaticMarkup(
       <SessionEventLogPanel state={{ ...emptyState(), events }} nowMs={0} panelId="session-event-log" />,
     );
-    expect(html).toContain('data-severity="alarm"');
+    expect(entryContaining(html, 'GPU 0 temperature')).toContain('data-severity="alarm"');
   });
 
   test('⚠ the panel head has no severity of its own — chip renders the explicit no-band state', () => {
