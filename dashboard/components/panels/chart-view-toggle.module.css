@@ -1,0 +1,16 @@
+.toggle {
+  font: inherit;
+  font-size: 0.8em;
+  padding: 0.15em 0.6em;
+  border: 1px solid var(--ink-muted);
+  border-radius: 0.25em;
+  background: transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.toggle:hover {
+  color: var(--ink-primary);
+  border-color: var(--ink-primary);
+}

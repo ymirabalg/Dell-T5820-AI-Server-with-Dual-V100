@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 
 import { everythingZero, nothingReadable, servingInstances } from '@/lib/fixtures';
 import { celsius, mib, throttleMask, watts } from '@/lib/types';
-import type { Gpu, TelemetrySnapshot } from '@/lib/types';
+import type { Gpu, ServingInstance, TelemetrySnapshot } from '@/lib/types';
 
 import { GpuPanel } from './gpu-panel';
 import { allReadingsNull, emptyState, stateWith, valueCells } from './test-support';
@@ -118,6 +118,30 @@ describe('⚠ the GPU↔instance join is gpu.index === serving.instance', () => 
     expect(html).not.toContain('qwen3.6-27b');
   });
 
+  test('⚠ the join is by instance NUMBER, never by array POSITION — a sparse serving[] must not shift a model onto the wrong card', () => {
+    // 10c1-A1. `lib/collectors/llama.ts:61 discoverInstances()` returns `[...found].sort()` —
+    // the SET of instance indices whose `<i>.env` was read, not a dense array from zero. If
+    // `0.env` is missing (a `set-model` rollback mid-write, a `.bak` left in the scanned
+    // directory) the snapshot carries `serving: [{ instance: 1, … }]` alone. Under
+    // `serving[index]` GPU 0's card then prints instance 1's model under an honest-looking
+    // `served by instance 0` label — §6.2's own named failure, *"prints the wrong model on a
+    // card rather than failing visibly"*. Every fixture in the project has `serving` dense and
+    // in order, so positional indexing passed the whole suite (adversarial 10c1-A1, EXECUTED).
+    const card0 = rawGpuSnapshot().gpus?.[0] as Gpu;
+    const snapshot: TelemetrySnapshot = {
+      ...rawGpuSnapshot(),
+      gpus: [card0, { ...card0, index: 1 }],
+      serving: [{ ...(servingInstances[1] as ServingInstance), model: 'gemma-4-12b' }],
+    };
+    const html0 = renderToStaticMarkup(<GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu0" />);
+    expect(rowContaining(html0, 'served by instance 0')).toContain('—');
+    expect(html0).not.toContain('gemma-4-12b');
+    // ⚠ The POSITIVE direction, for the card the join exists to distinguish — unasserted
+    // anywhere before this: no test rendered GPU 1 with instance 1 actually present.
+    const html1 = renderToStaticMarkup(<GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu1" />);
+    expect(rowContaining(html1, 'served by instance 1')).toContain('gemma-4-12b');
+  });
+
   test('⚠ a card ABSENT from a gpus[] that WAS read never asserts a served model', () => {
     // §3.1/§9 spend paragraphs keeping *retired* (absent from a collection that was read) apart
     // from *stale* (the collection could not be read); before this branch existed the panel
@@ -143,6 +167,50 @@ describe('⚠ the GPU↔instance join is gpu.index === serving.instance', () => 
       <GpuPanel state={stateWith(allReadingsNull)} nowMs={0} panelId="gpu1" />,
     );
     expect(absent).not.toBe(presentButUnread);
+  });
+});
+
+describe('⚠ 10c1-A2/A11 — this card is found by gpu.index, and its TRACE is its own', () => {
+  test('⚠ a gpus[] whose only member is index 1 leaves GPU 0 unenumerated, and GPU 1 renders that card', () => {
+    // 10c1-A2. `lib/collectors/nvidia-smi.ts:147` documents it: *"a row whose `index` will not
+    // parse is a `problems` entry and not a GPU"*, and line 171 pushes `row with unreadable
+    // index skipped`. So `gpus: [{ index: 1, … }]` is a shape the collector is DESIGNED to
+    // produce. Under `snapshot.gpus[index]` the GPU 0 panel renders GPU 1's die — its
+    // temperature, its VRAM, its throttle mask — titled `GPU 0`, while GPU 1 reads *"card not
+    // enumerated"*. Both directions are asserted here, per ANCHOR §5's boundary-fixture rule.
+    const card1: Gpu = { ...(rawGpuSnapshot().gpus?.[0] as Gpu), index: 1, tempC: celsius(55) };
+    const snapshot: TelemetrySnapshot = { ...rawGpuSnapshot(), gpus: [card1] };
+    const html0 = renderToStaticMarkup(<GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu0" />);
+    expect(html0).toContain('card not enumerated');
+    expect(html0).not.toContain('55 °C');
+    const html1 = renderToStaticMarkup(<GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu1" />);
+    expect(html1).not.toContain('card not enumerated');
+    expect(rowContaining(html1, 'temperature')).toContain('55 °C');
+  });
+
+  test('⚠ GPU 1’s temperature trace carries GPU 1’s own history, not GPU 0’s redrawn in GPU 1’s colour', () => {
+    // 10c1-A11 — `10c-CO4`'s exact twin in the other file. The cooling panel's `g.index === 1`
+    // was found unexercised by the test phase and fixed; `gpu-panel.tsx`'s own
+    // `g.index === index` trace lambda has the same hole, and no test in this file asserts on
+    // trace CONTENT at any index. Hard-coding it to `0` draws GPU 0's history under the label
+    // *"GPU 1 temperature over the selected window"*, with GPU 1's own current reading in the
+    // headline above it — the number and the line beneath it describing different cards.
+    const card0 = rawGpuSnapshot().gpus?.[0] as Gpu;
+    const snapshot: TelemetrySnapshot = {
+      ...rawGpuSnapshot(),
+      gpus: [
+        { ...card0, tempC: celsius(66) },
+        { ...card0, index: 1, tempC: celsius(55) },
+      ],
+    };
+    // Table view renders each trace point as a plain `<td>` — no SVG geometry to reverse, the
+    // same method `cooling-panel.test.tsx`'s `10c-CO4` test uses.
+    const html = renderToStaticMarkup(
+      <GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu1" view="table" />,
+    );
+    const table = html.slice(html.indexOf('<table'), html.indexOf('</table>') + '</table>'.length);
+    expect(table).toContain('<td>55 °C</td>');
+    expect(table).not.toContain('<td>66 °C</td>');
   });
 });
 
@@ -214,5 +282,39 @@ describe('⚠ invariant 1, across EVERY reading on this card — not just the te
     const cells = valueCells(html);
     expect(cells.length).toBeGreaterThanOrEqual(4);
     for (const cell of cells) expect(cell).not.toMatch(/[0-9]/);
+  });
+});
+
+describe('⚠ 10c1 — the chart/table toggle (Q2-S2), now shell-owned', () => {
+  test('⚠ with no `view` given, both chart elements render as CHARTS, not tables', () => {
+    const html = renderToStaticMarkup(
+      <GpuPanel state={stateWith(rawGpuSnapshot())} nowMs={0} panelId="gpu0" />,
+    );
+    expect(html).not.toContain('data-role="table-view"');
+  });
+
+  test('⚠ `view="table"` switches BOTH the sparkline and its ≥1600px promotion to tables', () => {
+    // Both chart elements are always in the DOM (CSS picks which one paints, per this file's
+    // own ≥1600px-promotion note) — so one `view` value reaching this panel must flip both.
+    const html = renderToStaticMarkup(
+      <GpuPanel state={stateWith(rawGpuSnapshot())} nowMs={0} panelId="gpu0" view="table" />,
+    );
+    expect(html.split('data-role="table-view"').length - 1).toBe(2);
+  });
+
+  test('⚠ the toggle control renders ONLY when the caller supplies onToggleView', () => {
+    const withoutHandler = renderToStaticMarkup(
+      <GpuPanel state={stateWith(rawGpuSnapshot())} nowMs={0} panelId="gpu0" />,
+    );
+    expect(withoutHandler).not.toContain('table view');
+    const withHandler = renderToStaticMarkup(
+      <GpuPanel
+        state={stateWith(rawGpuSnapshot())}
+        nowMs={0}
+        panelId="gpu0"
+        onToggleView={() => undefined}
+      />,
+    );
+    expect(withHandler).toContain('table view');
   });
 });

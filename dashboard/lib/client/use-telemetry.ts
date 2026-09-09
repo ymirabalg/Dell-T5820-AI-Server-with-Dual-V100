@@ -36,6 +36,7 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 
 import { createBrowserEnv } from './env';
+import { forceAlarmForTesting } from './force-alarm';
 import { TelemetryRuntime } from './runtime';
 import type { RuntimeState } from './runtime';
 
@@ -65,7 +66,24 @@ export function useTelemetry(): TelemetryHandle {
     // `lib/client/wire.test-d.ts` asserts that at the type level — a hand-rolled seam whose
     // shape has drifted from the DOM's is the failure this whole approach risks, and a cast
     // here is precisely how it would be hidden.
-    held.current = new TelemetryRuntime(createBrowserEnv(window));
+    const browserEnv = createBrowserEnv(window);
+    // ⚠ 10a-F4's alarm-forcing escape hatch (`force-alarm.ts`). Wraps ONLY `fetchTelemetry`,
+    // reshaping the JSON body already received before `runtime.ts` ever validates it — every
+    // later stage (validation, severity, the debounce, the banner) runs unmodified and for
+    // real. `forceAlarmForTesting` is itself a no-op unless `NODE_ENV` is not `'production'`
+    // AND the query string opts in; see that module's doc for the production-unreachability
+    // argument and `10c1-build.md` for the verified build-output check.
+    held.current = new TelemetryRuntime({
+      ...browserEnv,
+      fetchTelemetry: async () => {
+        const response = await browserEnv.fetchTelemetry();
+        if (response.kind !== 'ok') return response;
+        return {
+          kind: 'ok',
+          body: forceAlarmForTesting(response.body, window.location.search, process.env.NODE_ENV),
+        };
+      },
+    });
   }
   const runtime = held.current;
 

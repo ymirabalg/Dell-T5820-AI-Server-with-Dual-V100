@@ -11,7 +11,7 @@ import { EMPTY_RING, appendSample } from '@/lib/client/ring';
 import type { SampleRing } from '@/lib/client/ring';
 import type { RuntimeState, TelemetryRuntime } from '@/lib/client/runtime';
 import { everythingZero } from '@/lib/fixtures';
-import { isoTimestamp } from '@/lib/types';
+import { celsius, isoTimestamp } from '@/lib/types';
 import type { TelemetrySnapshot } from '@/lib/types';
 
 import { DashboardShell } from './dashboard-shell';
@@ -372,37 +372,201 @@ describe('⚠ F15 — logout must survive its own navigation', () => {
   });
 });
 
+/** The full markup of one grid slot — from its `data-slot` marker up to the next one (or the
+ *  end of the document for the last slot in DOM order). Scoped assertions over the SLOT, not
+ *  the document — the exact rule `HANDOVER.md` §0.4 draws after three separate document-wide
+ *  `toContain`s turned out to be inert. */
+const cellFor = (html: string, slot: string): string => {
+  const from = html.indexOf(`data-slot="${slot}"`);
+  const next = html.indexOf('data-slot=', from + 1);
+  return html.slice(from, next === -1 ? undefined : next);
+};
+
+/** §6.2's own title for each grid slot, exactly as each real panel renders it (10c1). This
+ *  replaces `PanelPlaceholder`'s old `data-panel-id` marker: once the nine real panels are
+ *  wired, the panel's own head IS the observable fact — a genuinely stronger assertion than a
+ *  marker that only ever existed for the test. */
+const SLOT_TITLE: Readonly<Record<string, string>> = {
+  gpu0: 'GPU 0',
+  gpu1: 'GPU 1',
+  cpu: 'cpu',
+  memory: 'memory',
+  cooling: 'cooling',
+  safety: 'safety',
+  'storage-and-network': 'storage &amp; network',
+  serving: 'serving',
+  'session-event-log': 'session event log',
+};
+
+/**
+ * `everythingZero` enumerates only GPU 0 (§6.5's "not enumerated" shape) — several tests below
+ * need a genuine SECOND card, or `GpuPanel` takes the "card not enumerated" branch for `gpu1`
+ * and renders no chart at all, which is a real fixture fact rather than a test bug.
+ *
+ * ⚠ **The two cards must DIFFER in the fields the panel renders** (10c1-A10, and it is the
+ * finding that explains three others). This helper originally built card 1 as
+ * `{ ...gpu0, index: 1 }` — identical `name`, `bus`, `tempC`, VRAM, everything. Two
+ * indistinguishable subjects make a positional read observationally identical to an
+ * index read, so `gpus[index]`, `serving[index]` and a trace lambda hard-coded to card 0 all
+ * shipped green through a file that already had a two-GPU helper. The rule this loop leaves
+ * behind: **a fixture whose two subjects are identical cannot discriminate between them.**
+ */
+const GPU0_TEMP_C = celsius(66);
+const GPU1_TEMP_C = celsius(55);
+const stateOfTwoGpus = (): RuntimeState => {
+  const gpu0 = everythingZero.gpus?.[0];
+  if (gpu0 === undefined) throw new Error('fixture invariant: everythingZero.gpus[0] must exist');
+  return stateOf({
+    ring: ringWithSample({
+      gpus: [
+        { ...gpu0, tempC: GPU0_TEMP_C },
+        { ...gpu0, index: 1, name: 'Tesla PG500-216', bus: '00000000:65:00.0', tempC: GPU1_TEMP_C },
+      ],
+    }),
+  });
+};
+
 describe('⚠ F16 — all nine slots really receive PanelProps, panelId included', () => {
-  test('⚠ nine distinct panel ids render, one per grid slot', () => {
+  test('⚠ every grid slot renders the §6.2 panel titled for THAT slot, never a swapped neighbour', () => {
+    // 10c1 replaced `PanelPlaceholder` with the nine real panels — this is the wiring-level
+    // guard 10a-PP2 used to carry via the placeholder's marker attribute, now checked against
+    // real production content instead. A slot fed the wrong component (a copy-paste in the
+    // `<Grid>` JSX) or the wrong literal `panelId` both show up here as the wrong title inside
+    // the right cell.
     const html = render(stateOf());
-    const ids = [...html.matchAll(/data-panel-id="([^"]+)"/g)].map((m) => m[1]);
-    expect(new Set(ids).size).toBe(9);
-    expect(ids.sort()).toEqual(
-      [
-        'cooling',
-        'cpu',
-        'gpu0',
-        'gpu1',
-        'memory',
-        'safety',
-        'serving',
-        'session-event-log',
-        'storage-and-network',
-      ].sort(),
-    );
+    for (const [slot, title] of Object.entries(SLOT_TITLE)) {
+      expect(cellFor(html, slot)).toContain(`>${title}<`);
+    }
   });
 
-  test('⚠ each panel id sits inside the grid slot of the same name', () => {
-    // The id is the SVG-id namespace (L4). If it did not track the slot, two mounted copies of
-    // one panel component could still collide — which is the collision the namespace exists to
-    // prevent, and it is invisible to `tsc`.
+  test('⚠ GPU 0 and GPU 1 mint DISTINCT, panelId-prefixed chart ids — the namespace 10b-F12 protects', () => {
+    // `GpuPanel` derives its card index FROM `panelId` (10b-F12) — this is the one place a
+    // wrong literal `panelId="gpu0"` reaching the `gpu1` slot in `dashboard-shell.tsx` itself
+    // (as opposed to inside `GpuPanel`) would be caught: it fails here, not in `gpu-panel.test.tsx`,
+    // because that file cannot see which literal the SHELL chose to pass.
+    // `StackedTimeSeriesChart`'s `id` prop surfaces as `${id}-hatch` on its gap pattern
+    // (`stacked-time-series-chart.tsx:669`) — the one internal id it derives from the prop.
+    const html = render(stateOfTwoGpus());
+    expect(cellFor(html, 'gpu0')).toContain('id="gpu0-temp-chart-hatch"');
+    expect(cellFor(html, 'gpu1')).toContain('id="gpu1-temp-chart-hatch"');
+    expect(cellFor(html, 'gpu0')).not.toContain('id="gpu1-temp-chart-hatch"');
+    expect(cellFor(html, 'gpu1')).not.toContain('id="gpu0-temp-chart-hatch"');
+  });
+
+  test('⚠ each GPU cell renders ITS OWN card’s readings — the two slots are not one card twice', () => {
+    // 10c1-A10. The only per-card fact this file could observe before was the hatch id, which
+    // is derived from `panelId` rather than from the data — so a shell that fed both slots the
+    // same card, or a panel that read `gpus[position]`, was invisible here. These assertions
+    // are over the SLOT (`cellFor`), never the document, per HANDOVER §0.4.
+    const html = render(stateOfTwoGpus());
+    expect(cellFor(html, 'gpu0')).toContain('66 °C');
+    expect(cellFor(html, 'gpu0')).not.toContain('55 °C');
+    expect(cellFor(html, 'gpu1')).toContain('55 °C');
+    expect(cellFor(html, 'gpu1')).not.toContain('66 °C');
+    // Identity, not just measurement: the subtitle is the driver's raw name/bus per card.
+    expect(cellFor(html, 'gpu1')).toContain('00000000:65:00.0');
+    expect(cellFor(html, 'gpu0')).not.toContain('00000000:65:00.0');
+  });
+
+  test('⚠ COOLING mints its shared-time chart id under its own panelId prefix', () => {
     const html = render(stateOf());
-    for (const slot of ['gpu0', 'gpu1', 'cpu', 'memory', 'cooling', 'safety', 'serving']) {
-      const from = html.indexOf(`data-slot="${slot}"`);
-      const next = html.indexOf('data-slot=', from + 1);
-      const cell = html.slice(from, next === -1 ? undefined : next);
-      expect(cell).toContain(`data-panel-id="${slot}"`);
-    }
+    expect(cellFor(html, 'cooling')).toContain('id="cooling-chart-hatch"');
+  });
+});
+
+describe('⚠ 10c1 — the chart/table toggle is shell state, per PANEL, not one flag for the page', () => {
+  test('⚠ every chart-bearing panel starts in chart view, with its own toggle control present', () => {
+    const html = render(stateOfTwoGpus());
+    expect(html).not.toContain('data-role="table-view"');
+    // The control itself: `chart-view-toggle.tsx` renders "table view" only when a caller
+    // supplies `onToggleView` — GPU 0, GPU 1, CPU and COOLING all wire it, so the label appears
+    // at least that many times.
+    expect(html.split('table view').length - 1).toBeGreaterThanOrEqual(4);
+  });
+
+  /** Click the `table view`/`chart view` control inside one grid slot, and return the markup
+   *  the shell re-rendered. ⚠ The button's LABEL tracks the current view (`chart-view-toggle.tsx`),
+   *  so match on the shared `view` rather than on `table view` — otherwise a second click on an
+   *  already-flipped panel silently finds nothing and the test asserts a fixture again. */
+  const clickToggleIn = (slot: string): void => {
+    const button = [...container.querySelectorAll(`[data-slot="${slot}"] button`)].find((b) =>
+      b.textContent?.includes('view'),
+    );
+    expect(button, `no chart/table toggle rendered in the ${slot} slot`).not.toBeUndefined();
+    act(() => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+  };
+
+  test('⚠ toggling GPU 0 to table view does NOT flip GPU 1, CPU or COOLING — independent state', () => {
+    // ⚠ `stateOfTwoGpus()`, NOT `stateOf()` (10c1-A3). Under the one-card state `everythingZero`
+    // provides, the `gpu1` slot renders §6.5's "card not enumerated" takeover — no `<svg>`, no
+    // button, no `data-role="table-view"` — so the negative assertion below could not fail
+    // under ANY mutation of the shell's GPU 1 wiring. It read as independence and asserted the
+    // fixture. Same species as A10: an assertion whose subject does not exist is not a guard.
+    handle = { state: stateOfTwoGpus(), runtime: runtimeStub().runtime };
+    const unmount = mount();
+    // The precondition the old version silently lacked, asserted rather than assumed.
+    expect(cellFor(container.innerHTML, 'gpu1')).not.toContain('card not enumerated');
+    clickToggleIn('gpu0');
+    const html = container.innerHTML;
+    expect(cellFor(html, 'gpu0')).toContain('data-role="table-view"');
+    expect(cellFor(html, 'gpu1')).not.toContain('data-role="table-view"');
+    expect(cellFor(html, 'cpu')).not.toContain('data-role="table-view"');
+    expect(cellFor(html, 'cooling')).not.toContain('data-role="table-view"');
+    unmount();
+  });
+
+  test('⚠ GPU 1’s own toggle flips GPU 1 — the slot’s wiring, not the shared mechanism', () => {
+    // 10c1-A3. `10c-DS2/3/4` mutate `toggleChartView`/`INITIAL_CHART_VIEWS` — the mechanism the
+    // four slots share. They say nothing about the four PER-SLOT wirings, and only `gpu0` and
+    // `cpu` were ever clicked. A `gpu1` slot fed `chartViews.gpu0`/`toggleChartView('gpu0')`
+    // ships green: on the real box an operator clicks GPU 1's button, GPU 0's chart becomes a
+    // table, and the card they were reading changes underneath them.
+    handle = { state: stateOfTwoGpus(), runtime: runtimeStub().runtime };
+    const unmount = mount();
+    clickToggleIn('gpu1');
+    const html = container.innerHTML;
+    expect(cellFor(html, 'gpu1')).toContain('data-role="table-view"');
+    expect(cellFor(html, 'gpu0')).not.toContain('data-role="table-view"');
+    unmount();
+  });
+
+  test('⚠ COOLING’s own toggle flips COOLING — the fourth wiring, previously never clicked', () => {
+    // 10c1-A4, the same defect at the fourth call site. COOLING's `view=` is guarded by the
+    // independence test above (feeding it another panel's entry would flip it when GPU 0 is
+    // clicked); its `onToggleView=` was guarded by nothing, because nothing clicked it.
+    handle = { state: stateOfTwoGpus(), runtime: runtimeStub().runtime };
+    const unmount = mount();
+    clickToggleIn('cooling');
+    const html = container.innerHTML;
+    expect(cellFor(html, 'cooling')).toContain('data-role="table-view"');
+    expect(cellFor(html, 'gpu0')).not.toContain('data-role="table-view"');
+    expect(cellFor(html, 'gpu1')).not.toContain('data-role="table-view"');
+    expect(cellFor(html, 'cpu')).not.toContain('data-role="table-view"');
+    unmount();
+  });
+
+  test('⚠ toggling GPU 0 then CPU leaves GPU 0 STILL in table view — one flip must not reset another', () => {
+    // The mutation this defends: `setChartViews` spreading `INITIAL_CHART_VIEWS` instead of
+    // `prev` would silently reset every OTHER panel back to chart view on each toggle — invisible
+    // if only ever one panel is toggled per test.
+    handle = { state: stateOf(), runtime: runtimeStub().runtime };
+    const unmount = mount();
+    const toggleFor = (slot: string) =>
+      [...container.querySelectorAll(`[data-slot="${slot}"] button`)].find((b) =>
+        b.textContent?.includes('view'),
+      );
+    act(() => {
+      toggleFor('gpu0')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    act(() => {
+      toggleFor('cpu')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const html = container.innerHTML;
+    expect(cellFor(html, 'gpu0')).toContain('data-role="table-view"');
+    expect(cellFor(html, 'cpu')).toContain('data-role="table-view"');
+    unmount();
   });
 });
 

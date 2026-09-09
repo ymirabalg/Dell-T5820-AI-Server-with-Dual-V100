@@ -1,37 +1,44 @@
-# Handover — after 10b-S-G, before 10c
+# Handover — after 10c-1, before 10c-2
 
-**Rewritten 2026-09-08 by 10b-S-G's reconciliation** (the owner's ruling that gave `errors[]` an
-optional `instance`), on top of 10b's. Steps 1–8 are closed, **step 9 is closed**, **Q1** and
-**Q2** are closed, **10a — the shell** is closed, **10b — the nine panel bodies** is closed, and
-**10b-S-G** is closed pending the parent's review. This file is the whole inheritance: the next
-phase's agents get clean context and read it as fact.
+**Rewritten 2026-09-08 by 10c-1's reconciliation** (the wiring loop: the nine panels mounted,
+`PanelPlaceholder` deleted, a shell-owned chart/table toggle, an alarm-forcing escape hatch), on
+top of 10b-S-G's. Steps 1–8 are closed, **step 9** is closed, **Q1** and **Q2** are closed,
+**10a — the shell**, **10b — the nine panel bodies**, **10b-S-G** and now **10c-1 — the wiring**
+are closed pending the parent's review. This file is the whole inheritance: the next phase's
+agents get clean context and read it as fact.
 
 ⚠ **Read §0.3 FIRST.** It says why `pnpm verify` is **not deterministic today**, and it changes
-what a green harness run is allowed to be taken as evidence of. §0.1, §0.2, §0.4 and the new
-**§0.5** remain true.
+what a green harness run is allowed to be taken as evidence of. §0.1, §0.2, §0.4, §0.5 and the
+new **§0.6** remain true.
 
-⚠ **§0.5 is new and it is what 10b-S-G cost most to learn:** a mutation harness proves every ⚠
-test *can* fail; it never proves every branch *has* one. The line it missed was the **second call
-site of the same function**, in a file carrying 133 mutations.
+⚠ **§0.6 is new and it is the single most transferable thing 10c-1 cost:
+a fixture whose two subjects are identical cannot discriminate between them.** A two-GPU test
+helper existed, was in use, and still let three separate positional-indexing defects ship with
+`pnpm verify` at exit 0 across 94 files and 2617 tests. §0.6 also carries a **correction** to a
+phase note that would have weakened a live guard if believed.
 
-**Next is 10c — the backlog** (SCOPE §5's third loop): §3's inherited items, L9's sizing, L11's
-unit-name constant, Q1-F4's cross-harness runner, SCOPE 2.5f's `max-height`, **the wiring of the
-nine panels into `app/dashboard-shell.tsx`** (they still have no production call site), 10a-F17's
-determinism fix and 10a-F4's browser pass. `pipeline/WORK-ITEMS.md` §10 is the queue.
+**Next is 10c-2 — the guards** (see §9): `10b-F1-guard`'s document-wide-`toContain` lint,
+**Q1-F4**'s cross-harness `LEDGER_FILES` runner, **L11**'s unit-name constant, **S-G-A11**'s
+`exactOptionalPropertyTypes`, and **10c1-A8-audit**'s dangling-CSS-reference check. Then
+**10c-3 — sizing and visual**: L9, `10b-F14b`, SCOPE 2.5f's `max-height`, Q2-F9's clamp-vs-drop,
+and the browser pass (**paint only** — see §0.6). `pipeline/WORK-ITEMS.md` §10 is the queue.
 
-⚠ **§0.4 is new and it is the most important thing 10b learned.** *A document-wide `toContain` is
-a weak assertion wearing a strong name* — the third instance in three loops, and this time it was
-protecting `PLAN.md`'s **first** invariant.
+⚠ **§0.4 remains the most important thing 10b learned.** *A document-wide `toContain` is a weak
+assertion wearing a strong name* — three instances in three loops, and one was protecting
+`PLAN.md`'s **first** invariant. §0.6 is its sibling one level up: an assertion whose *subject*
+does not render cannot fail either.
 
 ⚠ **Everything below about steps 1–8's surface, the four structural rules, and the toolchain is
-inherited unchanged and is still true.** The sections **10b** rewrote are §0.4 (new), §2, §3.6's
-tail, §4, §5.2's rule list, §8 and §9. 10a wrote §0.3; Q1 wrote §0.1; Q2 wrote §0.2 and §3.5.
+inherited unchanged and is still true.** The sections **10c-1** rewrote are §0.6 (new), this
+header, §2 and §9. 10b-S-G wrote §0.5; 10b wrote §0.4, §3.6's tail, §4, §5.2's rule list and §8;
+10a wrote §0.3; Q1 wrote §0.1; Q2 wrote §0.2 and §3.5.
 
-⚠ **§4 and §8 have been found stale IN THE SAFE DIRECTION seven times.** **10b re-checked every
-row it touches against the tree and against `SPEC.md`, and marked what it did NOT re-check.** Do
-the same; do not copy the tables forward. ⚠ **And 10b found the other direction too**: two
-*phase notes* (`10b-build.md`, `10b-test.md`) asserted a mutation coverage that did not exist, so
-a document claiming a property is not evidence of it either — read what a mutation **replaces**.
+⚠ **§4 and §8 have been found stale IN THE SAFE DIRECTION seven times.** Re-check every row you
+touch against the tree and against `SPEC.md`, and mark what you did NOT re-check. Do not copy the
+tables forward. ⚠ **And 10b found the other direction too**: two *phase notes* (`10b-build.md`,
+`10b-test.md`) asserted a mutation coverage that did not exist — and 10c-1 found a third
+(`10c1-test.md` §1.2, §0.6). **A document claiming a property is not evidence of it. Read what a
+mutation replaces, and probe what a document says it probed.**
 
 ---
 
@@ -353,7 +360,97 @@ only by **restoring the old implementation and running the suite**. Four loops i
 with the key **present** and reads identically through `?.instance`. Every assertion that a
 subjectless entry *omits* the field uses `Object.hasOwn(...) === false`. ⚠ Measured 2026-09-08:
 `npx tsc --noEmit --exactOptionalPropertyTypes` **exits 0 on this tree** — turning the flag on is
-free today (§9, 10c).
+free today (§9, 10c-2).
+
+---
+
+## 0.6 ⚠ NEW — what 10c-1 found, and the rule to carry out of it
+
+10c-1 mounted the nine panels for the first time. Its adversarial applied **four wrong edits
+simultaneously** and `pnpm verify` exited 0 across **94 files / 2617 tests** on a build that
+served GPU 0's model name and GPU 0's temperature history on GPU 1's card, sent GPU 1's toggle to
+GPU 0, and shipped an alarm-forcing escape hatch any visitor could trigger in production.
+**Twelve findings, all adjudicated: 10 accepted, 0 rejected, 2 deferred**
+(`10c1-reconciliation.md`).
+
+### ⚠ THE RULE — a fixture whose two subjects are identical cannot discriminate between them
+
+`app/dashboard-shell.test.tsx` already had a two-GPU helper. It built card 1 as
+`{ ...gpu0, index: 1 }` — the same `name`, `bus`, `tempC`, VRAM, everything. **Two
+indistinguishable subjects make a positional read observationally identical to an index read**,
+so three separate defects passed straight through it:
+
+| edit | what it ships |
+|---|---|
+| `serving.find(s => s.instance === i)` → `serving[i]` | another instance's **model** on this card |
+| `gpus.find(g => g.index === i)` → `gpus[i]` | another card's **die** under this card's title |
+| the trace lambda's `index` → `0` | GPU 1's chart drawing **GPU 0's history** |
+
+**Fixture *presence* is not fixture *power*.** Make the two subjects differ in every field the
+component under test renders, and assert **per subject**, scoped to its own element.
+
+⚠ **And the same shape one level out (`10c1-A3`/`A4`): an assertion whose subject does not render
+cannot fail.** Two toggle tests asserted GPU 1's independence while driving a **one-GPU** state,
+under which the `gpu1` cell renders §6.5's takeover — no `<svg>`, no button, no
+`data-role="table-view"`. The negative assertion read as independence and asserted the fixture.
+**Assert the precondition when the subject is conditional.** Only two of the four per-slot toggle
+wirings were ever clicked; the shared mechanism was well mutated and the wirings were not —
+§0.5's *"used more than once, mutated once"*, at a fourth site.
+
+### ⚠ Both collectors return SPARSE collections, and the panels had assumed dense
+
+Not hypothetical, and each is documented in its own collector's source:
+
+- `lib/collectors/llama.ts:61 discoverInstances()` returns `[...found].sort()` — the **set** of
+  instance indices whose `<i>.env` was read. A missing `0.env` gives `serving: [{instance: 1}]`.
+- `lib/collectors/nvidia-smi.ts:147` skips a row whose `index` will not parse. `gpus: [{index: 1}]`
+  is a shape it is designed to produce.
+
+**Index into these by their `index`/`instance` field, never by array position.** A hard-coded
+`=== 0` was already caught by the existing tests; only the positional form escaped.
+
+### ⚠ CORRECTION — a `.module.css` import is a **Proxy**, not `{}`
+
+`10c1-test.md` §1.2 stated that every CSS-module import resolves to an empty object, so no test
+could ever observe a class name. **That is wrong, and acting on it would have weakened the exact
+guard 10a added to close its own F1** (the one that caught COOLING painting in the event log's
+grid cell). `Object.keys(styles)` is `[]` — which is why `console.log` prints `{}` — but
+`styles.gpu0` returns `_gpu0_e75739`. `grid.test.tsx`'s tier-2 placement guard and
+`dashboard-shell.test.tsx`'s sticky-band assertion are **live**; they would *fail* if the claim
+were true. That document now carries a marked correction with the original struck.
+
+**The real void is the opposite one: every key resolves, including keys with no rule.**
+`styles.zzzNoSuchRule` → `_zzzNoSuchRule_e75739`, and the module is typed as an index signature,
+so `tsc` is silent too. A deleted or misspelled class is invisible to the whole suite.
+`alarm-banner.tsx` had one (`styles.item`, no `.item` in its stylesheet); it is removed, and the
+mechanical audit is **10c-2's** (§9).
+
+⚠ **Method note:** `console.log(obj)` on a Proxy prints `{}` and looks conclusive. **Probe a
+property access, never the object.**
+
+### ⚠ Three tiers of CSS question — only the third needs a browser
+
+This is what 10c-3's scope actually is, and it should not be re-derived:
+
+| tier | risk | observable |
+|---|---|---|
+| **binding** | which element carries which class, `data-*` hooks | **jsdom, today** |
+| **reference** | `styles.X` naming a rule that does not exist | **a static check**, no runtime — 10c-2 |
+| **paint** | cascade, specificity, media queries, `display:none` at ≥1600px, overflow, stacking | **a real browser** — 10c-3, and only this |
+
+### ⚠ The sibling case, for the third loop running
+
+`10c-CO4` (COOLING's GPU 1 trace) and `10c-GP6` (GPU's own GPU 1 trace) are the same lambda in
+two files, found a phase apart. **When a lookup keyed on a subject index is found unguarded in
+one file, grep the other consumers for the same shape before closing the finding.** 10b's
+invariant-1 sweep stopped at four of nine panels; the test phase's fix stopped at COOLING.
+
+### ⚠ A correction inside a correction, recorded both ways
+
+`10c1-test.md` §5 flagged the escape hatch's wiring as untested — **right** — and demonstrated it
+with a `!==`→`===` flip that **does not compile** (`TS2339`: the discriminated union has no
+`body` on its failure arms). The finding was real and its justification was not. Both are now in
+the document. §0.5's rule applies: **compare against the counterfactual that was the code.**
 
 ---
 
@@ -449,8 +546,15 @@ python3 pipeline/steps/06-telemetry-route/regressions.py                    #  6
 python3 pipeline/steps/07-auth-login/regressions.py                         # 128 mutations + ledger
 python3 pipeline/steps/08-client-runtime/regressions.py                     # 174 mutations + ledger
 python3 pipeline/steps/09-ui-primitives/regressions.py                      #  95 mutations + ledger
-python3 pipeline/steps/10-panels-assembly/regressions.py                    # 138 mutations + ledger
+python3 pipeline/steps/10-panels-assembly/regressions.py                    # 168 mutations + ledger
 ```
+
+⚠ **10c-1 touched step 10's ONLY, and re-ran step 10's only.** It went 138 → **158** (build:
+`10c-DS*`, `10c-CVT*`, `10c-GP1..3`, `10c-CP*`, `10c-CO1..3`, `10c-FA*`, minus `10a-PP1`/`PP2`
+which went with `PanelPlaceholder`) → **159** (test phase: `10c-CO4`) → **168** (reconciliation:
+`10c-GP4/5/6`, `10c-DS5/6/7`, `10c-UT1/2/3`), with **196 ⚠ marks**. That it is the only one was
+established by grepping every `pipeline/steps/*/regressions.py` for each changed file — step 8's
+sole hit is a **docstring** mention of `use-telemetry.ts`, not a ledger entry or an anchor.
 
 ⚠ **10b-S-G touched three of them and re-ran two.** Step 5 gained `10b-SF1` (test phase) and
 `10b-SG1`/`10b-SG2` (reconciliation) → **130**; step 8 gained `10b-W1` (build) → **174**; step 10
@@ -461,7 +565,7 @@ rule is: re-run the harnesses whose `LEDGER_FILES` you touched, and **say which*
 ⚠ **NINE as of 10a (2026-09-08).** `pipeline/steps/10-panels-assembly/regressions.py` is new: it
 owns `app/dashboard-shell*.tsx`, `app/page*.tsx`, `app/use-now-tick*`, `lib/client/header-status*`,
 `lib/client/banner*`, `lib/client/use-telemetry*`, and the four `components/` files 10a added
-(`header`, `alarm-banner`, `grid`, `panel-placeholder`). It went **32 → 34** (10a's test phase)
+(`header`, `alarm-banner`, `grid`, and `panel-placeholder` until 10c-1 deleted it). It went **32 → 34** (10a's test phase)
 **→ 70** (10a's reconciliation), with **86 ⚠ marks**, and it is the first harness in the project
 to mutate a **CSS file** (`components/grid.module.css` — six of the seventy).
 
@@ -477,9 +581,10 @@ was written after them. Q1's fix to the ⚠-scanner applies to step 9's too — 
 the corrected scanner and carries the same blind spot — so an item that touches the scanner
 touches eight files and owes eight runs.
 
-**947 mutations** — 55/72/92/130/63/128/174 across steps 2–8, **95** in the `components/`
-harness, **138** in step 10's. ⚠ Derived 2026-09-08 (after 10b-S-G) by importing all nine and
-reading `len(REGRESSIONS)`, not copied forward.
+**977 mutations** — 55/72/92/130/63/128/174 across steps 2–8, **95** in the `components/`
+harness, **168** in step 10's. ⚠ The step-10 figure is 10c-1's own harness output
+(`All 168 regressions failed their check`); the other eight are carried from 10b-S-G's derivation
+and were **not** re-derived by 10c-1, because it changed no file any of them mutates.
 ⚠ **This total and the nine above it go stale on every item that adds a mutation, and have done six times.** Do not trust them; the authoritative number is the
 `All N regressions failed their check` line each harness prints, and all **eight** can be
 re-derived at once by importing each `regressions.py` and reading `len(REGRESSIONS)`. ⚠ Do **not**
@@ -609,13 +714,14 @@ Everything under `dashboard/`. Nothing outside it has been created or modified e
 | `app/login/page.tsx` · `login-form.tsx` | `/login`, and `LoginForm` (stateful) + `LoginCard` (**pure**) |
 | `proxy.ts` | §5's gate. **`proxy.ts`, NOT `middleware.ts`** — §7 |
 | **`components/*.tsx` + `*.module.css`** | **step 9's primitives, with Q2's hover layer and table view** — see §3.5 |
-| **`components/header.tsx` · `alarm-banner.tsx` · `grid.tsx` · `panel-placeholder.tsx`** | **New in 10a** — §6.2's header, §6.4's banner, §6.1's grid, and the 10a/10b seam. All four pure, all four with `.module.css` |
+| **`components/header.tsx` · `alarm-banner.tsx` · `grid.tsx`** | **New in 10a** — §6.2's header, §6.4's banner, §6.1's grid. All pure, all with `.module.css`. ⚠ **`panel-placeholder.tsx` is DELETED** (10c-1) — it implied a "pending" mechanism that no longer runs, and its one useful property is now proven against the real panels' own output |
 | **`components/panel-props.ts`** | **New in 10a.** `PanelProps` / `PanelId` — the contract 10b typechecks against. §3.6 |
 | **`lib/client/header-status.ts` · `banner.ts`** | **New in 10a.** §9's aggregate status reduction and §6.4's banner reduction. Pure, hook-free, no React |
 | **`app/dashboard-shell.tsx` + `.module.css`** | **New in 10a.** The ONE stateful surface: one `useTelemetry()`, one `useNowTick()`, one `state === null` guard, one sticky band |
 | **`app/use-now-tick.ts`** | **New in 10a.** D2's independent age interval. Never driven by any store |
-| **`components/panels/*.tsx` + `*.module.css`** | **New in 10b — the nine panel bodies**, plus `status-row.tsx`, `panel-notes.tsx`, `condition-lookup.ts`, `panel-chart.ts`, `event-sentence.ts`, `test-support.ts`. All pure, all inside `purity.test.ts`'s recursive walk. ⚠ **Not yet mounted anywhere** — see below |
-| 93 test files | **2594 tests** (10b-S-G: 2559 → 2587 → 2594) |
+| **`components/panels/*.tsx` + `*.module.css`** | **New in 10b — the nine panel bodies**, plus `status-row.tsx`, `panel-notes.tsx`, `condition-lookup.ts`, `panel-chart.ts`, `event-sentence.ts`, `test-support.ts`, and 10c-1's `chart-view-toggle.tsx`. All pure, all inside `purity.test.ts`'s recursive walk. ⚠ **Mounted as of 10c-1** — see below |
+| **`lib/client/force-alarm.ts`** | **New in 10c-1.** 10a-F4's alarm-forcing escape hatch — a pure function of `(body, search, nodeEnv)` wrapped around `RuntimeEnv.fetchTelemetry`, so a forced alarm runs the real validation, severity, debounce and banner path. Gated on `NODE_ENV !== 'production'` **and** an undocumented query string; the production gate is now a **behaviour** (`use-telemetry.force-alarm.test.tsx`, `10c-UT1`), not just a token |
+| 95 test files | **2627 tests** (10c-1: 2594 → 2616 build → 2617 test → **2627** reconcile) |
 | `package.json` · `pnpm-lock.yaml` · `tsconfig.json` · `next.config.mjs` · `vitest.config.mts` | pinned toolchain; `strict` + seven more flags, all asserted |
 | `app/layout.tsx` · `app/page.tsx` | ⚠ **No longer placeholders.** `page.tsx` renders `<DashboardShell />` and nothing else; `layout.tsx` imports `components/tokens.css` and paints the ground from tokens. ⚠ **`app/page.tsx` must stay free of telemetry** — see §6 — and it is now tested (`app/page.test.tsx`) |
 
@@ -634,24 +740,34 @@ the moment 10b creates it. That is not a style
 preference: it is why the view toggle is a **prop** the caller owns (step 10), and why there is
 no `useId`, no hover-position state and no self-toggling leaf anywhere under `components/`.
 
-⚠ **The assembly exists as of 10a (2026-09-08).** `app/dashboard-shell.tsx` composes
-`Header` + `AlarmBanner` + `Grid`, and all nine grid slots hold a `PanelPlaceholder`. **jsdom
-exists** (`jsdom@30.0.1`, devDependency, added by 10a for D6) — five test files use it, and
-`next build` was re-run to confirm it does not reach `.next/standalone`.
+⚠ **The assembly exists as of 10a and is COMPOSED as of 10c-1 (2026-09-08).**
+`app/dashboard-shell.tsx` composes `Header` + `AlarmBanner` + `Grid`, and all nine grid slots now
+hold their **real panel** — `PanelPlaceholder` is deleted. **jsdom exists** (`jsdom@30.0.1`,
+devDependency, added by 10a for D6) — six test files use it, and `next build` was re-run to
+confirm it does not reach `.next/standalone`.
 
-⚠ **The nine panel bodies exist as of 10b (2026-09-08) and have NO production call site.**
-`app/dashboard-shell.tsx` still renders nine `PanelPlaceholder`s; 10b's scope was
-`components/panels/`, and the swap is an `app/` change. **10c owns the wiring**, and the diff is
-`<PanelPlaceholder …props />` → `<GpuPanel {...props} />` etc. ⚠ **`GpuPanel` takes NO `index`
-prop** — 10b's reconciliation narrowed `panelId` to `'gpu0' | 'gpu1'` and derives the index from
-it, because two independent copies of *which card am I* typechecked while disagreeing (F12).
-⚠ **Until that wiring exists, nothing proves the nine compose**: every one of the ~330
-panel tests renders one panel in isolation against a hand-built `RuntimeState`. Same shape of gap
-10a's own reconciliation flagged for the header/banner/grid — *a mutation harness over the parts
-does not cover the join*.
+⚠ **`GpuPanel` takes NO `index` prop** and is called with a literal `panelId="gpu0"`/`"gpu1"`
+rather than through the `panel(id)` helper — `GpuPanelProps` narrows `panelId` to
+`'gpu0' | 'gpu1'` and the helper's return type carries the full `PanelId` union, so spreading it
+would widen the literal back out and let a swapped slot typecheck (10b-F12).
+
+⚠ **Q2-S2's chart/table toggle is SHELL state, one entry per chart-bearing panel.**
+`chartViews: Record<'gpu0'|'gpu1'|'cpu'|'cooling', 'chart'|'table'>` lives in
+`app/dashboard-shell.tsx`; the four chart-bearing panels take **optional** `view`/`onToggleView`
+props and render no control when `onToggleView` is omitted. The control renders **beside each
+chart**, never in the header — §6.2 says the header list is exhaustive and that "a tooltip is
+part of a chart, not a control of the page". ⚠ **Granularity is one toggle per PANEL, governing
+every chart that panel draws** — §6.2 does not say, and the decision is recorded in
+`chart-view-toggle.tsx`'s module doc (invariant 7), not spec-mandated.
+
+⚠ **What composing them found, and it is the reason the join is worth mounting** (§0.6): three
+positional-indexing defects and two unasserted toggle wirings, all invisible to ~330 isolated
+panel tests. *A mutation harness over the parts does not cover the join* — 10a's own lesson, and
+10c-1 is the loop that paid it.
 
 **Does not exist yet:** `Dockerfile`, `.dockerignore`, `dashboard.sh`, the systemd unit,
-`README.md`; any browser-driven test (10c, §9).
+`README.md`; any **automated** browser-driven test (10c-3, §9 — 10c-1 ran a real Chrome by hand
+and argues in `10c1-build.md` §3.3 for giving it its own loop with a purpose-built tool).
 
 ---
 
@@ -1559,7 +1675,7 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | ~~**`errorsForPanel(snapshot, panel)`**~~ (D4) | — | **closed 2026-09-07** — `lib/client/observations.ts:350`. ⚠ Carried as open here until Q2 checked |
 | ~~**`traceFor(state, pick)`**~~ (D5) | — | **closed 2026-09-07** — `lib/client/series.ts:201`. Same |
 | ~~The GB → GiB rename~~ (O19) | — | **closed 2026-09-07** — a deletion; `GiB` already existed |
-| **Formatter `parts` variant** (O14) | ⚠ **10c** (was step 9, step 10, 10b) | open — re-checked by 10b: the nine panels render headline figures and still never split a formatted string, so the ask has not arisen. §4 |
+| **Formatter `parts` variant** (O14) | ⚠ **10c-3** (was step 9, step 10, 10b) | open — re-checked by 10b: the nine panels render headline figures and still never split a formatted string, so the ask has not arisen. §4 |
 | ~~**jsdom** (D6)~~ | — | **closed by 10a** — `jsdom@30.0.1`, both halves tested, and `next build` re-run to confirm it does not reach `.next/standalone`. ⚠ jsdom still cannot see `:hover`, `position: sticky`, `matchMedia` or layout — that is the browser item below, not this one |
 | ~~S11/G5's **panel-rendering residue**~~ | — | **closed by 10b** — by construction, and the guard rebuilt to assert the ruling rather than three substrings. §8 |
 | **S40's third event-log feed** (D1) | **10c / owner** | open — `LogEntryKind` is `lib/client/events.ts`'s and was outside 10b's file scope. ⚠ `event-sentence.ts`'s exhaustive switch makes the new kind a **compile error** in the panel the day it lands, so the panel half is future-proofed |
@@ -1571,31 +1687,38 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 | **Keep the server-rendered shell free of telemetry and secrets** | ⚠ **standing, all steps** | §3.3. 10a made `app/page.tsx` four lines and **tested it** (`app/page.test.tsx`) — it had no test at all before |
 | ~~The red-test ledger retrofit for step 3's harness~~ | — | **closed** — done during step 8, confirmed 2026-09-07. All **eight** harnesses carry a ledger |
 | ~~**Q1** — the ⚠-scanner back-port~~ | — | **closed 2026-09-07** — 771 mutations, 689 marks, eight harnesses green. §0.1 |
-| **Q1-F4** — assert every ⚠-bearing test file is in some `LEDGER_FILES` | ⚠ **10c** | open — §0.1. The union it was waiting on has now changed: 10a added the **ninth** harness and hand-wrote its `LEDGER_FILES`, which is exactly the step a cross-harness runner would check |
+| **Q1-F4** — assert every ⚠-bearing test file is in some `LEDGER_FILES` | ⚠ **10c-2** | open — §0.1. The union it was waiting on has now changed: 10a added the **ninth** harness and hand-wrote its `LEDGER_FILES`, which is exactly the step a cross-harness runner would check |
 | ~~**Q2** — §6.2's hover layer and table view~~ | — | **closed 2026-09-08** — 13 findings adjudicated, `components/` harness at 93 mutations. §0.2 |
-| **Q2-S2** — the table view's height, against §6.1's no-scroll promise | **owner**, then **10c** | ⚠ open, and ⚠ **still not reachable in the UI**: no panel sets `view`, and none can, because a self-toggling leaf would need the hook `purity.test.ts` forbids. The toggle has to live in `app/`, so it lands with 10c's wiring. The session event log DOES use `--table-scroll-max` for its own scroll region. **Answered for the stopgap, not for the layout:** `--table-scroll-max: 40vh` still stands, and 10a's grid gives a panel body a bounded ancestor for the **first time**, so SCOPE 2.5f's `max-height: 100%` replacement is now possible — **10c**, with a browser |
+| **Q2-S2** — the table view's height, against §6.1's no-scroll promise | **owner**, then **10c-3** | ⚠ open — but **now reachable**: 10c-1 gave the toggle its `app/`-owned home, so four panels really do render a table view in a mounted page. The session event log also uses `--table-scroll-max` for its own scroll region. **Answered for the stopgap, not for the layout:** `--table-scroll-max: 40vh` still stands, and the grid now gives a panel body a bounded ancestor, so SCOPE 2.5f's `max-height: 100%` replacement is possible — **10c-3**, with a browser |
 | **Q2-S1** — §6.2's per-mark tooltip clause vs the crosshair layer that occludes it | **owner** | open — §8 |
 | **Q2-F9** — the chart clamps out-of-domain points; the domain's containment is a precondition it neither states as a prop rule nor checks | **owner**, then 10c | open. ⚠ **Sidestepped, not resolved, by 10b**: `chartDomainOf` computes the same window `traceFor` uses, so no panel in this loop can feed an out-of-domain instant. The *rendering* decision (clamp vs drop) is still unmade for a future caller without that property |
 | ~~**10b — the nine panel bodies**~~ | — | **closed 2026-09-08** pending the parent's review — 14 findings adjudicated (11 accepted, 1 in part, 2 deferred, 0 rejected outright). **92 files · 2559 tests · step 10's harness at 129 mutations · 150 ⚠ marks.** `10b-reconciliation.md` |
-| ⚠ **Wire the nine panels into `app/dashboard-shell.tsx`** | **10c** | ⚠ open, and it is the biggest single gap left in step 10: the panels exist, typecheck and are tested, and **nothing mounts them**. Until they are mounted, nothing proves the nine compose — SVG ids across the real page, layout, and that the real hook's state satisfies `PanelProps` end to end. ⚠ **`<GpuPanel {...props} />` takes NO `index`** (F12) |
-| **10b-F1-guard** — forbid the document-wide `toContain` shape mechanically | **10c** | open. Q1-F4's family (a cross-cutting test-quality guard). The behavioural half exists now — `valueCells` + six per-panel guards — and should live a while before a lint is written against its shape. §0.4 |
+| ~~⚠ **Wire the nine panels into `app/dashboard-shell.tsx`**~~ | — | **closed by 10c-1, 2026-09-08** — nine real panels mounted, `PanelPlaceholder` deleted, SVG ids distinct per cell, and the composition itself found five defects no isolated panel test could see (§0.6). `10c1-reconciliation.md` |
+| ~~**Q2-S2's toggle needs a home in `app/`**~~ | — | **closed by 10c-1** — `chartViews` in `app/dashboard-shell.tsx`, one entry per chart-bearing panel, the control rendered beside each chart per §6.2. ⚠ Granularity (one per panel, not per chart) is an **invariant-7 recording**, not a spec ruling |
+| ~~**10a-F4, half two: force an alarm client-side**~~ | — | **closed by 10c-1** — `lib/client/force-alarm.ts`, wrapped around `RuntimeEnv.fetchTelemetry` so the real validation/severity/debounce/banner path runs and a forced alarm takes the same two-poll confirmation a genuine one does. ⚠ Its **production unreachability is now a test** (`10c-UT1`), not an unwatched `process.env.NODE_ENV` token — the adversarial replaced that token and reached a real `pnpm build` chunk with everything green |
+| ⚠ **10c1-A8-audit** — a static check that every `styles.X` names a rule its sibling `.module.css` declares | **10c-2** | open. **A CSS-module import is a Proxy: every key resolves, including keys with no rule** (§0.6), so a deleted or misspelled class is invisible to `tsc` and to the whole suite. The one live instance (`alarm-banner.tsx`'s `styles.item`) is **fixed**; the mechanism that hid it is not. ~15 lines, no browser, no runtime — it belongs beside `10b-F1-guard` and `L11` |
+| ⚠ **10c1-A9-paint** — scope the browser step to **paint only** | **10c-3** | open. Binding is observable in jsdom today and a dangling reference is statically checkable; only cascade, specificity, media queries, the ≥1600px `display:none` promotion, overflow and stacking need a real browser. §0.6's three-tier table. **Do not ask the browser step to carry the other two tiers** |
+| ⚠ **Banner items: should a condition be forbidden from wrapping mid-condition?** | **10c-3**, with the owner | open, raised by 10c-1's A8 fix and **deliberately not answered**. `alarm-banner.tsx`'s per-condition `<span>` now carries no class; the layout works on `.rest`'s `flex-wrap: wrap; gap: .4em 1em` — **by luck rather than by design**. Declaring a `white-space: nowrap` rule would be inventing; look at it in the browser pass and decide |
+| **10b-F1-guard** — forbid the document-wide `toContain` shape mechanically | **10c-2** | open. Q1-F4's family (a cross-cutting test-quality guard). The behavioural half exists now — `valueCells` + six per-panel guards — and should live a while before a lint is written against its shape. §0.4 |
 | **10b-F11 / 10b-S-F** — a panel head reading `normal` over one of its own em dashes | **owner**, then 10b/10c | open — §8. Deferred deliberately: it changes what every panel head means, which is not a reconciler's call |
-| **10b-F14b** — at 1280–1599px (the design target) the GPU and CPU traces cannot hatch a gap | **10c**, with L9 | open. `Sparkline` takes no `gaps` prop by design, so HANDOVER's *"hatch `state.gaps`, never a hole in a series"* holds only above 1600px, where the promoted chart receives them. The fix is a new prop on **step 9's** primitive or a different primitive at the design breakpoint — both are L9's sizing question, and 10c owns L9 and the browser pass that would show which |
+| **10b-F14b** — at 1280–1599px (the design target) the GPU and CPU traces cannot hatch a gap | **10c-3**, with L9 | open. `Sparkline` takes no `gaps` prop by design, so HANDOVER's *"hatch `state.gaps`, never a hole in a series"* holds only above 1600px, where the promoted chart receives them. The fix is a new prop on **step 9's** primitive or a different primitive at the design breakpoint — both are L9's sizing question, and 10c owns L9 and the browser pass that would show which |
 | **10b-F14a** — SERVING's composite row value reads `:— · — · ctx — · health —` for an identity-only instance | **owner** | open, cosmetic. Not an O14 violation (it concatenates whole formatter outputs, never splits one); changing it means inventing a composition rule §6.6 does not state |
 | **10b-S-E · S-F · S-H** — three spec questions (~~S-G~~ is **ruled and implemented**) | **owner** | §8. Two implemented conservatively, S-F not implemented |
 | ~~**10b-S-G** — `errors[]` gains an optional `instance`~~ | — | **closed 2026-09-08** pending the parent's review — build → test → adversarial → reconcile, **11 findings adjudicated** (6 accepted of which 3 in part, 1 rejected, 2 deferred). The `errors[]`→`llama-server` join is **structural**, not a substring match. `10b-sg-reconciliation.md` |
 | ⚠ **S-G-Q1** — several entries from one source about one instance: only the last is rendered, anywhere | **owner** | open — §8. `readEnv` files one entry per parse problem, so this loses a real reason on a real box. The doc that claimed otherwise is corrected; **the behaviour is unchanged and deliberate**, because §6.5 says "the reason", singular |
 | ⚠ **S-G-Q2** — a `dbus` entry with **no** instance conflates a bus-wide failure with `collectSafety`'s per-unit one | **owner**, then whoever owns §4 | open — §8. ⚠ **This is the residue of the A2 fix and it is named at both call sites in the code.** COOLING and SAFETY now ignore entries that name an instance; entries that name none still reach all three panels, so SERVING prints `gpu-fan-control.service`'s failure under its rows. Needs a second structural subject or two sources — not a reconciler's call |
 | **S-G-Q3** — which of the eighteen sources may carry an `instance` is a judgement in a document | **owner** | open — §8. Enforced today by a test per path (`10b-SF1`, `10b-SG1`, `10b-SG2`). A type-level constraint was **rejected** as the fix here: it means a discriminated union over eighteen sources and a per-source rule in `wire.ts` that `SPEC.md` never states |
-| **S-G-Q4** — duplicate `instance` values in `serving[]` validate and render twice under one React key | **owner**, then **10c** | open — §8. The collector prevents it; `wire.ts` does not, and its own header says its purpose is not to trust the other side |
-| **S-G-A10** — should the session event log be per-instance? | **10c** | open, low. `events.ts:400` folds `errors[]` last-per-source across **all** instances while a SERVING row is now last-per-source **per** instance, so with both instances failing `/health` the log's one sentence is instance 1's while row 0 shows instance 0's. `events.ts` has no row to hang an instance on, which is why this is a question and not a bug. The comment that cited the two as agreeing is corrected |
-| **S-G-A11** — turn on `exactOptionalPropertyTypes` | **10c** | open, and ⚠ **measured, not guessed**: `npx tsc --noEmit --exactOptionalPropertyTypes` **exits 0 on this tree today** (2026-09-08), so it is a one-line `tsconfig.json` change with no migration. What it buys: `contract.test.ts`'s `Object.hasOwn(entry,'instance') === false` stops being a runtime-only guarantee — today `{ ...base, instance: maybeUndefined }` typechecks with the key present. `errors.ts`'s docstring records the exposure meanwhile |
+| **S-G-Q4** — duplicate `instance` values in `serving[]` validate and render twice under one React key | **owner**, then **10c-2** | open — §8. The collector prevents it; `wire.ts` does not, and its own header says its purpose is not to trust the other side |
+| **S-G-A10** — should the session event log be per-instance? | **10c-2 / owner** | open, low. `events.ts:400` folds `errors[]` last-per-source across **all** instances while a SERVING row is now last-per-source **per** instance, so with both instances failing `/health` the log's one sentence is instance 1's while row 0 shows instance 0's. `events.ts` has no row to hang an instance on, which is why this is a question and not a bug. The comment that cited the two as agreeing is corrected |
+| **S-G-A11** — turn on `exactOptionalPropertyTypes` | **10c-2** | open, and ⚠ **measured, not guessed**: `npx tsc --noEmit --exactOptionalPropertyTypes` **exits 0 on this tree today** (2026-09-08), so it is a one-line `tsconfig.json` change with no migration. What it buys: `contract.test.ts`'s `Object.hasOwn(entry,'instance') === false` stops being a runtime-only guarantee — today `{ ...base, instance: maybeUndefined }` typechecks with the key present. `errors.ts`'s docstring records the exposure meanwhile |
 | ~~**10a — the shell**~~ | — | **closed 2026-09-08** — 18 findings adjudicated (16 accepted, 2 deferred, 1 half-rejected). 79 files · 2399 tests · nine harnesses · 875 mutations. `10a-reconciliation.md` |
-| ⚠ **10a-F17 — `pnpm verify` is not deterministic** | **10c** | ⚠ open, and it undermines every ledger in the project. **§0.3 — read it before trusting a green run.** Fix with an injected clock in `lib/collectors/serving.test.ts:592`, never a wider margin |
-| ⚠ **10a-F4 — nothing in the pipeline runs a browser** | **10c** | open. The step owes **two** things: (1) the test phase's seven measurements re-run headlessly — `getBoundingClientRect` at 820/899/900/1150/1279/1280/1920, asserting COOLING's `y`/`height`/`x` span at ≥1280 and the `y`-order at <900; **(2) a way to force an alarm-level condition client-side.** Without (2) the banner never mounts, which is exactly why the manual pass could not see F13 — the one element §6.4 makes normative was the one element the browser check could not reach |
+| ⚠ **10a-F17 — `pnpm verify` is not deterministic** | **10c-2** | ⚠ open, and it undermines every ledger in the project. **§0.3 — read it before trusting a green run.** Fix with an injected clock in `lib/collectors/serving.test.ts:592`, never a wider margin |
+| ⚠ **10a-F4 — nothing in the pipeline runs a browser AUTOMATICALLY** | **10c-3** | ⚠ **half closed.** (2) — the alarm-forcing hatch — is **built and tested** by 10c-1. (1) is still open: the seven measurements re-run headlessly, `getBoundingClientRect` at 820/899/900/1150/1279/1280/1920, asserting COOLING's `y`/`height`/`x` span at ≥1280 and the `y`-order at <900. ⚠ **10c-1 ran a real Chrome by hand and five of the seven passed**, but `resize_window` could not set the viewport — `window.innerWidth` read a constant 3440 across every call — so measurements 1–4 and 6 are unexercised. That is a **tooling** limit, cleanly separated from the app, and it is the concrete argument in `10c1-build.md` §3.3 for a purpose-built harness (Playwright/Puppeteer, verified absent from `.next/standalone` the way jsdom was) rather than half-solving it with the wrong tool. ⚠ **Scope it to paint only** — see `10c1-A9-paint` above |
 | **10a-S-A · S-B · S-C · S-D** — four spec questions | **owner** | §8. Three implemented conservatively, S-C not implemented |
-| **10a — SCOPE 2.5f**: replace `--table-scroll-max: 40vh` with `max-height: 100%` | **10c** | open — now unblocked by 10a's grid, but wants a browser to confirm |
-| **10c — the backlog** | **10c** | next. SCOPE §5's third loop, plus everything marked 10c in this table |
+| **10a — SCOPE 2.5f**: replace `--table-scroll-max: 40vh` with `max-height: 100%` | **10c-3** | open — now unblocked by 10a's grid, but wants a browser to confirm |
+| ~~**10c-1 — the wiring**~~ | — | **closed 2026-09-08** pending the parent's review — **12 findings adjudicated: 10 accepted, 0 rejected, 2 deferred.** 95 files · 2627 tests · step 10's harness at **168 mutations · 196 ⚠ marks**. `10c1-reconciliation.md`, and §0.6 for the rule it leaves behind |
+| **10c-2 — the guards** | **10c-2** | **next.** `10b-F1-guard` · `Q1-F4` · `L11` · `S-G-A11` · `10c1-A8-audit`. All mechanical, none needs a browser |
+| **10c-3 — sizing and visual** | **10c-3** | after 10c-2. `L9` · `10b-F14b` · SCOPE 2.5f's `max-height` · `Q2-F9` · `10a-F4`'s remaining half · `10c1-A9-paint`'s scoping · the banner-item wrapping question |
 | **O20 · O21 · O22 · D8** — the four silent-failure obligations | **step 11** | §4.1 |
 | **`dashboard.sh check`**: an unparseable `PASSWORD_HASH`; a `SESSION_SECRET` short or quoted; a `STANDING` entry matching nothing; the env file's mode and owner | **step 11** | the only place any of them can be caught, because nothing is logged |
 | **F7 — `LIMITS` bounds scrypt's memory but not its time** (measured 1 720 ms vs 58 ms at the worst accepted parameters) | **step 11** | with `check` |

@@ -1,9 +1,9 @@
 /**
  * §6.1's grid — the authoritative ASCII layout, as nine named slots over a CSS grid.
  *
- * A pure layout shell: it takes nine already-built panels (or, until 10b lands, nine
- * `PanelPlaceholder`s — see the step notes on that decision) and places each one by NAME, not
- * by array position. §6.1's layout is unusual enough (COOLING spans two rows; two 2-wide GPU
+ * A pure layout shell: it takes nine already-built panels — the real ones, since 10c1 wired
+ * them into `app/dashboard-shell.tsx` in place of `PanelPlaceholder` — and places each one by
+ * NAME, not by array position. §6.1's layout is unusual enough (COOLING spans two rows; two 2-wide GPU
  * cards sit above a differently-shaped bottom row) that a positional `children[]` API would
  * make every call site re-derive the mapping this component exists to fix in one place.
  *

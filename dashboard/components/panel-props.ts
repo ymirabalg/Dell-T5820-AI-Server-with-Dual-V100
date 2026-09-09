@@ -10,9 +10,13 @@
  * including the one fact a panel cannot derive for itself (§2.4/L4: *which instance am I*),
  * which is what stops two mounted copies of one `GpuPanel` from minting the same SVG `id`.
  *
- * So the contract is a type, `PanelPlaceholder` implements it today, and `dashboard-shell.tsx`
- * really does pass all three to all nine slots. 10b's swap is `<PanelPlaceholder …props />` →
- * `<GpuPanel …props index={0} />`, and a panel that invents its own names now fails `tsc`.
+ * So the contract is a type, and `dashboard-shell.tsx` really does pass all three to all nine
+ * slots. 10b wrote the nine real panels against it; 10c1 did the swap — every
+ * `<PanelPlaceholder …props />` is now the real panel (`<GpuPanel …props panelId="gpu0" />`,
+ * `GpuPanel` deriving its own card index from `panelId` rather than taking a second, separately
+ * mistakable `index` prop) — and `PanelPlaceholder` itself is deleted rather than kept around
+ * implying a "pending" state that no longer exists (`10c1-build.md` §2). A panel that invents
+ * its own prop names still fails `tsc`.
  *
  * ⚠ **The full `RuntimeState`, deliberately, not a pre-sliced subset.** Computing a panel's
  * slice IS its body's domain logic — the GPU↔instance join (`gpu.index === serving.instance`),

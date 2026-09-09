@@ -73,12 +73,19 @@ import { chartDomainOf, formatTimeOfDayMs } from './panel-chart';
 import { findDisplayed, staleAgeNote, staleValueOr } from './condition-lookup';
 import { panelChip } from './panel-chip';
 import { StatusRow } from './status-row';
+import { ChartViewToggle } from './chart-view-toggle';
 
 import styles from './cooling-panel.module.css';
 
 const FAN_SERVICE_ID = conditionId('unit', FAN_SERVICE_UNIT);
 
-export function CoolingPanel({ state, nowMs, panelId }: PanelProps) {
+/** Q2-S2's table toggle (10c1) — see `gpu-panel.tsx`'s identical field for the shape. */
+export interface CoolingPanelProps extends PanelProps {
+  readonly view?: 'chart' | 'table';
+  readonly onToggleView?: () => void;
+}
+
+export function CoolingPanel({ state, nowMs, panelId, view = 'chart', onToggleView }: CoolingPanelProps) {
   const snapshot: TelemetrySnapshot | null = latestSample(state)?.snapshot ?? null;
   const cooling: Cooling | null = snapshot?.cooling ?? null;
 
@@ -149,6 +156,13 @@ export function CoolingPanel({ state, nowMs, panelId }: PanelProps) {
         detail={dbusError}
       />
       <div className={styles.chart}>
+        {onToggleView === undefined ? null : (
+          <ChartViewToggle
+            view={view}
+            onToggle={onToggleView}
+            label="GPU temperature and fan 5 RPM"
+          />
+        )}
         <StackedTimeSeriesChart
           id={`${panelId}-chart`}
           ariaLabel="GPU temperature and fan 5 RPM over the selected window"
@@ -181,6 +195,7 @@ export function CoolingPanel({ state, nowMs, panelId }: PanelProps) {
           formatTime={formatTimeOfDayMs}
           width={CHART_SIZE.cooling.width}
           plotHeight={CHART_SIZE.cooling.height}
+          view={view}
         />
       </div>
       <div className={styles.smaller}>

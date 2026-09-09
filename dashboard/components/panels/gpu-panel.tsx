@@ -69,6 +69,7 @@ import type { Gpu, ServingInstance, TelemetrySnapshot } from '@/lib/types';
 
 import { PanelNotes } from './panel-notes';
 import { panelChip } from './panel-chip';
+import { ChartViewToggle } from './chart-view-toggle';
 
 import styles from './gpu-panel.module.css';
 
@@ -84,6 +85,18 @@ import styles from './gpu-panel.module.css';
 export interface GpuPanelProps extends Omit<PanelProps, 'panelId'> {
   /** This mount's grid slot — and, through it, which of the two known cards this is. */
   readonly panelId: 'gpu0' | 'gpu1';
+  /**
+   * Q2-S2's table toggle, now shell-owned (10c1). Optional and defaulted to `'chart'` so a
+   * caller with nothing to toggle — every existing test in this file — renders exactly as
+   * before; `dashboard-shell.tsx` is the one production caller and always supplies both.
+   * Governs BOTH chart elements this panel draws (the sparkline and its ≥1600px promotion):
+   * only one is ever visible at a time by CSS, so one `view` value covers whichever is shown
+   * (`chart-view-toggle.tsx`'s module doc has the granularity reasoning).
+   */
+  readonly view?: 'chart' | 'table';
+  /** Present only when the caller owns toggle state. The control renders only when this is
+   *  given — a panel with nothing wired must not invent a button that does nothing. */
+  readonly onToggleView?: () => void;
 }
 
 const gpuAt = (snapshot: TelemetrySnapshot | null, index: number): Gpu | null =>
@@ -92,7 +105,7 @@ const gpuAt = (snapshot: TelemetrySnapshot | null, index: number): Gpu | null =>
 const servingFor = (snapshot: TelemetrySnapshot | null, index: number): ServingInstance | null =>
   snapshot?.serving?.find((s) => s.instance === index) ?? null;
 
-export function GpuPanel({ state, panelId }: GpuPanelProps) {
+export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPanelProps) {
   const index: 0 | 1 = panelId === 'gpu0' ? 0 : 1;
   const snapshot = latestSample(state)?.snapshot ?? null;
   const gpu = gpuAt(snapshot, index);
@@ -144,6 +157,9 @@ export function GpuPanel({ state, panelId }: GpuPanelProps) {
           <div className={styles.headline}>
             <Row label="temperature" value={formatCelsius(gpu?.tempC ?? null)} severity={severityGpuTemp(gpu?.tempC ?? null)} />
           </div>
+          {onToggleView === undefined ? null : (
+            <ChartViewToggle view={view} onToggle={onToggleView} label={ariaLabel} />
+          )}
           <div className={styles.sparklineWrap}>
             <Sparkline
               points={trace}
@@ -151,6 +167,7 @@ export function GpuPanel({ state, panelId }: GpuPanelProps) {
               color={color}
               width={CHART_SIZE.sparkline.width}
               height={CHART_SIZE.sparkline.height}
+              view={view}
               formatValue={(v) => formatCelsius(celsius(v))}
               formatTime={formatTimeOfDayMs}
             />
@@ -172,6 +189,7 @@ export function GpuPanel({ state, panelId }: GpuPanelProps) {
               formatTime={formatTimeOfDayMs}
               width={480}
               plotHeight={140}
+              view={view}
             />
           </div>
           <Row label="power" value={`${formatWatts(gpu?.powerW ?? null)} of ${formatWatts(gpu?.powerCapW ?? null)} cap`} />

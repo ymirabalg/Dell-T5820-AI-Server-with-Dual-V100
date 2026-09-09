@@ -156,3 +156,28 @@ describe('⚠ invariant 1, across EVERY reading on this panel', () => {
     for (const cell of cells) expect(cell).not.toMatch(/[0-9]/);
   });
 });
+
+describe('⚠ 10c1 — the chart/table toggle (Q2-S2), now shell-owned', () => {
+  test('⚠ with no `view` given, both sparklines render as CHARTS, not tables', () => {
+    const html = renderToStaticMarkup(<CpuPanel state={stateWith(everythingZero)} nowMs={0} panelId="cpu" />);
+    expect(html).not.toContain('data-role="table-view"');
+  });
+
+  test('⚠ `view="table"` switches BOTH the temperature and utilisation sparklines to tables', () => {
+    // One toggle governs the whole panel (`chart-view-toggle.tsx`'s recorded granularity
+    // decision) — this is the test that would catch only ONE of the two sparklines being wired.
+    const html = renderToStaticMarkup(
+      <CpuPanel state={stateWith(everythingZero)} nowMs={0} panelId="cpu" view="table" />,
+    );
+    expect(html.split('data-role="table-view"').length - 1).toBe(2);
+  });
+
+  test('⚠ the toggle control renders ONLY when the caller supplies onToggleView', () => {
+    const withoutHandler = renderToStaticMarkup(<CpuPanel state={stateWith(everythingZero)} nowMs={0} panelId="cpu" />);
+    expect(withoutHandler).not.toContain('table view');
+    const withHandler = renderToStaticMarkup(
+      <CpuPanel state={stateWith(everythingZero)} nowMs={0} panelId="cpu" onToggleView={() => undefined} />,
+    );
+    expect(withHandler).toContain('table view');
+  });
+});

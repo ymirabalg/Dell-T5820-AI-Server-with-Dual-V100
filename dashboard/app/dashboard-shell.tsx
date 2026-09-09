@@ -18,30 +18,52 @@
  *   whether a poll landed, which is the whole point (D2).
  * - **2.5d — unique SVG ids.** `panelId` — the grid slot's own name — is passed to all nine
  *   slots as part of `components/panel-props.ts`'s `PanelProps`, and every SVG id a panel
- *   mints is prefixed with it (`` `${panelId}-temp-trace` ``). No chart is mounted until 10b's
- *   panels replace `PanelPlaceholder`, but the namespace is real, threaded and asserted now
- *   rather than described in a document — that gap was adversarial F16.
+ *   mints is prefixed with it (`` `${panelId}-temp-trace` ``), genuinely — 10c1 wired the nine
+ *   real panels in place of `PanelPlaceholder`, so this is now observable in a mounted chart's
+ *   own `id` attribute rather than only in a marker `panel-placeholder.tsx` rendered on the
+ *   type's behalf. See `10c1-build.md` §1 for what composing them for the first time found.
  * - **2.5e — chart sizing.** `components/grid.tsx`'s `CHART_SIZE` is exported for 10b to
  *   import; this file does not otherwise decide a size.
+ *
+ * ### 10c1 — the chart/table toggle (Q2-S2) is owned HERE, not by a panel
+ *
+ * `components/panels/gpu-panel.tsx`, `cpu-panel.tsx` and `cooling-panel.tsx` are the only
+ * panels that draw a chart, and each takes an optional `view`/`onToggleView` pair. This file
+ * is the one place `components/` is not — `app/` — so `chartViews` below is a plain `useState`,
+ * one entry per chart-bearing panel, and `toggleChartView` is the only thing that ever changes
+ * it. §6.2 (amended 2026-09-07/08) rules the control itself OUT of the header's four — "a
+ * tooltip is part of a chart, not a control of the page" — which is why it is threaded down to
+ * each panel instead of appearing beside `⟳`/`❙❙` below. `10c1-build.md` records the
+ * granularity decision (one toggle per PANEL, not per chart) as invariant 7, since §6.2 does
+ * not say.
  *
  * ### Formatting convention
  *
  * Every string handed to `Header` and `AlarmBanner` is already run through `lib/format.ts` —
  * neither component imports a formatter itself, the same rule `PanelShell.subtitle` set in
- * step 9. That keeps the header, the banner and (once 10b lands) the panels from ever
- * disagreeing about how one reading reads.
+ * step 9. That keeps the header, the banner and the panels from ever disagreeing about how one
+ * reading reads.
  */
+
+import { useState } from 'react';
 
 import { AlarmBanner } from '@/components/alarm-banner';
 import type { AlarmBannerItem } from '@/components/alarm-banner';
 import { Grid } from '@/components/grid';
 import { Header } from '@/components/header';
-import { PanelPlaceholder } from '@/components/panel-placeholder';
 import type { PanelProps } from '@/components/panel-props';
 import type { BannerCondition } from '@/lib/client/banner';
 import { bannerView } from '@/lib/client/banner';
 import { ageMs, latestSample } from '@/lib/client/runtime';
 import { useTelemetry } from '@/lib/client/use-telemetry';
+import { GpuPanel } from '@/components/panels/gpu-panel';
+import { CpuPanel } from '@/components/panels/cpu-panel';
+import { MemoryPanel } from '@/components/panels/memory-panel';
+import { CoolingPanel } from '@/components/panels/cooling-panel';
+import { SafetyPanel } from '@/components/panels/safety-panel';
+import { StorageNetworkPanel } from '@/components/panels/storage-network-panel';
+import { ServingPanel } from '@/components/panels/serving-panel';
+import { SessionEventLogPanel } from '@/components/panels/session-event-log-panel';
 import {
   formatAge,
   formatText,
@@ -129,9 +151,22 @@ function ConnectingShell() {
   );
 }
 
+/** The four panels that draw a chart (§6.2) — the only ones Q2-S2's toggle reaches. */
+type ChartPanelId = 'gpu0' | 'gpu1' | 'cpu' | 'cooling';
+type ChartViewMap = Readonly<Record<ChartPanelId, 'chart' | 'table'>>;
+const INITIAL_CHART_VIEWS: ChartViewMap = { gpu0: 'chart', gpu1: 'chart', cpu: 'chart', cooling: 'chart' };
+
 export function DashboardShell() {
   const { state, runtime } = useTelemetry();
   const nowMs = useNowTick(AGE_TICK_MS);
+  // ⚠ 10c1 — Q2-S2's table toggle. A `useState` call, unconditional and above the 2.5a early
+  // return below (the Rules of Hooks bind even though `state` is `null` on a server render and
+  // for one client frame): every hook in this file runs every render regardless of what it
+  // renders. One entry per chart-bearing panel, not one flag for the whole page — flipping GPU
+  // 0 to a table must not also flip GPU 1 or COOLING, which a single boolean could not express.
+  const [chartViews, setChartViews] = useState<ChartViewMap>(INITIAL_CHART_VIEWS);
+  const toggleChartView = (id: ChartPanelId): void =>
+    setChartViews((prev) => ({ ...prev, [id]: prev[id] === 'chart' ? 'table' : 'chart' }));
 
   // ⚠ 2.5a, and the ONLY place in this assembly this check is made. `runtime` is checked
   // alongside `state` defensively — both come from the same hook and become non-null
@@ -203,19 +238,47 @@ export function DashboardShell() {
         />
       </div>
       <Grid
-        gpu0={<PanelPlaceholder title="GPU 0" {...panel('gpu0')} />}
-        gpu1={<PanelPlaceholder title="GPU 1" {...panel('gpu1')} />}
-        cpu={<PanelPlaceholder title="cpu" {...panel('cpu')} />}
-        memory={<PanelPlaceholder title="memory" {...panel('memory')} />}
-        cooling={<PanelPlaceholder title="cooling" {...panel('cooling')} />}
-        safety={<PanelPlaceholder title="safety" {...panel('safety')} />}
-        storageAndNetwork={
-          <PanelPlaceholder title="storage & network" {...panel('storage-and-network')} />
+        // ⚠ GPU is not built from `panel()`: `GpuPanelProps` narrows `panelId` to
+        // `'gpu0' | 'gpu1'` (10b-F12), and `panel()`'s return type carries the full `PanelId`
+        // union — spreading it would widen the literal back out and let a swapped slot
+        // typecheck. Writing the two calls directly keeps the narrowing load-bearing.
+        gpu0={
+          <GpuPanel
+            state={state}
+            nowMs={nowMs}
+            panelId="gpu0"
+            view={chartViews.gpu0}
+            onToggleView={() => toggleChartView('gpu0')}
+          />
         }
-        serving={<PanelPlaceholder title="serving" {...panel('serving')} />}
-        sessionEventLog={
-          <PanelPlaceholder title="session event log" {...panel('session-event-log')} />
+        gpu1={
+          <GpuPanel
+            state={state}
+            nowMs={nowMs}
+            panelId="gpu1"
+            view={chartViews.gpu1}
+            onToggleView={() => toggleChartView('gpu1')}
+          />
         }
+        cpu={
+          <CpuPanel
+            {...panel('cpu')}
+            view={chartViews.cpu}
+            onToggleView={() => toggleChartView('cpu')}
+          />
+        }
+        memory={<MemoryPanel {...panel('memory')} />}
+        cooling={
+          <CoolingPanel
+            {...panel('cooling')}
+            view={chartViews.cooling}
+            onToggleView={() => toggleChartView('cooling')}
+          />
+        }
+        safety={<SafetyPanel {...panel('safety')} />}
+        storageAndNetwork={<StorageNetworkPanel {...panel('storage-and-network')} />}
+        serving={<ServingPanel {...panel('serving')} />}
+        sessionEventLog={<SessionEventLogPanel {...panel('session-event-log')} />}
       />
     </>
   );

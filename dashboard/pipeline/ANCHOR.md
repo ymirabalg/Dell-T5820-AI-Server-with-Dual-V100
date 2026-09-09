@@ -27,12 +27,13 @@ adversarial and review phases and fixed before they became wrong code. Several w
 
 ---
 
-## 2. State — READ CAREFULLY. Updated 2026-09-08 by 10b-S-G's reconciliation.
+## 2. State — READ CAREFULLY. Updated 2026-09-08 by 10c-1's reconciliation.
 
 **Steps 1–8 are closed and verified. Step 9's full loop is closed. Q1 and Q2 are closed.
-Step 10 is UNDER WAY: 10a — the shell — is closed, 10b — the nine panel bodies — is closed, and
-so is 10b-S-G, the owner's `errors[].instance` ruling. 10c has not started and is the last of
-the three loops.** Steps 11–12 have not started.
+Step 10 is UNDER WAY: 10a — the shell — is closed, 10b — the nine panel bodies — is closed,
+10b-S-G (the owner's `errors[].instance` ruling) is closed, and **10c-1 — the wiring — is closed**.
+⚠ 10c was cut into three: **10c-2 (guards) is next, then 10c-3 (sizing/visual)**, and step 10
+closes with 10c-3.** Steps 11–12 have not started.
 
 ### ⚠ The backend has LANDED ON `main` — 2026-09-07. Two branches remain.
 
@@ -68,10 +69,12 @@ permission classifier in this environment and was refused once before the owner 
 | **Q1** | **closed 2026-09-07** — the ledger scanner, seven findings adjudicated. §2.2 |
 | **Q2** | **closed 2026-09-08** — §6.2's hover layer + table view, 13 findings adjudicated. §2.2 |
 | **10a** | build → test → adversarial → **reconcile done 2026-09-08**, 18 findings adjudicated; **the parent's review is the phase that closes it** (§8). §2.2 |
-| suite | **79 files · 2399 tests · `pnpm verify` exit 0** (10a, 2026-09-08; was 67 · 2260 after Q2) |
+| **10b / 10b-S-G** | closed 2026-09-08 — 14 and 11 findings adjudicated. §2.2 |
+| **10c-1 — the wiring** | **closed 2026-09-08** — the nine panels mounted, `PanelPlaceholder` deleted, Q2-S2's toggle housed in `app/`, 10a-F4's alarm-forcing hatch built. **12 findings adjudicated: 10 accepted, 0 rejected, 2 deferred.** §2.2 |
+| suite | **95 files · 2627 tests · `pnpm verify` exit 0** (10c-1, 2026-09-08; was 93 · 2594 after 10b-S-G) |
 | step 9's harness | **95** mutations, ledger clean over its ⚠ marks |
-| step 10's harness | **138** mutations — new in 10a (70/86), grown by 10b and by 10b-S-G. The first harness to mutate a CSS file |
-| all **nine** harnesses | **947 mutations · every harness exit 0** — 714 across steps 2–8 (step 5 is **130**, step 8 **174**, both grown by 10b-S-G), 95 in `components/`, 138 in step 10's. ⚠ Re-derived 2026-09-08 by importing each `regressions.py` and reading `len(REGRESSIONS)`, not copied forward |
+| step 10's harness | **168** mutations · **196** ⚠ marks — new in 10a (70/86), grown by 10b, 10b-S-G and 10c-1. The first harness to mutate a CSS file |
+| all **nine** harnesses | **977 mutations · every harness exit 0** — 714 across steps 2–8 (step 5 is **130**, step 8 **174**, both grown by 10b-S-G), 95 in `components/`, **168** in step 10's. ⚠ Steps 2–9's figures are carried from 10b-S-G's derivation; step 10's is 10c-1's own harness output |
 | the box | **running the backend natively**, see §2.1 |
 
 ### 2.1 ⚠ The backend is DEPLOYED and running on `ai-server` right now
@@ -92,9 +95,65 @@ tree**, or you ship whatever an agent happens to be mid-edit on. Full account in
 
 ⚠ The deployed password is `dashboard1`, set for testing. Step 11 replaces it properly.
 
-### 2.2 ⚠ What to do next — **10c, the backlog** (and the wiring)
+### 2.2 ⚠ What to do next — **10c-2, the guards**, then **10c-3, sizing and visual**
 
-### ⚠ 10b-S-G is CLOSED, 2026-09-08 — and it is the LAST item before 10c. Step 10 closes with 10c.
+### ⚠ 10c-1 — THE WIRING — is CLOSED, 2026-09-08. Two loops remain in step 10.
+
+SCOPE §5's third loop was cut into three when it turned out to be three unlike jobs. **10c-1
+(the wiring) is done**: the nine real panels are mounted in `app/dashboard-shell.tsx`,
+`PanelPlaceholder` is deleted, Q2-S2's chart/table toggle has a shell-owned home, and 10a-F4's
+alarm-forcing escape hatch exists. Build → test → adversarial → reconcile are done and §8's fifth
+phase (the parent re-runs `pnpm verify`, audits the adjudication table, spot-checks, commits) is
+what closes it. **12 adversarial findings adjudicated: 10 accepted, 0 rejected, 2 deferred.**
+See `pipeline/steps/10-panels-assembly/10c1-reconciliation.md`.
+
+**Suite after 10c-1: 95 files · 2627 tests · `pnpm verify` exit 0. Step 10's harness at 168
+mutations · 196 ⚠ marks** (138 before this loop). The other eight harnesses are untouched, and
+that was established by grepping every `pipeline/steps/*/regressions.py` for each file 10c-1
+changed — step 8's sole hit is a docstring mention, not a ledger entry or an anchor. ⚠ Their
+counts are carried forward from 10b-S-G's derivation and were **not** re-derived here.
+
+| loop | contents | state |
+|---|---|---|
+| **10c-1 — the wiring** | mount the nine, the toggle's home, the alarm-forcing hatch | ✅ **closed 2026-09-08** |
+| **10c-2 — the guards** | `10b-F1-guard` (the document-wide `toContain` lint) · **Q1-F4** (the cross-harness `LEDGER_FILES` runner) · **L11** (the unit-name constant) · **S-G-A11** (`exactOptionalPropertyTypes`, measured free) · **10a-F17** (`pnpm verify`'s non-determinism) · **`10c1-A8-audit`** (every `styles.X` against its sibling stylesheet) | **NEXT** |
+| **10c-3 — sizing and visual** | **L9** · `10b-F14b` (no gap hatching at 1280–1599px) · SCOPE 2.5f's `max-height: 100%` · **Q2-F9**'s clamp-vs-drop · **10a-F4**'s remaining half (the seven viewport measurements, headless) · the banner-item wrapping question | after 10c-2 |
+
+**Why this order.** 10c-2 is entirely mechanical — no browser, no design decision, and every item
+is a guard that would have caught something this project has already shipped. 10c-3 needs a real
+browser and at least one sizing decision the spec leaves open, so it wants to see what the
+composed page actually is. ⚠ **Scope 10c-3 to PAINT.** `10c1-A9` established three tiers: binding
+is observable in jsdom today, a dangling CSS reference is statically checkable with no runtime
+(that is 10c-2's `A8-audit`), and only cascade/specificity/media-queries/overflow/stacking need a
+browser. Asking the browser step to carry the other two makes it slower and no better.
+
+**⚠ The four things 10c-2 and 10c-3 must inherit as fact from 10c-1, not rediscover:**
+
+1. ⚠ **A fixture whose two subjects are identical cannot discriminate between them.** The
+   two-GPU test helper built card 1 as `{ ...gpu0, index: 1 }`, so three separate
+   positional-indexing defects (`serving[i]`, `gpus[i]`, a trace lambda hard-coded to card 0)
+   were observationally identical to correct code. Four wrong edits shipped at once with
+   `pnpm verify` at exit 0 across 94 files / 2617 tests. **Fixture presence is not fixture
+   power.** The sibling rule: an assertion whose subject does not render cannot fail either —
+   two toggle tests asserted GPU 1's independence while GPU 1 rendered §6.5's takeover.
+2. ⚠ **Both collectors return SPARSE collections and their own source says so.**
+   `llama.ts:61 discoverInstances()` returns the sorted **set** of found instance indices;
+   `nvidia-smi.ts:147` skips a row whose `index` will not parse. **Index by the `index`/`instance`
+   field, never by array position.** A hard-coded `=== 0` was already caught; only positional
+   escaped.
+3. ⚠ **A `.module.css` import under Vitest is a Proxy, not `{}`.** `Object.keys` is `[]` — hence
+   `console.log` printing `{}` — but `styles.gpu0` returns `_gpu0_e75739`. `grid.test.tsx`'s
+   tier-2 placement guard and the sticky-band assertion are **live**, and acting on
+   `10c1-test.md` §1.2 as originally written would have weakened them; that document now carries
+   a marked correction. **The real void is that every key resolves, including keys with no rule**
+   — which is what `10c1-A8-audit` is for. Probe a property access, never the object.
+4. ⚠ **The chart/table toggle is shell state, one entry per chart-bearing panel**, and the
+   control renders beside each chart because §6.2 says the header list is exhaustive.
+   **Granularity — one toggle per panel, governing every chart it draws — is an invariant-7
+   recording, not a spec ruling** (`chart-view-toggle.tsx`'s module doc). A future panel wanting
+   independent toggles is a new decision, not an extension of this one.
+
+### ⚠ 10b-S-G is CLOSED, 2026-09-08 — it was the last item before 10c.
 
 The owner's ruling that `errors[]` gains an optional `instance` is built, tested, attacked and
 reconciled: build → test → adversarial → reconcile are done and §8's fifth phase (the parent
@@ -230,24 +289,26 @@ about whether any of it works. Open a browser.
 
 ### The queue
 
-**10c is next and nothing blocks it.** ⚠ **Updated 2026-09-08 by 10b's reconciliation** — this
-list was originally written before 10a and most of it is now closed. The panel bodies are done;
+**10c-2 is next and nothing blocks it.** ⚠ **Updated 2026-09-08 by 10c-1's reconciliation** —
+this list was originally written before 10a and most of it is now closed. The wiring is done;
 below is what is left, and `HANDOVER.md` §9 is the authoritative form of it.
 
 | item | owner |
 |---|---|
-| ⚠ **wire the nine panels into `app/dashboard-shell.tsx`** — until this happens nothing proves they compose | **10c** |
-| **D1** S40's third event-log feed (`LogEntryKind` is `lib/client/events.ts`'s; the panel's exhaustive switch will force the case) | 10c / owner |
-| **O14** the formatter `parts` variant — re-checked by 10b and **still has not arisen** | 10c |
-| **Q2-F9** the clamp-vs-drop rendering decision · **Q2-S2** the table view's height (⚠ still unreachable — the toggle needs `app/`) | 10c, with the owner |
-| **10a-F4** a repeatable browser step — **and a way to force an alarm client-side**, without which the banner never mounts | **10c** |
-| **10a-F17** `pnpm verify`'s non-determinism · **Q1-F4** the cross-harness ledger runner · **10b-F1-guard** the document-wide-`toContain` lint · **L9** sizing (with **10b-F14b**: no gap hatching at 1280–1599px) · **L11** the unit-name constant · SCOPE 2.5f's `max-height` | **10c** |
+| ~~wire the nine panels into `app/dashboard-shell.tsx`~~ · ~~Q2-S2's toggle needs an `app/` home~~ · ~~10a-F4's alarm-forcing hatch~~ | ✅ **closed by 10c-1** |
+| **10a-F17** `pnpm verify`'s non-determinism · **Q1-F4** the cross-harness ledger runner · **10b-F1-guard** the document-wide-`toContain` lint · **L11** the unit-name constant · **S-G-A11** `exactOptionalPropertyTypes` (measured free) · ⚠ **10c1-A8-audit** every `styles.X` against its sibling stylesheet | **10c-2** |
+| **L9** sizing (with **10b-F14b**: no gap hatching at 1280–1599px) · SCOPE 2.5f's `max-height` · **Q2-F9** clamp-vs-drop · **10a-F4**'s remaining half (seven viewport measurements, headless) · **O14** the formatter `parts` variant (re-checked by 10b and 10c-1; **still has not arisen**) · whether a banner item may wrap mid-condition | **10c-3**, with a browser |
+| **D1** S40's third event-log feed (`LogEntryKind` is `lib/client/events.ts`'s; the panel's exhaustive switch will force the case) | 10c-2 / owner |
+| **Q2-S1** the per-mark tooltip clause · **Q2-S2** the table view's height — ⚠ **now reachable**, 10c-1 gave the toggle a home | owner, then 10c-3 |
 | **10a-S-A/S-B/S-C/S-D** and **10b-S-E/S-F/S-H** — seven spec questions, five implemented conservatively (**S-G is RULED, implemented and closed**) | **owner** |
 | ⚠ **S-G-Q1 · S-G-Q2 · S-G-Q3 · S-G-Q4** — the four questions implementing S-G raised. None implemented; `HANDOVER.md` §8 carries each with the code that stands today | **owner** |
-| **S-G-A10** the session log's per-source fold vs the panel's per-instance one · **S-G-A11** turn on `exactOptionalPropertyTypes` (measured free today) | **10c** |
+| **S-G-A10** the session log's per-source fold vs the panel's per-instance one | 10c-2 / owner |
 
-~~D2~~ and ~~D6~~ are **closed by 10a**; ~~D3~~, ~~O12~~, ~~O13~~ and ~~S11/G5~~ by **10b**.
-`D8` remains step 11's.
+~~D2~~ and ~~D6~~ are **closed by 10a**; ~~D3~~, ~~O12~~, ~~O13~~ and ~~S11/G5~~ by **10b**;
+the **wiring**, **Q2-S2's toggle home** and **10a-F4's alarm hatch** by **10c-1**.
+`D8` remains step 11's. ⚠ **10c-1 raised no new spec question** — its two invariant-7 candidates
+(the banner-item wrapping rule, and where an escape hatch's defence belongs) are recorded above
+and in `10c1-reconciliation.md` §5 rather than answered.
 
 ## 3. Toolchain
 

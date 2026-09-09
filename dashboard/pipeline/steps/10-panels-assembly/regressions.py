@@ -42,7 +42,6 @@ BANNER_TEST = "lib/client/banner.test.ts"
 HEADER_TEST = "components/header.test.tsx"
 ALARM_BANNER_TEST = "components/alarm-banner.test.tsx"
 GRID_TEST = "components/grid.test.tsx"
-PANEL_PLACEHOLDER_TEST = "components/panel-placeholder.test.tsx"
 USE_TELEMETRY_TEST = "lib/client/use-telemetry.test.tsx"
 USE_TELEMETRY_SSR_TEST = "lib/client/use-telemetry.ssr.test.tsx"
 USE_NOW_TICK_TEST = "app/use-now-tick.test.tsx"
@@ -93,15 +92,27 @@ PANEL_NOTES_TEST = "components/panels/panel-notes.test.tsx"
 # requires (§6.2). One file, imported by every panel that can reach the case, so its own unit
 # tests carry the ⚠-marked load-bearing coverage rather than one per panel.
 PANEL_CHIP_TEST = "components/panels/panel-chip.test.ts"
+# ⚠ Added by 10c1 — the wiring loop. `chart-view-toggle.tsx` is the control Q2-S2's toggle
+# renders through (see that file's module doc for why it lives beside a chart rather than in
+# the header); `force-alarm.ts` is 10a-F4's alarm-forcing escape hatch, pure and DOM-free.
+CHART_VIEW_TOGGLE_TEST = "components/panels/chart-view-toggle.test.tsx"
+FORCE_ALARM_TEST = "lib/client/force-alarm.test.ts"
+# ⚠ Added by 10c1's RECONCILIATION, 2026-09-08 (adversarial A5/A6). `force-alarm.test.ts` covers
+# the PURE function; this file covers the six lines in `use-telemetry.ts` that CALL it — the
+# `process.env.NODE_ENV` token the whole production-unreachability argument rests on, which was
+# defended by nothing and which the adversarial replaced with `'development'` all the way into a
+# real `pnpm build` chunk with the suite and the harness both green.
+FORCE_ALARM_WIRING_TEST = "lib/client/use-telemetry.force-alarm.test.tsx"
 
 LEDGER_FILES = [
     HEADER_STATUS_TEST, BANNER_TEST, HEADER_TEST, ALARM_BANNER_TEST, GRID_TEST,
-    PANEL_PLACEHOLDER_TEST, USE_TELEMETRY_TEST, USE_TELEMETRY_SSR_TEST, USE_NOW_TICK_TEST,
+    USE_TELEMETRY_TEST, USE_TELEMETRY_SSR_TEST, USE_NOW_TICK_TEST,
     DASHBOARD_SHELL_SSR_TEST, DASHBOARD_SHELL_TEST, PAGE_TEST,
     STATUS_ROW_TEST, CONDITION_LOOKUP_TEST, EVENT_SENTENCE_TEST, PANEL_CHART_TEST,
     GPU_PANEL_TEST, CPU_PANEL_TEST, MEMORY_PANEL_TEST, COOLING_PANEL_TEST,
     STORAGE_NETWORK_PANEL_TEST, SERVING_PANEL_TEST, SAFETY_PANEL_TEST,
     SESSION_EVENT_LOG_PANEL_TEST, PANEL_NOTES_TEST, PANEL_CHIP_TEST,
+    CHART_VIEW_TOGGLE_TEST, FORCE_ALARM_TEST, FORCE_ALARM_WIRING_TEST,
 ]
 
 # `test`/`it`, optionally `.each(<PAREN-BALANCED ARGS>)`, optionally `<A GENERIC ARG>`, then `(`.
@@ -233,12 +244,16 @@ BANNER_SRC = "lib/client/banner.ts"
 HEADER_SRC = "components/header.tsx"
 ALARM_BANNER_SRC = "components/alarm-banner.tsx"
 GRID_SRC = "components/grid.tsx"
-PANEL_PLACEHOLDER_SRC = "components/panel-placeholder.tsx"
 USE_TELEMETRY_SRC = "lib/client/use-telemetry.ts"
 USE_NOW_TICK_SRC = "app/use-now-tick.ts"
 DASHBOARD_SHELL_SRC = "app/dashboard-shell.tsx"
 GRID_CSS_SRC = "components/grid.module.css"
 PAGE_SRC = "app/page.tsx"
+# ==================================================== 10c1's wiring loop
+# `GPU_PANEL_SRC`/`CPU_PANEL_SRC`/`COOLING_PANEL_SRC` already exist below (10b's own additions);
+# reused here rather than redefined.
+CHART_VIEW_TOGGLE_SRC = "components/panels/chart-view-toggle.tsx"
+FORCE_ALARM_SRC = "lib/client/force-alarm.ts"
 
 # ==================================================== 10b's panel bodies
 STATUS_ROW_SRC = "components/panels/status-row.tsx"
@@ -422,12 +437,16 @@ REGRESSIONS = [
      '<div className={styles.gpu1} data-slot="gpu1">\n        {gpu0}\n      </div>',
      [GRID_TEST]),
 
-    # ============================================== components/panel-placeholder.tsx
-    ("10a-PP1 the placeholder chip claims a \"normal\" severity band it has not earned",
-     PANEL_PLACEHOLDER_SRC,
-     '<PanelShell title={title} subtitle={PLACEHOLDER_SUBTITLE} chip={null}>',
-     "<PanelShell title={title} subtitle={PLACEHOLDER_SUBTITLE} chip={'normal'}>",
-     [PANEL_PLACEHOLDER_TEST]),
+    # ⚠ components/panel-placeholder.tsx and its two mutations (10a-PP1, 10a-PP2) are GONE —
+    # 10c1 deleted the component (and its test file) once the nine real panels replaced it in
+    # `dashboard-shell.tsx` (HANDOVER's do-not-copy rule: don't leave a thing implying a
+    # "pending" mechanism that no longer runs). 10a-PP2's job — proving `panelId` reaches each
+    # slot correctly — is now covered by `10c-DS1` (a swapped `panelId` literal) together with
+    # `10c-DS5`/`10c-DS6`/`10c-DS7` (the four per-slot toggle wirings), against the REAL panels'
+    # own content rather than a marker attribute only the placeholder rendered.
+    # ⚠ CORRECTED by 10c1's reconciliation (adversarial A12): this comment named `10c-DS-WIRE*`,
+    # which has never existed in this file. It is the only place a reader is told where
+    # 10a-PP2's coverage went, written by the phase that also wrote the correct mutations.
 
     # ============================================== lib/client/use-telemetry.ts  (D6)
     ("10a-UT1 unmounting no longer calls stop() — the effect's cleanup is dropped",
@@ -611,11 +630,6 @@ REGRESSIONS = [
      "  c.stale ? `last read ${formatAge(nowMs - c.lastSeenMs)} ago` : null;",
      "  null;",
      [DASHBOARD_SHELL_TEST]),
-    ("10a-PP2 the placeholder stops rendering its panelId, so the id namespace is unobservable (F16)",
-     PANEL_PLACEHOLDER_SRC,
-     '<p className={styles.pending} data-panel-id={panelId}>',
-     '<p className={styles.pending}>',
-     [PANEL_PLACEHOLDER_TEST, DASHBOARD_SHELL_TEST]),
     ("10a-PG1 the entry point renders nothing at all — a blank dashboard, previously untested (F18)",
      PAGE_SRC, "  return <DashboardShell />;", "  return null;", [PAGE_TEST]),
 
@@ -1148,6 +1162,209 @@ REGRESSIONS = [
      "          {[].map((e: TelemetryError) => (",
      [SERVING_PANEL_TEST]),
 
+    # ================================== 10c1 — the wiring loop
+    # `dashboard-shell.tsx`: replacing the nine `PanelPlaceholder`s with the real panels, and
+    # Q2-S2's chart/table toggle as shell-owned per-panel state.
+    ("10c-DS1 the GPU 1 slot is fed panelId=\"gpu0\", a copy-paste wiring bug the placeholder's marker used to catch",
+     DASHBOARD_SHELL_SRC,
+     '            panelId="gpu1"',
+     '            panelId="gpu0"',
+     [DASHBOARD_SHELL_TEST]),
+    ("10c-DS2 toggling one panel resets every OTHER chart-bearing panel back to chart view",
+     DASHBOARD_SHELL_SRC,
+     "    setChartViews((prev) => ({ ...prev, [id]: prev[id] === 'chart' ? 'table' : 'chart' }));",
+     "    setChartViews((prev) => ({ ...INITIAL_CHART_VIEWS, [id]: prev[id] === 'chart' ? 'table' : 'chart' }));",
+     [DASHBOARD_SHELL_TEST]),
+    ("10c-DS3 the toggle never flips — clicking a chart's table-view button leaves it in chart view",
+     DASHBOARD_SHELL_SRC,
+     "    setChartViews((prev) => ({ ...prev, [id]: prev[id] === 'chart' ? 'table' : 'chart' }));",
+     "    setChartViews((prev) => ({ ...prev, [id]: 'chart' }));",
+     [DASHBOARD_SHELL_TEST]),
+    ("10c-DS4 every chart-bearing panel starts in TABLE view, not chart view",
+     DASHBOARD_SHELL_SRC,
+     "const INITIAL_CHART_VIEWS: ChartViewMap = { gpu0: 'chart', gpu1: 'chart', cpu: 'chart', cooling: 'chart' };",
+     "const INITIAL_CHART_VIEWS: ChartViewMap = { gpu0: 'table', gpu1: 'table', cpu: 'table', cooling: 'table' };",
+     [DASHBOARD_SHELL_TEST]),
+
+    # ⚠ Added by 10c1's RECONCILIATION (adversarial A3/A4). `10c-DS2/3/4` mutate
+    # `toggleChartView`/`INITIAL_CHART_VIEWS` — the mechanism all four slots SHARE. The four
+    # per-slot wirings are a separate thing, and only two of them (`gpu0`, `cpu`) were ever
+    # clicked: HANDOVER §0.5's "a function used more than once, mutated once", at a fourth site.
+    ("10c-DS5 the GPU 1 slot reads GPU 0's view, so GPU 0's toggle silently flips GPU 1 too",
+     DASHBOARD_SHELL_SRC,
+     "            view={chartViews.gpu1}",
+     "            view={chartViews.gpu0}",
+     [DASHBOARD_SHELL_TEST]),
+    ("10c-DS6 GPU 1's toggle button sends its click to GPU 0 — the card the operator was reading changes instead",
+     DASHBOARD_SHELL_SRC,
+     "            onToggleView={() => toggleChartView('gpu1')}",
+     "            onToggleView={() => toggleChartView('gpu0')}",
+     [DASHBOARD_SHELL_TEST]),
+    ("10c-DS7 COOLING's toggle button sends its click to CPU — the fourth wiring, previously never clicked",
+     DASHBOARD_SHELL_SRC,
+     "            onToggleView={() => toggleChartView('cooling')}",
+     "            onToggleView={() => toggleChartView('cpu')}",
+     [DASHBOARD_SHELL_TEST]),
+
+    # components/panels/chart-view-toggle.tsx — the control itself.
+    ("10c-CVT1 the button's onClick is dropped, so clicking it never reaches the caller's onToggle",
+     CHART_VIEW_TOGGLE_SRC,
+     "      onClick={onToggle}",
+     "      onClick={() => undefined}",
+     [CHART_VIEW_TOGGLE_TEST]),
+    ("10c-CVT2 the button always offers \"table view\", even while already showing the table",
+     CHART_VIEW_TOGGLE_SRC,
+     "      {isTable ? 'chart view' : 'table view'}",
+     "      {'table view'}",
+     [CHART_VIEW_TOGGLE_TEST]),
+    ("10c-CVT3 the button always offers \"chart view\", even while still showing the chart",
+     CHART_VIEW_TOGGLE_SRC,
+     "      {isTable ? 'chart view' : 'table view'}",
+     "      {'chart view'}",
+     [CHART_VIEW_TOGGLE_TEST]),
+
+    # components/panels/gpu-panel.tsx — the toggle's plumbing into the two chart elements.
+    ("10c-GP1 the default view is \"table\", so a GPU card renders as a table before anyone toggles anything",
+     GPU_PANEL_SRC,
+     "export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPanelProps) {",
+     "export function GpuPanel({ state, panelId, view = 'table', onToggleView }: GpuPanelProps) {",
+     [GPU_PANEL_TEST]),
+    ("10c-GP2 the toggle control never renders, even when the caller supplies onToggleView",
+     GPU_PANEL_SRC,
+     "          {onToggleView === undefined ? null : (\n            <ChartViewToggle view={view} onToggle={onToggleView} label={ariaLabel} />\n          )}",
+     "          {null}",
+     [GPU_PANEL_TEST]),
+    ("10c-GP3 the sparkline is pinned to chart view, so only the ≥1600px promotion ever switches to a table",
+     GPU_PANEL_SRC,
+     "              height={CHART_SIZE.sparkline.height}\n              view={view}",
+     "              height={CHART_SIZE.sparkline.height}\n              view=\"chart\"",
+     [GPU_PANEL_TEST]),
+
+    # ⚠ Added by 10c1's RECONCILIATION (adversarial A1/A2/A11) — ONE defect shape at three
+    # sites in this file: `components/panels/` assumed `gpus` and `serving` are dense arrays
+    # indexed from zero, and BOTH collectors document that they are not
+    # (`llama.ts:61 discoverInstances` returns the sorted SET of found indices;
+    # `nvidia-smi.ts:147` skips a row whose index will not parse). A hard-coded `=== 0` was
+    # already caught; only the POSITIONAL variant escaped, and it escaped because every
+    # two-card fixture in the project was dense, in order and — A10 — identical card to card.
+    ("10c-GP4 the §6.2 GPU↔instance join becomes array-POSITION lookup, printing another card's model",
+     GPU_PANEL_SRC,
+     "  snapshot?.serving?.find((s) => s.instance === index) ?? null;",
+     "  snapshot?.serving?.[index] ?? null;",
+     [GPU_PANEL_TEST]),
+    ("10c-GP5 the card lookup becomes array-POSITION, so a sparse gpus[] renders GPU 1's die titled GPU 0",
+     GPU_PANEL_SRC,
+     "  snapshot?.gpus?.find((g) => g.index === index) ?? null;",
+     "  snapshot?.gpus?.[index] ?? null;",
+     [GPU_PANEL_TEST]),
+    ("10c-GP6 GPU 1's temperature TRACE reads card 0 — 10c-CO4's exact twin in the other file",
+     GPU_PANEL_SRC,
+     "  const trace = traceFor(state, (s) => s.gpus?.find((g) => g.index === index)?.tempC ?? null);",
+     "  const trace = traceFor(state, (s) => s.gpus?.find((g) => g.index === 0)?.tempC ?? null);",
+     [GPU_PANEL_TEST]),
+
+    # components/panels/cpu-panel.tsx — one toggle governs BOTH sparklines.
+    ("10c-CP1 the default view is \"table\", so the CPU card renders as tables before anyone toggles anything",
+     CPU_PANEL_SRC,
+     "export function CpuPanel({ state, view = 'chart', onToggleView }: CpuPanelProps) {",
+     "export function CpuPanel({ state, view = 'table', onToggleView }: CpuPanelProps) {",
+     [CPU_PANEL_TEST]),
+    ("10c-CP2 the toggle control never renders, even when the caller supplies onToggleView",
+     CPU_PANEL_SRC,
+     "      {onToggleView === undefined ? null : (\n        <ChartViewToggle view={view} onToggle={onToggleView} label=\"CPU charts\" />\n      )}",
+     "      {null}",
+     [CPU_PANEL_TEST]),
+    ("10c-CP3 the temperature sparkline is pinned to chart view, so toggling the panel only switches utilisation",
+     CPU_PANEL_SRC,
+     "        color={SERIES_COLORS.gpu0}\n        width={CHART_SIZE.sparkline.width}\n        height={CHART_SIZE.sparkline.height}\n        view={view}",
+     "        color={SERIES_COLORS.gpu0}\n        width={CHART_SIZE.sparkline.width}\n        height={CHART_SIZE.sparkline.height}\n        view=\"chart\"",
+     [CPU_PANEL_TEST]),
+
+    # components/panels/cooling-panel.tsx
+    ("10c-CO1 the default view is \"table\", so COOLING's shared-time chart renders as a table before anyone toggles anything",
+     COOLING_PANEL_SRC,
+     "export function CoolingPanel({ state, nowMs, panelId, view = 'chart', onToggleView }: CoolingPanelProps) {",
+     "export function CoolingPanel({ state, nowMs, panelId, view = 'table', onToggleView }: CoolingPanelProps) {",
+     [COOLING_PANEL_TEST]),
+    ("10c-CO2 the toggle control never renders, even when the caller supplies onToggleView",
+     COOLING_PANEL_SRC,
+     "        {onToggleView === undefined ? null : (\n          <ChartViewToggle\n            view={view}\n            onToggle={onToggleView}\n            label=\"GPU temperature and fan 5 RPM\"\n          />\n        )}",
+     "        {null}",
+     [COOLING_PANEL_TEST]),
+    ("10c-CO3 the shared-time chart is pinned to chart view, so the toggle changes only its own control's label",
+     COOLING_PANEL_SRC,
+     "          width={CHART_SIZE.cooling.width}\n          plotHeight={CHART_SIZE.cooling.height}\n          view={view}",
+     "          width={CHART_SIZE.cooling.width}\n          plotHeight={CHART_SIZE.cooling.height}\n          view=\"chart\"",
+     [COOLING_PANEL_TEST]),
+    # ⚠ Added by 10c1's TEST phase — found while chasing the handoff's "are there other fixtures
+    # with the single-GPU assumption" question. `everythingZero` enumerates only GPU 0, so this
+    # line's `g.index === 1` lookup was never exercised against a real second card by any fixture
+    # in the project; duplicating GPU 0's lookup here passed the whole suite before this mutation
+    # and its paired test existed.
+    ("10c-CO4 the GPU 1 trace reads GPU 0's card instead of its own — GPU 1's line duplicates GPU 0's",
+     COOLING_PANEL_SRC,
+     "  const gpu1Trace = traceFor(state, (s) => s.gpus?.find((g) => g.index === 1)?.tempC ?? null);",
+     "  const gpu1Trace = traceFor(state, (s) => s.gpus?.find((g) => g.index === 0)?.tempC ?? null);",
+     [COOLING_PANEL_TEST]),
+
+    # lib/client/force-alarm.ts — 10a-F4's alarm-forcing escape hatch. Pure, so every mutation
+    # is caught by the plain-Node unit tests alone.
+    ("10c-FA1 the production gate is INVERTED, so the escape hatch forces an alarm in production and never off it",
+     FORCE_ALARM_SRC,
+     "  if (nodeEnv === 'production') return body;",
+     "  if (nodeEnv !== 'production') return body;",
+     [FORCE_ALARM_TEST]),
+    ("10c-FA2 the query-string gate is removed, so EVERY non-production poll is forced into alarm",
+     FORCE_ALARM_SRC,
+     "  if (!new URLSearchParams(search).has(FORCE_ALARM_PARAM)) return body;",
+     "  if (false) return body;",
+     # ⚠ Both files: the pure function's own tests AND the wiring test, whose "no query flag →
+     # the body is handed on unchanged" case is exactly what this mutation destroys. Added by
+     # 10c1's reconciliation.
+     [FORCE_ALARM_TEST, FORCE_ALARM_WIRING_TEST]),
+    ("10c-FA3 the forced temperature no longer clears §6.3's alarm threshold",
+     FORCE_ALARM_SRC,
+     "const FORCED_ALARM_TEMP_C = 95;",
+     "const FORCED_ALARM_TEMP_C = 50;",
+     [FORCE_ALARM_TEST]),
+    ("10c-FA4 forcing the temperature drops every OTHER field on GPU 0 instead of carrying them through",
+     FORCE_ALARM_SRC,
+     "  const forcedGpu = { ...(firstGpu as Record<string, unknown>), tempC: FORCED_ALARM_TEMP_C };",
+     "  const forcedGpu = { tempC: FORCED_ALARM_TEMP_C };",
+     [FORCE_ALARM_TEST]),
+    ("10c-FA5 the null-body guard is dropped, so a null body reaches the gpus lookup and throws",
+     FORCE_ALARM_SRC,
+     "  if (body === null || typeof body !== 'object') return body;",
+     "  if (typeof body !== 'object') return body;",
+     [FORCE_ALARM_TEST]),
+    ("10c-FA6 the array-shape guard is dropped, so a missing or null gpus field throws instead of passing through",
+     FORCE_ALARM_SRC,
+     "  if (!Array.isArray(snapshot.gpus) || snapshot.gpus.length === 0) return body;",
+     "  if (snapshot.gpus.length === 0) return body;",
+     [FORCE_ALARM_TEST]),
+
+    # ⚠ Added by 10c1's RECONCILIATION (adversarial A5/A6) — the escape hatch's WIRING, which
+    # is a different thing from the pure function `10c-FA1..6` cover. The gate's whole
+    # production-unreachability argument rests on `process.env.NODE_ENV` at ONE call site,
+    # which Next's build replaces with the literal `"production"`. The adversarial replaced the
+    # token with `'development'`, and `pnpm verify`, this harness AND `pnpm build` all stayed
+    # green while the shipped chunk read `location.search,"development"`.
+    ("10c-UT1 the production gate's token is replaced by a literal 'development' — the exact edit that reached a real bundle",
+     USE_TELEMETRY_SRC,
+     "window.location.search, process.env.NODE_ENV)",
+     "window.location.search, 'development')",
+     [FORCE_ALARM_WIRING_TEST]),
+    ("10c-UT2 the opt-in reads location.hash, so the query-string gate can never open at all",
+     USE_TELEMETRY_SRC,
+     "response.body, window.location.search,",
+     "response.body, window.location.hash,",
+     [FORCE_ALARM_WIRING_TEST]),
+    ("10c-UT3 the wrapper is dropped — the hatch is wired in but does nothing, indistinguishable from working on a GPU-less host",
+     USE_TELEMETRY_SRC,
+     "          body: forceAlarmForTesting(response.body, window.location.search, process.env.NODE_ENV),",
+     "          body: response.body,",
+     [FORCE_ALARM_WIRING_TEST]),
+
 ]
 
 # ---------------------------------------------------------------------------
@@ -1165,10 +1382,12 @@ def _assert_unique_ids() -> None:
     # ⚠ SCOPE.md's three-loop split (10a/10b/10c) shares this one harness, so more than one
     # creating-step prefix is expected here — unlike a harness inherited unchanged from an
     # earlier step. Widen this set as each further loop lands its own mutations.
-    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-")))
+    # ⚠ `10c-` added by 10c1 (the wiring loop, first of 10c's three parts) — see the handoff's
+    # "back each ⚠ mark with a 10c-prefixed mutation" instruction.
+    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-", "10c-")))
     if bad_prefix:
         raise SystemExit(
-            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-): {', '.join(bad_prefix)}"
+            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-/10c-): {', '.join(bad_prefix)}"
         )
 
 

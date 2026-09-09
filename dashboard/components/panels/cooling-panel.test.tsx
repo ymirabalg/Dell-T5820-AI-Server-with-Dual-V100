@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 
 import { ch5EcAuto, ch5Manual, everythingZero, pwm5NodeAbsent } from '@/lib/fixtures';
-import { rpm } from '@/lib/types';
+import { celsius, rpm } from '@/lib/types';
 import type { TelemetrySnapshot } from '@/lib/types';
 
 import { CoolingPanel } from './cooling-panel';
@@ -139,6 +139,32 @@ describe('§6.1/§6.2 — COOLING', () => {
     expect(html).toContain('cooling-chart');
   });
 
+  test("⚠ GPU 1's trace carries GPU 1's OWN reading, not GPU 0's — every fixture up to now had only one GPU", () => {
+    // 10c1's test phase (dashboard-shell composition finally mounting a real second card) found
+    // that `everythingZero` — and every fixture derived from it — enumerates only GPU 0, so the
+    // test above only ever proved the "GPU 1" LEGEND LABEL renders (a hard-coded string), never
+    // that `gpu1Trace`'s `g.index === 1` lookup actually reads a distinct card's data. A mutation
+    // that read `g.index === 0` for BOTH series (duplicating GPU 0's trace onto the GPU 1 line)
+    // passed every existing test in this file, this suite, and the harness — a two-GPU snapshot
+    // is the only thing that can tell the two lookups apart.
+    const gpu0 = everythingZero.gpus?.[0];
+    if (gpu0 === undefined) throw new Error('fixture invariant: everythingZero.gpus[0] must exist');
+    const snapshot: TelemetrySnapshot = {
+      ...everythingZero,
+      gpus: [
+        { ...gpu0, tempC: celsius(66) },
+        { ...gpu0, index: 1, tempC: celsius(55) },
+      ],
+    };
+    // The table view renders each series' reading as a plain `<td>` in reading order — no SVG
+    // geometry to reverse-engineer, and a stronger assertion than the chart view's tooltip text.
+    const html = renderToStaticMarkup(
+      <CoolingPanel state={stateWith(snapshot)} nowMs={0} panelId="cooling" view="table" />,
+    );
+    const tempTable = html.slice(html.indexOf('<table'), html.indexOf('</table>') + '</table>'.length);
+    expect(tempTable).toContain('<td>66 °C</td><td>55 °C</td>');
+  });
+
   test("⚠ a stale fan service condition uses S-B's exact wording, watch-toned", () => {
     const displayed = [
       displayedConditionOf({
@@ -261,5 +287,37 @@ describe('⚠ invariant 1, across EVERY reading on this panel', () => {
     const cells = valueCells(html);
     expect(cells.length).toBeGreaterThanOrEqual(6);
     for (const cell of cells) expect(cell).not.toMatch(/[0-9]/);
+  });
+});
+
+describe('⚠ 10c1 — the chart/table toggle (Q2-S2), now shell-owned', () => {
+  test('⚠ with no `view` given, the shared-time chart renders as a CHART, not a table', () => {
+    const html = renderToStaticMarkup(
+      <CoolingPanel state={stateWith(withCooling(ch5Manual))} nowMs={0} panelId="cooling" />,
+    );
+    expect(html).not.toContain('data-role="table-view"');
+  });
+
+  test('⚠ `view="table"` switches the shared-time chart to its table view', () => {
+    const html = renderToStaticMarkup(
+      <CoolingPanel state={stateWith(withCooling(ch5Manual))} nowMs={0} panelId="cooling" view="table" />,
+    );
+    expect(html).toContain('data-role="table-view"');
+  });
+
+  test('⚠ the toggle control renders ONLY when the caller supplies onToggleView', () => {
+    const withoutHandler = renderToStaticMarkup(
+      <CoolingPanel state={stateWith(withCooling(ch5Manual))} nowMs={0} panelId="cooling" />,
+    );
+    expect(withoutHandler).not.toContain('table view');
+    const withHandler = renderToStaticMarkup(
+      <CoolingPanel
+        state={stateWith(withCooling(ch5Manual))}
+        nowMs={0}
+        panelId="cooling"
+        onToggleView={() => undefined}
+      />,
+    );
+    expect(withHandler).toContain('table view');
   });
 });

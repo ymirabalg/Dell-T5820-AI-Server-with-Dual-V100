@@ -27,6 +27,7 @@ import { SERIES_COLORS } from '../palette';
 import type { PanelProps } from '../panel-props';
 import { formatTimeOfDayMs } from './panel-chart';
 import { PanelNotes } from './panel-notes';
+import { ChartViewToggle } from './chart-view-toggle';
 import { errorsForPanel } from '@/lib/client/observations';
 import { traceFor } from '@/lib/client/series';
 import { latestSample } from '@/lib/client/runtime';
@@ -37,11 +38,21 @@ import type { Host, TelemetrySnapshot } from '@/lib/types';
 
 const coreThread = (n: number | null): string => (n === null ? EM_DASH : String(n));
 
+/**
+ * Q2-S2's table toggle (10c1) — see `gpu-panel.tsx`'s identical field for the optional/default
+ * shape and `chart-view-toggle.tsx` for why one toggle governs BOTH of this panel's sparklines
+ * (temperature and utilisation) rather than one each.
+ */
+export interface CpuPanelProps extends PanelProps {
+  readonly view?: 'chart' | 'table';
+  readonly onToggleView?: () => void;
+}
+
 // ⚠ `panelId` is not read: `Sparkline` (this panel's only chart primitive) mints no SVG ids at
 // all (unlike `StackedTimeSeriesChart`'s `id` prop), so there is nothing here for the
 // namespace to prefix. Still required by `PanelProps` — a future promotion to a full chart
 // (matching GPU's ≥1600px treatment) would need it, and the type keeps that honest.
-export function CpuPanel({ state }: PanelProps) {
+export function CpuPanel({ state, view = 'chart', onToggleView }: CpuPanelProps) {
   const snapshot: TelemetrySnapshot | null = latestSample(state)?.snapshot ?? null;
   const host: Host | null = snapshot?.host ?? null;
 
@@ -75,12 +86,16 @@ export function CpuPanel({ state }: PanelProps) {
         severity={chip}
         note={messageFor('coretemp')}
       />
+      {onToggleView === undefined ? null : (
+        <ChartViewToggle view={view} onToggle={onToggleView} label="CPU charts" />
+      )}
       <Sparkline
         points={tempTrace}
         ariaLabel="CPU temperature over the selected window"
         color={SERIES_COLORS.gpu0}
         width={CHART_SIZE.sparkline.width}
         height={CHART_SIZE.sparkline.height}
+        view={view}
         formatValue={(v) => formatCelsius(celsius(v))}
         formatTime={formatTimeOfDayMs}
       />
@@ -95,6 +110,7 @@ export function CpuPanel({ state }: PanelProps) {
         color={SERIES_COLORS.gpu1}
         width={CHART_SIZE.sparkline.width}
         height={CHART_SIZE.sparkline.height}
+        view={view}
         formatValue={(v) => formatPercent(percent(v))}
         formatTime={formatTimeOfDayMs}
       />
