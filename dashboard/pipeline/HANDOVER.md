@@ -8,161 +8,66 @@ get clean context and read it as fact.
 
 ---
 
-## 0.0 ⚠⚠ READ THIS FIRST — §6.1's ONLY quantitative promise is measured FALSE. It is the OWNER'S to settle, and step 11 packages a page that breaks it.
+## 0.0 ⚠⚠ READ THIS FIRST — §6.1's promise is measured false in the BUILD, and measured TRUE in the DESIGN. The fix is density, not layout.
 
 `SPEC.md` §6.1: *"The 'no scroll' promise holds at ≥1280px **wide and ≥1024px tall** … At
-1920×1080 it fits comfortably."* Clarified by the owner on 2026-09-08: *"what the promise forbids
-is the **grid** growing past the viewport and the reader having to scroll the dashboard to see a
-panel."*
+1920×1080 it fits comfortably."* The built page breaks it — and the design it was built from does
+not. Both measured in real headless Chrome, 2026-09-09.
 
-**Measured in real headless Chrome, logged in, default `chart` view, every panel populated,
-2026-09-09** (`node pipeline/steps/10-panels-assembly/measure-breakpoints.mjs`, measurement 9):
+**The build** (`measure-breakpoints.mjs` measurement 9, healthy box-faithful telemetry, no banner):
 
-| viewport | `documentElement.scrollHeight` | `clientHeight` | **overflow** |
+| viewport | `scrollHeight` | viewport | overflow |
 |---|---|---|---|
-| **1280 × 1024** | 1620 | 1024 | **scrolls by 596 px** |
-| **1600 × 1024** | 1656 | 1024 | **scrolls by 632 px** |
-| **1920 × 1080** | 1640 | 1080 | **scrolls by 560 px** |
+| 1280 × 1024 | ~1380 | 1024 | **356** |
+| 1600 × 1024 | ~1442 | 1024 | **418** |
+| 1920 × 1080 | ~1442 | 1080 | **362** |
 
-**It is the grid itself, not a dev-server artefact.** The only two body children with any height
-are the sticky header+banner band (49 px) and `.grid` (1571 / 1607 / 1591 px). Everything else in
-`<body>` is a zero-height `<script>` or an absolutely-positioned route announcer.
+(10c-3's first figures — 596 / 632 / 560 — included ~200 px of `errors[]` notes that only a
+GPU-less development Mac produces; 10d §2.2 corrected them.)
 
-**Where the height is**, at 1920×1080, so the owner can see what would have to change: GPU 0 and
-GPU 1 **485 px each** (row 1) · COOLING **868** (spanning rows 2–3) · CPU and MEMORY **458** ·
-SAFETY and STORAGE & NETWORK **397** · SERVING and SESSION EVENT LOG **190**. Keeping the promise
-means the grid loses **~35 %** of its height at 1920×1080 and **~38 %** at 1280×1024. That is not
-padding.
+**The design** — `MOCK.html`, the §8.2 mock, **same four-row nine-panel grid** — with
+`mocks/measure-mock.mjs`, minus the 31 px mock-viewer strip the real app lacks:
 
-⚠ **And this is the most favourable state the app has.** The measurement runs with no alarm
-banner pinned (§6.4's banner adds to the 49 px band) and with every panel in its **chart** view —
-toggling one to `table` adds up to `--table-scroll-max: 40vh` = **432 px at 1080** to that cell,
-and the table view has never been measured in a browser at any width (**Q2-S2**, still open).
+| viewport | healthy | with the mock's six-alarm banner |
+|---|---|---|
+| 1280 × 1024 | **fits by ~19** | over by ~166 |
+| 1600 × 1024 | **fits by ~90** | over by ~52 |
+| 1920 × 1080 | **fits by ~159** | **fits by ~86** |
 
-**The concrete failure:** §1 decision 7's wall panel — a fixed display nobody stands at — hides
-SERVING and SESSION EVENT LOG below the fold at 1920×1080, and cuts into SAFETY, *"the panel that
-earns the dashboard's existence"*, at 1280×1024. Nobody scrolls a wall panel.
+**Per panel at 1920 — mock vs built:** GPU **220 vs 485** · COOLING **472 vs 868** · CPU **204 vs
+458** · MEMORY **195 vs 458** · SAFETY **259 vs 397** · STORAGE **182 vs 397** · SERVING **140 vs
+190** · LOG **134 vs 190**. **The built panels are 1.8–2.4× taller than the design.** That is the
+whole failure.
 
-**Three repairs exist and all three are the owner's**, which is why nothing was changed:
+**Consequences, ruled by the owner 2026-09-09:**
 
-1. **Shrink the panels** — §6.2 fixes their content; choosing what to drop is inventing.
-2. **Bound the grid and scroll inside it** — that keeps the *viewport* clean by conceding the
-   page, and it is entangled with SCOPE 2.5f's `--table-scroll-max` stopgap.
-3. **Change §6.1's numbers** — the owner's, and forbidden to a phase agent (ANCHOR §8, rule 3).
+- **The §6.1 grid stays exactly as drawn** — four rows, COOLING spanning rows 2–3 in columns 1–2,
+  **all nine panels on the wall**. Nothing moves, nothing is hidden.
+- **10d's recommendation (arrangement B, a `<details>` for SERVING and the log) is WITHDRAWN.** Its
+  measurements, mocks and harness stay as a record under `steps/10-panels-assembly/`.
+- **`MOCK.html` is the source for FORM** — density, anatomy, type scale, spacing, chart sizes —
+  **and for nothing else.** Data, strings and rules come from `SPEC.md`, and where they disagree
+  the spec wins (`ANCHOR.md` §9, the owner's words). The mock predates O19, the raw-name and
+  full-bus rules, and every S-* ruling; the builder takes its form and keeps the built behaviour.
+- **The work is 10e**: a builder spec bringing `components/` and `app/` to the mock's density,
+  measured, then a full build loop implementing it. **Step 11 waits for it** (owner's ruling).
+
+**Two shipped defects found by measuring, both to be fixed in that loop (owner's ruling):**
+**F1** — the session event log grows the *page* through its clipped scroll box: every `Chip`
+renders a `position: absolute` `.sr-only` span and nothing between it and the viewport is
+positioned (`position: relative` on `.panel` closes it, and the same leak reaches the sparkline
+table's `<caption>`). **F5** — SERVING's instance row overflows horizontally in any column under
+~450 px (`status-row`'s `.value` is `flex: 0 0 auto`).
+
+**One open owner question this raises:** the mock itself overflows at 1280×1024 and 1600×1024
+**under a six-alarm banner** and holds only at 1920. Whether §6.1's promise is conditioned on
+"no banner pinned" is not settled anywhere — bring it with 10e's questions.
 
 **How this went unnoticed until the last loop of step 10:** none of the seven §6.1 measurements
-10a-F4 asked for checked it — six measure column counts and relative positions, the seventh a
-`display` toggle — and the script measured the 1280 checkpoint at height **900**, below the 1024
-the promise is conditioned on, so it could not have observed it even incidentally. One
-`page.evaluate` would have. **It is measurement 9 now**, and it is the only reason that script
-exits non-zero.
-
----
-
-⚠ **§0.3's determinism problem is CLOSED** (`3c37107`, 2026-09-08) and this paragraph used to
-say otherwise — it read *"`pnpm verify` is not deterministic today … re-owned to 10c-3"*, which
-is the stale-in-the-dangerous-direction shape this file warns about two paragraphs down, still
-present in the very sentence pointing at it. `10a-F17` was **not** in 10c-3's scope because it
-was already fixed. §0.3 is worth reading for the reasoning; it is not a live warning.
-§0.1, §0.2, §0.4, §0.5, §0.6, §0.7 and the new **§0.8** remain true.
-
-⚠ **§0.7 is new and it is the most transferable thing 10c-2 cost: a guard can be written so that
-it fails when the project SUCCEEDS.** One test file stood between a green suite and a red one,
-and the failing message would have read as though the guard were broken. It also carries the
-measured answer to *"can the bare-word `toContain` case be mechanised?"* — **yes, in a matcher,
-at 9.5 %**, which contradicts what three earlier documents said.
-
-**Next is step 11 — packaging** (`pipeline/INSTALL-SPEC.md` specifies `dashboard.sh` before it
-is written). ⚠ **But read §0.0 first**: step 10 closed with §6.1's promise broken, and if the
-owner's answer is "shrink the panels" or "bound the grid", that is a change to the artifact step
-11 packages and it should land before the image is specified rather than after.
-
-**10c-3 closed these**, all of them recorded open in earlier versions of this file: **L9**
-(`CHART_SIZE`, ⚠ with A7's correction to its recorded justification), **`10b-F14b`** (the
-sparkline's `gaps` prop, ⚠ then corrected three ways by A4/A5/A9), **SCOPE 2.5f** (verified, not
-changed — and A1 strengthens the reason), **Q2-F9** (decided DROP, `clipPlotsToDomain`),
-**10a-F4's remaining half** (a real headless browser: **9 pass · 3 fail · 0 blocked**, the three
-failures being §0.0), **`10c1-A9-paint`** (paint-tier only, by construction) and the
-**banner-item wrapping question** (recorded for the owner, no CSS invented).
-
-⚠ **`10a-F17` is NOT on that list — it was FIXED and committed at `3c37107` on 2026-09-08**, ahead
-of 10b landing, at the owner's instruction. Three rows in this document said otherwise and sent
-10c-2's reconciliation to re-own an already-closed item; corrected 2026-09-09 by the parent, who
-ran the fix and verified it. **This is the FIRST time this handover has been stale in the
-DANGEROUS direction** — every previous instance named something already answered, which costs a
-re-check; this one named live work that did not exist, which costs a loop.
-`pipeline/WORK-ITEMS.md` §10 is the queue. ⚠ Two items belong in that queue and only the owner
-can place them: **F7's runtime `toContain` matcher** (§0.7) and **mutation coverage for the four
-guards' anti-vacuity nets** (§0.7).
-
-⚠ **§0.4 remains the most important thing 10b learned.** *A document-wide `toContain` is a weak
-assertion wearing a strong name* — and 10c-2 makes it **nine** instances in five loops: its lint
-found eight, and a change made in its own reconcile phase found a ninth. §0.6 is its sibling one
-level up: an assertion whose *subject* does not render cannot fail either.
-
-⚠ **Everything below about steps 1–8's surface, the four structural rules, and the toolchain is
-inherited unchanged and is still true.** The sections **10c-2** rewrote are §0.7 (new), this
-header, §0.5's `Object.hasOwn` correction, §5.3's guard list, §9 and §11. 10c-1 wrote §0.6, §2;
-10b-S-G wrote §0.5; 10b wrote §0.4, §3.6's tail, §4, §5.2's rule list and §8; 10a wrote §0.3;
-Q1 wrote §0.1; Q2 wrote §0.2 and §3.5.
-
-⚠ **§4 and §8 have been found stale IN THE SAFE DIRECTION seven times.** Re-check every row you
-touch against the tree and against `SPEC.md`, and mark what you did NOT re-check. Do not copy the
-tables forward. ⚠ **And 10b found the other direction too**: two *phase notes* (`10b-build.md`,
-`10b-test.md`) asserted a mutation coverage that did not exist — and 10c-1 found a third
-(`10c1-test.md` §1.2, §0.6). **A document claiming a property is not evidence of it. Read what a
-mutation replaces, and probe what a document says it probed.** ⚠ 10c-2 found the fourth and fifth,
-both about a guard's REACH rather than its coverage: see §0.7.
----
-
-⚠ **`MOCK.html` is a reference, never a source.** It shows four states and it predates several
-spec decisions (S30's sixth login row is the recorded example). Do not import from it, do not
-copy a number out of it, and where it disagrees with `SPEC.md`, the spec wins. Its value is
-that it shows what the thing is meant to *look* like.
-
-**Three things every remaining step must inherit rather than rediscover:**
-
-- ⚠ **A cell's colour is NOT a condition.** §6.4: a cell calls `lib/severity.ts` on the
-  **current reading**, undebounced. `state.displayed` is the banner's and the log's input, and
-  a cell that took its colour from there would lag the figure printed inside it by ten seconds.
-- ⚠ **`null` renders `—`; `0` renders `0 RPM`** (invariant 1). Every formatter in
-  `lib/format.ts` already applies this law once. Do not re-implement it in a component, and do
-  not split a formatter's output on whitespace — ask for a `parts` variant (O14).
-- ⚠ **A gap is drawn from `state.gaps`, never inferred from holes in a series.** Decimation
-  drops a `null` inside an otherwise readable bucket, so a hole in a trace is not evidence of
-  anything. The gap list carries real endpoints and survives every rendering.
-
----
-
-## 0. ⚠ The revert check — `git status`, and the manifest that preceded it
-
-**`dashboard/` is committed** (since `71a2f7d`; the working branch is now `dashboard-frontend`
-at `391d17f` — see §11), so `git status --short` and `git diff --stat` work as a revert check
-and are the primary one. ⚠ **A phase deliberately leaves its own work uncommitted**, so read
-`git status` against what the phase's notes say it changed, not against an empty diff. That is
-new in step 8: before the commit an untracked `dashboard/` collapsed to `?? ./`, and a source
-file left mutated by a killed harness was invisible.
-
-**The manifest procedure still works and is still the one to use inside a phase**, because it
-is cheap enough to run after **every** harness rather than once at the end (M12):
-
-```bash
-cd dashboard
-find lib app proxy.ts -type f | sort | xargs md5 > /tmp/manifest.before
-# …one harness, or one `pnpm verify`. NEVER two at once. …
-find lib app proxy.ts -type f | sort | xargs md5 | diff /tmp/manifest.before - \
-  && echo "TREE IDENTICAL TO BASELINE"
-```
-
-A current snapshot lives at `pipeline/steps/08-client-runtime/manifest-baseline.txt`.
-**A harness killed mid-mutation leaves the file mutated on disk** — the `finally` that restores
-it never runs — so the check is not ceremony.
-
-⚠ **`build.md`'s advice to "check `git status` before believing it" was wrong when written**
-and is recorded here in its corrected form only. Two other `build.md` claims are corrected in
-§5.3; none of the three may be repeated as originally written.
-
----
+10a-F4 asked for checked page height, and the script measured the 1280 checkpoint at height
+**900**, below the 1024 the promise is conditioned on (fixed in 10c-3, measurement 9). And nobody
+measured the mock — the spec called it "a reference, never a source", which was read as "never
+consult it", when it was the one artefact that answered the question.
 
 ## 0.1 ⚠ NEW — what Q1 found, and the three rules that came out of it
 

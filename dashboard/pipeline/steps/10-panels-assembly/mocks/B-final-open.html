@@ -1,0 +1,989 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style data-inlined-from="/_next/static/chunks/components_tokens_0r9hwbh.css">/* [project]/components/tokens.css [app-client] (css) */
+:root {
+  --surface-0: #0d0d0d;
+  --surface-1: #1a1a19;
+  --ink-primary: #fff;
+  --ink-secondary: #c3c2b7;
+  --ink-muted: #898781;
+  --gridline: #2c2c2a;
+  --baseline: #383835;
+  --border: #ffffff1a;
+  --status-good: #0ca30c;
+  --status-watch: #fab219;
+  --status-alarm: #d03b3b;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --table-scroll-max: 40vh;
+}
+
+.sr-only {
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  position: absolute;
+  overflow: hidden;
+}
+
+/*# sourceMappingURL=components_tokens_0r9hwbh.css.map*/</style><style data-inlined-from="/_next/static/chunks/_0zmtanx._.css">/* [project]/components/alarm-banner.module.css [app-client] (css) */
+.alarm-banner-module__fGm4JW__banner {
+  background: color-mix(in srgb, var(--status-alarm) 22%, var(--surface-0));
+  border-bottom: 1px solid var(--status-alarm);
+  font-family: var(--font-mono);
+  color: var(--ink-primary);
+  align-items: flex-start;
+  gap: .6em;
+  padding: .6em 1em;
+  display: flex;
+}
+
+.alarm-banner-module__fGm4JW__glyph {
+  color: var(--status-alarm);
+  font-size: 1.1em;
+  line-height: 1.3;
+}
+
+.alarm-banner-module__fGm4JW__body {
+  flex-direction: column;
+  gap: .2em;
+  min-width: 0;
+  display: flex;
+}
+
+.alarm-banner-module__fGm4JW__head {
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .6em;
+  display: flex;
+}
+
+.alarm-banner-module__fGm4JW__count {
+  color: var(--status-alarm);
+  font-weight: 600;
+}
+
+.alarm-banner-module__fGm4JW__lead b {
+  color: var(--ink-primary);
+  font-weight: 600;
+}
+
+.alarm-banner-module__fGm4JW__since {
+  color: var(--ink-muted);
+  font-size: .85em;
+}
+
+.alarm-banner-module__fGm4JW__rest {
+  color: var(--ink-secondary);
+  flex-wrap: wrap;
+  gap: .4em 1em;
+  font-size: .85em;
+  display: flex;
+}
+
+.alarm-banner-module__fGm4JW__itemSince {
+  color: var(--ink-muted);
+  font-style: normal;
+}
+
+.alarm-banner-module__fGm4JW__stale {
+  color: var(--status-watch);
+  font-style: normal;
+}
+
+/* [project]/components/grid.module.css [app-client] (css) */
+.grid-module__qTxVQG__grid {
+  grid-template-columns: 1fr;
+  grid-template-areas: "gpu0"
+                       "gpu1"
+                       "cooling"
+                       "safety"
+                       "serving"
+                       "cpu"
+                       "memory"
+                       "storage"
+                       "log";
+  gap: .75rem;
+  padding: .75rem;
+  display: grid;
+}
+
+@media (min-width: 900px) {
+  .grid-module__qTxVQG__grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-areas: "gpu0 gpu1"
+                         "cooling cooling"
+                         "cpu memory"
+                         "safety storage"
+                         "serving serving"
+                         "log log";
+  }
+}
+
+@media (min-width: 1280px) {
+  .grid-module__qTxVQG__grid {
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-areas: "gpu0 gpu0 gpu1 gpu1"
+                         "cooling cooling cpu memory"
+                         "cooling cooling safety storage"
+                         "serving serving log log";
+  }
+}
+
+.grid-module__qTxVQG__gpu0 {
+  grid-area: gpu0;
+}
+
+.grid-module__qTxVQG__gpu1 {
+  grid-area: gpu1;
+}
+
+.grid-module__qTxVQG__cpu {
+  grid-area: cpu;
+}
+
+.grid-module__qTxVQG__memory {
+  grid-area: memory;
+}
+
+.grid-module__qTxVQG__cooling {
+  grid-area: cooling;
+}
+
+.grid-module__qTxVQG__safety {
+  grid-area: safety;
+}
+
+.grid-module__qTxVQG__storage {
+  grid-area: storage;
+}
+
+.grid-module__qTxVQG__serving {
+  grid-area: serving;
+}
+
+.grid-module__qTxVQG__log {
+  grid-area: log;
+}
+
+.grid-module__qTxVQG__gpu0, .grid-module__qTxVQG__gpu1, .grid-module__qTxVQG__cpu, .grid-module__qTxVQG__memory, .grid-module__qTxVQG__cooling, .grid-module__qTxVQG__safety, .grid-module__qTxVQG__storage, .grid-module__qTxVQG__serving, .grid-module__qTxVQG__log {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.grid-module__qTxVQG__gpu0 > *, .grid-module__qTxVQG__gpu1 > *, .grid-module__qTxVQG__cpu > *, .grid-module__qTxVQG__memory > *, .grid-module__qTxVQG__cooling > *, .grid-module__qTxVQG__safety > *, .grid-module__qTxVQG__storage > *, .grid-module__qTxVQG__serving > *, .grid-module__qTxVQG__log > * {
+  flex: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* [project]/components/header.module.css [app-client] (css) */
+.header-module__bY5_QG__header {
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-secondary);
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5em 1.5em;
+  padding: .6em 1em;
+  display: flex;
+}
+
+.header-module__bY5_QG__identity {
+  align-items: baseline;
+  gap: .75em;
+  min-width: 0;
+  display: flex;
+}
+
+.header-module__bY5_QG__hostname {
+  color: var(--ink-primary);
+  font-weight: 600;
+}
+
+.header-module__bY5_QG__uptime {
+  color: var(--ink-muted);
+  font-size: .9em;
+}
+
+.header-module__bY5_QG__status {
+  align-items: baseline;
+  gap: .6em;
+  min-width: 0;
+  display: flex;
+}
+
+.header-module__bY5_QG__dot {
+  text-align: center;
+  width: 1em;
+  display: inline-block;
+}
+
+.header-module__bY5_QG__dot[data-severity="normal"] {
+  color: var(--status-good);
+}
+
+.header-module__bY5_QG__dot[data-severity="watch"] {
+  color: var(--status-watch);
+}
+
+.header-module__bY5_QG__dot[data-severity="alarm"] {
+  color: var(--status-alarm);
+}
+
+.header-module__bY5_QG__dot[data-severity="none"] {
+  color: var(--ink-muted);
+}
+
+.header-module__bY5_QG__statusText {
+  color: var(--ink-primary);
+}
+
+.header-module__bY5_QG__time {
+  color: var(--ink-muted);
+  font-size: .9em;
+}
+
+.header-module__bY5_QG__controls {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .6em;
+  display: flex;
+}
+
+.header-module__bY5_QG__control {
+  align-items: center;
+  gap: .35em;
+  font-size: .9em;
+  display: flex;
+}
+
+.header-module__bY5_QG__controlLabel {
+  color: var(--ink-muted);
+}
+
+.header-module__bY5_QG__controls button {
+  font-family: var(--font-mono);
+  color: var(--ink-secondary);
+  background: var(--surface-0);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: .3em .6em;
+  font-size: .9em;
+}
+
+.header-module__bY5_QG__controls select {
+  font-family: var(--font-mono);
+  color: var(--ink-secondary);
+  background: var(--surface-0);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: .2em .4em;
+  font-size: .9em;
+}
+
+.header-module__bY5_QG__separator {
+  background: var(--gridline);
+  align-self: stretch;
+  width: 1px;
+}
+
+.header-module__bY5_QG__logout {
+  color: var(--ink-primary);
+}
+
+/* [project]/components/stacked-time-series-chart.module.css [app-client] (css) */
+.stacked-time-series-chart-module__7N9xpa__chart {
+  font-family: var(--font-mono);
+  display: block;
+}
+
+.stacked-time-series-chart-module__7N9xpa__gridline {
+  stroke: var(--gridline);
+  stroke-width: 1px;
+}
+
+.stacked-time-series-chart-module__7N9xpa__line {
+  fill: none;
+  stroke-width: 2px;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.stacked-time-series-chart-module__7N9xpa__tickLabel {
+  fill: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 9px;
+}
+
+.stacked-time-series-chart-module__7N9xpa__legendLabel {
+  fill: var(--ink-secondary);
+  font-size: 9px;
+}
+
+.stacked-time-series-chart-module__7N9xpa__endLabel {
+  fill: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+  font-size: 9px;
+}
+
+.stacked-time-series-chart-module__7N9xpa__endDot {
+  stroke: var(--surface-1);
+  stroke-width: 1px;
+}
+
+.stacked-time-series-chart-module__7N9xpa__hatchGround {
+  fill: var(--surface-1);
+}
+
+.stacked-time-series-chart-module__7N9xpa__hatchLine {
+  stroke: var(--gridline);
+  stroke-width: 2px;
+}
+
+.stacked-time-series-chart-module__7N9xpa__point {
+  stroke: var(--surface-1);
+  stroke-width: 1px;
+}
+
+.stacked-time-series-chart-module__7N9xpa__leader {
+  stroke-width: 1px;
+}
+
+.stacked-time-series-chart-module__7N9xpa__hoverZone {
+  fill: #0000;
+  pointer-events: all;
+  cursor: crosshair;
+}
+
+.stacked-time-series-chart-module__7N9xpa__crosshairGroup {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.stacked-time-series-chart-module__7N9xpa__hoverZone:hover + .stacked-time-series-chart-module__7N9xpa__crosshairGroup {
+  opacity: 1;
+}
+
+.stacked-time-series-chart-module__7N9xpa__crosshairLine {
+  stroke: var(--ink-muted);
+  stroke-width: 1px;
+  stroke-dasharray: 2 2;
+}
+
+.stacked-time-series-chart-module__7N9xpa__tableView {
+  font-family: var(--font-mono);
+  max-height: var(--table-scroll-max);
+  flex-direction: column;
+  gap: 12px;
+  display: flex;
+  overflow-y: auto;
+}
+
+.stacked-time-series-chart-module__7N9xpa__tableView:focus-visible {
+  outline: 2px solid var(--ink-primary);
+  outline-offset: -2px;
+}
+
+.stacked-time-series-chart-module__7N9xpa__tableEmpty {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.stacked-time-series-chart-module__7N9xpa__table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  width: 100%;
+  font-size: 11px;
+}
+
+.stacked-time-series-chart-module__7N9xpa__table th, .stacked-time-series-chart-module__7N9xpa__table td {
+  text-align: left;
+  border-bottom: 1px solid var(--gridline);
+  color: var(--ink-secondary);
+  white-space: nowrap;
+  padding: 2px 10px 2px 0;
+}
+
+.stacked-time-series-chart-module__7N9xpa__table th {
+  color: var(--ink-muted);
+  font-weight: normal;
+}
+
+.stacked-time-series-chart-module__7N9xpa__table thead th {
+  background: var(--surface-1);
+  z-index: 1;
+  position: sticky;
+  top: 0;
+}
+
+.stacked-time-series-chart-module__7N9xpa__gapRow td {
+  color: var(--ink-muted);
+  white-space: normal;
+  font-style: italic;
+}
+
+.stacked-time-series-chart-module__7N9xpa__table tbody th {
+  color: var(--ink-secondary);
+  font-weight: normal;
+}
+
+/* [project]/components/sparkline.module.css [app-client] (css) */
+.sparkline-module__PFWsJa__sparkline {
+  display: block;
+  overflow: visible;
+}
+
+.sparkline-module__PFWsJa__line {
+  fill: none;
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.sparkline-module__PFWsJa__gap {
+  fill: var(--gridline);
+  pointer-events: none;
+}
+
+.sparkline-module__PFWsJa__end {
+  stroke: var(--surface-1);
+  stroke-width: 1px;
+}
+
+.sparkline-module__PFWsJa__point {
+  stroke: var(--surface-1);
+  stroke-width: .5px;
+}
+
+.sparkline-module__PFWsJa__hoverZone {
+  fill: #0000;
+  pointer-events: all;
+  cursor: crosshair;
+}
+
+.sparkline-module__PFWsJa__crosshairGroup {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sparkline-module__PFWsJa__hoverZone:hover + .sparkline-module__PFWsJa__crosshairGroup {
+  opacity: 1;
+}
+
+.sparkline-module__PFWsJa__crosshairLine {
+  stroke: var(--ink-muted);
+  stroke-width: 1px;
+}
+
+.sparkline-module__PFWsJa__tableEmpty {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.sparkline-module__PFWsJa__tableView {
+  max-height: var(--table-scroll-max);
+  overflow-y: auto;
+}
+
+.sparkline-module__PFWsJa__tableView:focus-visible {
+  outline: 2px solid var(--ink-primary);
+  outline-offset: -2px;
+}
+
+.sparkline-module__PFWsJa__table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.sparkline-module__PFWsJa__table th, .sparkline-module__PFWsJa__table td {
+  text-align: left;
+  border-bottom: 1px solid var(--gridline);
+  color: var(--ink-secondary);
+  white-space: nowrap;
+  padding: 2px 10px 2px 0;
+}
+
+.sparkline-module__PFWsJa__table th {
+  color: var(--ink-muted);
+  font-weight: normal;
+}
+
+.sparkline-module__PFWsJa__table thead th {
+  background: var(--surface-1);
+  z-index: 1;
+  position: sticky;
+  top: 0;
+}
+
+.sparkline-module__PFWsJa__table tbody th {
+  color: var(--ink-secondary);
+  font-weight: normal;
+}
+
+.sparkline-module__PFWsJa__gapRow td {
+  color: var(--ink-muted);
+  white-space: normal;
+  font-style: italic;
+}
+
+/* [project]/components/chip.module.css [app-client] (css) */
+.chip-module__W_Vh7q__chip {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-secondary);
+  align-items: center;
+  gap: .35em;
+  line-height: 1;
+  display: inline-flex;
+}
+
+.chip-module__W_Vh7q__chip[data-size="sm"] {
+  font-size: .85em;
+}
+
+.chip-module__W_Vh7q__glyph {
+  text-align: center;
+  width: 1em;
+  display: inline-block;
+}
+
+.chip-module__W_Vh7q__label {
+  color: var(--ink-secondary);
+}
+
+.chip-module__W_Vh7q__chip[data-severity="normal"] .chip-module__W_Vh7q__glyph {
+  color: var(--status-good);
+}
+
+.chip-module__W_Vh7q__chip[data-severity="watch"] .chip-module__W_Vh7q__glyph {
+  color: var(--status-watch);
+}
+
+.chip-module__W_Vh7q__chip[data-severity="alarm"] .chip-module__W_Vh7q__glyph {
+  color: var(--status-alarm);
+}
+
+.chip-module__W_Vh7q__chip[data-severity="none"] .chip-module__W_Vh7q__glyph {
+  color: var(--ink-muted);
+}
+
+/* [project]/components/panel-shell.module.css [app-client] (css) */
+.panel-shell-module__3uRWgG__panel {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  flex-direction: column;
+  gap: .6em;
+  min-width: 0;
+  min-height: 0;
+  padding: .85em 1em;
+  display: flex;
+}
+
+.panel-shell-module__3uRWgG__head {
+  border-bottom: 1px solid var(--gridline);
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: .15em .75em;
+  padding-bottom: .5em;
+  display: grid;
+}
+
+.panel-shell-module__3uRWgG__title {
+  font-family: var(--font-mono);
+  color: var(--ink-primary);
+  grid-area: 1 / 1;
+  margin: 0;
+  font-size: .95em;
+  font-weight: 600;
+}
+
+.panel-shell-module__3uRWgG__subtitle {
+  font-family: var(--font-mono);
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+  grid-area: 2 / 1;
+  margin: 0;
+  font-size: .8em;
+}
+
+.panel-shell-module__3uRWgG__head > [data-severity] {
+  grid-area: 1 / 2 / span 2;
+  align-self: center;
+}
+
+.panel-shell-module__3uRWgG__body {
+  flex-direction: column;
+  gap: .4em;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+/* [project]/components/meter.module.css [app-client] (css) */
+.meter-module__aYDMYG__meter {
+  font-family: var(--font-mono);
+  flex-direction: column;
+  gap: .25em;
+  display: flex;
+}
+
+.meter-module__aYDMYG__head {
+  font-variant-numeric: tabular-nums;
+  justify-content: space-between;
+  gap: .5em;
+  display: flex;
+}
+
+.meter-module__aYDMYG__label {
+  color: var(--ink-muted);
+}
+
+.meter-module__aYDMYG__value {
+  color: var(--ink-primary);
+}
+
+.meter-module__aYDMYG__track {
+  background: var(--surface-0);
+  border-radius: 3px;
+  height: 6px;
+  position: relative;
+  overflow: hidden;
+}
+
+.meter-module__aYDMYG__fill {
+  border-radius: inherit;
+  height: 100%;
+  transition: width .2s ease-out;
+}
+
+.meter-module__aYDMYG__track[data-severity="normal"] {
+  background: color-mix(in oklab, var(--status-good) 22%, var(--surface-0));
+}
+
+.meter-module__aYDMYG__track[data-severity="normal"] .meter-module__aYDMYG__fill {
+  background: var(--status-good);
+}
+
+.meter-module__aYDMYG__track[data-severity="watch"] {
+  background: color-mix(in oklab, var(--status-watch) 22%, var(--surface-0));
+}
+
+.meter-module__aYDMYG__track[data-severity="watch"] .meter-module__aYDMYG__fill {
+  background: var(--status-watch);
+}
+
+.meter-module__aYDMYG__track[data-severity="alarm"] {
+  background: color-mix(in oklab, var(--status-alarm) 22%, var(--surface-0));
+}
+
+.meter-module__aYDMYG__track[data-severity="alarm"] .meter-module__aYDMYG__fill {
+  background: var(--status-alarm);
+}
+
+.meter-module__aYDMYG__track[data-severity="none"] .meter-module__aYDMYG__fill {
+  background: var(--ink-muted);
+}
+
+/* [project]/components/row.module.css [app-client] (css) */
+.row-module__4rkltq__row {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .5em;
+  padding: .15em 0;
+  display: flex;
+}
+
+.row-module__4rkltq__chip {
+  flex: none;
+}
+
+.row-module__4rkltq__label {
+  color: var(--ink-muted);
+  flex: auto;
+}
+
+.row-module__4rkltq__value {
+  color: var(--ink-primary);
+  text-align: right;
+  flex: none;
+}
+
+.row-module__4rkltq__note {
+  color: var(--ink-secondary);
+  overflow-wrap: anywhere;
+  flex-basis: 100%;
+  font-size: .85em;
+}
+
+/* [project]/components/panels/panel-notes.module.css [app-client] (css) */
+.panel-notes-module__qWCEVW__notes {
+  flex-direction: column;
+  gap: .25em;
+  padding: .15em 0;
+  display: flex;
+}
+
+.panel-notes-module__qWCEVW__note {
+  color: var(--ink-secondary);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+  margin: 0;
+  font-size: .85em;
+}
+
+/* [project]/components/panels/chart-view-toggle.module.css [app-client] (css) */
+.chart-view-toggle-module__rgiWRW__toggle {
+  font: inherit;
+  border: 1px solid var(--ink-muted);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  background: none;
+  border-radius: .25em;
+  align-self: flex-start;
+  padding: .15em .6em;
+  font-size: .8em;
+}
+
+.chart-view-toggle-module__rgiWRW__toggle:hover {
+  color: var(--ink-primary);
+  border-color: var(--ink-primary);
+}
+
+/* [project]/components/panels/gpu-panel.module.css [app-client] (css) */
+.gpu-panel-module__W3S0_q__takeover {
+  color: var(--ink-primary);
+  font-weight: 600;
+}
+
+.gpu-panel-module__W3S0_q__takeoverNote {
+  color: var(--ink-secondary);
+  font-size: .85em;
+}
+
+.gpu-panel-module__W3S0_q__headline {
+  font-size: 1.1em;
+}
+
+.gpu-panel-module__W3S0_q__fullChartWrap {
+  display: none;
+}
+
+@media (min-width: 1600px) {
+  .gpu-panel-module__W3S0_q__fullChartWrap {
+    display: block;
+  }
+
+  .gpu-panel-module__W3S0_q__sparklineWrap {
+    display: none;
+  }
+}
+
+/* [project]/components/panels/status-row.module.css [app-client] (css) */
+.status-row-module__nUT8wG__row {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .5em;
+  padding: .15em 0;
+  display: flex;
+}
+
+.status-row-module__nUT8wG__chip {
+  flex: none;
+}
+
+.status-row-module__nUT8wG__label {
+  color: var(--ink-muted);
+  flex: auto;
+}
+
+.status-row-module__nUT8wG__value {
+  color: var(--ink-primary);
+  text-align: right;
+  flex: none;
+}
+
+.status-row-module__nUT8wG__note {
+  color: var(--ink-secondary);
+  overflow-wrap: anywhere;
+  flex-basis: 100%;
+  font-size: .85em;
+}
+
+.status-row-module__nUT8wG__noteWatch {
+  color: var(--status-watch);
+  overflow-wrap: anywhere;
+  flex-basis: 100%;
+  font-size: .85em;
+}
+
+/* [project]/components/panels/cooling-panel.module.css [app-client] (css) */
+.cooling-panel-module__5ilg7a__headline {
+  font-size: 1.1em;
+}
+
+.cooling-panel-module__5ilg7a__chart {
+  margin: .5em 0;
+}
+
+.cooling-panel-module__5ilg7a__smaller {
+  opacity: .9;
+  font-size: .9em;
+}
+
+/* [project]/components/panels/safety-panel.module.css [app-client] (css) */
+.safety-panel-module__qMPBaq__unknownStanding {
+  border-top: 1px solid var(--ink-muted);
+  margin-top: .4em;
+  padding-top: .4em;
+}
+
+.safety-panel-module__qMPBaq__unknownRow {
+  font-family: var(--font-mono);
+  align-items: baseline;
+  gap: .5em;
+  font-size: .85em;
+  display: flex;
+}
+
+.safety-panel-module__qMPBaq__unknownLabel {
+  color: var(--ink-muted);
+  flex: auto;
+}
+
+.safety-panel-module__qMPBaq__unknownValue {
+  color: var(--ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* [project]/components/panels/serving-panel.module.css [app-client] (css) */
+.serving-panel-module__RlsZDa__empty {
+  color: var(--ink-primary);
+}
+
+.serving-panel-module__RlsZDa__emptyNote {
+  color: var(--ink-secondary);
+  font-size: .85em;
+}
+
+/* [project]/components/panels/session-event-log-panel.module.css [app-client] (css) */
+.session-event-log-panel-module__KpQwoa__scroll {
+  max-height: var(--table-scroll-max);
+  overflow-y: auto;
+}
+
+.session-event-log-panel-module__KpQwoa__list {
+  flex-direction: column;
+  gap: .2em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+}
+
+.session-event-log-panel-module__KpQwoa__entry {
+  font-family: var(--font-mono);
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .5em;
+  font-size: .85em;
+  display: flex;
+}
+
+.session-event-log-panel-module__KpQwoa__time {
+  color: var(--ink-muted);
+  flex: none;
+}
+
+.session-event-log-panel-module__KpQwoa__sentence {
+  color: var(--ink-primary);
+  flex: auto;
+}
+
+.session-event-log-panel-module__KpQwoa__source {
+  color: var(--ink-secondary);
+  flex: none;
+}
+
+/* [project]/app/dashboard-shell.module.css [app-client] (css) */
+.dashboard-shell-module__r7ki5q__stickyBand {
+  z-index: 10;
+  position: sticky;
+  top: 0;
+}
+
+/*# sourceMappingURL=_0zmtanx._.css.map*/</style><title>ai-server</title><meta name="description" content="Read-only telemetry for ai-server"><style>@font-face{font-family:'__nextjs-Geist';font-style:normal;font-weight:400 600;font-display:swap;src:url(/__nextjs_font/geist-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}@font-face{font-family:'__nextjs-Geist Mono';font-style:normal;font-weight:400 600;font-display:swap;src:url(/__nextjs_font/geist-mono-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}@font-face{font-family:'__nextjs-Geist';font-style:normal;font-weight:400 600;font-display:swap;src:url(/__nextjs_font/geist-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}@font-face{font-family:'__nextjs-Geist Mono';font-style:normal;font-weight:400 600;font-display:swap;src:url(/__nextjs_font/geist-mono-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}</style><style id="tend-override">
+  @media (min-width: 1280px) {
+    div:has(> [data-slot="gpu0"]) {
+      grid-template-columns: minmax(300px, 1fr) minmax(432px, 1.5fr) 1fr 1fr;
+      grid-template-rows: auto auto;
+      grid-template-areas:
+        'gpu0 cooling cpu memory'
+        'gpu1 cooling safety storage';
+    }
+  }
+  @media (min-width: 1600px) {
+    div:has(> [data-slot="gpu0"]) {
+      grid-template-columns: minmax(432px, 1.5fr) minmax(432px, 1.5fr) 1fr 1fr;
+    }
+  }
+  [data-role="gpu-sparkline-wrap"] svg[role="img"], [data-slot="cpu"] svg[role="img"] { width: 200px; }
+
+  [data-slot="cooling"] svg[role="img"] { width: 400px; height: 450px; }
+  [data-role="gpu-full-chart-wrap"] svg[role="img"] { width: 400px; height: 120px; }
+
+  #tend-details { margin: 0 0.75rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #898781; }
+  #tend-details > summary { cursor: pointer; padding: 0.25em 0; font-size: 0.85em; }
+  #tend-details > div { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; padding: 0.75rem 0; }
+  #tend-details [data-slot] { display: flex; min-width: 0; }
+  #tend-details [data-slot] > * { flex: 1 1 auto; min-width: 0; }
+  #tend-details [data-slot="session-event-log"] [role="group"] { position: relative; }
+</style></head><body style="margin:0;background:var(--surface-0);color:var(--ink-secondary)"><div hidden=""><!--$--><!--/$--></div><div class="dashboard-shell-module__r7ki5q__stickyBand"><header class="header-module__bY5_QG__header"><div class="header-module__bY5_QG__identity"><span class="header-module__bY5_QG__hostname">ai-server</span><span class="header-module__bY5_QG__uptime">up 2 d 02:01</span></div><div class="header-module__bY5_QG__status" role="status"><span aria-hidden="true" class="header-module__bY5_QG__dot" data-mode="live" data-severity="normal">●</span><span class="header-module__bY5_QG__statusText">all healthy</span><span class="header-module__bY5_QG__time">08:59:58 EDT · 0 s ago</span></div><div class="header-module__bY5_QG__controls"><label class="header-module__bY5_QG__control"><span class="header-module__bY5_QG__controlLabel">refresh</span><select aria-label="refresh cadence"><option value="1">1 s</option><option value="2">2 s</option><option value="5">5 s</option><option value="10">10 s</option><option value="30">30 s</option></select></label><label class="header-module__bY5_QG__control"><span class="header-module__bY5_QG__controlLabel">window</span><select aria-label="chart window"><option value="10">10 min</option><option value="30">30 min</option><option value="120">2 h</option></select></label><button type="button">⟳ refresh</button><button type="button" aria-pressed="false">❙❙ pause</button><span aria-hidden="true" class="header-module__bY5_QG__separator"></span><button type="button" class="header-module__bY5_QG__logout">⏻ logout</button></div></header></div><div class="grid-module__qTxVQG__grid"><div class="grid-module__qTxVQG__gpu0" data-slot="gpu0"><section class="panel-shell-module__3uRWgG__panel" data-severity="normal"><header class="panel-shell-module__3uRWgG__head"><h2 class="panel-shell-module__3uRWgG__title">GPU 0</h2><p class="panel-shell-module__3uRWgG__subtitle">Tesla PG500-216 · 00000000:17:00.0</p><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="md"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></header><div class="panel-shell-module__3uRWgG__body"><div class="gpu-panel-module__W3S0_q__headline"><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="row-module__4rkltq__label">temperature</span><span class="row-module__4rkltq__value">62 °C</span></div></div><button type="button" class="chart-view-toggle-module__rgiWRW__toggle" aria-pressed="false" aria-label="GPU 0 temperature over the selected window: show as table">table view</button><div class="gpu-panel-module__W3S0_q__sparklineWrap" data-role="gpu-sparkline-wrap"><svg class="sparkline-module__PFWsJa__sparkline" width="220" height="44" viewBox="0 0 220 44" role="img" aria-label="GPU 0 temperature over the selected window"><g data-role="sparkline-gaps"><rect class="sparkline-module__PFWsJa__gap" data-role="gap" x="0" y="0" width="220" height="44"></rect></g><polyline class="sparkline-module__PFWsJa__line" stroke="#3987e5" points="0,22"></polyline><circle class="sparkline-module__PFWsJa__point" cx="0" cy="22" r="1.5" fill="#3987e5" data-role="lone-point"><title>08:59:54
+62 °C</title></circle><polyline class="sparkline-module__PFWsJa__line" stroke="#3987e5" points="220,22"></polyline><circle class="sparkline-module__PFWsJa__point" cx="220" cy="22" r="1.5" fill="#3987e5" data-role="lone-point"><title>08:59:58
+62 °C</title></circle><circle class="sparkline-module__PFWsJa__end" cx="220" cy="22" r="2.5" fill="#3987e5"><title>08:59:58
+62 °C</title></circle><g data-role="hover"><rect class="sparkline-module__PFWsJa__hoverZone" data-role="hover-zone" x="0" y="0" width="110" height="44"><title>08:59:54
+62 °C</title></rect><g class="sparkline-module__PFWsJa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="0" y1="0" x2="0" y2="44" class="sparkline-module__PFWsJa__crosshairLine"></line></g><rect class="sparkline-module__PFWsJa__hoverZone" data-role="hover-zone" x="110" y="0" width="110" height="44"><title>08:59:58
+62 °C</title></rect><g class="sparkline-module__PFWsJa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="220" y1="0" x2="220" y2="44" class="sparkline-module__PFWsJa__crosshairLine"></line></g></g></svg></div><div class="gpu-panel-module__W3S0_q__fullChartWrap" data-role="gpu-full-chart-wrap"><svg class="stacked-time-series-chart-module__7N9xpa__chart" width="480" height="160" viewBox="0 0 480 160" role="img" aria-label="GPU 0 temperature over the selected window"><defs><pattern id="gpu0-temp-chart-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" class="stacked-time-series-chart-module__7N9xpa__hatchGround"></rect><line x1="0" y1="0" x2="0" y2="6" class="stacked-time-series-chart-module__7N9xpa__hatchLine"></line></pattern></defs><g data-role="gaps"><rect x="432" y="0" width="2" height="140" fill="url(#gpu0-temp-chart-hatch)" data-gap-reason="paused"></rect></g><g transform="translate(0, 0)" data-role="plot"><g data-role="legend"><g transform="translate(0, 0)"><line x1="0" y1="8" x2="16" y2="8" stroke="#3987e5" stroke-width="2"></line><text x="20" y="11" class="stacked-time-series-chart-module__7N9xpa__legendLabel">GPU 0</text></g></g><g transform="translate(0, 16)"><g data-role="y-axis"><g><line x1="0" y1="124" x2="434" y2="124" class="stacked-time-series-chart-module__7N9xpa__gridline"></line><text x="2" y="122" class="stacked-time-series-chart-module__7N9xpa__tickLabel">61 °C</text></g><g><line x1="0" y1="62" x2="434" y2="62" class="stacked-time-series-chart-module__7N9xpa__gridline"></line><text x="2" y="60" class="stacked-time-series-chart-module__7N9xpa__tickLabel">62 °C</text></g><g><line x1="0" y1="0" x2="434" y2="0" class="stacked-time-series-chart-module__7N9xpa__gridline"></line><text x="2" y="9" class="stacked-time-series-chart-module__7N9xpa__tickLabel">63 °C</text></g></g><g data-role="series"><g data-series="gpu0"><polyline class="stacked-time-series-chart-module__7N9xpa__line" stroke="#3987e5" points="433.05990777777777,62 434,62"></polyline></g></g><g data-role="end-labels"></g></g></g><g transform="translate(0, 140)" data-role="x-axis"><text x="0" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="start">08:29:58</text><text x="108.5" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="middle">08:37:28</text><text x="217" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="middle">08:44:58</text><text x="325.5" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="middle">08:52:28</text><text x="434" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="end">08:59:58</text></g><g data-role="hover"><rect class="stacked-time-series-chart-module__7N9xpa__hoverZone" data-role="hover-zone" x="0" y="0" width="433.5299538888889" height="140"><title>08:59:54
+GPU 0: 62 °C</title></rect><g class="stacked-time-series-chart-module__7N9xpa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="433.05990777777777" y1="0" x2="433.05990777777777" y2="140" class="stacked-time-series-chart-module__7N9xpa__crosshairLine"></line></g><rect class="stacked-time-series-chart-module__7N9xpa__hoverZone" data-role="hover-zone" x="433.5299538888889" y="0" width="0.4700461111111167" height="140"><title>08:59:58
+GPU 0: 62 °C</title></rect><g class="stacked-time-series-chart-module__7N9xpa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="434" y1="0" x2="434" y2="140" class="stacked-time-series-chart-module__7N9xpa__crosshairLine"></line></g></g></svg></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__label">power</span><span class="row-module__4rkltq__value">231.0 W of 250.0 W cap</span></div><div class="meter-module__aYDMYG__meter"><div class="meter-module__aYDMYG__head"><span class="meter-module__aYDMYG__label">VRAM</span><span class="meter-module__aYDMYG__value">26,452 / 32,768 MiB</span><span class="sr-only">normal</span></div><div class="meter-module__aYDMYG__track" data-severity="normal" aria-hidden="true"><div class="meter-module__aYDMYG__fill" style="width: 80.7251%;"></div></div></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__label">utilisation</span><span class="row-module__4rkltq__value">97.0 %</span></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__label">SM clock</span><span class="row-module__4rkltq__value">1,290 MHz</span></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__label">served by instance 0</span><span class="row-module__4rkltq__value">qwen3.6-27b</span></div></div></section></div><div class="grid-module__qTxVQG__gpu1" data-slot="gpu1"><section class="panel-shell-module__3uRWgG__panel" data-severity="normal"><header class="panel-shell-module__3uRWgG__head"><h2 class="panel-shell-module__3uRWgG__title">GPU 1</h2><p class="panel-shell-module__3uRWgG__subtitle">Tesla PG500-216 · 00000000:65:00.0</p><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="md"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></header><div class="panel-shell-module__3uRWgG__body"><div class="gpu-panel-module__W3S0_q__headline"><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="row-module__4rkltq__label">temperature</span><span class="row-module__4rkltq__value">60 °C</span></div></div><button type="button" class="chart-view-toggle-module__rgiWRW__toggle" aria-pressed="false" aria-label="GPU 1 temperature over the selected window: show as table">table view</button><div class="gpu-panel-module__W3S0_q__sparklineWrap" data-role="gpu-sparkline-wrap"><svg class="sparkline-module__PFWsJa__sparkline" width="220" height="44" viewBox="0 0 220 44" role="img" aria-label="GPU 1 temperature over the selected window"><g data-role="sparkline-gaps"><rect class="sparkline-module__PFWsJa__gap" data-role="gap" x="0" y="0" width="220" height="44"></rect></g><polyline class="sparkline-module__PFWsJa__line" stroke="#199e70" points="0,22"></polyline><circle class="sparkline-module__PFWsJa__point" cx="0" cy="22" r="1.5" fill="#199e70" data-role="lone-point"><title>08:59:54
+60 °C</title></circle><polyline class="sparkline-module__PFWsJa__line" stroke="#199e70" points="220,22"></polyline><circle class="sparkline-module__PFWsJa__point" cx="220" cy="22" r="1.5" fill="#199e70" data-role="lone-point"><title>08:59:58
+60 °C</title></circle><circle class="sparkline-module__PFWsJa__end" cx="220" cy="22" r="2.5" fill="#199e70"><title>08:59:58
+60 °C</title></circle><g data-role="hover"><rect class="sparkline-module__PFWsJa__hoverZone" data-role="hover-zone" x="0" y="0" width="110" height="44"><title>08:59:54
+60 °C</title></rect><g class="sparkline-module__PFWsJa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="0" y1="0" x2="0" y2="44" class="sparkline-module__PFWsJa__crosshairLine"></line></g><rect class="sparkline-module__PFWsJa__hoverZone" data-role="hover-zone" x="110" y="0" width="110" height="44"><title>08:59:58
+60 °C</title></rect><g class="sparkline-module__PFWsJa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="220" y1="0" x2="220" y2="44" class="sparkline-module__PFWsJa__crosshairLine"></line></g></g></svg></div><div class="gpu-panel-module__W3S0_q__fullChartWrap" data-role="gpu-full-chart-wrap"><svg class="stacked-time-series-chart-module__7N9xpa__chart" width="480" height="160" viewBox="0 0 480 160" role="img" aria-label="GPU 1 temperature over the selected window"><defs><pattern id="gpu1-temp-chart-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" class="stacked-time-series-chart-module__7N9xpa__hatchGround"></rect><line x1="0" y1="0" x2="0" y2="6" class="stacked-time-series-chart-module__7N9xpa__hatchLine"></line></pattern></defs><g data-role="gaps"><rect x="432" y="0" width="2" height="140" fill="url(#gpu1-temp-chart-hatch)" data-gap-reason="paused"></rect></g><g transform="translate(0, 0)" data-role="plot"><g data-role="legend"><g transform="translate(0, 0)"><line x1="0" y1="8" x2="16" y2="8" stroke="#199e70" stroke-width="2"></line><text x="20" y="11" class="stacked-time-series-chart-module__7N9xpa__legendLabel">GPU 1</text></g></g><g transform="translate(0, 16)"><g data-role="y-axis"><g><line x1="0" y1="124" x2="434" y2="124" class="stacked-time-series-chart-module__7N9xpa__gridline"></line><text x="2" y="122" class="stacked-time-series-chart-module__7N9xpa__tickLabel">59 °C</text></g><g><line x1="0" y1="62" x2="434" y2="62" class="stacked-time-series-chart-module__7N9xpa__gridline"></line><text x="2" y="60" class="stacked-time-series-chart-module__7N9xpa__tickLabel">60 °C</text></g><g><line x1="0" y1="0" x2="434" y2="0" class="stacked-time-series-chart-module__7N9xpa__gridline"></line><text x="2" y="9" class="stacked-time-series-chart-module__7N9xpa__tickLabel">61 °C</text></g></g><g data-role="series"><g data-series="gpu1"><polyline class="stacked-time-series-chart-module__7N9xpa__line" stroke="#199e70" points="433.05990777777777,62 434,62"></polyline></g></g><g data-role="end-labels"></g></g></g><g transform="translate(0, 140)" data-role="x-axis"><text x="0" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="start">08:29:58</text><text x="108.5" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="middle">08:37:28</text><text x="217" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="middle">08:44:58</text><text x="325.5" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="middle">08:52:28</text><text x="434" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="end">08:59:58</text></g><g data-role="hover"><rect class="stacked-time-series-chart-module__7N9xpa__hoverZone" data-role="hover-zone" x="0" y="0" width="433.5299538888889" height="140"><title>08:59:54
+GPU 1: 60 °C</title></rect><g class="stacked-time-series-chart-module__7N9xpa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="433.05990777777777" y1="0" x2="433.05990777777777" y2="140" class="stacked-time-series-chart-module__7N9xpa__crosshairLine"></line></g><rect class="stacked-time-series-chart-module__7N9xpa__hoverZone" data-role="hover-zone" x="433.5299538888889" y="0" width="0.4700461111111167" height="140"><title>08:59:58
+GPU 1: 60 °C</title></rect><g class="stacked-time-series-chart-module__7N9xpa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="434" y1="0" x2="434" y2="140" class="stacked-time-series-chart-module__7N9xpa__crosshairLine"></line></g></g></svg></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__label">power</span><span class="row-module__4rkltq__value">231.0 W of 250.0 W cap</span></div><div class="meter-module__aYDMYG__meter"><div class="meter-module__aYDMYG__head"><span class="meter-module__aYDMYG__label">VRAM</span><span class="meter-module__aYDMYG__value">26,650 / 32,768 MiB</span><span class="sr-only">normal</span></div><div class="meter-module__aYDMYG__track" data-severity="normal" aria-hidden="true"><div class="meter-module__aYDMYG__fill" style="width: 81.3293%;"></div></div></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__label">utilisation</span><span class="row-module__4rkltq__value">97.0 %</span></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__label">SM clock</span><span class="row-module__4rkltq__value">1,290 MHz</span></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__label">served by instance 1</span><span class="row-module__4rkltq__value">qwen3.6-27b</span></div></div></section></div><div class="grid-module__qTxVQG__cooling" data-slot="cooling"><section class="panel-shell-module__3uRWgG__panel" data-severity="normal"><header class="panel-shell-module__3uRWgG__head"><h2 class="panel-shell-module__3uRWgG__title">cooling</h2><p class="panel-shell-module__3uRWgG__subtitle">dell_smm · channel 5 = FAN_HDD (PCIe/GPU)</p><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="md"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></header><div class="panel-shell-module__3uRWgG__body"><div class="cooling-panel-module__5ilg7a__headline"><div class="status-row-module__nUT8wG__row"><span class="status-row-module__nUT8wG__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="status-row-module__nUT8wG__label">fan 5</span><span class="status-row-module__nUT8wG__value">4,308 RPM</span></div></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__label">mode</span><span class="row-module__4rkltq__value">HIGH pwm 255</span></div><div class="status-row-module__nUT8wG__row"><span class="status-row-module__nUT8wG__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="status-row-module__nUT8wG__label">fan service</span><span class="status-row-module__nUT8wG__value">active</span></div><div class="cooling-panel-module__5ilg7a__chart"><button type="button" class="chart-view-toggle-module__rgiWRW__toggle" aria-pressed="false" aria-label="GPU temperature and fan 5 RPM: show as table">table view</button><svg class="stacked-time-series-chart-module__7N9xpa__chart" width="480" height="450" viewBox="0 0 480 450" role="img" aria-label="GPU temperature and fan 5 RPM over the selected window"><defs><pattern id="cooling-chart-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" class="stacked-time-series-chart-module__7N9xpa__hatchGround"></rect><line x1="0" y1="0" x2="0" y2="6" class="stacked-time-series-chart-module__7N9xpa__hatchLine"></line></pattern></defs><g data-role="gaps"><rect x="432" y="0" width="2" height="430" fill="url(#cooling-chart-hatch)" data-gap-reason="paused"></rect></g><g transform="translate(0, 0)" data-role="plot"><g data-role="legend"><g transform="translate(0, 0)"><line x1="0" y1="8" x2="16" y2="8" stroke="#3987e5" stroke-width="2"></line><text x="20" y="11" class="stacked-time-series-chart-module__7N9xpa__legendLabel">GPU 0</text></g><g transform="translate(61, 0)"><line x1="0" y1="8" x2="16" y2="8" stroke="#199e70" stroke-width="2" stroke-dasharray="4 3"></line><text x="20" y="11" class="stacked-time-series-chart-module__7N9xpa__legendLabel">GPU 1</text></g></g><g transform="translate(0, 16)"><g data-role="y-axis"><g><line x1="0" y1="194" x2="434" y2="194" class="stacked-time-series-chart-module__7N9xpa__gridline"></line><text x="2" y="192" class="stacked-time-series-chart-module__7N9xpa__tickLabel">60 °C</text></g><g><line x1="0" y1="97" x2="434" y2="97" class="stacked-time-series-chart-module__7N9xpa__gridline"></line><text x="2" y="95" class="stacked-time-series-chart-module__7N9xpa__tickLabel">61 °C</text></g><g><line x1="0" y1="0" x2="434" y2="0" class="stacked-time-series-chart-module__7N9xpa__gridline"></line><text x="2" y="9" class="stacked-time-series-chart-module__7N9xpa__tickLabel">62 °C</text></g></g><g data-role="series"><g data-series="gpu0"><polyline class="stacked-time-series-chart-module__7N9xpa__line" stroke="#3987e5" points="433.05990777777777,0 434,0"></polyline></g><g data-series="gpu1"><polyline class="stacked-time-series-chart-module__7N9xpa__line" stroke="#199e70" stroke-dasharray="5 4" points="433.05990777777777,194 434,194"></polyline></g></g><g data-role="end-labels"></g></g></g><g transform="translate(0, 220)" data-role="plot"><g data-role="legend"><g transform="translate(0, 0)"><line x1="0" y1="8" x2="16" y2="8" stroke="#d95926" stroke-width="2"></line><text x="20" y="11" class="stacked-time-series-chart-module__7N9xpa__legendLabel">fan 5</text></g></g><g transform="translate(0, 16)"><g data-role="y-axis"><g><line x1="0" y1="194" x2="434" y2="194" class="stacked-time-series-chart-module__7N9xpa__gridline"></line><text x="2" y="192" class="stacked-time-series-chart-module__7N9xpa__tickLabel">4,307 RPM</text></g><g><line x1="0" y1="97" x2="434" y2="97" class="stacked-time-series-chart-module__7N9xpa__gridline"></line><text x="2" y="95" class="stacked-time-series-chart-module__7N9xpa__tickLabel">4,308 RPM</text></g><g><line x1="0" y1="0" x2="434" y2="0" class="stacked-time-series-chart-module__7N9xpa__gridline"></line><text x="2" y="9" class="stacked-time-series-chart-module__7N9xpa__tickLabel">4,309 RPM</text></g></g><g data-role="series"><g data-series="fan5"><polyline class="stacked-time-series-chart-module__7N9xpa__line" stroke="#d95926" points="433.05990777777777,97 434,97"></polyline></g></g><g data-role="end-labels"></g></g></g><g transform="translate(0, 430)" data-role="x-axis"><text x="0" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="start">08:29:58</text><text x="108.5" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="middle">08:37:28</text><text x="217" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="middle">08:44:58</text><text x="325.5" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="middle">08:52:28</text><text x="434" y="14" class="stacked-time-series-chart-module__7N9xpa__tickLabel" text-anchor="end">08:59:58</text></g><g data-role="hover"><rect class="stacked-time-series-chart-module__7N9xpa__hoverZone" data-role="hover-zone" x="0" y="0" width="433.5299538888889" height="430"><title>08:59:54
+GPU 0: 62 °C
+GPU 1: 60 °C
+fan 5: 4,308 RPM</title></rect><g class="stacked-time-series-chart-module__7N9xpa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="433.05990777777777" y1="0" x2="433.05990777777777" y2="430" class="stacked-time-series-chart-module__7N9xpa__crosshairLine"></line></g><rect class="stacked-time-series-chart-module__7N9xpa__hoverZone" data-role="hover-zone" x="433.5299538888889" y="0" width="0.4700461111111167" height="430"><title>08:59:58
+GPU 0: 62 °C
+GPU 1: 60 °C
+fan 5: 4,308 RPM</title></rect><g class="stacked-time-series-chart-module__7N9xpa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="434" y1="0" x2="434" y2="430" class="stacked-time-series-chart-module__7N9xpa__crosshairLine"></line></g></g></svg></div><div class="cooling-panel-module__5ilg7a__smaller"><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="row-module__4rkltq__label">fan 2</span><span class="row-module__4rkltq__value">725 RPM</span></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="row-module__4rkltq__label">fan 1</span><span class="row-module__4rkltq__value">1,001 RPM</span></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="row-module__4rkltq__label">fan 3</span><span class="row-module__4rkltq__value">716 RPM</span></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="row-module__4rkltq__label">fan 4</span><span class="row-module__4rkltq__value">1,102 RPM</span></div></div></div></section></div><div class="grid-module__qTxVQG__cpu" data-slot="cpu"><section class="panel-shell-module__3uRWgG__panel" data-severity="normal"><header class="panel-shell-module__3uRWgG__head"><h2 class="panel-shell-module__3uRWgG__title">cpu</h2><p class="panel-shell-module__3uRWgG__subtitle">Xeon W-2135 · 6C / 12T</p><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="md"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></header><div class="panel-shell-module__3uRWgG__body"><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="row-module__4rkltq__label">temperature</span><span class="row-module__4rkltq__value">47 °C</span></div><button type="button" class="chart-view-toggle-module__rgiWRW__toggle" aria-pressed="false" aria-label="CPU charts: show as table">table view</button><svg class="sparkline-module__PFWsJa__sparkline" width="220" height="44" viewBox="0 0 220 44" role="img" aria-label="CPU temperature over the selected window"><g data-role="sparkline-gaps"><rect class="sparkline-module__PFWsJa__gap" data-role="gap" x="0" y="0" width="220" height="44"></rect></g><polyline class="sparkline-module__PFWsJa__line" stroke="#3987e5" points="0,22"></polyline><circle class="sparkline-module__PFWsJa__point" cx="0" cy="22" r="1.5" fill="#3987e5" data-role="lone-point"><title>08:59:54
+47 °C</title></circle><polyline class="sparkline-module__PFWsJa__line" stroke="#3987e5" points="220,22"></polyline><circle class="sparkline-module__PFWsJa__point" cx="220" cy="22" r="1.5" fill="#3987e5" data-role="lone-point"><title>08:59:58
+47 °C</title></circle><circle class="sparkline-module__PFWsJa__end" cx="220" cy="22" r="2.5" fill="#3987e5"><title>08:59:58
+47 °C</title></circle><g data-role="hover"><rect class="sparkline-module__PFWsJa__hoverZone" data-role="hover-zone" x="0" y="0" width="110" height="44"><title>08:59:54
+47 °C</title></rect><g class="sparkline-module__PFWsJa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="0" y1="0" x2="0" y2="44" class="sparkline-module__PFWsJa__crosshairLine"></line></g><rect class="sparkline-module__PFWsJa__hoverZone" data-role="hover-zone" x="110" y="0" width="110" height="44"><title>08:59:58
+47 °C</title></rect><g class="sparkline-module__PFWsJa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="220" y1="0" x2="220" y2="44" class="sparkline-module__PFWsJa__crosshairLine"></line></g></g></svg><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__label">utilisation</span><span class="row-module__4rkltq__value">31.4 %</span></div><svg class="sparkline-module__PFWsJa__sparkline" width="220" height="44" viewBox="0 0 220 44" role="img" aria-label="CPU utilisation over the selected window"><g data-role="sparkline-gaps"><rect class="sparkline-module__PFWsJa__gap" data-role="gap" x="0" y="0" width="220" height="44"></rect></g><polyline class="sparkline-module__PFWsJa__line" stroke="#199e70" points="0,22"></polyline><circle class="sparkline-module__PFWsJa__point" cx="0" cy="22" r="1.5" fill="#199e70" data-role="lone-point"><title>08:59:54
+31.4 %</title></circle><polyline class="sparkline-module__PFWsJa__line" stroke="#199e70" points="220,22"></polyline><circle class="sparkline-module__PFWsJa__point" cx="220" cy="22" r="1.5" fill="#199e70" data-role="lone-point"><title>08:59:58
+31.4 %</title></circle><circle class="sparkline-module__PFWsJa__end" cx="220" cy="22" r="2.5" fill="#199e70"><title>08:59:58
+31.4 %</title></circle><g data-role="hover"><rect class="sparkline-module__PFWsJa__hoverZone" data-role="hover-zone" x="0" y="0" width="110" height="44"><title>08:59:54
+31.4 %</title></rect><g class="sparkline-module__PFWsJa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="0" y1="0" x2="0" y2="44" class="sparkline-module__PFWsJa__crosshairLine"></line></g><rect class="sparkline-module__PFWsJa__hoverZone" data-role="hover-zone" x="110" y="0" width="110" height="44"><title>08:59:58
+31.4 %</title></rect><g class="sparkline-module__PFWsJa__crosshairGroup" data-role="crosshair" aria-hidden="true"><line x1="220" y1="0" x2="220" y2="44" class="sparkline-module__PFWsJa__crosshairLine"></line></g></g></svg><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__label">load average</span><span class="row-module__4rkltq__value">2.14 / 1.87 / 1.62</span></div></div></section></div><div class="grid-module__qTxVQG__memory" data-slot="memory"><section class="panel-shell-module__3uRWgG__panel" data-severity="normal"><header class="panel-shell-module__3uRWgG__head"><h2 class="panel-shell-module__3uRWgG__title">memory</h2><p class="panel-shell-module__3uRWgG__subtitle">/proc/meminfo</p><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="md"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></header><div class="panel-shell-module__3uRWgG__body"><div class="meter-module__aYDMYG__meter"><div class="meter-module__aYDMYG__head"><span class="meter-module__aYDMYG__label">RAM</span><span class="meter-module__aYDMYG__value">33.2 GiB / 61.6 GiB</span><span class="sr-only">normal</span></div><div class="meter-module__aYDMYG__track" data-severity="normal" aria-hidden="true"><div class="meter-module__aYDMYG__fill" style="width: 53.8961%;"></div></div></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="row-module__4rkltq__label">swap</span><span class="row-module__4rkltq__value">0.00 GiB</span></div></div></section></div><div class="grid-module__qTxVQG__safety" data-slot="safety"><section class="panel-shell-module__3uRWgG__panel" data-severity="normal"><header class="panel-shell-module__3uRWgG__head"><h2 class="panel-shell-module__3uRWgG__title">safety</h2><p class="panel-shell-module__3uRWgG__subtitle">ufw · pwm5 · dkms · fan service</p><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="md"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></header><div class="panel-shell-module__3uRWgG__body"><div class="status-row-module__nUT8wG__row"><span class="status-row-module__nUT8wG__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="status-row-module__nUT8wG__label">ufw enforcing</span><span class="status-row-module__nUT8wG__value">yes</span></div><div class="status-row-module__nUT8wG__row"><span class="status-row-module__nUT8wG__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="status-row-module__nUT8wG__label">pwm5 present</span><span class="status-row-module__nUT8wG__value">yes</span></div><div class="status-row-module__nUT8wG__row"><span class="status-row-module__nUT8wG__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="status-row-module__nUT8wG__label">DKMS for running kernel</span><span class="status-row-module__nUT8wG__value">yes</span></div><div class="status-row-module__nUT8wG__row"><span class="status-row-module__nUT8wG__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="status-row-module__nUT8wG__label">fan service</span><span class="status-row-module__nUT8wG__value">active</span></div></div></section></div><div class="grid-module__qTxVQG__storage" data-slot="storage-and-network"><section class="panel-shell-module__3uRWgG__panel" data-severity="normal"><header class="panel-shell-module__3uRWgG__head"><h2 class="panel-shell-module__3uRWgG__title">storage &amp; network</h2><p class="panel-shell-module__3uRWgG__subtitle">statvfs · eno1</p><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="md"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></header><div class="panel-shell-module__3uRWgG__body"><div class="meter-module__aYDMYG__meter"><div class="meter-module__aYDMYG__head"><span class="meter-module__aYDMYG__label">/</span><span class="meter-module__aYDMYG__value">41.7 GiB / 233.1 GiB</span><span class="sr-only">normal</span></div><div class="meter-module__aYDMYG__track" data-severity="normal" aria-hidden="true"><div class="meter-module__aYDMYG__fill" style="width: 17.8893%;"></div></div></div><div class="meter-module__aYDMYG__meter"><div class="meter-module__aYDMYG__head"><span class="meter-module__aYDMYG__label">/home</span><span class="meter-module__aYDMYG__value">312.4 GiB / 915.8 GiB</span><span class="sr-only">normal</span></div><div class="meter-module__aYDMYG__track" data-severity="normal" aria-hidden="true"><div class="meter-module__aYDMYG__fill" style="width: 34.1123%;"></div></div></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__label">eno1 rx</span><span class="row-module__4rkltq__value">180 KB/s</span></div><div class="row-module__4rkltq__row"><span class="row-module__4rkltq__label">eno1 tx</span><span class="row-module__4rkltq__value">2.6 MB/s</span></div><div class="status-row-module__nUT8wG__row"><span class="status-row-module__nUT8wG__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="status-row-module__nUT8wG__label">eno1 link</span><span class="status-row-module__nUT8wG__value">up</span></div></div></section></div></div><details id="tend-details" open=""><summary>serving · session event log</summary><div><div class="grid-module__qTxVQG__serving" data-slot="serving"><section class="panel-shell-module__3uRWgG__panel" data-severity="normal"><header class="panel-shell-module__3uRWgG__head"><h2 class="panel-shell-module__3uRWgG__title">serving</h2><p class="panel-shell-module__3uRWgG__subtitle">llama-server instances</p><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="md"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></header><div class="panel-shell-module__3uRWgG__body"><div class="status-row-module__nUT8wG__row"><span class="status-row-module__nUT8wG__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="status-row-module__nUT8wG__label">llama-server@0</span><span class="status-row-module__nUT8wG__value">:8080 · qwen3.6-27b · ctx 131,072 · health ok</span></div><div class="status-row-module__nUT8wG__row"><span class="status-row-module__nUT8wG__chip"><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span></span><span class="status-row-module__nUT8wG__label">llama-server@1</span><span class="status-row-module__nUT8wG__value">:8081 · qwen3.6-27b · ctx 131,072 · health ok</span></div></div></section></div><div class="grid-module__qTxVQG__log" data-slot="session-event-log"><section class="panel-shell-module__3uRWgG__panel" data-severity="none"><header class="panel-shell-module__3uRWgG__head"><h2 class="panel-shell-module__3uRWgG__title">session event log</h2><p class="panel-shell-module__3uRWgG__subtitle">state transitions since page load</p><span class="chip-module__W_Vh7q__chip" data-severity="none" data-size="md"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">—</span><span class="sr-only">no severity band</span></span></header><div class="panel-shell-module__3uRWgG__body"><div class="session-event-log-panel-module__KpQwoa__scroll" role="group" aria-label="session event log" tabindex="0" style=""><ul class="session-event-log-panel-module__KpQwoa__list" style=""><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li><li class="session-event-log-panel-module__KpQwoa__entry"><span class="session-event-log-panel-module__KpQwoa__time">08:59:55</span><span class="chip-module__W_Vh7q__chip" data-severity="normal" data-size="sm"><span aria-hidden="true" class="chip-module__W_Vh7q__glyph">✓</span><span class="sr-only">normal</span></span><span class="session-event-log-panel-module__KpQwoa__sentence">page loaded</span><span class="session-event-log-panel-module__KpQwoa__source">session</span></li></ul></div></div></section></div></div></details><!--$--><!--/$--><next-route-announcer style="position: absolute;"></next-route-announcer><div id="tend-mock-note" style="position:fixed;right:8px;bottom:8px;z-index:99;font:11px ui-monospace,Menlo,monospace;color:#898781;background:#1a1a19;border:1px solid rgba(255,255,255,.1);padding:4px 8px;border-radius:4px;max-width:420px">10d mock "B-final-open" — static capture of the real app with the arrangement's CSS injected; fixture=box. Chart interiors are letterboxed where a CHART_SIZE change is emulated by CSS; the boxes are exact.</div></body></html>

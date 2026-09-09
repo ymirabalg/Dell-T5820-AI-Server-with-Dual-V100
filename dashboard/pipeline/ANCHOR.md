@@ -27,374 +27,161 @@ adversarial and review phases and fixed before they became wrong code. Several w
 
 ---
 
-## 2. State — READ CAREFULLY. Updated 2026-09-08 by 10c-1's reconciliation.
+## 2. State — READ THIS FIRST. Written 2026-09-09 by the session that ran Q1–Q3, 10a–10c, 10d and 10e; it is the only inheritance.
 
-**Steps 1–8 are closed and verified. Step 9's full loop is closed. Q1 and Q2 are closed.
-⚠ STEP 10 IS CLOSED — 10a, 10b, 10b-S-G, 10c-1, 10c-2 and 10c-3 — but it is
-**closed-with-a-known-failure, not green**: §6.1's no-scroll promise is measured false and the
-repair is the owner's. See §2.2 and `HANDOVER.md` §0.0 before starting anything.** Steps 11–12
-have not started.
+### 2.0 ⚠ The one-paragraph version
 
-### ⚠ The backend has LANDED ON `main` — 2026-09-07. Two branches remain.
+**Step 10 is built and committed but does not meet §6.1's only quantitative promise** — the page
+overflows the fold by 356 / 418 / 362 px at 1280×1024 / 1600×1024 / 1920×1080 with healthy
+telemetry. **The cause is NOT the grid.** `MOCK.html` — the §8.2 design, which the owner calls
+"super cool" and wants adapted — uses the **same four-row, nine-panel grid** and **fits at every
+one of those viewports** (measured 2026-09-09: ~19 / ~90 / **~159 px to spare**). The built panels
+are simply **1.8–2.4× taller than the design** (GPU 485 vs 220, COOLING 868 vs 472, CPU 458 vs
+204 …). **The work is to bring the implementation to the mock's density; the grid, the shape and
+all nine panels stay exactly as §6.1 draws them.** A builder spec for that is 10e
+(`steps/10-panels-assembly/10e-match-the-mock.md`) — see §2.3 for its status.
+
+### 2.1 Branches and tree
 
 ```
-main                 3f06e98   local ahead of [origin/main]   backend merged, fast-forward, NOT PUSHED
-dashboard-backend    3f06e98   [origin/dashboard-backend]     == main. Finished; nothing more goes here
-dashboard-frontend   391d17f   3 commits ahead of main        LOCAL ONLY, never pushed
+main                 3f06e98   [origin/main]                 backend, pushed. Untouched since
+dashboard-frontend   7de7dd3   [origin/dashboard-frontend]   pushed; 10c-3 is the last commit
 ```
 
-The merge was a clean fast-forward — `dashboard-backend` had 18 commits and `main` had none of
-its own — touching only `dashboard/` and the root `.gitignore`. **`main` and `origin/main` have
-diverged until somebody pushes**, and `git push` is gated here and was not asked for.
+**Uncommitted, and meant to be committed together as "the design record" once 10e lands:**
+`steps/10-panels-assembly/10d-layout-replan.md` + `mocks/` (15 mocks, harness, screenshots),
+`mocks/measure-mock.mjs`, `handoffs/10d-layout-replan.md`, `handoffs/10e-match-the-mock.md`,
+`steps/10-panels-assembly/10e-match-the-mock.md` (when written), and this file. Nothing under
+`components/`, `app/`, `lib/` or `SPEC.md` is dirty — **verify with `git status` before trusting
+that**; a stranded harness mutation looks exactly like an intended edit.
 
-`dashboard-backend` is now redundant with `main` and carries **zero UI**: no `components/`, no
-`steps/09-ui-primitives/` (verified by `git ls-tree`, 2026-09-07). The split the previous session
-made by soft reset held. Do not add to that branch; if UI ever appears on it, that is the same
-mistake recurring.
+### 2.2 What is closed
 
-**`dashboard-frontend` is the working branch.** It carries `components/` and step 9's harness and
-nothing else; the spec, the collectors, the client runtime and every earlier harness live on
-`dashboard-backend` and arrive here by inheritance. **Do not commit UI to the backend branch** —
-that mistake was made once and had to be split apart with a soft reset.
-
-⚠ **Pushing `dashboard-frontend` needs the owner's approval** — `git push` is gated by a
-permission classifier in this environment and was refused once before the owner allowed it.
-
-### What exists
-
-| | |
-|---|---|
-| steps 1–8 | closed. **710** mutations across seven harnesses, every one biting (was 705; Q1 added four) |
-| step 9 | **closed** — build → test → adversarial → reconcile, 25 findings adjudicated |
-| **Q1** | **closed 2026-09-07** — the ledger scanner, seven findings adjudicated. §2.2 |
-| **Q2** | **closed 2026-09-08** — §6.2's hover layer + table view, 13 findings adjudicated. §2.2 |
-| **10a** | build → test → adversarial → **reconcile done 2026-09-08**, 18 findings adjudicated; **the parent's review is the phase that closes it** (§8). §2.2 |
-| **10c-3 — the last loop of step 10** | ⚠ **reconcile done 2026-09-09 — 12 findings adjudicated (12 accepted, 2 in part, 0 rejected outright, 2 sub-parts deferred).** ⚠ **Step 10 closes with a RECORDED FAILURE**, not green — §2.2 |
-| **10b / 10b-S-G** | closed 2026-09-08 — 14 and 11 findings adjudicated. §2.2 |
-| **10c-1 — the wiring** | **closed 2026-09-08** — the nine panels mounted, `PanelPlaceholder` deleted, Q2-S2's toggle housed in `app/`, 10a-F4's alarm-forcing hatch built. **12 findings adjudicated: 10 accepted, 0 rejected, 2 deferred.** §2.2 |
-| suite | **99 files · 2793 tests · `pnpm verify` exit 0** (10c-3, 2026-09-09; was 99 · 2775 after 10c-2) |
-| step 9's harness | **102** mutations, ledger clean over its ⚠ marks (10c-3 retired `10c-SP3`, re-anchored `10c-SP4`, added `10c-SP6`/`SP7`) |
-| step 10's harness | **175** mutations · **203** ⚠ marks — new in 10a (70/86), grown by 10b, 10b-S-G, 10c-1, 10c-2 and 10c-3 (`10c-P1`/`P2`/`P3`, the panels' `gaps` wiring). The first harness to mutate a CSS file |
-| all **nine** harnesses | **~991 mutations · every harness exit 0** (10c-3 re-ran steps 9 and 10 only: 102 and 175) — 714 across steps 2–8 (step 5 is **130**, step 8 **174**, both grown by 10b-S-G), 95 in `components/`, **168** in step 10's. ⚠ Steps 2–9's figures are carried from 10b-S-G's derivation; step 10's is 10c-1's own harness output |
-| the box | **running the backend natively**, see §2.1 |
-
-### 2.1 ⚠ The backend is DEPLOYED and running on `ai-server` right now
-
-Not §2.5's container — a native run, put there deliberately as the cheapest thing that exercises
-the real endpoint. **Node 24.16.0 in `~/.local/node24`** (checksum-verified), source at
-`~/aid-deploy`, serving **`127.0.0.1:8090` only**, so ufw is untouched and nothing is exposed.
-
-```bash
-pnpm probe          # from dashboard/ on the Mac — validates + renders the live snapshot
-```
-
-It last read **zero `errors[]`** with all 25 conditions banding normal. ⚠ **It is serving commit
-`b3969cd` and is now behind** — it has O19, D4 and D5 but not the time formatter or S11/G5.
-Redeploy with `git archive HEAD:dashboard | ssh ai-server '…'` — **deploy a commit, not a working
-tree**, or you ship whatever an agent happens to be mid-edit on. Full account in
-`pipeline/FIRST-DEPLOY.md`. Everything is under `~`; `rm -rf` undoes it.
-
-⚠ The deployed password is `dashboard1`, set for testing. Step 11 replaces it properly.
-
-### 2.2 ⚠ What to do next — **step 11, packaging.** ⚠ Step 10 is CLOSED **WITH A KNOWN FAILURE**, not green.
-
-### ⚠⚠ STEP 10 IS CLOSED-WITH-A-KNOWN-FAILURE — 2026-09-09. Read this before step 11.
-
-**10c-3 — sizing and visual — is done**, and with it every loop of step 10. All twelve of its
-adversarial findings were adjudicated (12 accepted, 2 in part, 0 rejected outright, 2 sub-parts
-deferred with owners), `pnpm verify` exits 0 at **99 files / 2793 tests**, step 9's harness is at
-**102** mutations and step 10's at **175**, both clean over every ⚠ mark. §8's fifth phase — the
-parent re-runs `pnpm verify`, audits the adjudication table, spot-checks, commits — is what
-actually closes it.
-
-**But it does not close green, and the honest statement is this:**
-
-> ⚠ **`SPEC.md` §6.1's only quantitative promise is measured FALSE at every size it applies to.**
-> The loop's own deliverable was the seven §6.1 breakpoint measurements; none of them checked the
-> promise, and the script measured the 1280 checkpoint at height 900, below the ≥1024 the promise
-> is conditioned on. Measured now, in real headless Chrome, with every panel populated:
-> **1280×1024 → the page scrolls by 596 px · 1600×1024 → 632 px · 1920×1080 → 560 px.** It is the
-> **grid** growing past the viewport — exactly what §6.1's own 2026-09-08 clarification forbids —
-> not a dev-server overlay: the only body children with height are the 49 px sticky band and
-> `.grid` at 1571/1607/1591 px.
-
-**This is invariant 7 in its strongest form: the spec makes a measurable promise the build does
-not keep.** Three repairs exist — shrink the panels, bound the grid and scroll inside it, or
-change §6.1's numbers — and **all three are the owner's**, so the reconciliation changed neither
-the layout nor the spec and recorded it instead. **`HANDOVER.md` §0.0** states it in full, with
-per-panel heights, and it is deliberately not in a table.
-
-**What step 11 inherits, concretely:**
-
-1. ⚠ **The §6.1 decision is upstream of packaging.** If the answer is "shrink the panels" or
-   "bound the grid", that changes the artifact step 11 packages; it should land before the image
-   is specified, not after.
-2. **A new devDependency, `playwright-core`**, verified absent from `.next/standalone` (nothing
-   under `app/`, `lib/`, `components/` or `proxy.ts` imports it). The image needs no browser.
-3. **`pipeline/steps/10-panels-assembly/measure-breakpoints.mjs` is dev-machine tooling** — not
-   in `pnpm verify` (ANCHOR §4: one deterministic command, no browser prerequisite), macOS-only
-   by hardcoded Chrome path, and it measures `next dev`. **Nothing has ever loaded the standalone
-   build's CSS in a browser** — that is step 12's, and this is the tool for it.
-4. **Everything else in `HANDOVER.md` §9**, where every deferral now names an owner. The ones
-   with a step-11/12 owner are the four silent-failure obligations (O20/O21/O22/D8), the ufw rule
-   for 8090, and the two browser items above.
-
-**What 10c-3 actually closed**, so nobody re-opens it: L9 (`CHART_SIZE`, ⚠ its recorded
-justification corrected — `height` meant two different measurements and the lower two entries are
-`plotHeight`, per plot), 10b-F14b (the sparkline's `gaps` prop — then corrected three ways by its
-own adversarial), SCOPE 2.5f (verified and deliberately unchanged: no panel body has a
-definite-height ancestor, so `max-height: 100%` would silently uncap the table), Q2-F9 (decided
-**DROP**), 10a-F4's remaining half (a real headless browser — **9 pass, 3 fail, 0 blocked**; the
-three failures are §6.1's), 10c1-A9-paint (paint tier only, by construction) and the banner-item
-wrapping question (recorded for the owner; no CSS invented).
-
-⚠ **The two most transferable things it cost** are in `HANDOVER.md` §0.8, and both are new shapes
-of an old rule: **a browser measurement printed `PASS` for a panel-order check that had looked at
-nothing** (it queried `data-slot="storage"`/`"log"`; the grid renders `storage-and-network` and
-`session-event-log`, and the predicate skipped `null`s) — the fifth instance of *an assertion
-whose subject does not render cannot fail*, and the first outside the test suite. And **two
-renderings of one fact, computed separately, disagreed**: the sparkline computed gap marks per
-adjacent point-pair where the chart computes them per gap, which produced three distinct wrong
-renderings including one that contradicts §6.7 in as many words.
-
-### ⚠ 10c-2 — THE GUARDS — is CLOSED, 2026-09-08. ONE loop remains in step 10.
-
-**10c-2 (the guards) is done**: five mechanism guards, four of them new `lib/*.test.ts` files —
-the document-wide `toContain` lint (`10b-F1-guard`), the cross-harness `LEDGER_FILES` runner
-(`Q1-F4`), the dangling-CSS-class audit (`10c1-A8-audit`), L11's unit-suffix guard and its nine
-`UNIT_*` constants in `lib/format.ts`, and `S-G-A11`, which turned out to need **nothing**:
-`exactOptionalPropertyTypes` has been `true` since the first commit and the measurement that said
-otherwise was reading a flag that was already on. Build → test → adversarial → reconcile are done
-and §8's fifth phase (the parent re-runs `pnpm verify`, audits the adjudication table,
-spot-checks, commits) is what closes it. **11 adversarial findings adjudicated: 11 accepted (2 in
-part), 0 rejected outright, 2 sub-parts rejected on measurement, 1 build deferred (F7).**
-See `pipeline/steps/10-panels-assembly/10c2-reconciliation.md`.
-
-**Suite after 10c-2: 99 files · 2775 tests · `pnpm verify` exit 0. Step 10's harness at 172
-mutations · 200 ⚠ marks** (168/196 before). **Step 3's is at 73** (`10c-G1`, adopting
-`lib/contract.test.ts`), and step 2's `02-R3` was re-anchored onto `UNIT_GIB`. ⚠ Step 2's harness
-**exits 1 on three PRE-EXISTING broken uptime anchors** (`02-R20`/`02-R30`/`02-R31`) that predate
-this loop entirely — do not read that as a regression.
-
-| loop | contents | state |
+| loop | commit | what it was |
 |---|---|---|
-| **10c-1 — the wiring** | mount the nine, the toggle's home, the alarm-forcing hatch | ✅ **closed 2026-09-08** |
-| **10c-2 — the guards** | `10b-F1-guard` · **Q1-F4** · **L11** · **S-G-A11** (a non-item) · **`10c1-A8-audit`** | ✅ **closed 2026-09-08** |
-| **10c-3 — sizing and visual** | **L9** · `10b-F14b` · SCOPE 2.5f · **Q2-F9** · **10a-F4**'s remaining half · `10c1-A9-paint` · the banner-item wrapping question | ⚠ **closed 2026-09-09 — WITH A KNOWN FAILURE (§6.1's no-scroll promise). 12 findings adjudicated.** See the top of §2.2 |
+| Q1 | `62dcbdf` | the ⚠-scanner could not see multi-line `test.each`; 39 marks were invisible |
+| Q3 | `80e7211` | mutation ids carry their creating step (`07-R3`, `Q1-SC1`) |
+| Q2 + S1/S2 | `ac9eee1`, `88bb2e9` | hover layer + table view; owner rulings |
+| 10a | `b4ffa3e` | the shell; the green criterion had not tested itself |
+| 10a-F17 | `3c37107` | `pnpm verify` made deterministic (fake timers; `deadline.ts` untouched) |
+| 10b + S-F + S-G | `bdc1c5c`, `da78491`, `be53c8d` | nine panels; invariant-1 coverage was illusory; `errors[].instance` |
+| 10c-1 | `a0c2c0e` | panels wired — the first composed render; a fixture that could not tell two GPUs apart |
+| 10c-2 | `6c2e64a` | five guards; one of them punished the fix |
+| 10c-3 | `7de7dd3` | sizing/paint; **§6.1 measured false** — step 10 closed-with-a-known-failure |
 
-⚠ **10a-F17 moved into 10c-3, and it did not move because it was done.** The row above used to
-list `pnpm verify`'s non-determinism under 10c-2; **10c-2's own handoff never scoped it**, so
-nothing happened to it. `lib/collectors/serving.test.ts:592` still sleeps a real 95 ms inside a
-real 100 ms budget, and it undermines every ledger in the project (`HANDOVER.md` §0.3). Fix it
-with an injected clock, never a wider margin.
+Suite at `7de7dd3`: **99 files · 2793 tests · exit 0**; nine harnesses, ~947 mutations, every ledger clean.
 
-⚠ **Two items came OUT of 10c-2 that belong in `WORK-ITEMS.md` §10, and only the owner places
-them there:**
+### 2.3 ⚠ 10d and 10e — the design investigation, and what was withdrawn
 
-1. **F7 — the runtime `toContain` matcher.** The adversarial *measured* that the bare-word case
-   (`toContain('paused')`) IS mechanisable — not in a source lint, but in a matcher: *"the needle
-   occurs more than once in the subject"* catches **4 of the 4 founding failures** at **43/454
-   calls (9.5 %)**, 7 already exempt, **36 to adjudicate**, against **198** for the source-lint
-   version. Three documents said it could not be done; the correction is now in the guard's own
-   doc and in `HANDOVER.md` §0.7 **with the numbers, so nobody re-derives them.** It is a
-   `test.setupFiles` change plus a staged report-then-gate adoption — its own loop, **not** 10c-3.
-2. **Mutation coverage for the four guards' anti-vacuity nets.** No mutation anywhere breaks a
-   guard's file-walk today; all four nets were proven functional by hand only.
+**10d** (uncommitted, keep as a record): a layout re-plan that measured three re-arrangements and
+recommended "arrangement B" (COOLING in its own column, SERVING + the event log in a closed
+`<details>`). **Its recommendation is WITHDRAWN** — the owner rejected the shape, and the mock
+measurement above proves the shape was never the problem. **What survives from 10d:** the measured
+overflow numbers; ~200 px of the earlier 560 was this GPU-less Mac's `errors[]` notes; and two
+**shipped defects it found by measuring**: **F1** — the session event log grows the *page* through
+its clipped scroll box because `Chip`'s absolute `.sr-only` spans escape (fix: `position: relative`
+on `.panel`); **F5** — SERVING's instance row overflows horizontally below ~450 px (fix: let
+`status-row`'s `.value` wrap). **The owner ruled: fix both.**
 
-**Why 10c-3 last.** It needs a real browser and at least one sizing decision the spec leaves open,
-so it wants to see what the composed page actually is. ⚠ **Scope it to PAINT.** `10c1-A9`
-established three tiers: binding is observable in jsdom, a dangling CSS reference is statically
-checkable with no runtime (10c-2 built that), and only cascade/specificity/media-queries/overflow/
-stacking need a browser.
+**10e** = the builder spec to match the mock's density. Status at the time of writing: **PENDING —
+see the line immediately below, which the parent updates when the agent reports.**
 
-⚠ **10c-1's own four inherited facts have NOT gone away** — they were listed here and are now
-carried in full in `HANDOVER.md` §0.6, because this section is the *queue*, not the archive:
-(1) a fixture whose two subjects are identical cannot discriminate between them; (2) both
-collectors return **sparse** collections — index by the `index`/`instance` field, never by array
-position; (3) a `.module.css` import under Vitest is a **Proxy** (every key resolves, including
-keys with no rule — probe a property access, never the object); (4) the chart/table toggle is
-shell state, one entry per chart-bearing panel, and that granularity is an invariant-7 recording
-rather than a spec ruling.
+> **10e status: DONE, 2026-09-09.** `steps/10-panels-assembly/10e-match-the-mock.md` (957 lines:
+> one-screen summary, the nine parts, method) plus two scripts under `mocks/`:
+> `measure-mock-anatomy.mjs` (per-element anatomy of the mock at all three viewports, healthy /
+> paused / six-alarm; its totals match §2.0's table to the pixel) and **`check-density.mjs`, the
+> acceptance checker** — it grades a `measure-arrangements.mjs --anatomy` JSON of the *real app*
+> against the spec's targets (±10 %), page fit, ≥200 px spare, banner fit and painted chart boxes.
+> Run on today's build it reports **31 FAIL**, so it discriminates; with the owner-question rows
+> accepted it reproduces the mock's own totals exactly, so its arithmetic is validated.
+>
+> **The finding, sharper than §2.0:** the overflow is a **16 px `em` base with one-reading-per-24 px
+> body lines** — not the charts and not the grid. Spec-only targets at 1920 (healthy): GPU **176**
+> (built 458) · COOLING intrinsic **366** (750) · CPU 185 · MEMORY 138.5 · SAFETY 160 · STORAGE 145
+> · SERVING 104 · LOG 133.8. Page **757 / 768 / 768** at the three viewports → **267 / 256 / 312 px
+> spare**, and **a six-alarm banner fits at 1280×1024** even with every owner question accepted.
+>
+> ⚠ **Two corrections to the parent's framing, both right:** (1) **SAFETY's mock height (259)
+> contains 99 px of prose §3.7 forbids** — the mock's per-row notes are written copy, not
+> `errors[]` text — so "±10 % of the mock" is the wrong acceptance there; §8 of the spec sets
+> acceptance against the **spec-only** targets, and the checker encodes that. (2) **The ≥1600
+> promotion is the mock's 50 px sparkline with a time axis and threshold lines, not a 160 px second
+> chart.** The spec keeps the media-query two-wrapper mechanism (over a shell-computed `matchMedia`
+> prop; reasons in its §3.2) and gives `Sparkline` three optional props (`domain`, `refs`,
+> `timeLabels`). It also **removes the CPU temperature sparkline** — §6.2 attaches the trace to
+> utilisation — pending OQ-7.
+>
+> **Eight owner questions (spec §9), to be put as a selectable list:** OQ-1 a min/max/now caption
+> under traces (+19 px each) · OQ-2 per-panel note footers (+37.6 each; needs a text source) · OQ-3
+> count chips (`1 of 4 failing`, `2 of 2 up`) · OQ-4 the log's head chip (`—` vs `10 s debounce`)
+> · OQ-5 a paused banner (mapped in §5, gated) · OQ-6 the `engage 55` / `EC auto 2210` reference
+> lines (constants the dashboard never reads; 70/80 are §6.3's and are drawn) · OQ-7 confirm the CPU
+> temp-trace removal · OQ-8 the `standing` pill's form for §6.4.
+>
+> **Beyond CSS, the builder will touch:** `lib/format.ts` `parts` variants (O14) so heroes size the
+> unit without splitting a string; `lib/severity.ts` exporting the 70/80 literals (bare literals at
+> lines 125/127 today); a `PanelShell` `headControl` prop (the table toggle moves into the head at
+> 0 px); new leaves `hero.tsx` / `strip.tsx`; `Meter` `tickPercent`; `Chip` `code` variant;
+> `header.test.tsx` lines 69/70/75 move from visible words to accessible names. **F1 and F5 are
+> concrete edits in its §7.** Nothing under `components/`, `app/`, `lib/` or `SPEC.md` was changed
+> by 10e — it is a spec.
 
-**⚠ The four things 10c-3 must inherit as fact from 10c-2, not rediscover:**
+### 2.4 Rulings that STAND (do not re-ask)
 
-1. ⚠ **A guard must not fail when the project SUCCEEDS.** The cross-harness runner asserted
-   `orphans.length > 0` — so the day the last orphan is adopted, `pnpm verify` goes red with
-   `expected 0 to be greater than 0`, and the cheapest reading is "delete the assertion". **Assert
-   the INPUTS (what did the guard look at?), never the output (did it find something?).**
-2. ⚠ **A guard's documentation is a claim; falsify it with one call.** Four guard docs overstated
-   their own reach in one loop — a `.tsx`-only walk described as covering `components/`, a
-   hand-typed list described as drift-proof, "the text right after the LAST interpolation" for
-   code that accepted any segment, and "cannot be mechanised" for a bound that only holds in a
-   source lint. Every one was written by the phase that wrote the correct code.
-3. ⚠ **A blanket exemption keyed on a test's NAME exempts every assertion in its BODY.** The
-   `"throwing"` carve-out was justified by "an em dash anywhere proves nothing crashed" and was
-   silently covering a `data-severity` check in a test whose name carried two claims. Narrowing
-   it to em dashes found the **ninth** instance of §0.4's shape.
-4. ⚠ **Resolve what you can, COUNT what you cannot.** Two guards in the same loop met the same
-   unreadable input and one dropped it in silence. Reporting an unreadable case is free while the
-   count is zero, which is exactly when to adopt it.
+- **Fix §6.1 before step 11.** Packaging waits for a page that meets its own spec.
+- **Keep the 1280×1024 promise** — the wall is not assumed to be 1920-only.
+- **Fix F1 and F5 both**, now.
+- ⚠ **`MOCK.html` is the source for FORM only** — density, anatomy, type scale, spacing, chart
+  sizes. **Data, strings and rules come from `SPEC.md`; where they disagree the spec wins.** Owner's
+  words: *"the mock is a mock; the data predates the mock is a rule — if the mock says V100 but the
+  data says PG500-216 then it is PG500-216."* So the raw driver name, full bus id, `GiB`, invariant
+  1, the throttle rules and every S-* ruling stand exactly as built. (Also in §9.)
+- The four 10a spec rulings (S-A `● no readings`, S-B `last read 6:12 ago`, S-C elapsed `for 2 d
+  06:00`, S-D invariant 1 governs) and the four 10b ones (S-E `card not enumerated`, S-F never green
+  over an em dash, S-G `errors[].instance`, S-H one message per source) are all in `SPEC.md`.
 
-### ⚠ 10b-S-G is CLOSED, 2026-09-08 — it was the last item before 10c.
+### 2.5 Rulings that are SUPERSEDED by the mock finding (do not implement)
 
-The owner's ruling that `errors[]` gains an optional `instance` is built, tested, attacked and
-reconciled: build → test → adversarial → reconcile are done and §8's fifth phase (the parent
-re-runs `pnpm verify`, audits the adjudication table, spot-checks, commits) is what closes it.
-**11 adversarial findings adjudicated: 6 accepted (3 in part), 1 rejected, 2 deferred.** See
-`pipeline/steps/10-panels-assembly/10b-sg-reconciliation.md`.
+The owner answered seven 10d questions before the mock was measured. **These no longer apply**:
+the `<summary>` disclosure and moving SERVING/the log off the wall (10d Q2, Q4); one chart width
+"400 everywhere" and `plotHeight` 100 (Q5, Q6 — sizes now come from the mock: sparkline **38 px,
+50 at ≥1600**; COOLING pair **84 + 10 + 46 + 14 = 160 px**); and **stage 2 "bound the grid"** (Q3)
+is **deferred, not ruled out** — re-evaluate only *after* the density fix is measured, since the
+mock's own numbers say it may be unnecessary in the healthy state.
 
-**What it changed, as fact for 10c:** `TelemetryError` carries `instance?: number` — the
-contract's **first and only optional member**, pinned by a dedicated `types.test-d.ts` census so a
-second one is still a compile error. The `errors[]`→`llama-server` join is **structural**: no
-panel reads message text to decide attribution any more. It is **additive on the wire**, so an old
-server's snapshot still validates and every entry simply falls back to panel-level rendering — the
-redeploy is needed for the feature to *work*, not to avoid a refusal (unlike O19).
+### 2.6 ⚠ What to do next, in order
 
-**Four things 10c inherits from it, and one is a rule:**
+1. **Read 10e's spec** (`steps/10-panels-assembly/10e-match-the-mock.md`) and its owner questions.
+   ⚠ One question to expect: **even the mock overflows at 1280×1024 (~166 px) and 1600×1024 (~52 px)
+   under a six-alarm banner** and holds only at 1920. Whether §6.1's promise is conditioned on
+   "no banner pinned" is the owner's — bring it with the rest.
+2. **Put the owner questions to the owner as a selectable list** (the owner prefers that form).
+3. **The parent rewrites `SPEC.md` §6.1** — keep the drawing and the four breakpoints; replace the
+   unmeasured "~1026px … fits comfortably" sentence with the mock's measured numbers; state that
+   `MOCK.html` is the source for form; record the banner ruling. **Phases never edit `SPEC.md`.**
+4. **Run the density build as a full loop** — build → test → adversarial → reconcile (background
+   agent) → **parent review** (§8: re-run `pnpm verify` yourself, read every rejection and deferral,
+   spot-check headline claims against the tree, then commit). Expect the adversarial to find things;
+   every loop this session has.
+5. **Measure the real app** with `pipeline/steps/10-panels-assembly/measure-breakpoints.mjs`
+   (measurement 9 is the scroll check; the script must exit 0). Then rule on stage 2 with real numbers.
+6. Then **step 11** (packaging), then **redeploy the box** (owner ruled: at step 10 complete; it
+   still serves `b3969cd`).
 
-1. ⚠ **A mutation harness proves every ⚠ test CAN fail; it never proves every branch HAS one.**
-   `namesInstance` had two call sites and one mutation. Deleting the unmutated filter left
-   `pnpm verify` green at 93 files / 2587 tests while the panel printed every attributed message
-   **twice**. **Grep for a function's other call sites before believing the mutation named for
-   it**, and make a test whose name says "once" **count** rather than `toContain`.
-2. ⚠ **Adding a discriminator obliges you to every consumer.** `panelsForSource('dbus')` reaches
-   COOLING, SERVING and SAFETY; S-G taught one of the three. Fixed for the entries that name an
-   instance; ⚠ **entries with NO instance are still ambiguous** (bus-wide vs `collectSafety`'s own
-   per-unit failure) — `HANDOVER.md` §8's **S-G-Q2**, the owner's.
-3. **Four new spec questions** — S-G-Q1…Q4 in `HANDOVER.md` §8 — none implemented, each naming
-   the code that stands today. S-G-Q1 (only the last of several entries from one source about one
-   instance is rendered, anywhere) is the one with a live consequence on this box.
-4. ⚠ **`exactOptionalPropertyTypes` is off**, so `{...base, instance: maybeUndefined}` typechecks
-   with the key present — assert absence with `Object.hasOwn`, never `?.field === undefined`.
-   Measured 2026-09-08: `npx tsc --noEmit --exactOptionalPropertyTypes` **exits 0 on this tree**,
-   so turning it on is a one-line change with no migration. 10c's, and it gets less free with time.
+### 2.7 Owner questions still open, carried from earlier loops
 
-**Suite after S-G: 93 files · 2594 tests · `pnpm verify` exit 0. Nine harnesses · 947 mutations**
-(step 5 → 130, step 8 → 174, step 10 → 138).
+S-G-Q1…Q4 (`HANDOVER.md` §8), F14a (a `:—` copy nit), D1 (the log's third feed), 10b-S-F's "its own
+readings" definition (recorded, not questioned), and whether §6.1 is banner-conditioned (new).
 
-**10b — the nine panel bodies — is CLOSED, 2026-09-08**, once the parent's review passes:
-build → test → adversarial → reconcile are done, and §8's fifth phase (the parent re-runs
-`pnpm verify` itself, audits the adjudication table, spot-checks, commits) is the one that closes
-it. **14 adversarial findings adjudicated: 11 accepted, 1 accepted in part, 2 deferred, 0
-rejected outright.** See `pipeline/steps/10-panels-assembly/10b-reconciliation.md`.
-**10a — the shell — closed the same way on 2026-09-08** (18 findings: 16 accepted, 2 deferred,
-1 half-rejected; `10a-reconciliation.md`). SCOPE §5's three-loop cut (10a → 10b → **10c**) is
-being followed and 10c is the last of the three.
+### 2.8 Things this session learned that the next one must not re-learn
 
-| | |
-|---|---|
-| what exists | 10a's shell — §6.2's header, §6.4's sticky banner, §6.1's grid + breakpoints, `app/dashboard-shell.tsx` — **plus 10b's nine panel bodies** under `components/panels/`, with `status-row.tsx`, `panel-notes.tsx`, `condition-lookup.ts`, `panel-chart.ts`, `event-sentence.ts` |
-| ⚠ what does NOT exist | **the wiring.** `dashboard-shell.tsx` still renders nine `PanelPlaceholder`s; the panels have **no production call site**, so nothing yet proves the nine compose. That is 10c's first job, and `<GpuPanel {...props} />` takes **no `index`** |
-| closed obligations | 10a: **D2**, **D6**, **O2**, the 2.5a wrapper, 2.5d's id namespace. 10b: **O12**, **O13**, **O3**'s rule, **D3** (`unknownStanding`), **S11/G5**'s panel residue |
-| suite | **93 files · 2594 tests · `pnpm verify` exit 0** (was 92 · 2559 after 10b; 79 · 2399 after 10a) |
-| harnesses | **NINE · 947 mutations.** `pipeline/steps/10-panels-assembly/regressions.py` covers both loops — **138 mutations** (129 after 10b, 70/86 after 10a). Step 5 is **130**, step 8 **174**, both grown by 10b-S-G |
-
-**⚠ The four things 10c must inherit as fact, not rediscover:**
-
-1. **The hook boundary is settled.** `components/` is hook-free (`purity.test.ts`, unweakened —
-   and it now recurses over `components/panels/` too); hooks live under `app/`; there are exactly
-   two and both are called once, in `app/dashboard-shell.tsx`. **The nine panels are pure
-   functions of props**, which is why the chart/table toggle and the age tick live in `app/`.
-2. **`components/panel-props.ts` is a REAL type** — `PanelProps { state, nowMs, panelId }`.
-   ⚠ `GpuPanel` narrows `panelId` to `'gpu0' | 'gpu1'` and **derives** its card index from it;
-   the old separate `index` prop is gone, because two independent copies of *which card am I*
-   typechecked while disagreeing and rendered GPU 0 into the `gpu1` slot (10b-F12).
-3. ⚠ **`pnpm verify` is NOT deterministic today** — `lib/collectors/serving.test.ts:592` races a
-   real 95 ms sleep against a real 100 ms budget, and a probabilistic ⚠ test can be falsely
-   credited by **any** harness ledger. `HANDOVER.md` §0.3. Still **10c's**; do not debug a single
-   red run on that test before re-running it.
-4. ⚠ **A document-wide `toContain` is a weak assertion wearing a strong name — three instances
-   in three loops** (10a's `paused`, its test phase's `refresh`, 10b's `—`, the last of which sat
-   in the ⚠ test named for `PLAN.md`'s FIRST invariant and passed while the panel printed
-   `fan 5  0 RPM` for a fan nobody could read). `HANDOVER.md` §0.4. **Assert over the element
-   that carries the claim, never over the document that contains it.** A mechanical guard
-   forbidding the shape is 10c's (`10b-F1-guard`).
-
-**⚠ Two findings from 10a's loop worth carrying into every later step**, because both shipped
-green and neither is specific to this code:
-
-- **A mutation harness over the parts does not cover the join.** `header-status.ts` and
-  `header.tsx` were each thoroughly tested in isolation while the shell that feeds them was
-  executed by nothing — so hard-coding `mode={'live'} alarms={0}`, inverting pause/resume and
-  killing the cadence handler left `pnpm verify` at exit 0 across 77 files, on a build that can
-  never say "paused" and reads `● all healthy` on six alarms. That is `PLAN.md`'s own green
-  criterion for step 10, unable to fail. Same shape as Q1's finding, one level up.
-- **A test that asserts a marker attribute is not testing what the CSS keys on.** `grid.test.tsx`
-  asserted `data-slot`, which no stylesheet reads, while placement is bound by
-  `className={styles.X}` — rewiring COOLING into the log's grid area was 19/19 green with `tsc`
-  clean, and the describe was *named* "the `data-slot` the layout CSS keys on".
-
-**Q1 is CLOSED, 2026-09-07** — build → test → adversarial → reconcile, seven findings adjudicated
-(six accepted, one deferred, none rejected). See
-`pipeline/steps/Q1-ledger-scanner/reconciliation.md`.
-
-**Q2 is CLOSED, 2026-09-08** — build → test → adversarial → reconcile, **13 findings adjudicated
-(ten accepted, two rejected, one split accept/defer)**, plus the parent's review. §6.2's hover
-layer and table view now exist on both chart primitives. See
-`pipeline/steps/Q2-hover-and-table/reconciliation.md`; the suite is **67 files · 2260 tests** and
-the `components/` harness is **95 mutations · 105 ⚠ marks**.
-
-### ⚠ Q2's two spec questions are ANSWERED and IMPLEMENTED — 2026-09-08. Step 10 is NOT blocked.
-
-The owner ruled on both, the parent wrote the wording into `SPEC.md` (three amendments — §6.2,
-§6.1 and §9's decision row), and the code half is in. **`SPEC.md` has now been amended by the
-owner's ruling for the second time in this project; it is not frozen.**
-
-- **Q2-S1 — the crosshair's tooltip discharges the per-mark requirement on line and area plots.**
-  They cannot both be reached: a full-body crosshair needs hover zones tiling the plot, and those
-  zones necessarily occlude every mark beneath them. §6.2's "per-mark on bars and dots" clause now
-  **scopes to bar and dot charts**, which `components/` does not contain — so it goes live when one
-  is built rather than standing as permanently unmet. The per-mark `<title>`s stay: correct markup,
-  no cost, reachable again if paint order ever changes. **No code change was needed.**
-- **Q2-S2 — the table view scrolls inside its own container** (`max-height` + `overflow-y`).
-  §6.1's promise governs the **page**, not every component, and the spec already specified the
-  session event log as "a compact scrolling list"; §6.1 now says that outright, because the
-  implicitness is exactly what made this read as a violation rather than a design choice.
-  ⚠ **Capping or decimating rows was considered and REJECTED** — a decimated table is no longer a
-  complete substitute for the chart, which is both the ground on which it is an accessibility floor
-  and the ground on which `build.md` §3.6 declined keyboard parity. **Every row stays in the DOM.
-  Do not re-propose a cap.**
-
-**What step 10 inherits from S2, and owes:** `--table-scroll-max: 40vh` in `tokens.css` is a
-**viewport-relative stopgap, not a considered layout value**. §6.1 says sizing is the grid's
-decision and step 9 deferred the sparkline's sizing (L9) for the same reason. When a panel body
-has a real bounded height, replace it with `max-height: 100%`. It is recorded as owed rather than
-left looking deliberate.
-
-Also from S2, worth copying rather than re-deriving: the scroll container is a **keyboard tab
-stop** (a scrollable region only a mouse can reach fails the floor it exists to hold up), sticky
-headers need **`border-collapse: separate`** to work around a WebKit bug where sticky table cells
-do nothing under `collapse`, and **the CSS was verified in a real Chrome browser** rather than
-asserted. That last one is the standing answer to this area's recurring problem: `:hover`,
-`position: sticky` and `overflow` are **not observable in jsdom**, so a passing suite says nothing
-about whether any of it works. Open a browser.
-
-### The queue
-
-⚠ **Step 11 is next. Updated 2026-09-09 by 10c-3's reconciliation** — every 10c row below is
-now closed, and `HANDOVER.md` §9 is the authoritative form of what is left. ⚠ **The largest open
-item is not in this table**: §6.1's no-scroll promise is measured false and the repair is the
-owner's — §2.2, and `HANDOVER.md` §0.0.
-
-| item | owner |
-|---|---|
-| ~~wire the nine panels into `app/dashboard-shell.tsx`~~ · ~~Q2-S2's toggle needs an `app/` home~~ · ~~10a-F4's alarm-forcing hatch~~ | ✅ **closed by 10c-1** |
-| **10a-F17** `pnpm verify`'s non-determinism · **Q1-F4** the cross-harness ledger runner · **10b-F1-guard** the document-wide-`toContain` lint · **L11** the unit-name constant · **S-G-A11** `exactOptionalPropertyTypes` (measured free) · ⚠ **10c1-A8-audit** every `styles.X` against its sibling stylesheet | **10c-2** |
-| ~~**L9** sizing~~ · ~~**10b-F14b**~~ · ~~SCOPE 2.5f~~ (verified, deliberately unchanged) · ~~**Q2-F9**~~ (DROP) · ~~**10a-F4**'s remaining half~~ (9 pass / 3 fail / 0 blocked) · ~~**10c1-A9-paint**~~ | ✅ **closed by 10c-3** |
-| **O14** the formatter `parts` variant — **has not arisen in four consecutive loops**; close it as a non-item or re-scope it · whether a banner item may wrap mid-condition (§6.4 is silent; 10c-3 looked and still declined to invent) · the gap mark's contrast in **both** chart primitives (1.12:1 → 1.245:1 applied; 3:1 is a token decision) | **owner** |
-| ⚠ **§6.1's no-scroll promise: shrink the panels, bound the grid, or change the numbers** | ⚠ **owner** — §2.2 |
-| Point `measure-breakpoints.mjs` at the **standalone build** and run it from something · wire it into a CI step (never `pnpm verify`) | **step 11 / 12** |
-| **D1** S40's third event-log feed (`LogEntryKind` is `lib/client/events.ts`'s; the panel's exhaustive switch will force the case) | 10c-2 / owner |
-| **Q2-S1** the per-mark tooltip clause · **Q2-S2** the table view's height — ⚠ **now reachable**, 10c-1 gave the toggle a home | owner, then 10c-3 |
-| **10a-S-A/S-B/S-C/S-D** and **10b-S-E/S-F/S-H** — seven spec questions, five implemented conservatively (**S-G is RULED, implemented and closed**) | **owner** |
-| ⚠ **S-G-Q1 · S-G-Q2 · S-G-Q3 · S-G-Q4** — the four questions implementing S-G raised. None implemented; `HANDOVER.md` §8 carries each with the code that stands today | **owner** |
-| **S-G-A10** the session log's per-source fold vs the panel's per-instance one | 10c-2 / owner |
-
-~~D2~~ and ~~D6~~ are **closed by 10a**; ~~D3~~, ~~O12~~, ~~O13~~ and ~~S11/G5~~ by **10b**;
-the **wiring**, **Q2-S2's toggle home** and **10a-F4's alarm hatch** by **10c-1**.
-`D8` remains step 11's. ⚠ **10c-1 raised no new spec question** — its two invariant-7 candidates
-(the banner-item wrapping rule, and where an escape hatch's defence belongs) are recorded above
-and in `10c1-reconciliation.md` §5 rather than answered.
+All recorded in §8/§9 — the short list: **the parent reviews every reconciliation** (a fifth phase);
+**a `pgrep` wait loop in the same `bash -c` that ran the harness deadlocks** — do not wait, run
+harnesses sequentially in the foreground; **`grep -c "while pgrep"` self-matches** — use a bracket
+pattern; **a heredoc written to a relative path from the wrong cwd fails silently while the trailing
+`echo` prints "written"** — `ls` the file; **`pgrep -f chrome` matches the user's own browser** —
+never kill what you did not launch; **the handover was stale in the dangerous direction once**
+(it said F17 was open a day after it was fixed) — check `git log` before re-owning an item.
 
 ## 3. Toolchain
 
@@ -670,6 +457,14 @@ recording it now leads somewhere — see §7.
   `S11/G5` work item, and `S12` collided too. §7's old warning that "the `S*` namespace is
   polluted" understated it — it was never confined to `S`, nor to steps 3–5. The prefix is the
   **creating** step, not the harness the mutation currently lives in, so it never changes.
+- ⚠ **`MOCK.html` is a source for FORM only — density, anatomy, type scale, spacing, chart sizes.
+  Data, strings and rules come from `SPEC.md`, and where the two disagree the spec wins.** The
+  owner's words, 2026-09-09: *"the mock is a mock; the data predates the mock is a rule — if the
+  mock says V100 but the data says PG500-216 then it is PG500-216."* So: raw driver name, full bus
+  id, `GiB`, invariant 1, the throttle rules, every S-* ruling — all stand exactly as built; the
+  mock supplies how tall and how dense, never what is printed. This sharpens the older "reference,
+  never a source" line: it *is* the source for form, since measured on 2026-09-09 it fits every
+  §6.1 viewport the build overflowed.
 - **Commit only when asked** (repo convention, root `CLAUDE.md`). Each reconciliation has been
   an explicit ask; `git push` is separately gated and needs its own.
 - **The server `ai-server` is reachable over SSH and is read-only to this work.** Reads are
