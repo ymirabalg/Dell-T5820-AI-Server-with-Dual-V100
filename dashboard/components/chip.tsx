@@ -22,6 +22,22 @@
  * band gets its own glyph (already the app's vocabulary — `▲` and `✕` are `login-form.tsx`'s)
  * plus a visually-hidden word for assistive tech, so the same fact survives greyscale,
  * forced-colors and a screen reader.
+ *
+ * ### 10e — two forms by `size`, plus an orthogonal `code` modifier
+ *
+ * `size="md"` is the mock's `.chip` **pill**: a bordered, tinted, uppercase badge whose whole
+ * body — border, background and text — carries the band, not merely its 9px glyph. That is a
+ * deliberate departure from the dataviz "glyph-only colour" rule this component followed
+ * before: a 9.5px uppercase word on a wall panel is read by its tint at a glance, and the
+ * sr-only word still carries the fact for anyone who cannot see colour at all. `size="sm"` is
+ * the mock's `.row__glyph` — a bare, unbordered glyph, colour-only on the glyph itself, which
+ * is what a `Row`'s left edge and a log entry's severity tag both want.
+ *
+ * `code` (10e §2.0) is the mock's `.chip--code`: a throttle reason (`0x20 sw thermal
+ * slowdown`) printed as data, never shouted into uppercase — `text-transform: none` and the
+ * monospace face, so `0x4` cannot render `0X4`. It modifies the `md` pill's typography only;
+ * the border/background/padding it sits inside are unchanged, which is why `code` is a
+ * boolean modifier rather than a third `size`.
  */
 
 import { EM_DASH } from '@/lib/format';
@@ -68,15 +84,24 @@ export interface ChipProps {
   /** Visible text beside the glyph — a value, a state word. Omit for a bare dot. */
   readonly label?: string;
   readonly size?: ChipSize;
+  /** 10e §2.0 — the mock's `.chip--code`: `text-transform: none`, monospace, for a throttle
+   *  reason (`0x20 sw thermal slowdown`) that must never be shouted into uppercase. Modifies
+   *  a `size="md"` pill's typography only; omit (or `false`) for the ordinary uppercase pill. */
+  readonly code?: boolean;
 }
 
 /** §6.2/§6.3's severity indicator — a glyph, an accessible word, and an optional label. */
-export function Chip({ severity, label, size = 'md' }: ChipProps) {
+export function Chip({ severity, label, size = 'md', code = false }: ChipProps) {
   const glyph = severity === null ? EM_DASH : GLYPH[severity];
   const word = severity === null ? NO_BAND_WORD : SEVERITY_WORD[severity];
 
   return (
-    <span className={styles.chip} data-severity={severity ?? 'none'} data-size={size}>
+    <span
+      className={styles.chip}
+      data-severity={severity ?? 'none'}
+      data-size={size}
+      data-code={code ? 'true' : undefined}
+    >
       <span aria-hidden="true" className={styles.glyph}>
         {glyph}
       </span>

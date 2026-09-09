@@ -222,5 +222,22 @@ describe('⚠ invariant 1, across EVERY reading on this panel', () => {
     const cells = valueCells(html);
     expect(cells.length).toBeGreaterThanOrEqual(2);
     for (const cell of cells) expect(cell).not.toMatch(/[0-9]/);
+    // ⚠ 10e §2.7: `secondaryLabel`/`inline`/`endPrefix` (port/model·ctx/health) are NOT
+    // `.value`-classed spans — they are SERVING-only `StatusRow` slots with their own class
+    // names — so `valueCells` above cannot see a fabricated digit inside them. Checked
+    // directly, over the whole render, so this test's own name ("no value cell") stays true
+    // of every reading the row prints, not only the ones `valueCells` happens to reach.
+    expect(html).not.toMatch(/ctx [0-9]/);
+  });
+
+  // ⚠ 10e §2.7 — `secondaryLabel`/`inline`/`endPrefix` are NOT `.value`-classed spans (they are
+  // SERVING-only `StatusRow` slots with their own class names), so `valueCells` above cannot
+  // see a fabricated digit inside them — checked directly here instead.
+  test('⚠ with every instance field null, port/model/ctx/health render — too, not a fabricated reading', () => {
+    const html = renderToStaticMarkup(<ServingPanel state={stateWith(allReadingsNull)} nowMs={0} panelId="serving" />);
+    expect(html).toContain(':—');
+    expect(html).toContain('— · ctx —');
+    expect(html).toContain('health —');
+    expect(html).not.toMatch(/ctx [0-9]/);
   });
 });

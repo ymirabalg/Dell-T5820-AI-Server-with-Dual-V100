@@ -31,29 +31,32 @@ adversarial and review phases and fixed before they became wrong code. Several w
 
 ### 2.0 ⚠ The one-paragraph version
 
-**Step 10 is built and committed but does not meet §6.1's only quantitative promise** — the page
-overflows the fold by 356 / 418 / 362 px at 1280×1024 / 1600×1024 / 1920×1080 with healthy
-telemetry. **The cause is NOT the grid.** `MOCK.html` — the §8.2 design, which the owner calls
-"super cool" and wants adapted — uses the **same four-row, nine-panel grid** and **fits at every
-one of those viewports** (measured 2026-09-09: ~19 / ~90 / **~159 px to spare**). The built panels
-are simply **1.8–2.4× taller than the design** (GPU 485 vs 220, COOLING 868 vs 472, CPU 458 vs
-204 …). **The work is to bring the implementation to the mock's density; the grid, the shape and
-all nine panels stay exactly as §6.1 draws them.** A builder spec for that is 10e
-(`steps/10-panels-assembly/10e-match-the-mock.md`) — see §2.3 for its status.
+**Step 10 is built and, as of 10e (2026-09-09, uncommitted), it MEETS §6.1's only quantitative
+promise on the healthy page.** The build used to overflow the fold by 356 / 418 / 362 px at
+1280×1024 / 1600×1024 / 1920×1080; measured on today's tree with `--fixture box` it **fits at all
+three with 263 / 228 / 284 px to spare, and still fits with §6.4's alarm banner pinned**. The cause
+was never the grid — `MOCK.html`, the same four-row nine-panel layout, always fitted — it was
+density, and 10e brought `components/` to the mock's. **One measurement still fails and it is an
+owner question, not a density miss:** `measure-breakpoints.mjs` measurement 9 grades a page on which
+every Linux-only collector has failed (this dev Mac), and is 27 px over at 1280 and 49 px at 1600;
+nothing bounds an `errors[]` block, and this box's own DKMS message costs 65.6 px against 14.2
+budgeted. That is `HANDOVER.md` §8's `10e-Q1`. **Next: the parent's review of
+`steps/10-panels-assembly/10e-reconciliation.md`, then a commit, then step 11.**
 
 ### 2.1 Branches and tree
 
 ```
 main                 3f06e98   [origin/main]                 backend, pushed. Untouched since
-dashboard-frontend   7de7dd3   [origin/dashboard-frontend]   pushed; 10c-3 is the last commit
+dashboard-frontend   5d9b00e   [origin/dashboard-frontend]   pushed; the 10e handoff is the last commit
 ```
 
-**Uncommitted, and meant to be committed together as "the design record" once 10e lands:**
-`steps/10-panels-assembly/10d-layout-replan.md` + `mocks/` (15 mocks, harness, screenshots),
-`mocks/measure-mock.mjs`, `handoffs/10d-layout-replan.md`, `handoffs/10e-match-the-mock.md`,
-`steps/10-panels-assembly/10e-match-the-mock.md` (when written), and this file. Nothing under
-`components/`, `app/`, `lib/` or `SPEC.md` is dirty — **verify with `git status` before trusting
-that**; a stranded harness mutation looks exactly like an intended edit.
+⚠ **The tree is DIRTY and that is the whole of 10e.** As of 2026-09-09 `git status` is ~86 entries:
+the design record (10d + `mocks/` + the handoffs + `10e-match-the-mock.md`), **`SPEC.md`'s §6.1/§6.2
+rewrite (the parent's — the owner's nine rulings)**, the four 10e phase notes, the two touched
+harnesses, and — unlike every earlier line in this file — **real edits under `components/`,
+`app/` and `lib/`**: the density build itself. Nothing under `proxy.ts` or `next.config.mjs` is
+touched and `next-env.d.ts` is byte-identical. **Verify with `git status` before trusting any of
+this**; a stranded harness mutation looks exactly like an intended edit.
 
 ### 2.2 What is closed
 
@@ -68,8 +71,11 @@ that**; a stranded harness mutation looks exactly like an intended edit.
 | 10c-1 | `a0c2c0e` | panels wired — the first composed render; a fixture that could not tell two GPUs apart |
 | 10c-2 | `6c2e64a` | five guards; one of them punished the fix |
 | 10c-3 | `7de7dd3` | sizing/paint; **§6.1 measured false** — step 10 closed-with-a-known-failure |
+| 10e | ⚠ **uncommitted** | the density build; **§6.1 measured TRUE on the healthy page**; F1's shipped fix measured worthless and re-fixed |
 
 Suite at `7de7dd3`: **99 files · 2793 tests · exit 0**; nine harnesses, ~947 mutations, every ledger clean.
+Suite on today's dirty tree (10e): **102 files · 2933 tests · exit 0**; nine harnesses, **1061**
+mutations, every ledger clean except step 2's three pre-existing orphans.
 
 ### 2.3 ⚠ 10d and 10e — the design investigation, and what was withdrawn
 
@@ -86,45 +92,28 @@ on `.panel`); **F5** — SERVING's instance row overflows horizontally below ~45
 **10e** = the builder spec to match the mock's density. Status at the time of writing: **PENDING —
 see the line immediately below, which the parent updates when the agent reports.**
 
-> **10e status: DONE, 2026-09-09.** `steps/10-panels-assembly/10e-match-the-mock.md` (957 lines:
-> one-screen summary, the nine parts, method) plus two scripts under `mocks/`:
-> `measure-mock-anatomy.mjs` (per-element anatomy of the mock at all three viewports, healthy /
-> paused / six-alarm; its totals match §2.0's table to the pixel) and **`check-density.mjs`, the
-> acceptance checker** — it grades a `measure-arrangements.mjs --anatomy` JSON of the *real app*
-> against the spec's targets (±10 %), page fit, ≥200 px spare, banner fit and painted chart boxes.
-> Run on today's build it reports **31 FAIL**, so it discriminates; with the owner-question rows
-> accepted it reproduces the mock's own totals exactly, so its arithmetic is validated.
+> **10e status: BUILT, TESTED, ATTACKED and RECONCILED — 2026-09-09, uncommitted, awaiting the
+> parent's review.** The spec is `steps/10-panels-assembly/10e-match-the-mock.md`; the four phase
+> notes are `10e-build.md`, `10e-test.md`, `10e-adversarial.md` and **`10e-reconciliation.md`**
+> (read that one first — its §1 is the adjudication of all fifteen adversarial findings).
 >
-> **The finding, sharper than §2.0:** the overflow is a **16 px `em` base with one-reading-per-24 px
-> body lines** — not the charts and not the grid. Spec-only targets at 1920 (healthy): GPU **176**
-> (built 458) · COOLING intrinsic **366** (750) · CPU 185 · MEMORY 138.5 · SAFETY 160 · STORAGE 145
-> · SERVING 104 · LOG 133.8. Page **757 / 768 / 768** at the three viewports → **267 / 256 / 312 px
-> spare**, and **a six-alarm banner fits at 1280×1024** even with every owner question accepted.
+> **Where it landed.** `pnpm verify` exit 0 — 102 files, 2933 tests. `check-density.mjs`
+> **ALL PASS** at all three viewports with no `--oq` flag (four of the nine slots at exactly 0.0 % of target),
+> spare 263.2 / 227.6 / 283.6 px, banner pinned still overflow 0. `measure-breakpoints.mjs` 10 pass
+> / 2 fail / 12 total — measurement 9 fails at 1280 and 1600 **under the dev-Mac fixture only**.
+> All nine harnesses run: eight exit 0, `02` exits 1 on the three pre-existing orphans and nothing
+> else; 1061 mutation ids, zero collisions.
 >
-> ⚠ **Two corrections to the parent's framing, both right:** (1) **SAFETY's mock height (259)
-> contains 99 px of prose §3.7 forbids** — the mock's per-row notes are written copy, not
-> `errors[]` text — so "±10 % of the mock" is the wrong acceptance there; §8 of the spec sets
-> acceptance against the **spec-only** targets, and the checker encodes that. (2) **The ≥1600
-> promotion is the mock's 50 px sparkline with a time axis and threshold lines, not a 160 px second
-> chart.** The spec keeps the media-query two-wrapper mechanism (over a shell-computed `matchMedia`
-> prop; reasons in its §3.2) and gives `Sparkline` three optional props (`domain`, `refs`,
-> `timeLabels`). It also **removes the CPU temperature sparkline** — §6.2 attaches the trace to
-> utilisation — pending OQ-7.
+> ⚠ **The two defects 10d found are both closed, and F1 was closed WRONGLY first.**
+> `panel-shell.module.css`'s `.panel { position: relative }` — the fix 10e §7 specified — measures
+> **5189 either way** at 200 log entries; the fix is `position: relative` on the CLIPPING box
+> (`.scroll`, and `.tableView` in both chart primitives), after which the page is 1024 at 200 and at
+> 500 entries. F5 was fixed and then **re-created one primitive over** in the new `Strip`. Both are
+> in `HANDOVER.md` §0.9, which is the five rules this loop paid for.
 >
-> **Eight owner questions (spec §9), to be put as a selectable list:** OQ-1 a min/max/now caption
-> under traces (+19 px each) · OQ-2 per-panel note footers (+37.6 each; needs a text source) · OQ-3
-> count chips (`1 of 4 failing`, `2 of 2 up`) · OQ-4 the log's head chip (`—` vs `10 s debounce`)
-> · OQ-5 a paused banner (mapped in §5, gated) · OQ-6 the `engage 55` / `EC auto 2210` reference
-> lines (constants the dashboard never reads; 70/80 are §6.3's and are drawn) · OQ-7 confirm the CPU
-> temp-trace removal · OQ-8 the `standing` pill's form for §6.4.
->
-> **Beyond CSS, the builder will touch:** `lib/format.ts` `parts` variants (O14) so heroes size the
-> unit without splitting a string; `lib/severity.ts` exporting the 70/80 literals (bare literals at
-> lines 125/127 today); a `PanelShell` `headControl` prop (the table toggle moves into the head at
-> 0 px); new leaves `hero.tsx` / `strip.tsx`; `Meter` `tickPercent`; `Chip` `code` variant;
-> `header.test.tsx` lines 69/70/75 move from visible words to accessible names. **F1 and F5 are
-> concrete edits in its §7.** Nothing under `components/`, `app/`, `lib/` or `SPEC.md` was changed
-> by 10e — it is a spec.
+> **Thirteen owner questions** are open in `HANDOVER.md` §8 as `10e-Q1`…`10e-Q13`. `10e-Q1` — does
+> §6.1's promise hold on a DEGRADED page, and if so what bounds an `errors[]` block — is the one
+> that decides whether step 10 is finished.
 
 ### 2.4 Rulings that STAND (do not re-ask)
 
@@ -151,27 +140,37 @@ mock's own numbers say it may be unnecessary in the healthy state.
 
 ### 2.6 ⚠ What to do next, in order
 
-1. **Read 10e's spec** (`steps/10-panels-assembly/10e-match-the-mock.md`) and its owner questions.
-   ⚠ One question to expect: **even the mock overflows at 1280×1024 (~166 px) and 1600×1024 (~52 px)
-   under a six-alarm banner** and holds only at 1920. Whether §6.1's promise is conditioned on
-   "no banner pinned" is the owner's — bring it with the rest.
-2. **Put the owner questions to the owner as a selectable list** (the owner prefers that form).
-3. **The parent rewrites `SPEC.md` §6.1** — keep the drawing and the four breakpoints; replace the
-   unmeasured "~1026px … fits comfortably" sentence with the mock's measured numbers; state that
-   `MOCK.html` is the source for form; record the banner ruling. **Phases never edit `SPEC.md`.**
-4. **Run the density build as a full loop** — build → test → adversarial → reconcile (background
-   agent) → **parent review** (§8: re-run `pnpm verify` yourself, read every rejection and deferral,
-   spot-check headline claims against the tree, then commit). Expect the adversarial to find things;
-   every loop this session has.
-5. **Measure the real app** with `pipeline/steps/10-panels-assembly/measure-breakpoints.mjs`
-   (measurement 9 is the scroll check; the script must exit 0). Then rule on stage 2 with real numbers.
-6. Then **step 11** (packaging), then **redeploy the box** (owner ruled: at step 10 complete; it
+> **Progress 2026-09-09, end of day:** steps 1–5 below are **DONE**. The owner ruled on all nine
+> questions (banner **unconditional**; OQ-1/2/3/5/6 **declined**; OQ-4 **no chip** on the log;
+> **OQ-7 keep BOTH CPU traces** → CPU target 216.1 / 240.1 / 240.1; OQ-8 recorded), `SPEC.md` §6.1/§6.2
+> were rewritten by the parent, and the **full 10e loop ran**: build → test → adversarial →
+> reconcile, all four notes in `steps/10-panels-assembly/`. Acceptance was measured, twice, by two
+> sessions: `check-density.mjs` **ALL PASS**, `measure-breakpoints.mjs` **10/12** with measurement 9
+> failing under the dev-Mac fixture only. **What is left is the parent's review and the commit.**
+
+1. ✅ **DONE** — 10e's spec was written and its owner questions put to the owner.
+2. ✅ **DONE** — all nine ruled.
+3. ✅ **DONE** — `SPEC.md` §6.1/§6.2 rewritten by the parent.
+4. ✅ **DONE** — the density build ran as a full loop. ⚠ **What is NOT done is the fifth phase:**
+   **the parent's review** (§8 — re-run `pnpm verify` yourself, read every rejection and deferral in
+   `10e-reconciliation.md` §1, spot-check the headline claims against the tree, then commit). Start
+   with §8's four checks and with that file's own §8, which names what to check first.
+5. ✅ **DONE** — the real app is measured. `measure-breakpoints.mjs` does **not** exit 0: it is
+   10 pass / 2 fail, and both failures are measurement 9 under the **dev-Mac** fixture, where every
+   Linux-only collector has failed. Under `--fixture box` the page fits at all three viewports with
+   227–284 px to spare, banner included. **Whether that is enough is `HANDOVER.md` §8's `10e-Q1`,
+   and it is the owner's** — do not treat the non-zero exit as a density regression.
+6. **Then rule on stage 2** ("bound the grid", §2.5) with those numbers — on this evidence it looks
+   unnecessary in the healthy state.
+7. Then **step 11** (packaging), then **redeploy the box** (owner ruled: at step 10 complete; it
    still serves `b3969cd`).
 
 ### 2.7 Owner questions still open, carried from earlier loops
 
 S-G-Q1…Q4 (`HANDOVER.md` §8), F14a (a `:—` copy nit), D1 (the log's third feed), 10b-S-F's "its own
-readings" definition (recorded, not questioned), and whether §6.1 is banner-conditioned (new).
+readings" definition (recorded, not questioned). The banner question is **ruled** (unconditional,
+`SPEC.md` §6.1) and superseded by **`10e-Q1`**: whether the promise holds on a page where every
+collector has failed. 10e added thirteen — `10e-Q1`…`10e-Q13` in `HANDOVER.md` §8.
 
 ### 2.8 Things this session learned that the next one must not re-learn
 
@@ -365,10 +364,10 @@ context** receiving a written handoff:
 
 | phase | model | runs as | does |
 |---|---|---|---|
-| **build** | **Sonnet 5, high effort** | subagent | implements + tests. Load the `dataviz` skill for anything with a chart, meter or stat row |
-| **test** | **Sonnet 5, high effort** | subagent | reads every test name against its body; fixture symmetry; hunts equivalent and probabilistic mutations |
-| **adversarial** | default | subagent | tries to break it, **fixes nothing**, writes findings with concrete failure scenarios |
-| **reconcile** | default | **background subagent** — changed 2026-09-07 | adjudicates every finding ACCEPTED/REJECTED/DEFERRED **with reasons**, applies what survives, re-runs everything, writes `reconciliation.md` and rewrites `HANDOVER.md` |
+| **build** | **Opus 5, high effort** (was Sonnet 5 until 2026-09-09) | subagent | implements + tests. Load the `dataviz` skill for anything with a chart, meter or stat row |
+| **test** | **Opus 5, high effort** (was Sonnet 5 until 2026-09-09) | subagent | reads every test name against its body; fixture symmetry; hunts equivalent and probabilistic mutations |
+| **adversarial** | Opus 5, high effort | subagent | tries to break it, **fixes nothing**, writes findings with concrete failure scenarios |
+| **reconcile** | Opus 5, high effort | **background subagent** — changed 2026-09-07 | adjudicates every finding ACCEPTED/REJECTED/DEFERRED **with reasons**, applies what survives, re-runs everything, writes `reconciliation.md` and rewrites `HANDOVER.md` |
 | **review** | — | **the parent, always** — added 2026-09-08 | re-runs `pnpm verify` itself, **audits the reconciliation's adjudication table**, spot-checks its headline claims against the tree, then commits. **The loop is not closed until this runs.** |
 
 ### ⚠ PROJECT RULE — the parent reviews every reconciliation. Added 2026-09-08, owner's instruction.
@@ -451,6 +450,11 @@ recording it now leads somewhere — see §7.
 
 ## 9. Standing constraints
 
+- ⚠ **Every spawned agent runs on Opus 5 at high effort unless the owner says otherwise** — owner's
+  instruction, 2026-09-09, made a project rule the same day. It replaced the "Sonnet 5 for build
+  and test" row in §8's table after the first 10e build agent, on Sonnet, was killed mid-flight by
+  a Sonnet session rate limit with half the primitives edited and no notes written. Pass
+  `model: "opus"` on every `Agent` call; the phase table in §8 is the record.
 - ⚠ **Mutation ids carry their creating step's id as a prefix** — `07-R3`, `Q1-SC1` — added
   2026-09-08 at the owner's instruction. The bare namespace collided with the gap/work-item
   namespace: `S11` and `G5` were each simultaneously a step-7 mutation id and half of the open

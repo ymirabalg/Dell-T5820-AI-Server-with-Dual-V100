@@ -1,8 +1,17 @@
 .empty {
   color: var(--ink-primary);
+  margin: 0;
 }
 
 .emptyNote {
   color: var(--ink-secondary);
-  font-size: 0.85em;
+  font-size: 10.5px;
+  margin: 0;
+}
+
+/* 10e §2.0 — the mock's `.rows` list. */
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }

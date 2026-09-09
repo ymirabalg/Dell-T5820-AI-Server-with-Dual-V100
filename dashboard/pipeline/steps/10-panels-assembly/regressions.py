@@ -88,6 +88,8 @@ SAFETY_PANEL_TEST = "components/panels/safety-panel.test.tsx"
 SESSION_EVENT_LOG_PANEL_TEST = "components/panels/session-event-log-panel.test.tsx"
 # ⚠ Added by 10b's RECONCILIATION, 2026-09-08 — §6.5's panel-level `errors[]` explanations.
 PANEL_NOTES_TEST = "components/panels/panel-notes.test.tsx"
+# 10e — the shared Caption leaf (§2.0, new): GPU's throttle line, STORAGE's link line.
+CAPTION_TEST = "components/panels/caption.test.tsx"
 # ⚠ Added by 10b-S-F, 2026-09-08 — the shared panel-head chip override the owner's ruling
 # requires (§6.2). One file, imported by every panel that can reach the case, so its own unit
 # tests carry the ⚠-marked load-bearing coverage rather than one per panel.
@@ -127,6 +129,7 @@ LEDGER_FILES = [
     SESSION_EVENT_LOG_PANEL_TEST, PANEL_NOTES_TEST, PANEL_CHIP_TEST,
     CHART_VIEW_TOGGLE_TEST, FORCE_ALARM_TEST, FORCE_ALARM_WIRING_TEST,
     TOCONTAIN_SCOPE_TEST, DANGLING_CSS_CLASS_TEST, UNIT_SUFFIX_TEST, CROSS_HARNESS_LEDGER_TEST,
+    CAPTION_TEST,
 ]
 
 # `test`/`it`, optionally `.each(<PAREN-BALANCED ARGS>)`, optionally `<A GENERIC ARG>`, then `(`.
@@ -284,6 +287,7 @@ SESSION_EVENT_LOG_PANEL_SRC = "components/panels/session-event-log-panel.tsx"
 # ⚠ Added by 10b's RECONCILIATION, 2026-09-08.
 PANEL_CHART_SRC = "components/panels/panel-chart.ts"
 PANEL_NOTES_SRC = "components/panels/panel-notes.tsx"
+CAPTION_SRC = "components/panels/caption.tsx"
 # ⚠ Added by 10b-S-F, 2026-09-08 — the owner's ruling on §6.2's chip.
 PANEL_CHIP_SRC = "components/panels/panel-chip.ts"
 
@@ -358,25 +362,27 @@ REGRESSIONS = [
      "onChange={(event) => onSetWindow(Number(event.target.value) as WindowMinutes)}",
      "onChange={() => undefined}",
      [HEADER_TEST]),
+    # ⚠ 10e re-aimed H3/H4/H5/H6/H9: every header button went glyph-only (§4) — new attribute
+    # order and no more visible words on the pause/resume button. Same properties, new anchors.
     ("10a-H3 the refresh button no longer calls onRefreshNow",
      HEADER_SRC,
-     '<button type="button" onClick={onRefreshNow}>',
-     '<button type="button" onClick={() => undefined}>',
+     'onClick={onRefreshNow}>\n          ⟳',
+     'onClick={() => undefined}>\n          ⟳',
      [HEADER_TEST]),
     ("10a-H4 the pause/resume button no longer calls onPauseResume",
      HEADER_SRC,
-     '<button type="button" aria-pressed={paused} onClick={onPauseResume}>',
-     '<button type="button" aria-pressed={paused} onClick={() => undefined}>',
+     '          onClick={onPauseResume}',
+     '          onClick={() => undefined}',
      [HEADER_TEST]),
-    ("10a-H5 the pause/resume label is stuck on \"pause\", never announcing \"resume\"",
+    ("10a-H5 the pause/resume label is stuck on \"❙❙\" (pause), never announcing \"▶\" (resume)",
      HEADER_SRC,
-     "{paused ? '▶ resume' : '❙❙ pause'}",
-     "{'❙❙ pause'}",
+     "{paused ? '▶' : '❙❙'}",
+     "{'❙❙'}",
      [HEADER_TEST]),
     ("10a-H6 the logout button no longer calls onLogout",
      HEADER_SRC,
-     '<button type="button" className={styles.logout} onClick={onLogout}>',
-     '<button type="button" className={styles.logout} onClick={() => undefined}>',
+     '          onClick={onLogout}',
+     '          onClick={() => undefined}',
      [HEADER_TEST]),
     ("10a-H7 the cadence selector silently drops the slowest option, breaking the exhaustive list",
      HEADER_SRC,
@@ -390,8 +396,8 @@ REGRESSIONS = [
      [HEADER_TEST]),
     ("10a-H9 logout loses its visual separation from the four controls",
      HEADER_SRC,
-     '<span aria-hidden="true" className={styles.separator} />\n\n        <button type="button" className={styles.logout} onClick={onLogout}>',
-     '<button type="button" className={styles.logout} onClick={onLogout}>',
+     '<span aria-hidden="true" className={styles.separator} />\n\n        <button\n          type="button"\n          className={styles.logout}',
+     '<button\n          type="button"\n          className={styles.logout}',
      [HEADER_TEST]),
     ("10a-H10 the header re-grows an IP address next to the hostname — the exact regression the spec names",
      HEADER_SRC,
@@ -408,24 +414,21 @@ REGRESSIONS = [
      "data-severity={severity ?? 'none'}",
      "data-severity={mode === 'paused' ? 'none' : (severity ?? 'none')}",
      [HEADER_TEST]),
-    # ⚠ Found by 10a-test: `10a-H3` above only mutates the refresh button's WIRING, so it never
-    # touched `toContain('refresh')` in "refresh now and a pause control both render" — a sibling
-    # of the exact inert-assertion shape the build already found once on "paused". That render
-    # test was checking for the SUBSTRING "refresh", which the cadence control's own label
-    # (`<span>refresh</span>`, §6.2's name for the cadence selector) and its
-    # `aria-label="refresh cadence"` both ALSO satisfy — confirmed by deleting the refresh-now
-    # button's visible text and watching the old assertion stay green. Fixed in
-    # `header.test.tsx` to assert the button's own `⟳ refresh` glyph+text, unique in the markup;
-    # this mutation is what proves the fix actually bites.
-    ("10a-H13 the refresh-now button loses its visible text, leaving only the cadence label's unrelated \"refresh\"",
-     HEADER_SRC,
-     "        <button type=\"button\" onClick={onRefreshNow}>\n"
-     "          ⟳ refresh\n"
-     "        </button>",
-     "        <button type=\"button\" onClick={onRefreshNow}>\n"
-     "          ⟳\n"
-     "        </button>",
-     [HEADER_TEST]),
+    # ⚠ 10e RETIRED `10a-H13`, not re-aimed. Its whole premise was "the refresh-now button loses
+    # its visible text `⟳ refresh`" — but 10e's own §4 redesign makes every header button
+    # glyph-only BY DESIGN (`⟳` alone, no trailing word, ever). There is no "visible text" left
+    # for a mutation to remove; the property this guarded (a real accessible name surviving the
+    # glyph-only form) is now `header.test.tsx`'s own `aria-label="Refresh now"` assertions,
+    # which nothing here can silently defeat the way a stray `toContain('refresh')` once could.
+    # Per HANDOVER §5.2 rule 1: the property has no plausible wrong implementation left to write
+    # against this source, so the mutation is dropped rather than kept as a no-op.
+    # ⚠ 10e's TEST phase upheld the retirement and added the two guards it leans on:
+    # `10e-HD3` (the `refresh` -> `cadence` rename that removed the ambiguous word from the
+    # markup at all) and `10e-HD2` (the pause control's accessible name, which `10a-H5` stopped
+    # reaching once the word moved off the glyph). ⚠ The header mutations 10e's BUILD named
+    # `10e-H1` are `10e-HD*` here: step 9's harness already owns `10e-H1`..`10e-H4` for the new
+    # `Hero` leaf, and a bare `10e-H1` in a step note was ambiguous between the two files —
+    # the exact collision ANCHOR §9's prefix rule exists to prevent, one level in.
 
     # ============================================== components/alarm-banner.tsx
     ("10a-AB1 the alarm count is always singular, so \"3 active alarms\" reads \"3 active alarm\"",
@@ -784,8 +787,10 @@ REGRESSIONS = [
      [GPU_PANEL_TEST]),
     ("10b-GP2 a missing GPU temperature reading defaults to 0 °C instead of —, invariant 1's exact conflation",
      GPU_PANEL_SRC,
-     '<Row label="temperature" value={formatCelsius(gpu?.tempC ?? null)} severity={severityGpuTemp(gpu?.tempC ?? null)} />',
-     '<Row label="temperature" value={formatCelsius(gpu?.tempC ?? celsius(0))} severity={severityGpuTemp(gpu?.tempC ?? celsius(0))} />',
+     [("  const tempSeverity = severityGpuTemp(gpu?.tempC ?? null);",
+       "  const tempSeverity = severityGpuTemp(gpu?.tempC ?? celsius(0));"),
+      ("  const tempParts = formatCelsiusParts(gpu?.tempC ?? null);",
+       "  const tempParts = formatCelsiusParts(gpu?.tempC ?? celsius(0));")],
      [GPU_PANEL_TEST]),
 
     # components/panels/cpu-panel.tsx
@@ -801,19 +806,17 @@ REGRESSIONS = [
      [CPU_PANEL_TEST]),
     ("10b-CP3 a missing CPU temperature defaults to 0 °C instead of —, invariant 1's exact conflation",
      CPU_PANEL_SRC,
-     [
-         ("const chip = severityCpuTemp(host?.cpuTempC ?? null);",
-          "const chip = severityCpuTemp(host?.cpuTempC ?? celsius(0));"),
-         ('        value={formatCelsius(host?.cpuTempC ?? null)}',
-          '        value={formatCelsius(host?.cpuTempC ?? celsius(0))}'),
-     ],
+     [("  const chip = severityCpuTemp(host?.cpuTempC ?? null);",
+       "  const chip = severityCpuTemp(host?.cpuTempC ?? celsius(0));"),
+      ("  const tempParts = formatCelsiusParts(host?.cpuTempC ?? null);",
+       "  const tempParts = formatCelsiusParts(host?.cpuTempC ?? celsius(0));")],
      [CPU_PANEL_TEST]),
 
     # components/panels/memory-panel.tsx
     ("10b-MP1 the swap row renders at 1dp (formatGiB) instead of §6.6's 2dp, rounding a small swap to 0.0",
      MEMORY_PANEL_SRC,
-     '<Row label="swap" value={formatSwapGiB(swap)} severity={severitySwap(swap)} />',
-     '<Row label="swap" value={formatGiB(swap)} severity={severitySwap(swap)} />',
+     "formattedValue={`${formatSwapGiB(swap)} / ${formatSwapGiB(swapTotal)}`}",
+     "formattedValue={`${formatGiB(swap)} / ${formatSwapGiB(swapTotal)}`}",
      [MEMORY_PANEL_TEST]),
     # ⚠ Re-aimed by 10b-S-F (2026-09-08): the source line changed from `severityMemory(host)`
     # to `panelChip(severityRam(…), severitySwap(…))` — see panel-chip.ts's module doc for why
@@ -821,8 +824,8 @@ REGRESSIONS = [
     # unchanged: drop the swap leaf, banding on RAM% alone.
     ("10b-MP2 the panel head's chip drops the swap trigger, banding on RAM% alone",
      MEMORY_PANEL_SRC,
-     "const chip = panelChip(severityRam(used, total), severitySwap(swap));",
-     "const chip = panelChip(severityRam(used, total));",
+     "  const chip = panelChip(ramSeverity, swapSeverity);",
+     "  const chip = panelChip(ramSeverity);",
      [MEMORY_PANEL_TEST]),
     ("10b-MP3 a missing RAM reading defaults to 0.0 GiB instead of —, invariant 1's exact conflation",
      MEMORY_PANEL_SRC,
@@ -850,8 +853,8 @@ REGRESSIONS = [
      [STORAGE_NETWORK_PANEL_TEST]),
     ("10b-SN2 a stale link condition drops its age note, showing only the (stale) errors[] message if any",
      STORAGE_NETWORK_PANEL_SRC,
-     "note={linkAge}\n        noteTone={linkAge === null ? 'muted' : 'watch'}",
-     "note={null}\n        noteTone={linkAge === null ? 'muted' : 'watch'}",
+     "{linkAge === null ? null : (",
+     "{true ? null : (",
      [STORAGE_NETWORK_PANEL_TEST]),
     ("10b-SN3 a missing root-disk reading defaults to 0.0 GiB instead of —, invariant 1's exact conflation",
      STORAGE_NETWORK_PANEL_SRC,
@@ -868,8 +871,8 @@ REGRESSIONS = [
     # components/panels/cooling-panel.tsx
     ("10b-CO1 the derived-mode row (EC auto/unavailable) is given a hard-coded alarm chip, violating O13",
      COOLING_PANEL_SRC,
-     '<Row label="mode" value={cooling === null ? formatText(null) : formatCh5Pwm(cooling)} />',
-     '<Row label="mode" value={cooling === null ? formatText(null) : formatCh5Pwm(cooling)} severity="alarm" />',
+     '<Chip severity={null} size="md" label={cooling === null ? formatText(null) : formatCh5Pwm(cooling)} />',
+     '<Chip severity="alarm" size="md" label={cooling === null ? formatText(null) : formatCh5Pwm(cooling)} />',
      [COOLING_PANEL_TEST]),
     ("10b-CO2 the fan5 headline row drops its severity entirely, so a dead fan (0 RPM) never alarms",
      COOLING_PANEL_SRC,
@@ -878,29 +881,41 @@ REGRESSIONS = [
      [COOLING_PANEL_TEST]),
     ("10b-CO3 the fan 2 row's severity is hard-coded away, so a stopped fan 2 (0 RPM) never alarms",
      COOLING_PANEL_SRC,
-     'severity={severityFanStopped(cooling?.fan2Rpm ?? null)}',
-     'severity={null}',
+     "{ id: 'fan 2', value: cooling?.fan2Rpm ?? null, severity: fan2Severity, note: null },",
+     "{ id: 'fan 2', value: cooling?.fan2Rpm ?? null, severity: null, note: null },",
      [COOLING_PANEL_TEST]),
     ("10b-CO4 the fan-service row drops its stale-age note, so an outage reads as a plain (stale) reading",
      COOLING_PANEL_SRC,
-     "note={serviceAge}\n        noteTone={serviceAge === null ? 'muted' : 'watch'}",
-     "note={null}\n        noteTone={serviceAge === null ? 'muted' : 'watch'}",
+     "          note={serviceAge}\n          noteTone={serviceAge === null ? 'muted' : 'watch'}",
+     "          note={null}\n          noteTone={serviceAge === null ? 'muted' : 'watch'}",
      [COOLING_PANEL_TEST]),
     # ⚠ S11/G5, settled 2026-09-08 (ruled while this loop was building SAFETY/COOLING):
     # widened §6.5 exception — a fan5 em dash beside the "unavailable" mode neighbour needs no
     # entry of its own, and the two rejected alternatives are both "invent copy in the panel".
     # This mutation reintroduces exactly the rejected fallback-sentence alternative.
-    ("10b-CO5 the fan5 row invents a fallback \"no reading reported\" sentence when neither a stale age nor an errors[] entry exists, violating the widened S11/G5 exception",
+    #
+    # ⚠ 10e's build RETIRED this mutation ("structurally superseded"); 10e's TEST phase
+    # RESTORED it, re-aimed. The retirement premise was that the anchor
+    # (`note={fan5Age} … detail={dellSmmError}` on a fan5 `Row`) no longer exists — true, the
+    # headline is a `Hero` now with no note slot. But the PROPERTY is not superseded: the
+    # `errors[]` text for channel 5 simply moved to `PanelNotes`, and writing
+    # `dellSmmError ?? '<a sentence>'` there is exactly the alternative §3.7 and the S11/G5
+    # ruling reject, one line further down the same file. Without this mutation the ⚠ test
+    # `⚠ S11/G5 … needs NO entry of its own` is reddened only by `10b-CO6` (which breaks its
+    # em-dash assertion), so its `not.toMatch(/class="_note/)` half — the half the ruling is
+    # about — was inert. HANDOVER §5.2 rule 2: the ledger cannot tell a mark reddened for the
+    # RIGHT reason from one reddened for another.
+    ("10b-CO5 the fan5 explanation invents a fallback \"no reading reported\" sentence when no errors[] entry exists, violating the widened S11/G5 exception",
      COOLING_PANEL_SRC,
-     "note={fan5Age}\n          noteTone={fan5Age === null ? 'muted' : 'watch'}\n          detail={dellSmmError}",
-     "note={fan5Age}\n          noteTone={fan5Age === null ? 'muted' : 'watch'}\n          detail={dellSmmError ?? 'channel 5 is not reporting a tach'}",
+     "<PanelNotes messages={dellSmmError === null ? [] : [{ source: 'dell-smm', message: dellSmmError }]} />",
+     "<PanelNotes messages={[{ source: 'dell-smm', message: dellSmmError ?? 'channel 5 is not reporting a tach' }]} />",
      [COOLING_PANEL_TEST]),
 
     # components/panels/serving-panel.tsx
     ("10b-SV1 a token rate leaks back into the instance row, violating decision 13",
      SERVING_PANEL_SRC,
-     "    `health ${formatText(instance.health)}`,\n  ].join(' · ');",
-     "    `health ${formatText(instance.health)}`,\n    '32 t/s',\n  ].join(' · ');",
+     "    endPrefix={`health ${formatText(instance.health)}`}",
+     "    endPrefix={`health ${formatText(instance.health)}` + ' · 32 t/s'}",
      [SERVING_PANEL_TEST]),
     ("10b-SV2 the takeover branch drops its null check, so serving: null renders no rows and no explanation",
      SERVING_PANEL_SRC,
@@ -921,10 +936,8 @@ REGRESSIONS = [
      [SAFETY_PANEL_TEST]),
     ("10b-SP2 the pwm5 row is wired to ufw's severity instead of its own, a copy-paste cross-wire",
      SAFETY_PANEL_SRC,
-     '''        value={yesNo(safety?.pwm5Present ?? null)}
-        severity={pwm5Severity}''',
-     '''        value={yesNo(safety?.pwm5Present ?? null)}
-        severity={ufwSeverity}''',
+     "          value={yesNo(safety?.pwm5Present ?? null)}\n          severity={pwm5Severity}",
+     "          value={yesNo(safety?.pwm5Present ?? null)}\n          severity={ufwSeverity}",
      [SAFETY_PANEL_TEST]),
     ("10b-SP3 an unknownStanding row is given a hard-coded watch chip, inventing a band O12 forbids",
      SAFETY_PANEL_SRC,
@@ -933,8 +946,8 @@ REGRESSIONS = [
      [SAFETY_PANEL_TEST]),
     ("10b-SP4 the fan-service row drops its stale-age note, so an outage reads as a plain (stale) reading",
      SAFETY_PANEL_SRC,
-     "note={fanServiceAge}\n        noteTone={fanServiceAge === null ? 'muted' : 'watch'}",
-     "note={null}\n        noteTone={fanServiceAge === null ? 'muted' : 'watch'}",
+     "          note={fanServiceAge}\n          noteTone={fanServiceAge === null ? 'muted' : 'watch'}",
+     "          note={null}\n          noteTone={fanServiceAge === null ? 'muted' : 'watch'}",
      [SAFETY_PANEL_TEST]),
 
     # components/panels/session-event-log-panel.tsx
@@ -945,7 +958,7 @@ REGRESSIONS = [
      [SESSION_EVENT_LOG_PANEL_TEST]),
     ("10b-SE2 the panel head is given a hard-coded watch chip instead of the explicit no-band state",
      SESSION_EVENT_LOG_PANEL_SRC,
-     'subtitle="state transitions since page load" chip={null}>',
+     'subtitle="state transitions since page load">',
      'subtitle="state transitions since page load" chip="watch">',
      [SESSION_EVENT_LOG_PANEL_TEST]),
 
@@ -957,29 +970,25 @@ REGRESSIONS = [
     # ---- F1a/F1b/F1c: invariant 1, on the fields that had no null-side fixture at all.
     ("10b-CO6 the fan5 headline defaults a MISSING tach to 0 RPM - invariant 1's own example sentence, in the panel PLAN.md names it in",
      COOLING_PANEL_SRC,
-     "value={staleValueOr(fan5Condition, formatRpm(cooling?.fan5Rpm ?? null))}",
-     "value={staleValueOr(fan5Condition, formatRpm(cooling?.fan5Rpm ?? rpm(0)))}",
+     "  const fan5Parts = formatRpmParts(cooling?.fan5Rpm ?? null);",
+     "  const fan5Parts = formatRpmParts(cooling?.fan5Rpm ?? rpm(0));",
      [COOLING_PANEL_TEST]),
     ("10b-CO7 fan 2 defaults a missing tach to 0 RPM, rendering a FABRICATED red alarm on a fan nobody could read",
      COOLING_PANEL_SRC,
-     [
-         ('          value={formatRpm(cooling?.fan2Rpm ?? null)}\n          severity={severityFanStopped(cooling?.fan2Rpm ?? null)}',
-          '          value={formatRpm(cooling?.fan2Rpm ?? rpm(0))}\n          severity={severityFanStopped(cooling?.fan2Rpm ?? rpm(0))}'),
-     ],
+     "{ id: 'fan 2', value: cooling?.fan2Rpm ?? null, severity: fan2Severity, note: null },",
+     "{ id: 'fan 2', value: cooling?.fan2Rpm ?? rpm(0), severity: severityFanStopped(cooling?.fan2Rpm ?? rpm(0)), note: null },",
      [COOLING_PANEL_TEST]),
     ("10b-GP3 a missing power reading defaults to 0.0 W - the second field on the card, untested on the null side before this",
      GPU_PANEL_SRC,
-     [
-         ("import { celsius } from '@/lib/types';",
-          "import { celsius, watts } from '@/lib/types';"),
-         ('value={`${formatWatts(gpu?.powerW ?? null)} of ${formatWatts(gpu?.powerCapW ?? null)} cap`}',
-          'value={`${formatWatts(gpu?.powerW ?? watts(0))} of ${formatWatts(gpu?.powerCapW ?? null)} cap`}'),
-     ],
+     [("import { celsius } from '@/lib/types';",
+       "import { celsius, watts } from '@/lib/types';"),
+      ("  const powerParts = formatWattsParts(gpu?.powerW ?? null);",
+       "  const powerParts = formatWattsParts(gpu?.powerW ?? watts(0));")],
      [GPU_PANEL_TEST]),
     ("10b-CP4 a missing CPU utilisation defaults to 0.0 %, so an unread /proc/stat reads as an idle box",
      CPU_PANEL_SRC,
-     '        value={formatPercent(host?.cpuPct ?? null)}',
-     '        value={formatPercent(host?.cpuPct ?? percent(0))}',
+     "        formattedValue={formatPercent(host?.cpuPct ?? null)}",
+     "        formattedValue={formatPercent(host?.cpuPct ?? percent(0))}",
      [CPU_PANEL_TEST]),
     ("10b-MP4 a missing swap reading defaults to 0.00 GiB, so an unread /proc/meminfo reads as no swap in use",
      MEMORY_PANEL_SRC,
@@ -991,12 +1000,10 @@ REGRESSIONS = [
      [MEMORY_PANEL_TEST]),
     ("10b-SN4 a missing eno1 rx rate defaults to 0 KB/s, so an unread /proc/net/dev reads as a silent link",
      STORAGE_NETWORK_PANEL_SRC,
-     [
-         ("import type { Storage, TelemetrySnapshot } from '@/lib/types';",
-          "import { bytesPerSecond } from '@/lib/types';\nimport type { Storage, TelemetrySnapshot } from '@/lib/types';"),
-         ("        value={formatBytesPerSecond(storage?.net.rxBytesPerSec ?? null)}",
-          "        value={formatBytesPerSecond(storage?.net.rxBytesPerSec ?? bytesPerSecond(0))}"),
-     ],
+     [("import type { Storage, TelemetrySnapshot } from '@/lib/types';",
+       "import { bytesPerSecond } from '@/lib/types';\nimport type { Storage, TelemetrySnapshot } from '@/lib/types';"),
+      ("{ k: 'eno1 ↓ rx', v: formatBytesPerSecond(storage?.net.rxBytesPerSec ?? null) },",
+       "{ k: 'eno1 ↓ rx', v: formatBytesPerSecond(storage?.net.rxBytesPerSec ?? bytesPerSecond(0)) },")],
      [STORAGE_NETWORK_PANEL_TEST]),
 
     # ---- F2: SERVING attaches an entry to a row that entry is not about.
@@ -1026,11 +1033,16 @@ REGRESSIONS = [
      [CONDITION_LOOKUP_TEST, COOLING_PANEL_TEST, STORAGE_NETWORK_PANEL_TEST]),
 
     # ---- F5: sources with no rendering path to the screen.
-    ("10b-CP5 the CPU panel stops rendering coretemp's explanation, leaving a blanked temperature unexplained",
-     CPU_PANEL_SRC,
-     "        note={messageFor('coretemp')}",
-     "        note={null}",
-     [CPU_PANEL_TEST]),
+    # ⚠ 10e RETIRED `10b-CP5` ("the CPU panel stops rendering coretemp's explanation"), and 10e's
+    # TEST phase agrees — but the reason was not written down at the time, so it is written here.
+    # CP5 anchored on a PER-ROW `note={messageFor('coretemp')}` that 10e deleted: the CPU hero,
+    # meter and strip have no note slot any more, so all four CPU sources render through ONE
+    # `<PanelNotes messages={cpuErrors} />` call (10e §2.3, S-H). Two mutations on one source
+    # line would be redundant, and `10b-CP6` was re-aimed onto that line and renamed to say so.
+    # ⚠ What CP5 no longer covers, recorded rather than claimed closed: WHICH sources feed
+    # `cpuErrors` is now `errorsForPanel`'s business, guarded by step 8's
+    # `lib/client/observations.test.ts`, not by this harness. A panel-side edit narrowing the
+    # source set (rather than emptying it) is caught there and nowhere here.
     ("10b-MP5 the MEMORY panel drops proc-meminfo's explanation, so a blanked RAM pair is unexplained anywhere on the page",
      MEMORY_PANEL_SRC,
      "<PanelNotes messages={snapshot === null ? [] : errorsForPanel(snapshot, 'memory')} />",
@@ -1047,15 +1059,15 @@ REGRESSIONS = [
      "",
      [PANEL_NOTES_TEST]),
 
-    ("10b-CP6 the CPU panel drops proc-cpuinfo's explanation, so a blanked SUBTITLE is unexplained anywhere",
+    ("10b-CP6 the CPU panel drops its error explanations entirely, so every blanked reading is unexplained",
      CPU_PANEL_SRC,
-     "<PanelNotes messages={identityErrors} />",
-     "<PanelNotes messages={[]} />",
+     "  <PanelNotes messages={cpuErrors} />",
+     "  <PanelNotes messages={[]} />",
      [CPU_PANEL_TEST]),
     ("10b-SN6 the STORAGE panel drops proc-net-dev's explanation, so both blanked counters are unexplained",
      STORAGE_NETWORK_PANEL_SRC,
-     "        note={netError}",
-     "        note={null}",
+     "  const notes = netError === null ? diskErrors : [...diskErrors, netError];",
+     "  const notes = diskErrors;",
      [STORAGE_NETWORK_PANEL_TEST]),
     ("10b-CL4 staleValueOr drops its em-dash guard, so a stale condition overrides a reading that IS present",
      CONDITION_LOOKUP_SRC,
@@ -1141,8 +1153,8 @@ REGRESSIONS = [
     # `panelChip` itself stayed correct but MEMORY stopped calling it correctly.
     ("10b-MP6 the chip falls back from a null RAM reading to swap via ??, reintroducing the exact null-skip the ruling forbids at the call site",
      MEMORY_PANEL_SRC,
-     "const chip = panelChip(severityRam(used, total), severitySwap(swap));",
-     "const chip = severityRam(used, total) ?? severitySwap(swap);",
+     "  const chip = panelChip(ramSeverity, swapSeverity);",
+     "  const chip = ramSeverity ?? swapSeverity;",
      [MEMORY_PANEL_TEST]),
 
     # ================================== 10b-S-G's RECONCILIATION, 2026-09-08 (adversarial A1/A2/A5)
@@ -1226,15 +1238,15 @@ REGRESSIONS = [
      "      onClick={onToggle}",
      "      onClick={() => undefined}",
      [CHART_VIEW_TOGGLE_TEST]),
-    ("10c-CVT2 the button always offers \"table view\", even while already showing the table",
+    ("10c-CVT2 the button always offers \"table\", even while already showing the table",
      CHART_VIEW_TOGGLE_SRC,
-     "      {isTable ? 'chart view' : 'table view'}",
-     "      {'table view'}",
+     "      {isTable ? 'chart' : 'table'}",
+     "      {'table'}",
      [CHART_VIEW_TOGGLE_TEST]),
-    ("10c-CVT3 the button always offers \"chart view\", even while still showing the chart",
+    ("10c-CVT3 the button always offers \"chart\", even while still showing the chart",
      CHART_VIEW_TOGGLE_SRC,
-     "      {isTable ? 'chart view' : 'table view'}",
-     "      {'chart view'}",
+     "      {isTable ? 'chart' : 'table'}",
+     "      {'chart'}",
      [CHART_VIEW_TOGGLE_TEST]),
 
     # components/panels/gpu-panel.tsx — the toggle's plumbing into the two chart elements.
@@ -1245,13 +1257,13 @@ REGRESSIONS = [
      [GPU_PANEL_TEST]),
     ("10c-GP2 the toggle control never renders, even when the caller supplies onToggleView",
      GPU_PANEL_SRC,
-     "          {onToggleView === undefined ? null : (\n            <ChartViewToggle view={view} onToggle={onToggleView} label={ariaLabel} />\n          )}",
-     "          {null}",
+     "  const toggle =\n    onToggleView === undefined ? undefined : (",
+     "  const toggle =\n    true ? undefined : (",
      [GPU_PANEL_TEST]),
     ("10c-GP3 the sparkline is pinned to chart view, so only the ≥1600px promotion ever switches to a table",
      GPU_PANEL_SRC,
-     "              height={CHART_SIZE.sparkline.height}\n              view={view}",
-     "              height={CHART_SIZE.sparkline.height}\n              view=\"chart\"",
+     "                  height={CHART_SIZE.gpuSparkline.height}\n                  view={view}",
+     "                  height={CHART_SIZE.gpuSparkline.height}\n                  view=\"chart\"",
      [GPU_PANEL_TEST]),
 
     # ⚠ Added by 10c1's RECONCILIATION (adversarial A1/A2/A11) — ONE defect shape at three
@@ -1285,13 +1297,13 @@ REGRESSIONS = [
      [CPU_PANEL_TEST]),
     ("10c-CP2 the toggle control never renders, even when the caller supplies onToggleView",
      CPU_PANEL_SRC,
-     "      {onToggleView === undefined ? null : (\n        <ChartViewToggle view={view} onToggle={onToggleView} label=\"CPU charts\" />\n      )}",
-     "      {null}",
+     "  const toggle =\n    onToggleView === undefined ? undefined : (",
+     "  const toggle =\n    true ? undefined : (",
      [CPU_PANEL_TEST]),
     ("10c-CP3 the temperature sparkline is pinned to chart view, so toggling the panel only switches utilisation",
      CPU_PANEL_SRC,
-     "        color={SERIES_COLORS.gpu0}\n        width={CHART_SIZE.sparkline.width}\n        height={CHART_SIZE.sparkline.height}\n        view={view}",
-     "        color={SERIES_COLORS.gpu0}\n        width={CHART_SIZE.sparkline.width}\n        height={CHART_SIZE.sparkline.height}\n        view=\"chart\"",
+     "          color={SERIES_COLORS.gpu0}\n          width={CHART_SIZE.cpuSparkline.width}\n          height={CHART_SIZE.cpuSparkline.height}\n          view={view}",
+     "          color={SERIES_COLORS.gpu0}\n          width={CHART_SIZE.cpuSparkline.width}\n          height={CHART_SIZE.cpuSparkline.height}\n          view=\"chart\"",
      [CPU_PANEL_TEST]),
 
     # components/panels/cooling-panel.tsx
@@ -1302,8 +1314,8 @@ REGRESSIONS = [
      [COOLING_PANEL_TEST]),
     ("10c-CO2 the toggle control never renders, even when the caller supplies onToggleView",
      COOLING_PANEL_SRC,
-     "        {onToggleView === undefined ? null : (\n          <ChartViewToggle\n            view={view}\n            onToggle={onToggleView}\n            label=\"GPU temperature and fan 5 RPM\"\n          />\n        )}",
-     "        {null}",
+     "  const toggle =\n    onToggleView === undefined ? undefined : (",
+     "  const toggle =\n    true ? undefined : (",
      [COOLING_PANEL_TEST]),
     ("10c-CO3 the shared-time chart is pinned to chart view, so the toggle changes only its own control's label",
      COOLING_PANEL_SRC,
@@ -1385,14 +1397,17 @@ REGRESSIONS = [
     # `10b-F1-guard` (the toContain-scope lint): un-scoping a check back to the whole document
     # is exactly the shape all four historical bugs took. This is the SAME edit the parent
     # made by hand to prove the guard fires, now pinned.
+    # ⚠ 10e re-aimed: `95 °C` split into two checks (`>95<` / `°C`) once `Hero` stopped
+    # concatenating value+unit into one string (O14). Same property — the FIRST assertion is
+    # the one this mutation un-scopes back to the whole document.
     ("10c-G2 cpu-panel's temperature-severity check is un-scoped back to the whole document",
      CPU_PANEL_TEST,
      "    const row = rowContaining(html, 'temperature');\n"
      "    expect(row).toContain('data-severity=\"alarm\"');\n"
-     "    expect(row).toContain('95 °C');",
+     "    expect(row).toContain('>95<');",
      "    const row = rowContaining(html, 'temperature');\n"
      "    expect(html).toContain('data-severity=\"alarm\"');\n"
-     "    expect(row).toContain('95 °C');",
+     "    expect(row).toContain('>95<');",
      [TOCONTAIN_SCOPE_TEST]),
 
     # `10c1-A8-audit` (the dangling-class audit): a misspelled/deleted class resolves to a
@@ -1408,10 +1423,14 @@ REGRESSIONS = [
     # L11 (the unit-suffix guard): a component hand-builds the reading instead of calling the
     # formatter — right next to a correct `formatRpm` call on the sibling row, so this is
     # exactly the edit an inattentive copy-paste would make.
-    ("10c-G4 cooling-panel's fan 2 row hand-builds its RPM string instead of calling formatRpm",
+    # ⚠ 10e re-aimed: the chan table's four rows (fan2/1/3/4) now share ONE generic value
+    # renderer (`ChanTable`) instead of four separate `formatRpm(cooling?.fanNRpm ?? null)`
+    # call sites — same property (a hard-coded ` RPM` suffix bypassing the formatter), caught
+    # regardless of which channel it would have hit.
+    ("10c-G4 the chan table hand-builds its RPM string instead of calling formatRpm",
      COOLING_PANEL_SRC,
-     "value={formatRpm(cooling?.fan2Rpm ?? null)}",
-     "value={`${cooling?.fan2Rpm ?? 0} RPM`}",
+     "<span className={chanValueClass(row.value)}>{formatRpm(row.value)}</span>",
+     "<span className={chanValueClass(row.value)}>{`${row.value ?? 0} RPM`}</span>",
      [UNIT_SUFFIX_TEST]),
 
     # Q1-F4 (the cross-harness runner): removing a ⚠-bearing file from LEDGER_FILES is
@@ -1436,21 +1455,302 @@ REGRESSIONS = [
     # the design target. `gaps` is optional on this primitive by design, so the type checker
     # cannot catch it either — these three mutations are what does.
     # ----------------------------------------------------------------------------------
+    # ⚠ 10e re-aimed P1/P2, and WIDENED them: OQ-7 gave CPU two SIZES of each trace (the
+    # ≥1600px promotion is now the same `Sparkline` primitive, not a second chart), so there
+    # are 4 mount points, not 2. Each pair below drops `gaps` from BOTH sizes of one trace —
+    # disambiguated by the `width=` line immediately above, since `formatValue`/`formatTime`/
+    # `gaps` alone repeat identically at both sizes.
     ("10c-P1 the CPU temperature sparkline stops receiving state.gaps, so an unsampled span draws as one smooth line",
      CPU_PANEL_SRC,
-     "        formatValue={(v) => formatCelsius(celsius(v))}\n        formatTime={formatTimeOfDayMs}\n        gaps={state.gaps}\n",
-     "        formatValue={(v) => formatCelsius(celsius(v))}\n        formatTime={formatTimeOfDayMs}\n",
+     [("          width={CHART_SIZE.cpuSparkline.width}\n          height={CHART_SIZE.cpuSparkline.height}\n          view={view}\n          formatValue={(v) => formatCelsius(celsius(v))}\n          formatTime={formatTimeOfDayMs}\n          gaps={state.gaps}\n        />",
+       "          width={CHART_SIZE.cpuSparkline.width}\n          height={CHART_SIZE.cpuSparkline.height}\n          view={view}\n          formatValue={(v) => formatCelsius(celsius(v))}\n          formatTime={formatTimeOfDayMs}\n        />"),
+      ("          width={CHART_SIZE.cpuPromoted.width}\n          height={CHART_SIZE.cpuPromoted.height}\n          view={view}\n          formatValue={(v) => formatCelsius(celsius(v))}\n          formatTime={formatTimeOfDayMs}\n          gaps={state.gaps}\n          timeLabels",
+       "          width={CHART_SIZE.cpuPromoted.width}\n          height={CHART_SIZE.cpuPromoted.height}\n          view={view}\n          formatValue={(v) => formatCelsius(celsius(v))}\n          formatTime={formatTimeOfDayMs}\n          timeLabels")],
      [CPU_PANEL_TEST]),
     ("10c-P2 the CPU utilisation sparkline stops receiving state.gaps — the sibling call site, which a fixture covering only the first would miss",
      CPU_PANEL_SRC,
-     "        formatValue={(v) => formatPercent(percent(v))}\n        formatTime={formatTimeOfDayMs}\n        gaps={state.gaps}\n",
-     "        formatValue={(v) => formatPercent(percent(v))}\n        formatTime={formatTimeOfDayMs}\n",
+     [("          width={CHART_SIZE.cpuSparkline.width}\n          height={CHART_SIZE.cpuSparkline.height}\n          view={view}\n          formatValue={(v) => formatPercent(percent(v))}\n          formatTime={formatTimeOfDayMs}\n          gaps={state.gaps}\n        />",
+       "          width={CHART_SIZE.cpuSparkline.width}\n          height={CHART_SIZE.cpuSparkline.height}\n          view={view}\n          formatValue={(v) => formatPercent(percent(v))}\n          formatTime={formatTimeOfDayMs}\n        />"),
+      ("          width={CHART_SIZE.cpuPromoted.width}\n          height={CHART_SIZE.cpuPromoted.height}\n          view={view}\n          formatValue={(v) => formatPercent(percent(v))}\n          formatTime={formatTimeOfDayMs}\n          gaps={state.gaps}\n          timeLabels",
+       "          width={CHART_SIZE.cpuPromoted.width}\n          height={CHART_SIZE.cpuPromoted.height}\n          view={view}\n          formatValue={(v) => formatPercent(percent(v))}\n          formatTime={formatTimeOfDayMs}\n          timeLabels")],
      [CPU_PANEL_TEST]),
+    # ⚠ 10e re-aimed and WIDENED: the ≥1600px promotion is now the SAME `Sparkline` primitive
+    # (§3.2), not `StackedTimeSeriesChart`, so there are two mount points sharing the identical
+    # `formatValue`/`formatTime`/`gaps`/`domain` tail — disambiguated by the `width=` line.
     ("10c-P3 the GPU card's sparkline stops receiving state.gaps while its promoted chart still hatches, so the two breakpoints disagree",
      GPU_PANEL_SRC,
-     "              formatValue={(v) => formatCelsius(celsius(v))}\n              formatTime={formatTimeOfDayMs}\n              gaps={state.gaps}\n",
-     "              formatValue={(v) => formatCelsius(celsius(v))}\n              formatTime={formatTimeOfDayMs}\n",
+     [("                  width={CHART_SIZE.gpuSparkline.width}\n                  height={CHART_SIZE.gpuSparkline.height}\n                  view={view}\n                  formatValue={(v) => formatCelsius(celsius(v))}\n                  formatTime={formatTimeOfDayMs}\n                  gaps={state.gaps}\n                  domain={TEMP_DOMAIN}\n                />",
+       "                  width={CHART_SIZE.gpuSparkline.width}\n                  height={CHART_SIZE.gpuSparkline.height}\n                  view={view}\n                  formatValue={(v) => formatCelsius(celsius(v))}\n                  formatTime={formatTimeOfDayMs}\n                  domain={TEMP_DOMAIN}\n                />"),
+      ("                  width={CHART_SIZE.gpuPromoted.width}\n                  height={CHART_SIZE.gpuPromoted.height}\n                  view={view}\n                  formatValue={(v) => formatCelsius(celsius(v))}\n                  formatTime={formatTimeOfDayMs}\n                  gaps={state.gaps}\n                  domain={TEMP_DOMAIN}",
+       "                  width={CHART_SIZE.gpuPromoted.width}\n                  height={CHART_SIZE.gpuPromoted.height}\n                  view={view}\n                  formatValue={(v) => formatCelsius(celsius(v))}\n                  formatTime={formatTimeOfDayMs}\n                  domain={TEMP_DOMAIN}")],
      [GPU_PANEL_TEST]),
+
+    # ============================================== components/panels/status-row.tsx (10e §2.7)
+    ("10e-SR1 secondaryLabel is silently dropped, so SERVING's port never renders",
+     STATUS_ROW_SRC,
+     "{secondaryLabel === undefined ? null : (",
+     "{true ? null : (",
+     [STATUS_ROW_TEST]),
+    # ⚠ 10e-test renamed this, 2026-09-09. It shipped as "inline is suppressed the same way
+    # note/detail are (null/empty), inventing a policy it must not have" — which describes the
+    # SHIPPED code, not a wrong implementation: `status-row.tsx:133` already uses the same
+    # `shown()` helper `note` and `detail` use, deliberately. The BODY drops `inline`
+    # altogether, which is a different (and real) defect. HANDOVER §0.4: read what a mutation
+    # REPLACES before crediting it with a property. The ⚠ test it reddens carried the same
+    # wrong words and was renamed with it.
+    ("10e-SR2 inline is silently dropped, so SERVING's model · ctx never renders",
+     STATUS_ROW_SRC,
+     "{!shown(inline) ? null : <span className={styles.inline}>{inline}</span>}",
+     "{null}",
+     [STATUS_ROW_TEST]),
+    # ⚠ 10e-test added SR4/SR5, 2026-09-09. `Row` got both directions of the pill branch
+    # (`10e-R1`/`10e-R2` in step 9's harness) and `StatusRow` — the component that renders
+    # EVERY pill on the shipped page, since no panel calls `Row` any more — got neither.
+    # `10b-SR2` governs only the LEFT-edge `Chip sm` guard at `status-row.tsx:124`; the `md`
+    # pill has its own independent ternary at `:136`.
+    ("10e-SR4 a StatusRow value never becomes a pill — severity given still renders plain text",
+     STATUS_ROW_SRC,
+     "        {severity === undefined ? (\n          <span className={styles.value}>{value}</span>\n        ) : (",
+     "        {true ? (\n          <span className={styles.value}>{value}</span>\n        ) : (",
+     [STATUS_ROW_TEST]),
+    ("10e-SR5 a StatusRow value ALWAYS becomes a pill, even with no severity of its own to badge it with",
+     STATUS_ROW_SRC,
+     "        {severity === undefined ? (\n          <span className={styles.value}>{value}</span>\n        ) : (",
+     "        {false ? (\n          <span className={styles.value}>{value}</span>\n        ) : (",
+     [STATUS_ROW_TEST]),
+    ("10e-SR3 endPrefix is silently dropped, so SERVING's health text never renders ahead of the pill",
+     STATUS_ROW_SRC,
+     "{endPrefix === undefined ? null : <span className={styles.endPrefix}>{endPrefix}</span>}",
+     "{null}",
+     [STATUS_ROW_TEST]),
+
+    ("10e-CO1 the dell-smm errors[] cause is dropped from PanelNotes, so a stale fan5 loses its explanation",
+     COOLING_PANEL_SRC,
+     "<PanelNotes messages={dellSmmError === null ? [] : [{ source: 'dell-smm', message: dellSmmError }]} />",
+     "<PanelNotes messages={[]} />",
+     [COOLING_PANEL_TEST]),
+
+    ("10e-SP1 a boolean check renders the raw JS boolean instead of yes/no",
+     SAFETY_PANEL_SRC,
+     "const yesNo = (value: boolean | null): string => (value === null ? formatText(null) : value ? 'yes' : 'no');",
+     "const yesNo = (value: boolean | null): string => (value === null ? formatText(null) : String(value));",
+     [SAFETY_PANEL_TEST]),
+
+    ("10e-CVT1 the aria-label is shortened along with the visible label, losing the caller's own sentence",
+     CHART_VIEW_TOGGLE_SRC,
+     "aria-label={`${label}: show as ${isTable ? 'chart' : 'table'}`}",
+     "aria-label={isTable ? 'chart' : 'table'}",
+     [CHART_VIEW_TOGGLE_TEST]),
+
+    ("10e-SV1 an unread ctx substitutes a plausible-looking default instead of the em dash",
+     SERVING_PANEL_SRC,
+     "inline={`${formatText(instance.model)} · ctx ${formatTokens(instance.ctx)}`}",
+     "inline={`${formatText(instance.model)} · ctx ${formatTokens(instance.ctx) === '—' ? '131,072' : formatTokens(instance.ctx)}`}",
+     [SERVING_PANEL_TEST]),
+
+    ("10e-HD1 the refresh button loses its accessible name, leaving a glyph nothing announces",
+     HEADER_SRC,
+     '<button type="button" aria-label="Refresh now" title="Refresh now" onClick={onRefreshNow}>',
+     '<button type="button" title="Refresh now" onClick={onRefreshNow}>',
+     [HEADER_TEST]),
+    # ⚠ ADDED BY 10e's TEST PHASE, 2026-09-09. `10a-H5` was re-aimed onto the VISIBLE GLYPH
+    # (`{paused ? '▶' : '❙❙'}`), which is now only half the control's announcement: 10e §4 moved
+    # the word onto a SEPARATE `aria-label` ternary. A wrong implementation pinning that label
+    # ships a paused dashboard whose only announcement to a screen reader still says "Pause
+    # polling" — §6.2's *"a paused dashboard must announce it loudly"*, defeated for exactly the
+    # reader who cannot see the glyph. Nothing anywhere mutated it.
+    ("10e-HD2 the pause control's accessible name is stuck on \"Pause polling\", so a paused dashboard never announces resume",
+     HEADER_SRC,
+     "          aria-label={paused ? 'Resume polling' : 'Pause polling'}",
+     "          aria-label=\"Pause polling\"",
+     [HEADER_TEST]),
+    # ⚠ ADDED BY 10e's TEST PHASE. The `refresh` -> `cadence` rename (10e §4) is what made
+    # `10a-H13` retirable: `10a-H13`'s original comment records that the cadence control's own
+    # visible `<span>refresh</span>` was what made `toContain('refresh')` inert in the first
+    # place (HANDOVER §0.4's second founding instance). Nothing asserted the rename, so a later
+    # loop could restore the word and silently re-arm that ambiguity.
+    ("10e-HD3 the cadence control's visible label reverts to \"refresh\", re-arming the ambiguity 10a-H13 was retired on",
+     HEADER_SRC,
+     "<span className={styles.controlLabel}>cadence</span>",
+     "<span className={styles.controlLabel}>refresh</span>",
+     [HEADER_TEST]),
+
+    # ⚠ ADDED BY 10e's TEST PHASE, 2026-09-09 — the promoted GPU chart's three optional props.
+    # HANDOVER §0.8: *wiring a prop is a property, and an optional prop makes it an untested
+    # one.* 10e wired `domain`/`refs`/`timeLabels` at three call sites in `gpu-panel.tsx` and
+    # asserted none of them outside `sparkline.test.tsx` (the PRIMITIVE). Deleting
+    # `refs={TEMP_REFS}` and `timeLabels` left `pnpm verify` green and BOTH harnesses green —
+    # `10c-P3`'s anchor ends at `domain={TEMP_DOMAIN}` and still matched — while dropping what
+    # SPEC §6.1's OQ-6 ruling requires to be drawn, and the only consumer of the two exported
+    # constants `10e-S1`..`S4` defend across two harnesses. Backed now, both directions.
+    ("10e-GP1 the promoted GPU chart loses §6.3's 70/80 reference lines, which OQ-6 rules must be drawn",
+     GPU_PANEL_SRC,
+     "                  refs={TEMP_REFS}\n",
+     "",
+     [GPU_PANEL_TEST]),
+    ("10e-GP2 the reference lines are drawn on the 1280 form too, which OQ-6 declines",
+     GPU_PANEL_SRC,
+     "                  domain={TEMP_DOMAIN}\n                />",
+     "                  domain={TEMP_DOMAIN}\n                  refs={TEMP_REFS}\n                />",
+     [GPU_PANEL_TEST]),
+    ("10e-GP3 the promoted GPU chart loses its time axis, so the window it draws is unlabelled",
+     GPU_PANEL_SRC,
+     "                  timeLabels\n",
+     "",
+     [GPU_PANEL_TEST]),
+    # Both sizes, one mutation each — dropping it from ONE size is the likelier edit and the
+    # worse outcome (the same card reads on two different scales either side of 1600px), and
+    # keeping the other reference means neither mutation turns `TEMP_DOMAIN` into dead code.
+    ("10e-GP4 the 1280 GPU chart autoscales instead of §3.2's fixed 30-90 scale, so the two sizes disagree",
+     GPU_PANEL_SRC,
+     "                  domain={TEMP_DOMAIN}\n                />",
+     "                />",
+     [GPU_PANEL_TEST]),
+    ("10e-GP5 the promoted GPU chart autoscales, so its reference lines float against a scale that is not §6.3's",
+     GPU_PANEL_SRC,
+     "                  domain={TEMP_DOMAIN}\n                  refs={TEMP_REFS}",
+     "                  refs={TEMP_REFS}",
+     [GPU_PANEL_TEST]),
+
+    # ========================================= 10e's RECONCILIATION, 2026-09-09
+    # Twenty mutations backing the fixes for adversarial 10e-A1/A3/A4/A5/A7/A8/A13/A14. Every
+    # one of them is an edit the ADVERSARIAL (or this phase) applied by hand and watched pass
+    # with the whole suite green — HANDOVER §0.8's rule at a further eleven call sites.
+
+    # ---- 10e-A4: OQ-4 is a CALL-SITE decision and nothing asserted the caller.
+    ("10e-SE3 the log's head gets its chip back as the explicit no-band pill - OQ-4's declined rendering, at the only call site that can choose it",
+     SESSION_EVENT_LOG_PANEL_SRC,
+     '<PanelShell title="session event log" subtitle="state transitions since page load">',
+     '<PanelShell title="session event log" subtitle="state transitions since page load" chip={null}>',
+     [SESSION_EVENT_LOG_PANEL_TEST]),
+
+    # ---- 10e-A1/A6: the three declarations on `.scroll` that make the well a well.
+    ("10e-SE4 the log well goes back to max-height, so the panel grows with the number of entries",
+     "components/panels/session-event-log-panel.module.css",
+     "  height: 84px;", "  max-height: 84px;",
+     [SESSION_EVENT_LOG_PANEL_TEST]),
+    ("10e-SE5 the log well loses box-sizing, so the mock's 84px total box paints 86",
+     "components/panels/session-event-log-panel.module.css",
+     "  box-sizing: border-box;\n  height: 84px;", "  height: 84px;",
+     [SESSION_EVENT_LOG_PANEL_TEST]),
+
+    # ---- 10e-A3: invariant 1's three chan inks, one branch per mutation (fixture symmetry).
+    ("10e-CO2 a genuine 0 RPM takes the ordinary ink, so a dead fan prints like a healthy one",
+     COOLING_PANEL_SRC,
+     "  if (value === 0) return styles.valueZero as string;\n", "",
+     [COOLING_PANEL_TEST]),
+    ("10e-CO3 an unreadable channel takes the ordinary ink, so an em dash prints like a reading",
+     COOLING_PANEL_SRC,
+     "  if (value === null || !Number.isFinite(value)) return styles.valueUnknown as string;",
+     "  if (value === null || !Number.isFinite(value)) return styles.value as string;",
+     [COOLING_PANEL_TEST]),
+
+    # ---- 10e-A5: the mode pill's size is a wiring, and an `sm` chip renders no label at all.
+    ("10e-CO4 the mode becomes a bare `sm` glyph, so `HIGH pwm 255` disappears from the panel entirely",
+     COOLING_PANEL_SRC,
+     'severity={null} size="md" label={cooling === null ? formatText(null) : formatCh5Pwm(cooling)}',
+     'severity={null} size="sm" label={cooling === null ? formatText(null) : formatCh5Pwm(cooling)}',
+     [COOLING_PANEL_TEST]),
+
+    # ---- 10e-A8: COOLING's headline loses the words `fan 5` from the body again.
+    ("10e-CO8 the fan5 headline loses its visible subject, leaving a 34px numeral labelled by nothing",
+     COOLING_PANEL_SRC,
+     "        <span className={styles.heroKey}>fan 5</span>\n", "",
+     [COOLING_PANEL_TEST]),
+
+    # ---- 10e-A7: S-B's watch tone, on the third of the three surfaces that carry it.
+    ("10e-CO9 the stale-age caption is alarm-toned, so `last read 6:12 ago` reads as a second alarm",
+     "components/panels/cooling-panel.module.css",
+     "  color: var(--status-watch);\n  font-family: var(--font-mono);",
+     "  color: var(--status-alarm);\n  font-family: var(--font-mono);",
+     [COOLING_PANEL_TEST]),
+    ("10e-SP2 SAFETY's fan-service age is muted, dropping S-B's watch tone at the call site",
+     SAFETY_PANEL_SRC,
+     "          noteTone={fanServiceAge === null ? 'muted' : 'watch'}",
+     "          noteTone={'muted'}",
+     [SAFETY_PANEL_TEST]),
+    ("10e-SN3 STORAGE's stale link age loses its watch tone - the one-off inline style a tidy-up removes silently",
+     STORAGE_NETWORK_PANEL_SRC,
+     "<span style={{ color: 'var(--status-watch)' }}>{linkAge}</span>",
+     "<span>{linkAge}</span>",
+     [STORAGE_NETWORK_PANEL_TEST]),
+
+    # ---- 10e-A5: four `tickPercent` wirings, none of which any test could see.
+    ("10e-GP7 the GPU VRAM bar loses §6.3's 90% watch tick",
+     GPU_PANEL_SRC,
+     "            severity={severityVram(gpu?.memUsedMiB ?? null, gpu?.memTotalMiB ?? null)}\n            tickPercent={90}",
+     "            severity={severityVram(gpu?.memUsedMiB ?? null, gpu?.memTotalMiB ?? null)}",
+     [GPU_PANEL_TEST]),
+    ("10e-MP2 the RAM hero's accessible name is dropped - the one Hero caller no test noticed (10e-A8)",
+     MEMORY_PANEL_SRC,
+     ' severity={ramSeverity} ariaLabel="memory used" />',
+     " severity={ramSeverity} />",
+     [MEMORY_PANEL_TEST]),
+
+    ("10e-MP1 the RAM bar loses §6.3's 85% watch tick",
+     MEMORY_PANEL_SRC,
+     "        severity={ramSeverity}\n        tickPercent={85}",
+     "        severity={ramSeverity}",
+     [MEMORY_PANEL_TEST]),
+    ("10e-SN1 both disk bars lose the 85%-used watch tick together, which is how the wrong implementation would write it",
+     STORAGE_NETWORK_PANEL_SRC,
+     [("        severity={rootSeverity}\n        tickPercent={85}", "        severity={rootSeverity}"),
+      ("        severity={homeSeverity}\n        tickPercent={85}", "        severity={homeSeverity}")],
+     [STORAGE_NETWORK_PANEL_TEST]),
+
+    # ---- 10e-A5: the `code` modifier, at the ONE call site chip.tsx's own doc names.
+    ("10e-GP6 the throttle chips lose `code`, so the mask is uppercased into `0X4` - not a mask any more",
+     GPU_PANEL_SRC,
+     'severity={r.severity} size="md" code label={r.label}',
+     'severity={r.severity} size="md" label={r.label}',
+     [GPU_PANEL_TEST]),
+
+    # ---- 10e-A5: the power Figure's caption - the `cap` half of §6.2's "power against the cap".
+    ("10e-GP8 the power Figure loses its `cap 250.0 W` caption, so the hero row states the draw with nothing to read it against",
+     GPU_PANEL_SRC,
+     " caption={`cap ${formatWatts(gpu?.powerCapW ?? null)}`}",
+     "",
+     [GPU_PANEL_TEST]),
+
+    # ---- 10e-A8: a point reading named with the chart's window sentence.
+    ("10e-GP9 the GPU hero is named with the CHART's window sentence, which is not what a single instantaneous numeral is",
+     GPU_PANEL_SRC,
+     "severity={tempSeverity} ariaLabel={heroAriaLabel}",
+     "severity={tempSeverity} ariaLabel={ariaLabel}",
+     [GPU_PANEL_TEST]),
+    ("10e-CP3 the CPU hero is named with the CHART's window sentence",
+     CPU_PANEL_SRC,
+     "severity={chip} ariaLabel={heroAriaLabel}",
+     "severity={chip} ariaLabel={tempAriaLabel}",
+     [CPU_PANEL_TEST]),
+
+    # ---- 10e-A5: CPU's promoted time axis - the GPU hole the test phase closed, left open here.
+    ("10e-CP1 both promoted CPU charts lose their time axis, which is how a copy-paste would drop it",
+     CPU_PANEL_SRC,
+     [("          gaps={state.gaps}\n          timeLabels\n        />\n        <Sparkline\n          points={utilTrace}\n          ariaLabel={utilAriaLabel}\n          color={SERIES_COLORS.gpu1}\n          width={CHART_SIZE.cpuPromoted.width}",
+       "          gaps={state.gaps}\n        />\n        <Sparkline\n          points={utilTrace}\n          ariaLabel={utilAriaLabel}\n          color={SERIES_COLORS.gpu1}\n          width={CHART_SIZE.cpuPromoted.width}"),
+      ("          gaps={state.gaps}\n          timeLabels\n        />\n      </div>",
+       "          gaps={state.gaps}\n        />\n      </div>")],
+     [CPU_PANEL_TEST]),
+    ("10e-CP4 the 1280 CPU pair gains the time axis too, spending height the design target does not have",
+     CPU_PANEL_SRC,
+     "          formatValue={(v) => formatCelsius(celsius(v))}\n          formatTime={formatTimeOfDayMs}\n          gaps={state.gaps}\n        />\n        <Sparkline\n          points={utilTrace}\n          ariaLabel={utilAriaLabel}\n          color={SERIES_COLORS.gpu1}\n          width={CHART_SIZE.cpuSparkline.width}",
+     "          formatValue={(v) => formatCelsius(celsius(v))}\n          formatTime={formatTimeOfDayMs}\n          gaps={state.gaps}\n          timeLabels\n        />\n        <Sparkline\n          points={utilTrace}\n          ariaLabel={utilAriaLabel}\n          color={SERIES_COLORS.gpu1}\n          width={CHART_SIZE.cpuSparkline.width}",
+     [CPU_PANEL_TEST]),
+
+    # ---- 10e-A13: FIRST vs LAST, two lines under a comment that says LAST.
+    ("10e-SN2 STORAGE reads the FIRST proc-net-dev entry, so the panel and the event log disagree",
+     STORAGE_NETWORK_PANEL_SRC,
+     "  const netError = storageErrors.findLast((e) => e.source === 'proc-net-dev') ?? null;",
+     "  const netError = storageErrors.find((e) => e.source === 'proc-net-dev') ?? null;",
+     [STORAGE_NETWORK_PANEL_TEST]),
+
+    # ============================================== components/panels/caption.tsx (10e, new)
+    ("10e-CAP1 the label always renders, even when omitted, so a caption with no lead word gets one anyway",
+     CAPTION_SRC,
+     "{label === undefined ? null : <b className={styles.label}>{label}</b>}",
+     "<b className={styles.label}>{label}</b>",
+     [CAPTION_TEST]),
 ]
 
 # ---------------------------------------------------------------------------
@@ -1470,10 +1770,11 @@ def _assert_unique_ids() -> None:
     # earlier step. Widen this set as each further loop lands its own mutations.
     # ⚠ `10c-` added by 10c1 (the wiring loop, first of 10c's three parts) — see the handoff's
     # "back each ⚠ mark with a 10c-prefixed mutation" instruction.
-    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-", "10c-")))
+    # ⚠ `10e-` added by 10e (match-the-mock/density loop) — same instruction, same reasoning.
+    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-", "10c-", "10e-")))
     if bad_prefix:
         raise SystemExit(
-            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-/10c-): {', '.join(bad_prefix)}"
+            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-/10c-/10e-): {', '.join(bad_prefix)}"
         )
 
 

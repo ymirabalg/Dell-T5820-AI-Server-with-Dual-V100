@@ -103,6 +103,12 @@
   font-family: var(--font-mono);
   max-height: var(--table-scroll-max);
   overflow-y: auto;
+  /* ⚠ 10e-A1's second victim, and it is NOT theoretical: this scroll container holds one
+     `<table>` per plot, each with a `<caption class="sr-only">` — and the SECOND caption's
+     static position is below the first table's ~361 rows. `.sr-only` is `position: absolute`,
+     so without a positioned containing block here it escapes the well exactly the way the
+     session event log's entry chips did (see that file's `.scroll`). */
+  position: relative;
 }
 
 .tableView:focus-visible {

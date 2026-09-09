@@ -1,0 +1,21 @@
+/* 10e §2.0 — the mock's `.caption`, shared by every panel that needs one (GPU's throttle
+   line, STORAGE's link line). `panel-notes.module.css` matches this sizing independently
+   rather than importing it, since its own layout (gap 2, no padding) differs. */
+
+.caption {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-height: 14px;
+  font-size: 10.5px;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+}
+
+.label {
+  color: var(--ink-secondary);
+  font-weight: 500;
+  font-style: normal;
+}

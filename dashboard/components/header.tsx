@@ -23,6 +23,18 @@
  * a pure function is not a violation of `purity.test.ts`'s guard; the guard is about React
  * hooks specifically (`components/purity.test.ts`'s own doc: matched by the shape React
  * mandates for a hook call, not by "any imported function").
+ *
+ * ### 10e §4 — glyph-only buttons, and two renamed things
+ *
+ * The five buttons/selects lose their visible words (`⟳ refresh` → `⟳`, `❙❙ pause` → `❙❙` /
+ * `▶`, `⏻ logout` → `⏻`) — the mock's form, a control row read by its `aria-label`/`title`
+ * rather than by squeezed-in text. `header.test.tsx`'s old `toContain('⟳ refresh')` /
+ * `toContain('pause')` / `toContain('logout')` move to the accessible names
+ * (`aria-label="Refresh now"`, `"Pause polling"`/`"Resume polling"`, `"Log out"`) — the visible
+ * glyph alone was never a safe substring to test against once every button shares a one- or
+ * two-character label. **The cadence select's key is now `cadence`**, the mock's word and
+ * §6.2's own ("the cadence selector") — the built label was `refresh`, which this file's own
+ * history already flagged as ambiguous beside the refresh-NOW button.
  */
 
 import { aggregateStatus } from '@/lib/client/header-status';
@@ -107,6 +119,8 @@ export function Header({
         <span className={styles.uptime}>{uptime}</span>
       </div>
 
+      <span aria-hidden="true" className={styles.spacer} />
+
       <div className={styles.status} role="status">
         {/* ⚠ `data-severity` is set from `severity` UNCONDITIONALLY — §6.2: "shown *alongside*
             the … severity, never instead of it." `data-mode` picks the GLYPH (❙❙/⊘/●); colour
@@ -121,14 +135,15 @@ export function Header({
           {status.glyph}
         </span>
         <span className={styles.statusText}>{status.text}</span>
-        <span className={styles.time}>
-          {timeOfDay} {zoneAbbreviation} · {ageText}
-        </span>
       </div>
+
+      <span className={styles.time}>
+        {timeOfDay} {zoneAbbreviation} · {ageText}
+      </span>
 
       <div className={styles.controls}>
         <label className={styles.control}>
-          <span className={styles.controlLabel}>refresh</span>
+          <span className={styles.controlLabel}>cadence</span>
           <select
             aria-label="refresh cadence"
             value={cadenceSeconds}
@@ -157,18 +172,31 @@ export function Header({
           </select>
         </label>
 
-        <button type="button" onClick={onRefreshNow}>
-          ⟳ refresh
+        {/* 10e §4 — glyph-only; the accessible name carries what the visible word used to. */}
+        <button type="button" aria-label="Refresh now" title="Refresh now" onClick={onRefreshNow}>
+          ⟳
         </button>
 
-        <button type="button" aria-pressed={paused} onClick={onPauseResume}>
-          {paused ? '▶ resume' : '❙❙ pause'}
+        <button
+          type="button"
+          aria-pressed={paused}
+          aria-label={paused ? 'Resume polling' : 'Pause polling'}
+          title={paused ? 'Resume polling' : 'Pause polling'}
+          onClick={onPauseResume}
+        >
+          {paused ? '▶' : '❙❙'}
         </button>
 
         <span aria-hidden="true" className={styles.separator} />
 
-        <button type="button" className={styles.logout} onClick={onLogout}>
-          ⏻ logout
+        <button
+          type="button"
+          className={styles.logout}
+          aria-label="Log out"
+          title="Log out"
+          onClick={onLogout}
+        >
+          ⏻
         </button>
       </div>
     </header>

@@ -1,14 +1,17 @@
+/* 10e §2.0 — the mock's `.meterRow`. */
+
 .meter {
   display: flex;
   flex-direction: column;
-  gap: 0.25em;
+  gap: 3px;
   font-family: var(--font-mono);
 }
 
 .head {
   display: flex;
   justify-content: space-between;
-  gap: 0.5em;
+  gap: 10px;
+  font-size: 10.5px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -17,50 +20,50 @@
 }
 
 .value {
-  color: var(--ink-primary);
+  color: var(--ink-secondary);
+  font-weight: 500;
 }
 
 .track {
   position: relative;
+  /* 10e §2.0 measured the mock's track at 6px TOTAL — `MOCK.html` sets `* { box-sizing:
+     border-box }` globally and this app does not, so without this line the 1px hairline is
+     added OUTSIDE the 6px and every meter row measures 25.0 instead of the spec's 23.2.
+     Measured 2026-09-09: that 1.8px bias appeared once per meter (GPU +3.6, MEMORY +3.6,
+     STORAGE +3.6, CPU +1.8) in `check-density.mjs`'s per-slot deltas. */
+  box-sizing: border-box;
   height: 6px;
-  border-radius: 3px;
-  background: var(--surface-0);
+  border: 1px solid var(--border-lo);
+  border-radius: 1px;
+  background: var(--surface-sunken);
   overflow: hidden;
 }
 
 .fill {
+  position: absolute;
+  inset: 0 auto 0 0;
   height: 100%;
-  border-radius: inherit;
+  /* 10e §2.0 — the neutral fill. A `normal` meter is NOT green: colour on this wall is spent
+     almost entirely on state (§6.3), so `normal` and the no-band case both draw this same
+     grey, and only `watch`/`alarm` below recolour the bar. */
+  background: var(--meter);
   transition: width 200ms ease-out;
-}
-
-/* The fill takes the severity colour; the track is a lighter step of the same ramp
-   (dataviz: "the unfilled track is a lighter step of the same ramp"), so state reads across
-   the whole bar rather than only in the thin fill. */
-.track[data-severity='normal'] {
-  background: color-mix(in oklab, var(--status-good) 22%, var(--surface-0));
-}
-
-.track[data-severity='normal'] .fill {
-  background: var(--status-good);
-}
-
-.track[data-severity='watch'] {
-  background: color-mix(in oklab, var(--status-watch) 22%, var(--surface-0));
 }
 
 .track[data-severity='watch'] .fill {
   background: var(--status-watch);
 }
 
-.track[data-severity='alarm'] {
-  background: color-mix(in oklab, var(--status-alarm) 22%, var(--surface-0));
-}
-
 .track[data-severity='alarm'] .fill {
   background: var(--status-alarm);
 }
 
-.track[data-severity='none'] .fill {
-  background: var(--ink-muted);
+/* 10e §2.0 — the mock's watch-threshold mark (VRAM 90, RAM 85, disk-free 15). `left` is set
+   inline per instance, the same pattern `.fill`'s `width` already uses. */
+.tick {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 1px;
+  background: var(--border-hi);
 }

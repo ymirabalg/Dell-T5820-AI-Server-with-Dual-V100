@@ -1,0 +1,74 @@
+/* 10e §2.0 — the mock's `.hero` and `.gpuTop__pw`. */
+
+.hero {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  font-family: var(--font-mono);
+}
+
+.value {
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: var(--ink-primary);
+}
+
+.hero[data-severity='alarm'] .value {
+  color: var(--ink-max);
+  text-shadow: 0 0 22px rgba(208, 59, 59, 0.55);
+}
+
+.hero[data-severity='watch'] .value {
+  color: var(--ink-max);
+}
+
+.unit {
+  font-size: 13px;
+  color: var(--ink-muted);
+  padding-bottom: 3px;
+}
+
+/* 10e §2.0 — the mock's `.hero--unk`, invariant 1's `—` struck through with the same hatch a
+   chart's gap mark and a no-band chip use, so a hero can never be mistaken for a zero. */
+.valueUnknown {
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  color: var(--ink-muted);
+  padding: 0 8px;
+  background: var(--nodata);
+  border: 1px solid var(--border-hi);
+}
+
+/* ------------------------------------------------------------------ Figure (.gpuTop__pw) --- */
+
+.figure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: var(--font-mono);
+}
+
+.figureTop {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.figureValue {
+  font-size: 18px;
+  color: var(--ink-primary);
+}
+
+.figureUnit {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.figureCaption {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--ink-muted);
+}

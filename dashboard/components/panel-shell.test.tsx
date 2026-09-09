@@ -80,3 +80,83 @@ describe('the chip carries the panel’s own severity', () => {
     expect(html).not.toContain('data-severity="normal"');
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// 10e §2.0 — `chip` becomes OPTIONAL: omitting it is a THIRD state, distinct from `null`.
+// OQ-4 (declined): SESSION EVENT LOG's head renders NO chip element at all — not the hatched
+// `—`, not an invented debounce constant.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ 10e/OQ-4 — an OMITTED chip renders no chip element at all, distinct from chip={null}', () => {
+  test('⚠ chip omitted: no Chip element anywhere in the head — zero data-severity occurrences on a chip', () => {
+    const html = renderToStaticMarkup(
+      <PanelShell title="session event log" subtitle="state transitions since page load">
+        body
+      </PanelShell>,
+    );
+    // The <section> itself still carries the attribute (chip ?? 'none' — unaffected by
+    // whether the prop was omitted or explicitly null; both are nullish). Exactly ONE
+    // occurrence — the section's own — proves no <Chip> rendered at all.
+    const occurrences = html.match(/data-severity="none"/g) ?? [];
+    expect(occurrences.length).toBe(1);
+  });
+
+  test('⚠ chip={null} still renders the hatched no-band CHIP — the two states are not the same', () => {
+    const html = renderToStaticMarkup(
+      <PanelShell title="serving" subtitle="llama-server" chip={null}>
+        body
+      </PanelShell>,
+    );
+    const occurrences = html.match(/data-severity="none"/g) ?? [];
+    expect(occurrences.length).toBe(2); // section + the Chip that chip={null} DOES render
+  });
+
+  test('omitting chip still renders the title, subtitle and children normally', () => {
+    const html = renderToStaticMarkup(
+      <PanelShell title="session event log" subtitle="state transitions since page load">
+        <span>an entry</span>
+      </PanelShell>,
+    );
+    expect(html).toContain('session event log');
+    expect(html).toContain('state transitions since page load');
+    expect(html).toContain('an entry');
+  });
+});
+
+describe('⚠ 10e §2.0 — headControl renders in the head, costing nothing in the body', () => {
+  test('⚠ headControl renders between the subtitle and the chip', () => {
+    const html = renderToStaticMarkup(
+      <PanelShell
+        title="gpu0"
+        subtitle="Tesla PG500-216 · 00000000:17:00.0"
+        chip="normal"
+        headControl={<button type="button">table</button>}
+      >
+        body
+      </PanelShell>,
+    );
+    expect(html).toContain('<button');
+    expect(html).toContain('>table<');
+    // Order: subtitle text, then the control, then the chip's own data-severity attribute.
+    const subtitleAt = html.indexOf('Tesla PG500-216');
+    const controlAt = html.indexOf('<button');
+    const chipAt = html.indexOf('data-severity="normal"', controlAt);
+    expect(subtitleAt).toBeLessThan(controlAt);
+    expect(controlAt).toBeLessThan(chipAt);
+  });
+
+  test('omitted by default — no extra element between subtitle and chip', () => {
+    const withControl = renderToStaticMarkup(
+      <PanelShell title="cpu" subtitle="Xeon W-2135 · 6C / 12T" chip="normal" headControl={<i>x</i>}>
+        body
+      </PanelShell>,
+    );
+    const without = renderToStaticMarkup(
+      <PanelShell title="cpu" subtitle="Xeon W-2135 · 6C / 12T" chip="normal">
+        body
+      </PanelShell>,
+    );
+    expect(withControl).not.toBe(without);
+    expect(without).not.toContain('<i>x</i>');
+  });
+});

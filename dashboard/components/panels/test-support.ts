@@ -151,9 +151,25 @@ const instanceWithNoReadings = (instance: number): ServingInstance => ({
  * `toContain('paused')`, its test phase's `toContain('refresh')`, now `toContain('—')`), so the
  * rule is worth stating rather than just the fix: **assert over the element that carries the
  * claim, never over the document that contains it.**
+ *
+ * ⚠ **10e widened this.** §2.0 moves a row's own value into a `Chip md` PILL whenever the row
+ * carries a `severity` — the mock's `chip(sev, state)` — so the reading now lives in that
+ * chip's own `.label` span, not a `.value` span, for every SAFETY/COOLING/STORAGE/SERVING row
+ * that bands. `Strip` (GPU's `util`/`SM clk`/`served by`, CPU's `load`) prints into its own
+ * `.v` span, neither `.value` nor a chip. Both are added below so this helper still means what
+ * its own name says: *every* reading, not just the ones still shaped like a `Row`. The pill
+ * match is scoped to a `data-size="md"` chip's OWN trailing label — `Row`'s and `StatusRow`'s
+ * own field-name span is also, confusingly, named `.label` in THEIR stylesheets, and a bare
+ * `class="_label…"` match would sweep up "ufw enforcing" beside "yes" as though both were
+ * readings.
  */
-export const valueCells = (html: string): string[] =>
-  [...html.matchAll(/class="_value[^"]*"[^>]*>([^<]*)</g)].map((m) => m[1] ?? '');
+export const valueCells = (html: string): string[] => [
+  ...[...html.matchAll(/class="_value[^"]*"[^>]*>([^<]*)</g)].map((m) => m[1] ?? ''),
+  ...[...html.matchAll(/class="_v_[^"]*"[^>]*>([^<]*)</g)].map((m) => m[1] ?? ''),
+  ...[...html.matchAll(/data-size="md"[^>]*>(?:(?!<\/span><\/span>)[\s\S])*?class="_label[^"]*"[^>]*>([^<]*)<\/span><\/span>/g)].map(
+    (m) => m[1] ?? '',
+  ),
+];
 
 /**
  * ⚠ A snapshot whose COLLECTIONS were all read and whose every READING is `null` — the

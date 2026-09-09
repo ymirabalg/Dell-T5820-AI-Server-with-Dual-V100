@@ -63,6 +63,11 @@ ROW = "components/row.test.tsx"
 METER = "components/meter.test.tsx"
 PANEL_SHELL = "components/panel-shell.test.tsx"
 SPARKLINE = "components/sparkline.test.tsx"
+# 10e — two new leaf primitives, owned here per ANCHOR §9 (ledger ownership follows the FILE):
+# both live directly under components/, beside chip/meter/row/panel-shell/sparkline, not under
+# components/panels/ (which is step 10's harness).
+HERO = "components/hero.test.tsx"
+STRIP = "components/strip.test.tsx"
 CHART = "components/stacked-time-series-chart.test.tsx"
 PURITY = "components/purity.test.ts"
 STYLES = "components/styles.test.ts"
@@ -89,7 +94,7 @@ STYLES = "components/styles.test.ts"
 # actually checks. The second is that the property has no plausible wrong implementation, in
 # which case drop the ⚠ rather than the standard.
 LEDGER_FILES = [
-    PALETTE, CHIP, ROW, METER, PANEL_SHELL, SPARKLINE, CHART, PURITY, STYLES,
+    PALETTE, CHIP, ROW, METER, PANEL_SHELL, SPARKLINE, CHART, PURITY, STYLES, HERO, STRIP,
 ]
 
 # ⚠ CORRECTED IN STEP 9's RECONCILIATION — the regex this used to be could not see a
@@ -265,6 +270,8 @@ METER_SRC = "components/meter.tsx"
 PANEL_SHELL_SRC = "components/panel-shell.tsx"
 SPARKLINE_SRC = "components/sparkline.tsx"
 CHART_SRC = "components/stacked-time-series-chart.tsx"
+HERO_SRC = "components/hero.tsx"
+STRIP_SRC = "components/strip.tsx"
 
 # (name, source file, old, new, check) — or (name, source file, [(old, new), …], check)
 REGRESSIONS = [
@@ -279,11 +286,16 @@ REGRESSIONS = [
     ("09-C1 alarm shares watch's glyph, so the two bands are visually identical",
      CHIP_SRC, "alarm: '✕', // ✕ — login-form.tsx's own alarm glyph",
      "alarm: '▲', // ✕ — login-form.tsx's own alarm glyph", [CHIP]),
+    # ⚠ 10e re-aimed this anchor: `data-severity`/`data-size` moved onto their own lines when
+    # `data-code` was added (chip.tsx). Same property, new source text.
     ("09-C2 a null severity defaults to the good colour — O12, inverted",
-     CHIP_SRC, "data-severity={severity ?? 'none'} data-size={size}",
-     "data-severity={severity ?? 'normal'} data-size={size}", [CHIP, PANEL_SHELL, ROW]),
+     CHIP_SRC, "data-severity={severity ?? 'none'}\n      data-size={size}",
+     "data-severity={severity ?? 'normal'}\n      data-size={size}", [CHIP, PANEL_SHELL, ROW]),
     ("09-C3 the visually-hidden word is dropped, leaving the glyph as the only carrier",
      CHIP_SRC, '      <span className="sr-only">{word}</span>\n', "", [CHIP]),
+    ("10e-C1 the code modifier's condition is inverted, so a throttle-reason chip never gets it",
+     CHIP_SRC, "data-code={code ? 'true' : undefined}",
+     "data-code={code ? undefined : 'true'}", [CHIP]),
 
     # ============================================== components/panel-shell.tsx
     ("09-PS1 the title is lowercased, so \"GPU 0\" renders \"gpu 0\"",
@@ -295,6 +307,16 @@ REGRESSIONS = [
     ("09-PS3 the section's own no-band state defaults to the good colour",
      PANEL_SHELL_SRC, '<section className={styles.panel} data-severity={chip ?? \'none\'}>',
      '<section className={styles.panel} data-severity={chip ?? \'normal\'}>', [PANEL_SHELL]),
+    ("10e-PS4 chip is rendered even when OMITTED, so the log gets the hatched no-band pill (OQ-4)",
+     PANEL_SHELL_SRC,
+     "{chip === undefined ? null : <Chip severity={chip} />}",
+     "<Chip severity={chip ?? null} />",
+     [PANEL_SHELL]),
+    ("10e-PS5 headControl is silently dropped, so the chart/table toggle never renders",
+     PANEL_SHELL_SRC,
+     "        {headControl}\n        {chip === undefined ? null : <Chip severity={chip} />}",
+     "        {chip === undefined ? null : <Chip severity={chip} />}",
+     [PANEL_SHELL]),
 
     # ============================================== components/row.tsx
     ("09-R1 an em-dash value is blanked instead of passed through verbatim",
@@ -307,6 +329,16 @@ REGRESSIONS = [
      ROW_SRC,
      "{note === undefined || note === null || note === '' ? null : (",
      "{note === undefined || note === null || note === '' || value === '—' ? null : (",
+     [ROW]),
+    ("10e-R1 the value never becomes a pill — severity given renders plain text regardless (§2.0)",
+     ROW_SRC,
+     "      {severity === undefined ? (\n        <span className={styles.value}>{value}</span>\n      ) : (",
+     "      {true ? (\n        <span className={styles.value}>{value}</span>\n      ) : (",
+     [ROW]),
+    ("10e-R2 the value ALWAYS becomes a pill, even with no severity of its own to badge it with",
+     ROW_SRC,
+     "      {severity === undefined ? (\n        <span className={styles.value}>{value}</span>\n      ) : (",
+     "      {false ? (\n        <span className={styles.value}>{value}</span>\n      ) : (",
      [ROW]),
 
     # ============================================== components/meter.tsx
@@ -330,6 +362,11 @@ REGRESSIONS = [
     ("09-M4 severity=null renders the good colour on the track instead of the no-band state",
      METER_SRC, "data-severity={severity ?? 'none'} aria-hidden",
      "data-severity={severity ?? 'normal'} aria-hidden", [METER]),
+    ("10e-ME1 tickPercent is silently dropped, so the watch-threshold mark never renders",
+     METER_SRC,
+     "        {tickPercent === undefined ? null : (\n          <div className={styles.tick} style={{ left: `${tickPercent}%` }} />\n        )}",
+     "        {null}",
+     [METER]),
 
     # ============================================== components/sparkline.tsx
     ("09-SP1 the empty-series guard is disabled, so zero and all-null points fall through",
@@ -510,15 +547,17 @@ REGRESSIONS = [
      [SPARKLINE]),
 
     # ============================================== components/purity.test.ts's subject: chip.tsx
+    # ⚠ 10e re-aimed both anchors below: the signature gained `code = false` (chip.tsx). Same
+    # property, new source text.
     ("09-PU1 Chip holds severity in useState, so its colour can be debounced across renders",
      CHIP_SRC,
      [
          ("import { EM_DASH } from '@/lib/format';\nimport type { Severity } from '@/lib/types';",
           "import { useState } from 'react';\n\n"
           "import { EM_DASH } from '@/lib/format';\nimport type { Severity } from '@/lib/types';"),
-         ("export function Chip({ severity, label, size = 'md' }: ChipProps) {\n"
+         ("export function Chip({ severity, label, size = 'md', code = false }: ChipProps) {\n"
           "  const glyph = severity === null ? EM_DASH : GLYPH[severity];",
-          "export function Chip({ severity, label, size = 'md' }: ChipProps) {\n"
+          "export function Chip({ severity, label, size = 'md', code = false }: ChipProps) {\n"
           "  const [heldSeverity] = useState(severity); // exactly what rule 1 forbids\n"
           "  void heldSeverity;\n"
           "  const glyph = severity === null ? EM_DASH : GLYPH[severity];"),
@@ -676,12 +715,13 @@ REGRESSIONS = [
      [CHART]),
 
     # -------------------------------------------- M6 / M10, the sparkline's half
+    # ⚠ 10e re-aimed this anchor: `yFor` gained the domain clamp and padT/padB (§3.2), so the
+    # flat branch is now its own statement rather than a ternary expression. Same property —
+    # a flat series must draw on the CENTRE line, not the bottom edge ("coldest").
     ("09-SP5 a flat sparkline is drawn along the bottom edge, where 'coldest' lives",
      SPARKLINE_SRC,
-     "  const yFor = (v: number): number =>\n"
-     "    flat ? height / 2 : height - ((v - min) / (max - min)) * height;",
-     "  const yFor = (v: number): number =>\n"
-     "    height - ((v - min) / (flat ? 1 : max - min)) * height;",
+     "    if (flat) return padT + (height - padT - padB) / 2;",
+     "    if (flat) return height;",
      [SPARKLINE]),
     ("09-SP6 a one-point sparkline run is left invisible",
      SPARKLINE_SRC, "          {run.length === 1 && (", "          {run.length === 0 && (",
@@ -709,19 +749,32 @@ REGRESSIONS = [
      [METER]),
 
     # -------------------------------------------- M7: a CSS declaration that does nothing
-    ("09-CS1 `.row` loses `flex-wrap: wrap`, so `.note`'s `flex-basis: 100%` silently stops wrapping",
-     "components/row.module.css", "  flex-wrap: wrap;\n", "", ["components/styles.test.ts"]),
+    # ⚠ 10e re-aimed, and widened. `row.module.css` now has a SECOND `flex-wrap: wrap` (`.end`,
+    # 10e §2.0) — and `styles.test.ts`'s own guard is FILE-WIDE, not rule-scoped (it asks "does
+    # THIS FILE contain flex-wrap:wrap anywhere", not "does the SAME RULE that has flex-basis:
+    # 100% also have it"). So removing only `.row`'s copy left `.end`'s copy satisfying the
+    # file-wide check and the mutation stopped biting (10e's own "DID NOT BITE" finding,
+    # HANDOVER §0.6's shape one level further in: a second independent declaration of the SAME
+    # property makes the first one's mutation inert). Removing BOTH is the mutation that still
+    # represents the real defect — a file with `flex-basis: 100%` and no wrapping container at
+    # all — and is what the guard is actually there to catch.
+    ("09-CS1 `.row` loses `flex-wrap: wrap` everywhere in the file, so `.note`'s `flex-basis: 100%` silently stops wrapping",
+     "components/row.module.css",
+     [("  flex-wrap: wrap;\n  align-items: center;", "  align-items: center;"),
+      ("  align-items: center;\n  flex-wrap: wrap;\n  gap: 4px 8px;", "  align-items: center;\n  gap: 4px 8px;")],
+     ["components/styles.test.ts"]),
 
     # -------------------------------------------- H4: the purity guard itself
+    # ⚠ 10e re-aimed (same reason as 09-PU1): the signature gained `code = false`.
     ("09-PU2 Chip subscribes to the store with useSyncExternalStore — the hook the old guard missed",
      CHIP_SRC,
      [
          ("import { EM_DASH } from '@/lib/format';\nimport type { Severity } from '@/lib/types';",
           "import { useSyncExternalStore } from 'react';\n\n"
           "import { EM_DASH } from '@/lib/format';\nimport type { Severity } from '@/lib/types';"),
-         ("export function Chip({ severity, label, size = 'md' }: ChipProps) {\n"
+         ("export function Chip({ severity, label, size = 'md', code = false }: ChipProps) {\n"
           "  const glyph = severity === null ? EM_DASH : GLYPH[severity];",
-          "export function Chip({ severity, label, size = 'md' }: ChipProps) {\n"
+          "export function Chip({ severity, label, size = 'md', code = false }: ChipProps) {\n"
           "  const held = useSyncExternalStore(sub, get, getServer); // the DEBOUNCED band\n"
           "  void held;\n"
           "  const glyph = severity === null ? EM_DASH : GLYPH[severity];"),
@@ -881,10 +934,11 @@ REGRESSIONS = [
      [CHART]),
 
     # -------------------------------------------- sparkline.tsx: hover layer + table view
+    # ⚠ 10e re-aimed: the third argument is now `plotWidth` (§3.2's `refs` padding), not `width`.
     ("Q2-SP1 hover columns are built only for READABLE points, so a null reading has no column of its own",
      SPARKLINE_SRC,
-     "  const hoverColumns = hoverColumnsFor(n, xFor, width);",
-     "  const hoverColumns = hoverColumnsFor(readable.length, xFor, width);",
+     "  const hoverColumns = hoverColumnsFor(n, xFor, plotWidth);",
+     "  const hoverColumns = hoverColumnsFor(readable.length, xFor, plotWidth);",
      [SPARKLINE]),
     ("Q2-SP2 a null point's hover tooltip renders through the formatter instead of the em dash",
      SPARKLINE_SRC,
@@ -1182,6 +1236,136 @@ REGRESSIONS = [
      "                  {row.toMs === null ? 'ongoing' : formatTime(row.toMs)}",
      "                  {formatTime(row.toMs as number)}",
      [SPARKLINE]),
+
+    # ---------------------------------------------------------- 10e §3.2 — domain/refs/timeLabels
+    ("10e-SP6 the Y-axis clamp is dropped, so a reading outside a FIXED domain draws off the rail instead of pegged to it",
+     SPARKLINE_SRC,
+     "    const clamped = Math.min(domainMax, Math.max(domainMin, v));",
+     "    const clamped = v;",
+     [SPARKLINE]),
+    # ⚠ ADDED BY 10e's TEST PHASE, 2026-09-09. `10e-SP6` removes BOTH rails at once, so a
+    # ONE-SIDED clamp — the likelier edit — is invisible to it. HANDOVER §5.1: "a regression that
+    # mutates a comparison must not anchor on the comparison — ship two mutations per guard."
+    # Until this loop's test phase every `domain` fixture in `sparkline.test.tsx` sat ABOVE the
+    # rail, so `Math.min(domainMax, v)` passed the whole suite; the below-min fixture that makes
+    # `10e-SP12` bite was added with it.
+    ("10e-SP12 only the UPPER rail clamps, so a reading below a fixed domain's min draws off the bottom of the viewBox",
+     SPARKLINE_SRC,
+     "    const clamped = Math.min(domainMax, Math.max(domainMin, v));",
+     "    const clamped = Math.min(domainMax, v);",
+     [SPARKLINE]),
+    ("10e-SP13 only the LOWER rail clamps, so a reading above a fixed domain's max draws off the top of the viewBox",
+     SPARKLINE_SRC,
+     "    const clamped = Math.min(domainMax, Math.max(domainMin, v));",
+     "    const clamped = Math.max(domainMin, v);",
+     [SPARKLINE]),
+    ("10e-SP7 a given domain is ignored — the scale always autoscales from the rendered values",
+     SPARKLINE_SRC,
+     [("const domainMin = domain ? domain.min : Math.min(...values);", "const domainMin = Math.min(...values);"),
+      ("const domainMax = domain ? domain.max : Math.max(...values);", "const domainMax = Math.max(...values);")],
+     [SPARKLINE]),
+    ("10e-SP8 the reference line's own label is dropped, leaving only an unlabelled dashed line",
+     SPARKLINE_SRC,
+     "              <text x={plotWidth + 3} y={yFor(r.v) + 3} className={styles.refLabel}>\n"
+     "                {r.label}\n"
+     "              </text>",
+     "              {null}",
+     [SPARKLINE]),
+    ("10e-SP9 hasRefs ignores an empty array, reserving 26px of width for nothing to draw",
+     SPARKLINE_SRC,
+     "  const hasRefs = refs !== undefined && refs.length > 0;",
+     "  const hasRefs = refs !== undefined;",
+     [SPARKLINE]),
+    ("10e-SP10 the time axis's start label reads the LAST point instead of the first",
+     SPARKLINE_SRC,
+     "          <text x={0} y={height - 1} className={styles.timeLabel}>\n"
+     "            {formatTime((points[0] as SparklinePoint).tMs)}\n"
+     "          </text>",
+     "          <text x={0} y={height - 1} className={styles.timeLabel}>\n"
+     "            {formatTime((points[n - 1] as SparklinePoint).tMs)}\n"
+     "          </text>",
+     [SPARKLINE]),
+    ("10e-SP11 the area fill renders only for the FIRST run, so a later run's outage loses its own area",
+     SPARKLINE_SRC,
+     "          <path\n"
+     "            className={styles.area}\n"
+     "            data-role=\"area\"\n"
+     "            fill={color}\n"
+     "            d={areaPathFor(run, xFor, yFor, areaBaselineY)}\n"
+     "          />",
+     "          {i === 0 ? (\n"
+     "          <path\n"
+     "            className={styles.area}\n"
+     "            data-role=\"area\"\n"
+     "            fill={color}\n"
+     "            d={areaPathFor(run, xFor, yFor, areaBaselineY)}\n"
+     "          />\n"
+     "          ) : null}",
+     [SPARKLINE]),
+
+    # ============================================== components/hero.tsx (10e, new)
+    ("10e-H1 the unavailable form is dropped, so an em-dash reading draws at the normal 34px weight",
+     HERO_SRC,
+     "const unknown = value === EM_DASH;",
+     "const unknown = false;",
+     [HERO]),
+    ("10e-H2 the unit is suppressed beside an unavailable reading, losing a fact that is not itself a reading",
+     HERO_SRC,
+     "<span className={styles.unit}>{unit}</span>\n    </div>",
+     "<span className={styles.unit}>{unknown ? '' : unit}</span>\n    </div>",
+     [HERO]),
+    ("10e-H3 severity defaults to the good band instead of the explicit no-band state",
+     HERO_SRC,
+     "data-severity={severity ?? 'none'}",
+     "data-severity={severity ?? 'normal'}",
+     [HERO]),
+    ("10e-H4 a falsy-looking numeral (\"0\") is treated as unavailable, invariant 1 inverted",
+     HERO_SRC,
+     "const unknown = value === EM_DASH;",
+     "const unknown = value === EM_DASH || value === '0';",
+     [HERO]),
+
+    ("10e-H5 the hero's accessible name is written without a role, where ARIA prohibits it - the attribute renders and does nothing (10e-A8)",
+     HERO_SRC,
+     "{...(ariaLabel === undefined ? {} : { role: 'group', 'aria-label': ariaLabel })}",
+     "aria-label={ariaLabel}",
+     [HERO]),
+    ("10e-H6 the role is rendered unconditionally, so a hero with no name announces an unnamed group",
+     HERO_SRC,
+     "{...(ariaLabel === undefined ? {} : { role: 'group', 'aria-label': ariaLabel })}",
+     "role=\"group\"\n      aria-label={ariaLabel}",
+     [HERO]),
+
+    # ============================================== components/strip.tsx (10e, new)
+    ("10e-ST1 Strip invents an already-explained-em-dash exception for itself, blanking it",
+     STRIP_SRC,
+     "<dd className={styles.v}>{item.v}</dd>",
+     "<dd className={styles.v}>{item.v === '—' ? '' : item.v}</dd>",
+     [STRIP]),
+    ("10e-ST3 Strip's value goes back to `white-space: nowrap`, so one long model path overflows the GPU column instead of wrapping (10e-A2)",
+     "components/strip.module.css",
+     "  min-width: 0;\n  white-space: normal;\n  overflow-wrap: anywhere;",
+     "  white-space: nowrap;",
+     [STRIP]),
+
+    # ---- 10e-A1: the CSS invariant `styles.test.ts` gained. Two mutations, one clipping box
+    #      each (HANDOVER §5.1) — the log's own well, and a chart table view.
+    ("10e-CS2 the session event log's well stops being a containing block, so every entry's absolutely-positioned .sr-only span escapes it and grows the PAGE (F1, measured)",
+     "components/panels/session-event-log-panel.module.css",
+     "  position: relative;\n  overflow-y: auto;",
+     "  overflow-y: auto;",
+     ["components/styles.test.ts"]),
+    ("10e-CS3 the sparkline's table view stops being a containing block, so its sr-only caption escapes the scroll box",
+     "components/sparkline.module.css",
+     "  position: relative;\n}",
+     "}",
+     ["components/styles.test.ts"]),
+
+    ("10e-ST2 the list is a plain <div>, not a semantic <dl> — dt/dd pairs with no list wrapper",
+     STRIP_SRC,
+     [("<dl className={styles.strip}>", "<div className={styles.strip}>"),
+      ("    </dl>", "    </div>")],
+     [STRIP]),
 ]
 
 # ---------------------------------------------------------------------------

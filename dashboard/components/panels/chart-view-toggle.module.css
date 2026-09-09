@@ -1,16 +1,26 @@
+/* 10e §2.0 — restyled as the mock's `Chip md` pill; still a real, focusable `<button>`. Moved
+   into the panel head (`headControl`), so `align-self: flex-start` (a body-row leftover) is
+   gone with it. */
+
 .toggle {
-  font: inherit;
-  font-size: 0.8em;
-  padding: 0.15em 0.6em;
-  border: 1px solid var(--ink-muted);
-  border-radius: 0.25em;
-  background: transparent;
+  font: 600 9.5px/1.35 var(--font-sans);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border: 1px solid var(--border-hi);
+  border-radius: 2px;
+  background: var(--surface-2);
   color: var(--ink-secondary);
   cursor: pointer;
-  align-self: flex-start;
+  white-space: nowrap;
 }
 
 .toggle:hover {
   color: var(--ink-primary);
-  border-color: var(--ink-primary);
+}
+
+.toggle[aria-pressed='true'] {
+  color: var(--ink-primary);
+  border-color: #3a4552;
+  background: var(--nodata);
 }

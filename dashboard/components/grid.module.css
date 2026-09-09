@@ -36,13 +36,25 @@
  * for what that would take and why it was not done here. Authored against §6.1's ASCII and
  * this file's own reasoning above; `grid.test.tsx` proves each named slot renders under the
  * right CSS class, never that the class paints where the ASCII says it should.
+ *
+ * ### 10e §3.1 — four values change; the areas and placements above do not
+ *
+ * The three `grid-template-areas` blocks and the nine `grid-area` rules are UNTOUCHED — §6.1's
+ * placement was never the problem (10e's whole finding is density, not layout). What changes,
+ * measured on the mock: `gap` 9px (was 12), `padding` `9px 12px 12px` (the 9 is the sticky
+ * band→grid gap, the 12s are the mock's `.app` gutter), `align-items: start` (a short panel no
+ * longer stretches to fill its row — MEMORY under CPU, STORAGE under SAFETY — the panel is its
+ * own intrinsic height and the slot wrapper below still fills it), and COOLING gets an explicit
+ * `align-self: stretch` so it alone still takes its spanned rows whole. `minmax(0, 1fr)` tracks
+ * (also the mock's) mean a long subtitle can never widen a column.
  */
 
 .grid {
   display: grid;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  grid-template-columns: 1fr;
+  gap: 9px;
+  padding: 9px 12px 12px;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     'gpu0'
     'gpu1'
@@ -57,7 +69,7 @@
 
 @media (min-width: 900px) {
   .grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
       'gpu0 gpu1'
       'cooling cooling'
@@ -70,7 +82,7 @@
 
 @media (min-width: 1280px) {
   .grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     /* §6.1's four rows, verbatim: COOLING spans rows 2–3 in columns 1–2 (settled, was wrong
        in earlier drafts) and the bottom row splits 2/2 rather than 1/3. */
     grid-template-areas:
@@ -93,8 +105,11 @@
 .memory {
   grid-area: memory;
 }
+/* 10e §3.1 — with `align-items: start` on `.grid`, every slot is its panel's own intrinsic
+   height by default; COOLING alone still takes its two spanned rows whole. */
 .cooling {
   grid-area: cooling;
+  align-self: stretch;
 }
 .safety {
   grid-area: safety;

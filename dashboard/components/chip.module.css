@@ -1,43 +1,99 @@
+/* 10e §2.0 — two forms by `data-size`, plus the `data-code` typography modifier. See
+   `chip.tsx`'s module doc for why `md` colours its whole body while `sm` colours only the
+   glyph, and why `code` is a modifier rather than a third size. */
+
 .chip {
   display: inline-flex;
-  align-items: center;
-  gap: 0.35em;
-  font-family: var(--font-mono);
+  align-items: baseline;
   font-variant-numeric: tabular-nums;
-  line-height: 1;
-  color: var(--ink-secondary);
-}
-
-.chip[data-size='sm'] {
-  font-size: 0.85em;
+  white-space: nowrap;
 }
 
 .glyph {
   display: inline-block;
-  width: 1em;
   text-align: center;
 }
 
 .label {
+  /* inherits the pill/glyph's own colour — see the per-size rules below. */
+}
+
+/* ---------------------------------------------------------------------- md — the pill ---- */
+
+.chip[data-size='md'] {
+  gap: 5px;
+  font: 600 9.5px/1.35 var(--font-sans);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 2px;
+  border: 1px solid var(--border-hi);
+  background: rgba(152, 165, 180, 0.07);
   color: var(--ink-secondary);
 }
 
-/* Colour is spent on the glyph only — text beside it stays in text tokens (dataviz: "text
-   never wears the data colour"). `data-severity` is the finite, closed vocabulary this
-   selects on; an arbitrary chart-series hex is never expressed this way (see the step
-   notes on the CSS approach) — it goes through an inline colour, deliberately elsewhere. */
-.chip[data-severity='normal'] .glyph {
-  color: var(--status-good);
+.chip[data-size='md'] .glyph {
+  font-size: 9px;
 }
 
-.chip[data-severity='watch'] .glyph {
+/* 10e §2.0 — the mock's `.chip--code`: data, never shouted into uppercase. Typography only —
+   the pill's own border/background/padding are untouched. */
+.chip[data-size='md'][data-code='true'] {
+  text-transform: none;
+  letter-spacing: 0.03em;
+  font: 400 10px var(--font-mono);
+}
+
+.chip[data-size='md'][data-severity='normal'] {
+  border-color: rgba(12, 163, 12, 0.45);
+  background: rgba(12, 163, 12, 0.12);
+  color: var(--status-good-ink);
+}
+
+.chip[data-size='md'][data-severity='watch'] {
+  border-color: rgba(250, 178, 25, 0.48);
+  background: rgba(250, 178, 25, 0.13);
   color: var(--status-watch);
 }
 
-.chip[data-severity='alarm'] .glyph {
-  color: var(--status-alarm);
+.chip[data-size='md'][data-severity='alarm'] {
+  border-color: rgba(208, 59, 59, 0.58);
+  background: rgba(208, 59, 59, 0.16);
+  color: var(--status-alarm-ink);
 }
 
-.chip[data-severity='none'] .glyph {
+.chip[data-size='md'][data-severity='none'] {
+  border-color: var(--border-hi);
+  background: var(--nodata);
+  color: var(--ink-secondary);
+}
+
+/* --------------------------------------------------------------- sm — the bare glyph ---- */
+/* The mock's `.row__glyph`: no border, no background, no padding — colour lives on the glyph
+   alone, which is what a `Row`'s left edge and a log entry's severity tag both want. */
+
+.chip[data-size='sm'] {
+  width: 11px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.chip[data-size='sm'] .glyph {
+  width: 11px;
+}
+
+.chip[data-size='sm'][data-severity='normal'] .glyph {
+  color: var(--status-good-ink);
+}
+
+.chip[data-size='sm'][data-severity='watch'] .glyph {
+  color: var(--status-watch);
+}
+
+.chip[data-size='sm'][data-severity='alarm'] .glyph {
+  color: var(--status-alarm-ink);
+}
+
+.chip[data-size='sm'][data-severity='none'] .glyph {
   color: var(--ink-muted);
 }

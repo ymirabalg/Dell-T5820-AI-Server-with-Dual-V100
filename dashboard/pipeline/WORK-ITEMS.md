@@ -758,3 +758,21 @@ Recorded because each is a defect class worth recognising again:
 
 **The pattern in all three: a finding was fixed where it was reported and the sibling case was
 not checked.** Worth a habit — when a fix lands, grep for the same shape elsewhere.
+
+
+---
+
+# 11. `SPEC.md` — the wordings, taken 2026-09-09 (after 10e)
+
+| # | § | What changed |
+|---|---|---|
+| **10e-§6.1** | §6.1 | The unmeasured *"~1026px tall at 1280 wide … fits comfortably at 1920×1080"* sentence replaced with the measured numbers (build over by 356/418/362; `MOCK.html` fits by ~19/~90/~159), the cause (density, not the grid), and three rules: **the mock is the source for FORM only**; **the promise is unconditional on the banner** (owner's ruling); **acceptance is a browser measurement**. Plus the eight OQ rulings (10e §9), verbatim as ruled |
+| **10e-OQ-7** | §6.2 CPU | *"aggregate utilisation with a trace"* stands, and **both temperature and utilisation carry a trace** — the owner kept the built temperature sparkline; the cost is stated so §6.1's budget carries it |
+| **10e-Q1** | §6.1 | **The promise holds on a degraded page too**; `errors[]`/`detail` blocks become fixed-height scroll boxes like the event log; acceptance is measurement 9 on the all-collectors-failed fixture as well as healthy. Owner's ruling after 10e's reconcile |
+| **10e-Q3** | §6.2 GPU | `0x4` beside a notable bit is a **neutral, unbanded code chip** — not a warning, not a green verdict |
+| **10e-form** | §6.2 bus id | *"a reference, not a source"* → *"a source for form only, never for data (§6.1)"*, so the two sentences about the mock agree |
+
+**Ruled the same day, work items rather than wording:** **10e-Q12** delete the dead `Row` primitive
+(its CSS, tests and the mutations defending it); **10e-Q13** re-aim `02-R20`/`R30`/`R31` now, before
+step 11, so step 2's ledger runs again. Both go into the follow-up loop **10f** with Q1 and Q3.
+

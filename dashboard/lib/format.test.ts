@@ -15,9 +15,11 @@ import {
   formatAge,
   formatBytesPerSecond,
   formatCelsius,
+  formatCelsiusParts,
   formatCh5Pwm,
   formatCpuModel,
   formatGiB,
+  formatGiBParts,
   formatLoadAverage,
   formatMHz,
   formatMiB,
@@ -25,12 +27,14 @@ import {
   formatPercent,
   formatPort,
   formatRpm,
+  formatRpmParts,
   formatSwapGiB,
   formatText,
   formatTimeOfDay,
   formatTokens,
   formatUptime,
   formatWatts,
+  formatWattsParts,
   formatZoneAbbreviation,
   pwmStateName,
 } from './format';
@@ -1021,5 +1025,98 @@ describe('law 1 over the time of day (§6.6)', () => {
     expect(formatTimeOfDay(ts, NEW_YORK)).toBe(EM_DASH);
     expect(() => formatZoneAbbreviation(ts, NEW_YORK)).not.toThrow();
     expect(formatZoneAbbreviation(ts, NEW_YORK)).toBe(EM_DASH);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10e / O14 — the `parts` variants. A `Hero` sizes its numeral and its unit at two different
+// font sizes, so it needs the two pieces separately rather than a formatter's output string
+// split on whitespace (O14 forbids exactly that). These four functions are the sanctioned way.
+// ---------------------------------------------------------------------------
+
+describe('⚠ 10e/O14 — formatCelsiusParts agrees with formatCelsius on every readable fixture', () => {
+  const cases: readonly Celsius[] = [celsius(66), celsius(0), celsius(-1), celsius(83), celsius(1234)];
+  test.each(cases)('%s: value+unit reconstructs the string formatter exactly', (input) => {
+    const parts = formatCelsiusParts(input);
+    expect(`${parts.value} ${parts.unit}`).toBe(formatCelsius(input));
+  });
+
+  test('the unit is bare — no leading space, unlike the UNIT_* constant', () => {
+    expect(formatCelsiusParts(celsius(66)).unit).toBe('°C');
+  });
+
+  // ⚠ `null` is the one fixture where the concatenation identity above does NOT hold — see the
+  // module doc's note on why. `Hero`'s own contract keeps the unit visible beside an
+  // unavailable reading, so the unit is NOT dropped the way the string formatter drops it.
+  test('⚠ null keeps the real unit, unlike formatCelsius(null) which drops it entirely', () => {
+    const parts = formatCelsiusParts(null);
+    expect(parts).toEqual({ value: EM_DASH, unit: '°C' });
+    expect(formatCelsius(null)).toBe(EM_DASH); // the string formatter carries no unit here
+    expect(`${parts.value} ${parts.unit}`).not.toBe(formatCelsius(null));
+  });
+
+  test('⚠ zero is a reading, not treated as unreadable', () => {
+    expect(formatCelsiusParts(celsius(0))).toEqual({ value: '0', unit: '°C' });
+  });
+});
+
+describe('⚠ 10e/O14 — formatWattsParts agrees with formatWatts on every readable fixture', () => {
+  const cases: readonly Watts[] = [watts(249.8), watts(250), watts(0), watts(0.04)];
+  test.each(cases)('%s: value+unit reconstructs the string formatter exactly', (input) => {
+    const parts = formatWattsParts(input);
+    expect(`${parts.value} ${parts.unit}`).toBe(formatWatts(input));
+  });
+
+  test('the unit is bare', () => {
+    expect(formatWattsParts(watts(249.8)).unit).toBe('W');
+  });
+
+  test('⚠ null keeps the real unit W, not dropped like formatWatts(null)', () => {
+    expect(formatWattsParts(null)).toEqual({ value: EM_DASH, unit: 'W' });
+  });
+});
+
+describe('⚠ 10e/O14 — formatRpmParts agrees with formatRpm on every readable fixture', () => {
+  const cases: readonly Rpm[] = [rpm(4308), rpm(14451), rpm(989)];
+  test.each(cases)('%s: value+unit reconstructs the string formatter exactly', (input) => {
+    const parts = formatRpmParts(input);
+    expect(`${parts.value} ${parts.unit}`).toBe(formatRpm(input));
+  });
+
+  test('the unit is bare', () => {
+    expect(formatRpmParts(rpm(4308)).unit).toBe('RPM');
+  });
+
+  // ⚠ Invariant 1, in the parts form: a stopped fan (`0 RPM`) is a reading, and it must not be
+  // confused with the null/no-reading shape above — both keep the unit, but only null's value
+  // is the em dash.
+  test('⚠ zero is `0`, never the em dash — the numeral survives the split', () => {
+    expect(formatRpmParts(rpm(0))).toEqual({ value: '0', unit: 'RPM' });
+  });
+
+  test('⚠ null keeps the real unit RPM, not dropped like formatRpm(null)', () => {
+    expect(formatRpmParts(null)).toEqual({ value: EM_DASH, unit: 'RPM' });
+  });
+});
+
+describe('⚠ 10e/O14 — formatGiBParts agrees with formatGiB (RAM/disk 1dp) on every readable fixture', () => {
+  const cases: readonly GiB[] = [gib(33.2), gib(61.6), gib(0), gib(1234.5)];
+  test.each(cases)('%s: value+unit reconstructs the string formatter exactly', (input) => {
+    const parts = formatGiBParts(input);
+    expect(`${parts.value} ${parts.unit}`).toBe(formatGiB(input));
+  });
+
+  test('the unit is bare', () => {
+    expect(formatGiBParts(gib(33.2)).unit).toBe('GiB');
+  });
+
+  // ⚠ Distinguishes the 1dp memory hero from swap's 2dp — this is `formatGiB`'s own precision,
+  // never `formatSwapGiB`'s, so a hero built from this must not be handed a swap reading.
+  test('⚠ rounds to ONE decimal place, matching formatGiB and NOT formatSwapGiB', () => {
+    expect(formatGiBParts(gib(0.04))).toEqual({ value: '0.0', unit: 'GiB' });
+  });
+
+  test('⚠ null keeps the real unit GiB, not dropped like formatGiB(null)', () => {
+    expect(formatGiBParts(null)).toEqual({ value: EM_DASH, unit: 'GiB' });
   });
 });

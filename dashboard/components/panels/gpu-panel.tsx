@@ -24,23 +24,23 @@
  * - ⚠ **A card ABSENT from a `gpus` that WAS read is its own branch** — §6.5's *retired* case,
  *   *"the subject has left the machine, and that is an answer"*. See `absent` below.
  *
+ * ### 10e §2.1 — the mock's density, at 10e's §3.2 chart sizes
+ *
+ * Temperature moves from a `Row` into the dominant `Hero` figure; power moves into a `Figure`
+ * block beside it (the SAME `powerW` reading the meter below draws against the cap — the
+ * mock's form, 0 extra px); utilisation/SM clock/served-by collapse into one `Strip` line.
+ * The GPU↔instance join, the `gpus: null` takeover, the *retired*-card branch, `panelChip` and
+ * `decodeThrottleMask(...).notable` are ALL UNCHANGED — 10e touches density, never data or
+ * rules (`ANCHOR.md` §9).
+ *
  * ### ⚠ The ≥1600px promotion (§6.1), and the size it was given
  *
- * `grid.tsx`'s own doc records the mechanism as "recommended, not mandated": render BOTH the
- * sparkline and the promoted `StackedTimeSeriesChart`, and let a `min-width: 1600px` media
- * query in this file's own stylesheet show one and hide the other — so no viewport-tracking
- * state has to cross the hook boundary `purity.test.ts` enforces. **Size now comes from
- * `grid.tsx`'s `CHART_SIZE.gpuPromoted`** (L9, closed by 10c-3) — 480px wide, matching
- * `CHART_SIZE.cooling`'s width so a promoted GPU card and the COOLING panel's own chart do not
- * disagree about how wide a "big" chart is on this page, and 140px PER PLOT (⚠ 10c-3/A7: that
- * field is `plotHeight`, not `height` — this chart paints 160px in total, and COOLING's 210
- * paints 450; the two numbers are not comparable the way an earlier draft of this paragraph
- * claimed, and `grid.tsx`'s own doc now carries the correction). The NUMBERS are unchanged
- * from 10b's original default; what changed is that they are no longer bare literals at this
- * call site — 10b wrote `width={480} plotHeight={140}` here directly, which meant the one file
- * meant to hold every chart size (`grid.tsx`'s own module doc: *"a panel that wants a bigger or
- * smaller chart than the default asks for a new named export here rather than picking a number
- * itself"*) did not actually hold this one.
+ * `grid.tsx`'s own doc records the mechanism: render BOTH sizes of the sparkline and let a
+ * `min-width: 1600px` media query in this file's own stylesheet show one and hide the other,
+ * so no viewport-tracking state has to cross the hook boundary `purity.test.ts` enforces. 10e
+ * replaces the ≥1600px `StackedTimeSeriesChart` with the SAME `Sparkline` primitive at a
+ * bigger size (`CHART_SIZE.gpuPromoted`), carrying `domain`/`refs`/`timeLabels` (§3.2) — no
+ * second chart component, no second geometry to keep in sync with the small form.
  *
  * ⚠ **CSS media-query behaviour is not observable from `renderToStaticMarkup`** (HANDOVER §6:
  * "CSS and layout are not observable in jsdom"). This file's tests can prove both elements
@@ -49,12 +49,14 @@
  * real browser.
  */
 
-import { formatTimeOfDayMs, chartDomainOf } from './panel-chart';
-import { StackedTimeSeriesChart } from '../stacked-time-series-chart';
+import { formatTimeOfDayMs } from './panel-chart';
 import { Sparkline } from '../sparkline';
 import { PanelShell } from '../panel-shell';
+import { Hero, Figure } from '../hero';
+import { Strip } from '../strip';
 import { Meter } from '../meter';
-import { Row } from '../row';
+import { Caption } from './caption';
+import { Chip } from '../chip';
 import { CHART_SIZE } from '../grid';
 import { SERIES_COLORS } from '../palette';
 import type { PanelProps } from '../panel-props';
@@ -64,13 +66,15 @@ import { traceFor } from '@/lib/client/series';
 import { latestSample } from '@/lib/client/runtime';
 import {
   formatCelsius,
+  formatCelsiusParts,
   formatMHz,
   formatMiBPair,
   formatPercent,
   formatText,
   formatWatts,
+  formatWattsParts,
 } from '@/lib/format';
-import { severityGpuTemp, severityVram } from '@/lib/severity';
+import { GPU_TEMP_ALARM_C, GPU_TEMP_WATCH_C, severityGpuTemp, severityVram, usedPercent } from '@/lib/severity';
 import { celsius } from '@/lib/types';
 import type { Gpu, ServingInstance, TelemetrySnapshot } from '@/lib/types';
 
@@ -112,6 +116,16 @@ const gpuAt = (snapshot: TelemetrySnapshot | null, index: number): Gpu | null =>
 const servingFor = (snapshot: TelemetrySnapshot | null, index: number): ServingInstance | null =>
   snapshot?.serving?.find((s) => s.instance === index) ?? null;
 
+/** §6.3's own boundaries, on the ≥1600px promoted sparkline only (OQ-6: leave the rest out). */
+const TEMP_REFS = [
+  { v: GPU_TEMP_ALARM_C, label: String(GPU_TEMP_ALARM_C), alarm: true },
+  { v: GPU_TEMP_WATCH_C, label: String(GPU_TEMP_WATCH_C) },
+];
+
+/** The mock's shared GPU scale (§3.2): both cards, both sizes, so the reference lines are
+ *  always on screen rather than only when the window happens to touch them. */
+const TEMP_DOMAIN = { min: 30, max: 90 };
+
 export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPanelProps) {
   const index: 0 | 1 = panelId === 'gpu0' ? 0 : 1;
   const snapshot = latestSample(state)?.snapshot ?? null;
@@ -131,21 +145,32 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
   // of these three LEAF readings (temperature, throttle, VRAM) is `null` shows no band instead.
   // See `panel-chip.ts`'s module doc for why these three specifically, and why passing something
   // pre-combined would be too late to catch it.
+  const tempSeverity = severityGpuTemp(gpu?.tempC ?? null);
   const chip = panelChip(
-    severityGpuTemp(gpu?.tempC ?? null),
+    tempSeverity,
     decode?.severity ?? null,
     severityVram(gpu?.memUsedMiB ?? null, gpu?.memTotalMiB ?? null),
   );
 
   const subtitle = `${formatText(gpu?.name ?? null)} · ${formatText(gpu?.bus ?? null)}`;
   const color = index === 0 ? SERIES_COLORS.gpu0 : SERIES_COLORS.gpu1;
-  const seriesId = index === 0 ? 'gpu0' : 'gpu1';
   const trace = traceFor(state, (s) => s.gpus?.find((g) => g.index === index)?.tempC ?? null);
-  const domain = chartDomainOf(state);
   const ariaLabel = `GPU ${index} temperature over the selected window`;
+  // ⚠ 10e-A8: the HERO is a point reading, so it must not be named with the CHART's
+  // window sentence — `ariaLabel` above is already the accessible name of both `<svg
+  // role="img">` mounts and of `ChartViewToggle`, and announcing "over the selected
+  // window" over a single instantaneous numeral is wrong three times over.
+  const heroAriaLabel = `GPU ${index} temperature`;
+  const tempParts = formatCelsiusParts(gpu?.tempC ?? null);
+  const powerParts = formatWattsParts(gpu?.powerW ?? null);
+
+  const toggle =
+    onToggleView === undefined ? undefined : (
+      <ChartViewToggle view={view} onToggle={onToggleView} label={ariaLabel} />
+    );
 
   return (
-    <PanelShell title={`GPU ${index}`} subtitle={subtitle} chip={chip}>
+    <PanelShell title={`GPU ${index}`} subtitle={subtitle} chip={chip} headControl={toggle}>
       {absent ? (
         <div>
           <p className={styles.takeover}>card not enumerated</p>
@@ -161,71 +186,84 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
         </div>
       ) : (
         <>
-          <div className={styles.headline}>
-            <Row label="temperature" value={formatCelsius(gpu?.tempC ?? null)} severity={severityGpuTemp(gpu?.tempC ?? null)} />
+          <div className={styles.heroRow}>
+            <Hero value={tempParts.value} unit={tempParts.unit} severity={tempSeverity} ariaLabel={heroAriaLabel} />
+            <div className={styles.sparklineArea}>
+              {/* ⚠ 10c-3/A2: the two wrappers carry a stable `data-role` so a browser measurement
+                  identifies them BY NAME. `measure-breakpoints.mjs` used to take `svgs[0]` and
+                  `svgs[1]` inside this card positionally, which held only while these two files
+                  were the only `<svg>` emitters in the tree — one icon or badge added here and the
+                  measurement silently checked the wrong pair, in the direction that PASSES. */}
+              <div className={styles.sparklineWrap} data-role="gpu-sparkline-wrap">
+                <Sparkline
+                  points={trace}
+                  ariaLabel={ariaLabel}
+                  color={color}
+                  width={CHART_SIZE.gpuSparkline.width}
+                  height={CHART_SIZE.gpuSparkline.height}
+                  view={view}
+                  formatValue={(v) => formatCelsius(celsius(v))}
+                  formatTime={formatTimeOfDayMs}
+                  gaps={state.gaps}
+                  domain={TEMP_DOMAIN}
+                />
+              </div>
+              <div className={styles.fullChartWrap} data-role="gpu-full-chart-wrap">
+                <Sparkline
+                  points={trace}
+                  ariaLabel={ariaLabel}
+                  color={color}
+                  width={CHART_SIZE.gpuPromoted.width}
+                  height={CHART_SIZE.gpuPromoted.height}
+                  view={view}
+                  formatValue={(v) => formatCelsius(celsius(v))}
+                  formatTime={formatTimeOfDayMs}
+                  gaps={state.gaps}
+                  domain={TEMP_DOMAIN}
+                  refs={TEMP_REFS}
+                  timeLabels
+                />
+              </div>
+            </div>
+            {/* The mock's `.gpuTop__pw` — the SAME `powerW` reading the meter below draws
+                against the cap; this is its 0px-extra form, not a second reading. */}
+            <Figure value={powerParts.value} unit={powerParts.unit} caption={`cap ${formatWatts(gpu?.powerCapW ?? null)}`} />
           </div>
-          {onToggleView === undefined ? null : (
-            <ChartViewToggle view={view} onToggle={onToggleView} label={ariaLabel} />
-          )}
-          {/* ⚠ 10c-3/A2: the two wrappers carry a stable `data-role` so a browser measurement
-              identifies them BY NAME. `measure-breakpoints.mjs` used to take `svgs[0]` and
-              `svgs[1]` inside this card positionally, which held only while these two files
-              were the only `<svg>` emitters in the tree — one icon or badge added here and the
-              measurement silently checked the wrong pair, in the direction that PASSES. */}
-          <div className={styles.sparklineWrap} data-role="gpu-sparkline-wrap">
-            <Sparkline
-              points={trace}
-              ariaLabel={ariaLabel}
-              color={color}
-              width={CHART_SIZE.sparkline.width}
-              height={CHART_SIZE.sparkline.height}
-              view={view}
-              formatValue={(v) => formatCelsius(celsius(v))}
-              formatTime={formatTimeOfDayMs}
-              gaps={state.gaps}
-            />
-          </div>
-          <div className={styles.fullChartWrap} data-role="gpu-full-chart-wrap">
-            <StackedTimeSeriesChart
-              id={`${panelId}-temp-chart`}
-              ariaLabel={ariaLabel}
-              plots={[
-                {
-                  id: 'temp',
-                  series: [{ id: seriesId, label: `GPU ${index}`, color, points: trace }],
-                  formatTick: (v) => formatCelsius(celsius(v)),
-                },
-              ]}
-              gaps={state.gaps}
-              domainStartMs={domain.startMs}
-              domainEndMs={domain.endMs}
-              formatTime={formatTimeOfDayMs}
-              width={CHART_SIZE.gpuPromoted.width}
-              plotHeight={CHART_SIZE.gpuPromoted.plotHeight}
-              view={view}
-            />
-          </div>
-          <Row label="power" value={`${formatWatts(gpu?.powerW ?? null)} of ${formatWatts(gpu?.powerCapW ?? null)} cap`} />
+          <Meter
+            label="power"
+            formattedValue={`${formatWatts(gpu?.powerW ?? null)} / ${formatWatts(gpu?.powerCapW ?? null)}`}
+            used={gpu?.powerW ?? null}
+            total={gpu?.powerCapW ?? null}
+            severity={null}
+          />
           <Meter
             label="VRAM"
-            formattedValue={formatMiBPair(gpu?.memUsedMiB ?? null, gpu?.memTotalMiB ?? null)}
+            // §6.3's own VRAM percentage — the same figure the severity bands on
+            // (`usedPercent`, `lib/severity.ts`), printed here because the mock does and it
+            // costs no height (it lives in the meter's own label line): never a second,
+            // independently-computed division.
+            formattedValue={`${formatMiBPair(gpu?.memUsedMiB ?? null, gpu?.memTotalMiB ?? null)} · ${formatPercent(
+              usedPercent(gpu?.memUsedMiB ?? null, gpu?.memTotalMiB ?? null),
+            )}`}
             used={gpu?.memUsedMiB ?? null}
             total={gpu?.memTotalMiB ?? null}
             severity={severityVram(gpu?.memUsedMiB ?? null, gpu?.memTotalMiB ?? null)}
+            tickPercent={90}
           />
-          <Row label="utilisation" value={formatPercent(gpu?.utilPct ?? null)} />
-          <Row label="SM clock" value={formatMHz(gpu?.smClockMHz ?? null)} />
+          <Strip
+            items={[
+              { k: 'util', v: formatPercent(gpu?.utilPct ?? null) },
+              { k: 'SM clk', v: formatMHz(gpu?.smClockMHz ?? null) },
+              { k: `served by instance ${index}`, v: formatText(instance?.model ?? null) },
+            ]}
+          />
           {decode !== null && decode.notable ? (
-            <Row
-              label="throttle"
-              value={decode.reasons.map((r) => r.label).join(', ')}
-              severity={decode.severity}
-            />
+            <Caption label="throttle">
+              {decode.reasons.map((r) => (
+                <Chip key={r.label} severity={r.severity} size="md" code label={r.label} />
+              ))}
+            </Caption>
           ) : null}
-          <Row
-            label={`served by instance ${index}`}
-            value={formatText(instance?.model ?? null)}
-          />
           {/* §6.5's "is available" half on the NON-takeover branch too. `nvidia-smi` is this
               panel's only source and it blanks every figure at once, so it renders once under
               them; before this, an enumerated card whose readings all failed showed four em

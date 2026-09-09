@@ -184,6 +184,22 @@ export interface SparklineGap {
   readonly reason: string;
 }
 
+/** 10e §3.2 — a fixed y-scale, so two cards (or two sizes of the same card) share one scale
+ *  and a threshold line is always on screen rather than only when the window happens to touch
+ *  it. See {@link SparklineProps.domain}. */
+export interface SparklineDomain {
+  readonly min: number;
+  readonly max: number;
+}
+
+/** 10e §3.2 — a dashed threshold line with an end label. See {@link SparklineProps.refs}. */
+export interface SparklineRef {
+  readonly v: number;
+  readonly label: string;
+  /** `true` draws the alarm hue; omitted/`false` draws the muted "watch"-register hue. */
+  readonly alarm?: boolean;
+}
+
 export interface SparklineProps {
   readonly points: readonly SparklinePoint[];
   /**
@@ -221,6 +237,46 @@ export interface SparklineProps {
    * a real sampling gap draw one smooth, unbroken line between them.
    */
   readonly gaps?: readonly SparklineGap[];
+  /**
+   * 10e §3.2 — the ≥1600px "promoted" form's three optional additions. All default to the
+   * primitive's existing behaviour: with none of the three given the scale autoscales exactly
+   * as before and neither the `sparkline-refs` nor the `sparkline-time-labels` group is
+   * emitted at all.
+   *
+   * ⚠ **"byte-identical to the pre-10e output" is NOT the claim, and an earlier draft of this
+   * comment made it** (corrected by 10e's test phase, 2026-09-09). Two 10e changes are
+   * UNCONDITIONAL — the area `<path data-role="area">` per run and the end dot's `r` going
+   * 2.5 → 4.5 with a 2px stroke — and `yFor` was rewritten from `height - ((v-min)/(max-min))
+   * *height` to a `padT`/`padB` form which is algebraically equal at `padT=padB=0` but not
+   * bit-equal in IEEE754 (`h=38, min=30, max=90, v=66` → `15.2` before, `15.200000000000001`
+   * after; those digits land in the emitted `points=` attribute). The honest claim is the one
+   * above: these three props are inert when omitted.
+   *
+   * A fixed y-scale. GPU cards pass `{ min: 30, max: 90 }` at BOTH sizes — the mock's own
+   * choice — so the two cards share one scale and the alarm/watch reference lines below are
+   * always on screen rather than only when the window happens to touch 70/80. Values outside
+   * the domain are CLAMPED for their y-position only (the same magnitude clamp
+   * `StackedTimeSeriesChart` already does — §6.3's Y-axis clamp, never the X-position drop
+   * Q2-F9 rejected): the mark stays at its real x (its real time), pegged to the nearer rail.
+   */
+  readonly domain?: SparklineDomain;
+  /**
+   * Dashed threshold lines with a right-hand label, drawn ONLY when `timeLabels` also reserves
+   * room and the caller is the ≥1600px promoted form — this primitive draws whatever it is
+   * given regardless of size, so gating "only at ≥1600px" is the CALLER's job (the same
+   * CSS-media-query mechanism that already shows/hides the two wrapper `<svg>`s), not this
+   * component's. GPU cards pass §6.3's own two boundaries, read from the exported
+   * `GPU_TEMP_WATCH_C`/`GPU_TEMP_ALARM_C` constants so the line on the chart and the colour of
+   * the cell cannot disagree. Reserves 26px on the right for the label.
+   */
+  readonly refs?: readonly SparklineRef[];
+  /**
+   * Draws `formatTime(points[0].tMs)` at the left edge and `formatTime(last.tMs)` anchored
+   * `end` at the right, 8.5px muted text at the bottom. Reserves 4px at the top and 10px at
+   * the bottom (vs. 0/0 without it) — the same padding the reference-line labels need, so the
+   * two never fight for the same strip.
+   */
+  readonly timeLabels?: boolean;
 }
 
 interface IndexedPoint {
@@ -331,6 +387,27 @@ const gapSpansFor = (points: readonly SparklinePoint[], gaps: readonly Sparkline
     if (firstIndex >= 0) spans.push({ gap, firstIndex, lastIndex });
   }
   return spans;
+};
+
+/**
+ * 10e §3.2 — the mock's `areaFrom`: one filled path per run, closed against the plot's own
+ * baseline. Drawn UNDER the polyline (see the render order below), `opacity: .1` in the
+ * stylesheet — form only, 0px of layout height, and it breaks at exactly the same points the
+ * line itself breaks at (one area per run, matching invariant 1's "never bridge a null").
+ */
+const areaPathFor = (
+  run: readonly IndexedPoint[],
+  xFor: (index: number) => number,
+  yFor: (v: number) => number,
+  baselineY: number,
+): string => {
+  if (run.length === 0) return '';
+  const first = run[0] as IndexedPoint;
+  const parts = [`M${xFor(first.index)},${baselineY}`];
+  for (const p of run) parts.push(`L${xFor(p.index)},${yFor(p.v)}`);
+  const last = run[run.length - 1] as IndexedPoint;
+  parts.push(`L${xFor(last.index)},${baselineY}`, 'Z');
+  return parts.join(' ');
 };
 
 /** One marker per gap — see {@link GapSpan} for why it is per gap and not per point-pair. */
@@ -491,6 +568,9 @@ export function Sparkline({
   formatValue,
   formatTime,
   gaps = [],
+  domain,
+  refs,
+  timeLabels = false,
 }: SparklineProps) {
   if (view === 'table') {
     return (
@@ -521,26 +601,52 @@ export function Sparkline({
     );
   }
 
+  // 10e §3.2 — the three optional additions. `hasRefs` gates BOTH the padding they need and
+  // whether anything is drawn from `refs`, so an empty array behaves exactly like `undefined`
+  // rather than silently reserving 26px for nothing. `padT`/`padB` are reserved only by
+  // `timeLabels`, independent of `refs` — CPU's promoted form takes the axis with no refs.
+  const hasRefs = refs !== undefined && refs.length > 0;
+  const padT = timeLabels ? 4 : 0;
+  const padB = timeLabels ? 10 : 0;
+  const padR = hasRefs ? 26 : 0;
+  const plotWidth = width - padR;
+
   const values = readable.map((p) => p.v);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  // ⚠ A flat series has no span to place anything within, and `(v - min) / 1` is 0 for every
-  // point — which put the whole line on `y = height`, the BOTTOM edge, the one position that
-  // everywhere else in the same trace means "coldest reading in the window". A card idling at
-  // a constant 66 °C is not at the bottom of anything. Draw it on the centre line instead,
-  // which is where `StackedTimeSeriesChart` puts the identical input, so the two primitives
-  // cannot be read against each other and disagree.
-  const flat = max - min === 0;
+  // A fixed domain wins when given (GPU cards, both sizes); otherwise autoscale exactly as
+  // before — the values ARE the domain, so the clamp below is a no-op on that path.
+  const domainMin = domain ? domain.min : Math.min(...values);
+  const domainMax = domain ? domain.max : Math.max(...values);
+  // ⚠ A flat series (or a degenerate domain) has no span to place anything within, and
+  // `(v - min) / 1` is 0 for every point — which put the whole line on `y = height`, the
+  // BOTTOM edge, the one position that everywhere else in the same trace means "coldest
+  // reading in the window". A card idling at a constant 66 °C is not at the bottom of
+  // anything. Draw it on the centre line instead, which is where `StackedTimeSeriesChart`
+  // puts the identical input, so the two primitives cannot be read against each other and
+  // disagree.
+  const flat = domainMax - domainMin === 0;
 
   const n = points.length;
   // A single point has nowhere to span; anchor it at the left edge rather than dividing by 0.
-  const xFor = (index: number): number => (n <= 1 ? 0 : (index / (n - 1)) * width);
-  const yFor = (v: number): number =>
-    flat ? height / 2 : height - ((v - min) / (max - min)) * height;
+  const xFor = (index: number): number => (n <= 1 ? 0 : (index / (n - 1)) * plotWidth);
+  // §6.3's Y-axis clamp (never Q2-F9's rejected X-position drop): a reading outside a FIXED
+  // domain is pegged to the nearer rail for its magnitude only — its x (its real time) is
+  // untouched. ⚠ TWO rails, and each needs its own fixture: every `domain` test in this
+  // component's file sat above the max until 10e's test phase added one below the min, and a
+  // one-sided `Math.min(domainMax, v)` passed the whole suite (`10e-SP12`/`SP13` now cover the
+  // rails separately). With no `domain` given, `values` already bound `domainMin`/`domainMax`,
+  // so the clamp never fires — the prop is inert when omitted, which is a weaker and TRUE
+  // statement than the "byte-identical to pre-10e" this comment used to make: see the prop's
+  // own doc above for the three unconditional 10e changes that make byte-identity false.
+  const yFor = (v: number): number => {
+    if (flat) return padT + (height - padT - padB) / 2;
+    const clamped = Math.min(domainMax, Math.max(domainMin, v));
+    return padT + (1 - (clamped - domainMin) / (domainMax - domainMin)) * (height - padT - padB);
+  };
 
   const last = readable[readable.length - 1];
-  const hoverColumns = hoverColumnsFor(n, xFor, width);
+  const hoverColumns = hoverColumnsFor(n, xFor, plotWidth);
   const gapMarks = gapMarksFor(gapSpansFor(points, gaps), xFor);
+  const areaBaselineY = height - padB;
 
   return (
     <svg
@@ -551,7 +657,29 @@ export function Sparkline({
       role="img"
       aria-label={ariaLabel}
     >
-      {/* 10c-3/F14b — painted FIRST, under the polylines: a hatched-ground rect would be
+      {/* 10e §3.2 — §6.3's own boundaries, drawn first so the data reads on top of them
+          (matching the mock's paint order). Only present when the caller passes `refs`, which
+          is the CALLER's decision (the ≥1600px promoted form only) — this primitive draws
+          whatever it is handed regardless of its own size. */}
+      {!hasRefs ? null : (
+        <g data-role="sparkline-refs">
+          {(refs as readonly SparklineRef[]).map((r) => (
+            <g key={r.label} data-role="sparkline-ref">
+              <line
+                x1={0}
+                x2={plotWidth}
+                y1={yFor(r.v)}
+                y2={yFor(r.v)}
+                className={r.alarm === true ? styles.refAlarm : styles.refLine}
+              />
+              <text x={plotWidth + 3} y={yFor(r.v) + 3} className={styles.refLabel}>
+                {r.label}
+              </text>
+            </g>
+          ))}
+        </g>
+      )}
+      {/* 10c-3/F14b — painted under the polylines: a hatched-ground rect would be
           nothing to hatch here (see the module doc), so this is a flat, muted tint instead.
           `pointer-events: none` so it never competes with the hover layer painted last. */}
       <g data-role="sparkline-gaps">
@@ -561,14 +689,22 @@ export function Sparkline({
             className={styles.gap}
             data-role="gap"
             x={mark.x}
-            y={0}
+            y={padT}
             width={mark.width}
-            height={height}
+            height={height - padT - padB}
           />
         ))}
       </g>
       {runs.map((run, i) => (
         <Fragment key={i}>
+          {/* 10e §3.2 — the mock's `areaFrom`: one filled path per run, under its own
+              polyline, opacity .1 (form only, 0px of layout height). */}
+          <path
+            className={styles.area}
+            data-role="area"
+            fill={color}
+            d={areaPathFor(run, xFor, yFor, areaBaselineY)}
+          />
           <polyline
             className={styles.line}
             stroke={color}
@@ -595,11 +731,25 @@ export function Sparkline({
         </Fragment>
       ))}
       {last === undefined ? null : (
-        <circle className={styles.end} cx={xFor(last.index)} cy={yFor(last.v)} r={2.5} fill={color}>
+        // 10e §3.2 — the mock's end dot: r 4.5, a 2px ground-coloured stroke (was 2.5 / 1).
+        <circle className={styles.end} cx={xFor(last.index)} cy={yFor(last.v)} r={4.5} fill={color}>
           <title>
             {`${formatTime((points[last.index] as SparklinePoint).tMs)}\n${formatValue(last.v)}`}
           </title>
         </circle>
+      )}
+
+      {/* 10e §3.2 — the promoted form's time axis: the window's first and last real instants,
+          8.5px muted text at the bottom edge. */}
+      {!timeLabels || n === 0 ? null : (
+        <g data-role="sparkline-time-labels">
+          <text x={0} y={height - 1} className={styles.timeLabel}>
+            {formatTime((points[0] as SparklinePoint).tMs)}
+          </text>
+          <text x={plotWidth} y={height - 1} textAnchor="end" className={styles.timeLabel}>
+            {formatTime((points[n - 1] as SparklinePoint).tMs)}
+          </text>
+        </g>
       )}
 
       {/* Q2's crosshair — CSS-only, adjacent-sibling reveal (see the module doc and

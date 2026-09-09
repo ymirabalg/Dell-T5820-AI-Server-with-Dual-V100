@@ -79,42 +79,46 @@ export function SafetyPanel({ state, nowMs }: PanelProps) {
 
   return (
     <PanelShell title="safety" subtitle="ufw · pwm5 · dkms · fan service" chip={chip}>
-      <StatusRow
-        label="ufw enforcing"
-        value={yesNo(safety?.ufwEnforcing ?? null)}
-        severity={ufwSeverity}
-        note={staleAgeNote(findDisplayed(state.displayed, 'ufw_enforcing'), nowMs)}
-        noteTone={staleAgeNote(findDisplayed(state.displayed, 'ufw_enforcing'), nowMs) === null ? 'muted' : 'watch'}
-        detail={messageFor('ufw')}
-      />
-      <StatusRow
-        label="pwm5 present"
-        value={yesNo(safety?.pwm5Present ?? null)}
-        severity={pwm5Severity}
-        note={staleAgeNote(findDisplayed(state.displayed, 'pwm5_present'), nowMs)}
-        noteTone={staleAgeNote(findDisplayed(state.displayed, 'pwm5_present'), nowMs) === null ? 'muted' : 'watch'}
-        detail={messageFor('dell-smm')}
-      />
-      <StatusRow
-        label="DKMS for running kernel"
-        value={yesNo(safety?.dkmsForRunningKernel ?? null)}
-        severity={dkmsSeverity}
-        note={staleAgeNote(findDisplayed(state.displayed, 'dkms_for_running_kernel'), nowMs)}
-        noteTone={
-          staleAgeNote(findDisplayed(state.displayed, 'dkms_for_running_kernel'), nowMs) === null
-            ? 'muted'
-            : 'watch'
-        }
-        detail={messageFor('dkms')}
-      />
-      <StatusRow
-        label="fan service"
-        value={staleValueOr(fanServiceCondition, formatText(safety?.fanServiceState ?? null))}
-        severity={fanServiceSeverity}
-        note={fanServiceAge}
-        noteTone={fanServiceAge === null ? 'muted' : 'watch'}
-        detail={messageFor('dbus')}
-      />
+      {/* 10e §2.0 — the mock's `.rows` list: `gap: 1px` between rows, distinct from the
+          panel body's own 5px gap between different KINDS of content. */}
+      <div className={styles.rows}>
+        <StatusRow
+          label="ufw enforcing"
+          value={yesNo(safety?.ufwEnforcing ?? null)}
+          severity={ufwSeverity}
+          note={staleAgeNote(findDisplayed(state.displayed, 'ufw_enforcing'), nowMs)}
+          noteTone={staleAgeNote(findDisplayed(state.displayed, 'ufw_enforcing'), nowMs) === null ? 'muted' : 'watch'}
+          detail={messageFor('ufw')}
+        />
+        <StatusRow
+          label="pwm5 present"
+          value={yesNo(safety?.pwm5Present ?? null)}
+          severity={pwm5Severity}
+          note={staleAgeNote(findDisplayed(state.displayed, 'pwm5_present'), nowMs)}
+          noteTone={staleAgeNote(findDisplayed(state.displayed, 'pwm5_present'), nowMs) === null ? 'muted' : 'watch'}
+          detail={messageFor('dell-smm')}
+        />
+        <StatusRow
+          label="DKMS for running kernel"
+          value={yesNo(safety?.dkmsForRunningKernel ?? null)}
+          severity={dkmsSeverity}
+          note={staleAgeNote(findDisplayed(state.displayed, 'dkms_for_running_kernel'), nowMs)}
+          noteTone={
+            staleAgeNote(findDisplayed(state.displayed, 'dkms_for_running_kernel'), nowMs) === null
+              ? 'muted'
+              : 'watch'
+          }
+          detail={messageFor('dkms')}
+        />
+        <StatusRow
+          label="fan service"
+          value={staleValueOr(fanServiceCondition, formatText(safety?.fanServiceState ?? null))}
+          severity={fanServiceSeverity}
+          note={fanServiceAge}
+          noteTone={fanServiceAge === null ? 'muted' : 'watch'}
+          detail={messageFor('dbus')}
+        />
+      </div>
       {state.unknownStanding.length === 0 ? null : (
         <div className={styles.unknownStanding}>
           {state.unknownStanding.map((id) => (

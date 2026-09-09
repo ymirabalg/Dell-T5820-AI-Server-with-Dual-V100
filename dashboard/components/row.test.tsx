@@ -31,7 +31,12 @@ describe('the optional severity chip', () => {
    */
   test('⚠ severity={null} still renders a chip, in the no-band state — it is not the same as omitting the prop', () => {
     const html = renderToStaticMarkup(<Row label="fan3" value={EM_DASH} severity={null} />);
-    expect(html).toContain('data-severity="none"');
+    // ⚠ Scoped to an exact COUNT, not a loose `toContain`: the row's own div, the left-edge
+    // glyph (`Chip sm`) and the value pill (`Chip md`, §2.0) all carry `data-severity="none"`
+    // when severity is explicitly null — three occurrences. A `toContain` alone cannot tell
+    // "the glyph rendered" from "only the row div's own attribute happens to say none too" —
+    // exactly the gap that let a real mutation (dropping the glyph) pass unnoticed.
+    expect((html.match(/data-severity="none"/g) ?? []).length).toBe(3);
   });
 
   test('a real band renders that band', () => {
@@ -66,5 +71,38 @@ describe('the optional trailing note', () => {
   test('rendered verbatim when given, alongside a real value', () => {
     const html = renderToStaticMarkup(<Row label="fan stopped:3" value="0 RPM" severity="alarm" note="since 14:02:11" />);
     expect(html).toContain('since 14:02:11');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// 10e §2.0 — the mock's `chip(sev, state)`: when severity is given, the value becomes a
+// Chip md PILL rather than plain text; without severity, it stays plain text.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ 10e — the value becomes a pill exactly when severity is given', () => {
+  // ⚠ RENAMED BY 10e's TEST PHASE, 2026-09-09: the name said "(uppercase text-transform
+  // hook)" and nothing here checks any text-transform — that is CSS, and `styles.test.ts` does
+  // not cover it either. `data-size="md"` is the real, sound claim, so the name says that.
+  test('⚠ severity present: the value renders inside a Chip md pill, not as bare text', () => {
+    const html = renderToStaticMarkup(<Row label="ufw enforcing" value="yes" severity="normal" />);
+    // `Chip` always renders its glyph and sr-only word alongside the label — a bare
+    // `<span>{value}</span>` never would. Two Chips exist on this row (the sm glyph and the
+    // md pill), so "normal" (the sr-only word) appears, and the visible label text is the
+    // value, not a duplicate of the glyph's own accessible word.
+    expect(html).toContain('class="sr-only"');
+    expect(html).toContain('yes');
+    expect(html).toContain('data-size="md"');
+  });
+
+  test('⚠ severity absent: the value stays plain text, never wrapped in a pill', () => {
+    const html = renderToStaticMarkup(<Row label="link" value="up" />);
+    expect(html).not.toContain('data-size="md"');
+    expect(html).not.toContain('class="sr-only"');
+  });
+
+  test('⚠ severity={null} (no band) still renders the value as a pill, in the no-band hatch', () => {
+    const html = renderToStaticMarkup(<Row label="mode" value="unavailable" severity={null} />);
+    expect(html).toContain('data-size="md"');
+    expect(html).toContain('data-severity="none"');
   });
 });

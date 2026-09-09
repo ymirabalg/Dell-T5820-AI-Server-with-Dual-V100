@@ -19,6 +19,10 @@ const snapshotWith = (overrides: Partial<TelemetrySnapshot['host']>): TelemetryS
  *  toContain-scope guard). */
 const ramMeterOf = (html: string): string => html.slice(html.indexOf('</header>'), html.indexOf('>swap<'));
 
+// `new RegExp` for the reason given with the other regex consts in this file: an odd number
+// of `"` in a regex LITERAL desynchronises `lib/source-text.ts`'s comment-stripper.
+const TICK_CLASS = new RegExp('class="_tick', 'g');
+
 describe('§6.2 — the MEMORY card', () => {
   test('subtitle is the fixed source label', () => {
     const html = renderToStaticMarkup(<MemoryPanel state={emptyState()} nowMs={0} panelId="memory" />);
@@ -154,5 +158,30 @@ describe('⚠ invariant 1, across EVERY reading on this panel', () => {
     const cells = valueCells(html);
     expect(cells.length).toBeGreaterThanOrEqual(2);
     for (const cell of cells) expect(cell).not.toMatch(/[0-9]/);
+  });
+});
+
+// ⚠ 10e-A5 (mutation C), added by 10e's RECONCILIATION, 2026-09-09. `10e-ME1` backs `Meter`'s
+// `tickPercent` prop in step 9's harness; nothing backed this CALL SITE, so deleting
+// `tickPercent={85}` left all 2892 tests green while the RAM bar lost §6.3's own watch
+// threshold. HANDOVER §0.8: wiring a prop is a property, and an optional prop makes it an
+// untested one.
+describe('⚠ 10e-A5 — the RAM bar carries §6.3’s 85 % watch tick, and swap does not', () => {
+  test('⚠ exactly one tick on this panel, at 85 %', () => {
+    const html = renderToStaticMarkup(<MemoryPanel state={stateWith(everythingZero)} nowMs={0} panelId="memory" />);
+    expect(html).toMatch(/class="_tick[^"]*"[^>]*style="left:85%[^"]*"/);
+    // Swap has no §6.3 percentage band (it bands on absolute GiB), so it takes no tick.
+    expect((html.match(TICK_CLASS) ?? []).length).toBe(1);
+  });
+});
+
+// ⚠ 10e-A8, added by 10e's RECONCILIATION. `Hero` now renders `role="group"` beside its
+// `aria-label` (on a role-less `<div>` the attribute is ARIA-prohibited and does nothing), and the
+// adversarial measured that of the three callers passing one, deleting MEMORY's was the only one
+// no test noticed — *"the three callers are not even covered consistently"*.
+describe('⚠ 10e-A8 — the RAM hero is named, with a role that permits naming', () => {
+  test('⚠ role="group" and the name, on the hero’s own element', () => {
+    const html = renderToStaticMarkup(<MemoryPanel state={stateWith(everythingZero)} nowMs={0} panelId="memory" />);
+    expect(html).toMatch(/<div[^>]*role="group"[^>]*aria-label="memory used"[^>]*>/);
   });
 });

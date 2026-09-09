@@ -10,17 +10,24 @@
  * rendered with a bare `—` fallback rather than through `lib/format.ts`, matching how every
  * other plain-number field on this contract is handled.
  *
- * ⚠ **Two traces, not one colour reused across both.** §6.2 asks for temperature AND
- * utilisation traces. `components/palette.ts` reserves its three hex values for series that
- * share ONE frame (GPU 0 / GPU 1 / fan 5 on the COOLING chart) and explicitly forbids adding a
- * fourth "without a design decision" — recorded here rather than invented silently: CPU's two
- * traces never share a frame with each other or with the GPU/fan traces, so reusing
- * `SERIES_COLORS.gpu0` (temperature) and `.gpu1` (utilisation) costs nothing and needs no new
- * hex. Neither reading is banded by §6.3 except temperature.
+ * ⚠ **Two traces, not one colour reused across both — OWNER'S RULING, 2026-09-09 (OQ-7).**
+ * 10e's own reading of §6.2 attaches the trace to utilisation alone and would have removed the
+ * temperature trace the built panel already carried; the owner ruled to KEEP BOTH. So this
+ * panel draws two independent `Sparkline`s — temperature and utilisation — each with its own
+ * ≥1600px promotion, the same two-wrapper mechanism the GPU card uses. `components/palette.ts`
+ * reserves its three hex values for series that share ONE frame (GPU 0 / GPU 1 / fan 5 on the
+ * COOLING chart) and explicitly forbids adding a fourth "without a design decision" — recorded
+ * here rather than invented silently: CPU's two traces never share a frame with each other or
+ * with the GPU/fan traces, so reusing `SERIES_COLORS.gpu0` (temperature) and `.gpu1`
+ * (utilisation) costs nothing and needs no new hex. Neither reading is banded by §6.3 except
+ * temperature. Height cost of the ruling: CPU is 10e's spec-only budget plus one sparkline and
+ * its gap — 216.1 / 240.1 / 240.1 (`check-density.mjs`'s `cpu` row already carries this).
  */
 
 import { PanelShell } from '../panel-shell';
-import { Row } from '../row';
+import { Hero } from '../hero';
+import { Meter } from '../meter';
+import { Strip } from '../strip';
 import { Sparkline } from '../sparkline';
 import { CHART_SIZE } from '../grid';
 import { SERIES_COLORS } from '../palette';
@@ -31,10 +38,12 @@ import { ChartViewToggle } from './chart-view-toggle';
 import { errorsForPanel } from '@/lib/client/observations';
 import { traceFor } from '@/lib/client/series';
 import { latestSample } from '@/lib/client/runtime';
-import { EM_DASH, formatCelsius, formatCpuModel, formatLoadAverage, formatPercent } from '@/lib/format';
+import { EM_DASH, formatCelsius, formatCelsiusParts, formatCpuModel, formatLoadAverage, formatPercent } from '@/lib/format';
 import { severityCpuTemp } from '@/lib/severity';
 import { celsius, percent } from '@/lib/types';
 import type { Host, TelemetrySnapshot } from '@/lib/types';
+
+import styles from './cpu-panel.module.css';
 
 const coreThread = (n: number | null): string => (n === null ? EM_DASH : String(n));
 
@@ -58,70 +67,90 @@ export function CpuPanel({ state, view = 'chart', onToggleView }: CpuPanelProps)
 
   // §6.5's "its `errors` entry is available" half. `lib/client/observations.ts` routes CPU's
   // four sources here BY THE FIGURE EACH BLANKS — that split is the reason `collectHost` files
-  // nine sources for one crash — so each message goes on the row it explains, and
-  // `proc-cpuinfo` (which blanks the SUBTITLE, a head element with no note slot) renders under
-  // the rows. ⚠ LAST per source, matching `events.ts` (10b-reconcile, adversarial F5/F10).
+  // nine sources for one crash. 10e §2.3: the hero and the strip have no note slot of their
+  // own, so every CPU source's message is rendered together, once, under the whole card
+  // (S-H: "the panel satisfies 'beside it'").
   const cpuErrors = snapshot === null ? [] : errorsForPanel(snapshot, 'cpu');
-  const messageFor = (source: string): string | null =>
-    cpuErrors.findLast((e) => e.source === source)?.message ?? null;
-  const identityErrors = cpuErrors.filter((e) => e.source === 'proc-cpuinfo');
-  // ⚠ 10b-S-F does not reach this panel, deliberately left as `severityCpuTemp` alone rather
-  // than routed through `panelChip`. CPU's chip has exactly ONE §6.3-banded leaf — temperature;
-  // utilisation and load average are unbanded (this file's own module doc: "neither reading is
-  // banded by §6.3 except temperature"). A single-leaf chip can never be `'normal'` while a
-  // DIFFERENT leaf of its own is `null`, because there is no different leaf: if `cpuTempC` is
-  // `null` the chip is already `null`, not a false `'normal'`. `panelChip(chip)` would be a
-  // no-op here — recorded per invariant 7 rather than added as inert wrapping.
   const chip = severityCpuTemp(host?.cpuTempC ?? null);
   const subtitle = `${formatCpuModel(host?.cpuModel ?? null)} · ${coreThread(host?.cores ?? null)}C / ${coreThread(host?.threads ?? null)}T`;
+  const tempParts = formatCelsiusParts(host?.cpuTempC ?? null);
 
   const tempTrace = traceFor(state, (s) => s.host.cpuTempC);
   const utilTrace = traceFor(state, (s) => s.host.cpuPct);
+  const tempAriaLabel = 'CPU temperature over the selected window';
+  // ⚠ 10e-A8: the hero is a POINT reading — see the identical note in `gpu-panel.tsx`.
+  const heroAriaLabel = 'CPU package temperature';
+  const utilAriaLabel = 'CPU utilisation over the selected window';
+
+  const toggle =
+    onToggleView === undefined ? undefined : (
+      <ChartViewToggle view={view} onToggle={onToggleView} label="CPU charts" />
+    );
 
   return (
-    <PanelShell title="cpu" subtitle={subtitle} chip={chip}>
-      <Row
-        label="temperature"
-        value={formatCelsius(host?.cpuTempC ?? null)}
-        severity={chip}
-        note={messageFor('coretemp')}
-      />
-      {onToggleView === undefined ? null : (
-        <ChartViewToggle view={view} onToggle={onToggleView} label="CPU charts" />
-      )}
-      <Sparkline
-        points={tempTrace}
-        ariaLabel="CPU temperature over the selected window"
-        color={SERIES_COLORS.gpu0}
-        width={CHART_SIZE.sparkline.width}
-        height={CHART_SIZE.sparkline.height}
-        view={view}
-        formatValue={(v) => formatCelsius(celsius(v))}
-        formatTime={formatTimeOfDayMs}
-        gaps={state.gaps}
-      />
-      <Row
+    <PanelShell title="cpu" subtitle={subtitle} chip={chip} headControl={toggle}>
+      {/* §6.2's "package" word — the mock's unit form, composed from the parts formatter's own
+          unit rather than a second, disagreeing formatter (O14). */}
+      <Hero value={tempParts.value} unit={`${tempParts.unit} pkg`} severity={chip} ariaLabel={heroAriaLabel} />
+      <div className={styles.sparklineWrap} data-role="cpu-sparkline-wrap">
+        <Sparkline
+          points={tempTrace}
+          ariaLabel={tempAriaLabel}
+          color={SERIES_COLORS.gpu0}
+          width={CHART_SIZE.cpuSparkline.width}
+          height={CHART_SIZE.cpuSparkline.height}
+          view={view}
+          formatValue={(v) => formatCelsius(celsius(v))}
+          formatTime={formatTimeOfDayMs}
+          gaps={state.gaps}
+        />
+        <Sparkline
+          points={utilTrace}
+          ariaLabel={utilAriaLabel}
+          color={SERIES_COLORS.gpu1}
+          width={CHART_SIZE.cpuSparkline.width}
+          height={CHART_SIZE.cpuSparkline.height}
+          view={view}
+          formatValue={(v) => formatPercent(percent(v))}
+          formatTime={formatTimeOfDayMs}
+          gaps={state.gaps}
+        />
+      </div>
+      <div className={styles.fullChartWrap} data-role="cpu-full-chart-wrap">
+        <Sparkline
+          points={tempTrace}
+          ariaLabel={tempAriaLabel}
+          color={SERIES_COLORS.gpu0}
+          width={CHART_SIZE.cpuPromoted.width}
+          height={CHART_SIZE.cpuPromoted.height}
+          view={view}
+          formatValue={(v) => formatCelsius(celsius(v))}
+          formatTime={formatTimeOfDayMs}
+          gaps={state.gaps}
+          timeLabels
+        />
+        <Sparkline
+          points={utilTrace}
+          ariaLabel={utilAriaLabel}
+          color={SERIES_COLORS.gpu1}
+          width={CHART_SIZE.cpuPromoted.width}
+          height={CHART_SIZE.cpuPromoted.height}
+          view={view}
+          formatValue={(v) => formatPercent(percent(v))}
+          formatTime={formatTimeOfDayMs}
+          gaps={state.gaps}
+          timeLabels
+        />
+      </div>
+      <Meter
         label="utilisation"
-        value={formatPercent(host?.cpuPct ?? null)}
-        note={messageFor('proc-stat')}
+        formattedValue={formatPercent(host?.cpuPct ?? null)}
+        used={host?.cpuPct ?? null}
+        total={100}
+        severity={null}
       />
-      <Sparkline
-        points={utilTrace}
-        ariaLabel="CPU utilisation over the selected window"
-        color={SERIES_COLORS.gpu1}
-        width={CHART_SIZE.sparkline.width}
-        height={CHART_SIZE.sparkline.height}
-        view={view}
-        formatValue={(v) => formatPercent(percent(v))}
-        formatTime={formatTimeOfDayMs}
-        gaps={state.gaps}
-      />
-      <Row
-        label="load average"
-        value={formatLoadAverage(host?.loadAvg ?? null)}
-        note={messageFor('proc-loadavg')}
-      />
-      <PanelNotes messages={identityErrors} />
+      <Strip items={[{ k: 'load', v: formatLoadAverage(host?.loadAvg ?? null) }]} />
+      <PanelNotes messages={cpuErrors} />
     </PanelShell>
   );
 }

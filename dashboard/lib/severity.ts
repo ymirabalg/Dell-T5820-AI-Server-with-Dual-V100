@@ -115,6 +115,18 @@ export const freePercent = <T extends number>(
 // ---------------------------------------------------------------------------
 
 /**
+ * §6.3's own GPU-temperature boundaries, exported (10e / §3.2) so the GPU sparkline's ≥1600px
+ * reference lines and this function read the SAME two numbers rather than one written twice.
+ * Before this they were bare literals inside {@link severityGpuTemp} (`lib/severity.ts:125`
+ * and `:127` at the time this was written) — a chart drawing its own copy of `70`/`80` could
+ * silently drift from the band that colours the cell, so the line on the chart and the colour
+ * of the cell could disagree. `70` is the WATCH floor, `80` the ALARM floor (§6.3: normal
+ * ≤ 69 °C, watch 70–79, alarm ≥ 80).
+ */
+export const GPU_TEMP_WATCH_C = 70;
+export const GPU_TEMP_ALARM_C = 80;
+
+/**
  * GPU temperature — normal ≤ 69 °C, watch 70–79, alarm ≥ 80.
  *
  * Basis: spec 83 °C, slowdown 87; production mean 66.2 °C, worst measured 75.3 °C.
@@ -122,9 +134,9 @@ export const freePercent = <T extends number>(
 export const severityGpuTemp = (tempC: Celsius | null): Severity | null =>
   tempC === null || !Number.isFinite(tempC)
     ? null
-    : tempC >= 80
+    : tempC >= GPU_TEMP_ALARM_C
       ? 'alarm'
-      : tempC >= 70
+      : tempC >= GPU_TEMP_WATCH_C
         ? 'watch'
         : 'normal';
 

@@ -77,16 +77,11 @@ export function AlarmBanner({ lead, rest }: AlarmBannerProps) {
         {rest.length > 0 ? (
           <div className={styles.rest}>
             {rest.map((item) => (
-              // ⚠ NO `className` here, and the absence is deliberate (10c1-A8). This used to
-              // read `className={styles.item}` while `alarm-banner.module.css` declared no
-              // `.item` — and nothing anywhere could see it: Vitest resolves a CSS module to a
-              // **Proxy** whose every key returns a plausible hashed name (`styles.item` →
-              // `_item_e75739`), including keys with no rule, and the module is typed as an
-              // index signature so `tsc` is silent too. The layout is `.rest`'s own
-              // `flex-wrap: wrap; gap: .4em 1em`; the reference contributed nothing but the
-              // appearance of contributing something. A mechanical audit for this shape
-              // (every `styles.X` against its sibling stylesheet's selectors) is 10c-2's.
-              <span key={item.id}>
+              // 10e §5 — `.item` is a REAL class now (10c1-A8's dangling `styles.item` was
+              // fixed by removing the reference; this loop restores it as a genuine rule,
+              // since the mock's `.item` carries its own border/background/padding — see
+              // `alarm-banner.module.css`).
+              <span key={item.id} className={styles.item}>
                 {item.label} {item.value} <i className={styles.itemSince}>{item.since}</i>
                 {item.age === null ? null : <i className={styles.stale}>{item.age}</i>}
               </span>

@@ -1003,6 +1003,29 @@ REGRESSIONS = [
      "  if (!Number.isFinite(value)) return 'alarm';\n  return value > 5100 || value === 0 ? 'alarm' : 'normal';",
      SEV),
 
+    # ============================== added by 10e's BUILD (2026-09-09), for THIS harness's ledger
+    # ⚠ `lib/severity.test.ts` is in the LEDGER_FILES of BOTH step 2's harness and this one, so
+    # a ⚠ mark added to it has to be backed TWICE — once per owner. 10e added two marks there
+    # (the exported GPU-temp boundaries the sparkline's reference lines and `severityGpuTemp`
+    # must share, 10e §3.2). Step 2 backs them with `10e-S1`/`10e-S2`; without the two below
+    # this harness's ledger reported them as marks no mutation reddens, which is exactly what
+    # it is for. These are deliberately NOT copies of `10e-S1`/`10e-S2`: that pair drifts the
+    # WATCH constant and weakens the comparison, this pair drifts the ALARM constant and
+    # re-introduces the drifted SECOND COPY of the floor that the mark's own name names — so
+    # the two harnesses cover the property from opposite sides rather than twice from one.
+    # The id prefix is the CREATING step (ANCHOR §9), which is why these read `10e-` in a
+    # `04-` file.
+    ("10e-S3 GPU_TEMP_ALARM_C drifts from §6.3's 80 — the ALARM boundary the ref line draws",
+     "lib/severity.ts",
+     "export const GPU_TEMP_ALARM_C = 80;",
+     "export const GPU_TEMP_ALARM_C = 81;",
+     SEV),
+    ("10e-S4 severityGpuTemp bands the watch floor from a drifted SECOND COPY of the number",
+     "lib/severity.ts",
+     "      : tempC >= GPU_TEMP_WATCH_C\n        ? 'watch'",
+     "      : tempC >= 71\n        ? 'watch'",
+     SEV),
+
     # ====================================================================== type-level
     ("04-T41 the wrapper normalises `unknown` away — `?? false` is the alarm by default",
      "lib/collectors/cooling.ts",

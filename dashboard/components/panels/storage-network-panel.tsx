@@ -7,17 +7,22 @@
  * `lib/format.ts` — the same reasoning applies here verbatim.
  *
  * ⚠ **Every source that reaches this panel is rendered somewhere** (added 2026-09-08 by 10b's
- * reconciliation, adversarial F5). `net-operstate` sits on the link row, `proc-net-dev` on the
- * `rx` row (it blanks rx and tx together; §6.5's "one fact, stated once" says once, and rx is
- * the first figure it blanks), and `statvfs` — which blanks BOTH mounts and files one entry per
- * mount — renders once beneath the two bars via {@link PanelNotes}. Before that, a `statvfs`
- * failure showed `/` and `/home` as `— / —` with no message anywhere on the page, and a
- * `proc-net-dev` failure blanked both counters silently.
+ * reconciliation, adversarial F5). `net-operstate` sits on the link caption's own detail line,
+ * `proc-net-dev` moves into `PanelNotes` (10e §2.6 — the `Strip` line it used to sit beside as
+ * a `Row` note has no note slot of its own), and `statvfs` — which blanks BOTH mounts and files
+ * one entry per mount — renders in the SAME `PanelNotes` call (§6.5's "one fact, stated once",
+ * applied across the two sources that now share the one note slot this panel has left).
  *
  * The link row is the one reading on this panel whose §6.3 function ({@link severityLink})
  * returns `null` for an unreadable input, so it is the one that can go stale (see
- * `condition-lookup.ts`'s module doc) and carries `StatusRow`'s treatment; the two throughput
- * figures are not banded by §6.3 at all and render as plain rows.
+ * `condition-lookup.ts`'s module doc); the two throughput figures are not banded by §6.3 at
+ * all and render as plain `Strip` text.
+ *
+ * ⚠ **10e / invariant 7 — the link's stale age and its `errors[]` detail move into two extra
+ * `Caption` lines**, since `Caption` (unlike `StatusRow`) has no `note`/`detail` slots of its
+ * own. Both are degraded-only (0px healthy, absent from every fixture `check-density.mjs`
+ * grades) — `staleValueOr` still supplies the LAST VALUE inside the same pill (§6.5), it is
+ * only the two supplementary facts that move to sibling lines.
  */
 
 import { errorsForPanel } from '@/lib/client/observations';
@@ -29,11 +34,12 @@ import type { Storage, TelemetrySnapshot } from '@/lib/types';
 import { Meter } from '../meter';
 import { PanelShell } from '../panel-shell';
 import type { PanelProps } from '../panel-props';
-import { Row } from '../row';
+import { Strip } from '../strip';
+import { Chip } from '../chip';
+import { Caption } from './caption';
 import { findDisplayed, staleAgeNote, staleValueOr } from './condition-lookup';
 import { PanelNotes } from './panel-notes';
 import { panelChip } from './panel-chip';
-import { StatusRow } from './status-row';
 
 export function StorageNetworkPanel({ state, nowMs }: PanelProps) {
   const snapshot: TelemetrySnapshot | null = latestSample(state)?.snapshot ?? null;
@@ -53,12 +59,17 @@ export function StorageNetworkPanel({ state, nowMs }: PanelProps) {
   // and `collectStorage` concatenates root's and home's `statvfs` entries, so more than one
   // entry per source is the ordinary case on this panel rather than a hypothetical.
   const linkError = storageErrors.findLast((e) => e.source === 'net-operstate')?.message ?? null;
-  const netError = storageErrors.findLast((e) => e.source === 'proc-net-dev')?.message ?? null;
-  // §6.5's "is available" half for the source that blanks BOTH mounts. `statvfs` cannot be
-  // attributed to one of them — `collectStorage` files an entry per mount under one source —
-  // so it is rendered once under the two bars it explains, per `errorsForPanel`'s own
-  // "granularity is per source, not per figure" (10b-reconcile, adversarial F5).
+  // ⚠ 10e-A13: this was `.find` — the FIRST — two lines under a comment that says LAST, and it
+  // is the only reader in the loop that disagreed with its siblings (`cooling-panel.tsx:148,159`,
+  // `safety-panel.tsx:75` and `linkError` above all use `findLast`). `events.ts` folds by
+  // source and keeps the last, so with two `proc-net-dev` entries the panel showed one message
+  // and the session event log showed a different one — F10's exact disease.
+  const netError = storageErrors.findLast((e) => e.source === 'proc-net-dev') ?? null;
+  // §6.5's "is available" half. `statvfs` cannot be attributed to one mount — `collectStorage`
+  // files an entry per mount under one source — so both it and `proc-net-dev` (10e: no longer
+  // has its own row note slot) render together, once, under the whole card.
   const diskErrors = storageErrors.filter((e) => e.source === 'statvfs');
+  const notes = netError === null ? diskErrors : [...diskErrors, netError];
 
   return (
     <PanelShell title="storage & network" subtitle="statvfs · eno1" chip={chip}>
@@ -68,6 +79,7 @@ export function StorageNetworkPanel({ state, nowMs }: PanelProps) {
         used={storage?.root.usedGiB ?? null}
         total={storage?.root.totalGiB ?? null}
         severity={rootSeverity}
+        tickPercent={85}
       />
       <Meter
         label="/home"
@@ -75,22 +87,31 @@ export function StorageNetworkPanel({ state, nowMs }: PanelProps) {
         used={storage?.home.usedGiB ?? null}
         total={storage?.home.totalGiB ?? null}
         severity={homeSeverity}
+        tickPercent={85}
       />
-      <PanelNotes messages={diskErrors} />
-      <Row
-        label="eno1 rx"
-        value={formatBytesPerSecond(storage?.net.rxBytesPerSec ?? null)}
-        note={netError}
+      <PanelNotes messages={notes} />
+      <Strip
+        items={[
+          { k: 'eno1 ↓ rx', v: formatBytesPerSecond(storage?.net.rxBytesPerSec ?? null) },
+          { k: 'eno1 ↑ tx', v: formatBytesPerSecond(storage?.net.txBytesPerSec ?? null) },
+        ]}
       />
-      <Row label="eno1 tx" value={formatBytesPerSecond(storage?.net.txBytesPerSec ?? null)} />
-      <StatusRow
-        label="eno1 link"
-        value={staleValueOr(linkCondition, formatText(storage?.net.link ?? null))}
-        severity={linkSeverity}
-        note={linkAge}
-        noteTone={linkAge === null ? 'muted' : 'watch'}
-        detail={linkError}
-      />
+      <Caption label="link">
+        <Chip
+          severity={linkSeverity}
+          size="md"
+          label={staleValueOr(linkCondition, formatText(storage?.net.link ?? null))}
+        />
+      </Caption>
+      {/* S-B: the stale age is watch-toned, matching `status-row.module.css`'s `.noteWatch`
+          and `alarm-banner.module.css`'s `.stale` exactly — inline since `Caption` has no
+          tone variant of its own and this is the one caller that needs one. */}
+      {linkAge === null ? null : (
+        <Caption>
+          <span style={{ color: 'var(--status-watch)' }}>{linkAge}</span>
+        </Caption>
+      )}
+      {linkError === null ? null : <Caption>{linkError}</Caption>}
     </PanelShell>
   );
 }

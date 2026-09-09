@@ -31,6 +31,17 @@
  * shows exactly one of two chart elements at a time by CSS, so a single `view` value naturally
  * covers whichever one is visible. If a future panel's charts turn out to want independent
  * toggles, that is a new decision, not an extension of this one.
+ *
+ * ### 10e §2.0 — moved into the head, restyled as a pill, and shortened
+ *
+ * Passed to `PanelShell` as `headControl` (10e), so it costs **0px of body height** — it now
+ * sits in the 25.8px head row beside the title and chip rather than as its own line above the
+ * chart. Restyled as the mock's `Chip md` pill (`chart-view-toggle.module.css`); still a real
+ * `<button>`, not the `Chip` component itself, since a pill here must stay focusable and
+ * clickable, which `Chip`'s `<span>` root is not. The visible label shortens from `table view`/
+ * `chart view` to **`table`** / **`chart`** — the mock's own words — while the `aria-label`
+ * keeps its fuller sentence (`"GPU 0 temperature: show as table"`) unchanged, so the control's
+ * accessible name is exactly as specific as before.
  */
 
 import styles from './chart-view-toggle.module.css';
@@ -56,7 +67,7 @@ export function ChartViewToggle({ view, onToggle, label }: ChartViewToggleProps)
       onClick={onToggle}
       aria-label={`${label}: show as ${isTable ? 'chart' : 'table'}`}
     >
-      {isTable ? 'chart view' : 'table view'}
+      {isTable ? 'chart' : 'table'}
     </button>
   );
 }

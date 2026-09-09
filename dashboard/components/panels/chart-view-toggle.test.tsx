@@ -19,16 +19,24 @@ describe('⚠ the button always announces the OTHER view — the one a click swi
     const html = renderToStaticMarkup(
       <ChartViewToggle view="chart" onToggle={() => undefined} label="GPU 0 temperature" />,
     );
-    expect(html).toContain('table view');
-    expect(html).not.toContain('>chart view<');
+    // 10e §2.0 — the mock's shortened labels: `table`/`chart`, not `table view`/`chart view`.
+    expect(html).toContain('>table<');
+    expect(html).not.toContain('>chart<');
   });
 
   test('⚠ in table view, the button offers the chart back', () => {
     const html = renderToStaticMarkup(
       <ChartViewToggle view="table" onToggle={() => undefined} label="GPU 0 temperature" />,
     );
-    expect(html).toContain('chart view');
-    expect(html).not.toContain('>table view<');
+    expect(html).toContain('>chart<');
+    expect(html).not.toContain('>table<');
+  });
+
+  test('⚠ the aria-label keeps its fuller sentence — only the VISIBLE label shortens', () => {
+    const html = renderToStaticMarkup(
+      <ChartViewToggle view="chart" onToggle={() => undefined} label="GPU 0 temperature" />,
+    );
+    expect(html).toContain('aria-label="GPU 0 temperature: show as table"');
   });
 });
 

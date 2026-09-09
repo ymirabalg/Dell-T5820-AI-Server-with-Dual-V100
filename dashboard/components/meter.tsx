@@ -24,6 +24,17 @@
  * selects on — never an inline colour, because unlike a chart series this is one of three
  * fixed bands, not an arbitrary hex (see the step notes on the CSS approach).
  *
+ * ### 10e §2.0 — a `normal` meter is NOT green, and an optional tick mark
+ *
+ * The fill's colour is now the mock's own rule (§6.3: *"colour is spent almost entirely on
+ * state"*): `normal` and the no-band case both draw the SAME neutral `--meter` fill —
+ * everything is grey until something is actually wrong, and only `watch`/`alarm` recolour
+ * the bar. The built `color-mix`-tinted track (a different shade of green/amber/red behind
+ * every fill) is gone; the track is one flat sunken ground in every band. `tickPercent`
+ * (optional) draws the mock's watch-threshold mark — VRAM 90, RAM 85, disk-free 15 (as
+ * `100 − free`) — a thin rule at a fixed position, independent of the fill: it never claims a
+ * value of its own, so it needs no severity and no formatted text.
+ *
  * ### ⚠ The band is a WORD as well as a colour, and the bar itself is not announced twice
  *
  * The track used to carry `role="img"` with `aria-label={`${label}: ${formattedValue}`}` —
@@ -51,6 +62,9 @@ export interface MeterProps {
   readonly used: number | null;
   readonly total: number | null;
   readonly severity: Severity | null;
+  /** 10e §2.0 — the mock's watch-threshold mark (VRAM 90, RAM 85, disk-free 15). A fixed
+   *  position on the track, independent of the fill; omit for a track with no such mark. */
+  readonly tickPercent?: number;
 }
 
 /** `null` when no fill can be honestly drawn; otherwise a percentage clamped to `[0, 100]`. */
@@ -60,7 +74,7 @@ const fillPercentOf = (used: number | null, total: number | null): number | null
   return Math.min(100, Math.max(0, (used / total) * 100));
 };
 
-export function Meter({ label, formattedValue, used, total, severity }: MeterProps) {
+export function Meter({ label, formattedValue, used, total, severity, tickPercent }: MeterProps) {
   const fillPercent = fillPercentOf(used, total);
 
   return (
@@ -75,6 +89,9 @@ export function Meter({ label, formattedValue, used, total, severity }: MeterPro
           className={styles.fill}
           style={{ width: fillPercent === null ? '0%' : `${fillPercent}%` }}
         />
+        {tickPercent === undefined ? null : (
+          <div className={styles.tick} style={{ left: `${tickPercent}%` }} />
+        )}
       </div>
     </div>
   );

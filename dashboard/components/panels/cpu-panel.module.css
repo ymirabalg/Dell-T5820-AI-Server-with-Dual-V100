@@ -1,0 +1,24 @@
+/* 10e §2.3/OQ-7 — both traces (temperature, utilisation) stack inside ONE wrapper per size,
+   the same ≥1600px promotion mechanism the GPU card uses. `gap: 5px` matches `panel-shell`'s
+   own body gap, so two stacked sparklines cost exactly one more body-gap unit — the arithmetic
+   the OQ-7 ruling's 216.1/240.1/240.1 targets are built from. */
+.sparklineWrap,
+.fullChartWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fullChartWrap {
+  display: none;
+}
+
+@media (min-width: 1600px) {
+  .fullChartWrap {
+    display: flex;
+  }
+
+  .sparklineWrap {
+    display: none;
+  }
+}

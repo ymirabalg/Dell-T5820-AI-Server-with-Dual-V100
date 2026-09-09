@@ -26,75 +26,52 @@ import styles from './grid.module.css';
 import './tokens.css';
 
 /**
- * The default pixel box a chart primitive should ask for at the design breakpoint
- * (1280–1599px). §6.1 gives COOLING two rows for its shared-time chart, so it gets a taller
- * box than the sparkline living in a one-row card; the sparkline default matches
- * `Sparkline`'s own optional default closely enough that a panel may simply omit `width`/
- * `height` there; COOLING's stacked chart should pass this explicitly since 210px is well
- * short of that primitive's own default `plotHeight` for two stacked plots.
+ * The pixel box a chart primitive asks for at each of the two widths §6.1 names (the
+ * 1280–1599px design target, and the ≥1600px "promoted" form). **The canonical answer to L9
+ * stands**: a chart or sparkline primitive never picks its own size — it takes one as a prop,
+ * and the value comes from exactly one of the named exports below, so a future panel asking
+ * "how big should my chart be" has one place to look rather than a literal to invent or copy.
  *
- * ⚠ **The ≥1600px "sparklines promoted to full line charts" rule is deliberately NOT a size
- * here.** §6.1 changes which CHART COMPONENT a GPU card uses at that width, not merely its
- * size — a decision this file leaves to 10b's panel body. The recommended mechanism (recorded
- * for 10b, not mandated): render both the sparkline and the promoted chart and let a
- * `min-width: 1600px` media query in the panel's own stylesheet show one and hide the other,
- * so no viewport-tracking state has to be invented on either side of the hook boundary.
- *
- * ### ⚠ L9, closed by 10c-3 — `gpuPromoted` replaces a literal that had drifted out of this file
- *
- * 10b built the ≥1600px promotion (see `gpu-panel.tsx`'s module doc) and gave it a defensible
- * default — 480×140 — but wrote it as bare literals at the call site instead of a named export
- * here, so the ONE place sizing is supposed to live had a silent second copy of a size
- * decision the moment that code was written. This entry is that default, moved to where every
- * other chart size already lives, with nothing about the number changed: 480px wide (matching
- * `cooling.width`, so a promoted GPU card and COOLING's own chart do not disagree about how
- * wide a "big" chart is on this page) and 140px per plot (see the A7 correction on `CHART_SIZE`
- * itself: 140 vs COOLING's 210 is NOT explained by "COOLING stacks two plots", since both
- * numbers are per-plot). **The canonical answer to L9 is this file**: a
- * chart or sparkline primitive never picks its own size — it takes one as a prop, and the
- * value comes from exactly one of these three named exports, so a future panel asking "how big
- * should my chart be" has one place to look rather than a literal to invent or copy.
+ * ⚠ **The ≥1600px "sparklines promoted to full line charts" rule is a SIZE, not a component
+ * change (10e).** Earlier drafts of this file used a different primitive at ≥1600px
+ * (`StackedTimeSeriesChart`); 10e replaces that with the SAME `Sparkline` primitive at a
+ * bigger size, carrying `refs`/`timeLabels` (§3.2) — so the "promoted" entries below are
+ * `Sparkline` boxes, not a second chart component's. The mechanism is unchanged: both sizes
+ * render in the DOM and a `min-width: 1600px` media query in the panel's own stylesheet shows
+ * one and hides the other, so no viewport-tracking state crosses the hook boundary.
  */
 /**
- * ⚠ **10c-3 reconciliation / A7 — `height` and `plotHeight` are NOT the same measurement, and
- * this object used to spell both `height`.** `Sparkline`'s `height` is the whole rendered
- * `<svg>`. `StackedTimeSeriesChart`'s `plotHeight` is **per plot**:
- * `plotsHeight = plots.length * plotHeight + (plots.length - 1) * PLOT_GAP`, plus
- * `AXIS_HEIGHT`. Measured, rendered:
+ * ⚠ **10e — every entry below is REPLACED, not tuned.** `10e-match-the-mock.md` §3.2 measured
+ * the mock's own chart boxes in real headless Chrome and none of the built sizes survive: the
+ * plain `sparkline` entry (220×44) and `gpuPromoted` (480×140/160 painted) are gone, replaced
+ * by four entries carrying the mock's own measured boxes at the design width (1280) and the
+ * ≥1600px promoted width, for both GPU and CPU. `cooling` is unchanged in shape (still
+ * `plotHeight` PER PLOT, still 480 wide) but its plot height moves to 72 — the mock's own
+ * `padTop 6 + hTemp 84 + gap 10 + hFan 46 + axis 14 = 160` painted total, plus the 14.8px HTML
+ * legend line already inside the chart's own SVG legend, giving **174px** total (§2.2).
  *
- * | entry | declared | actually painted |
- * |---|---|---|
- * | `sparkline` | 220 x 44 | 220 x **44** |
- * | `cooling` | 480 x 210 | 480 x **450** (two stacked plots + gap + axis) |
- * | `gpuPromoted` | 480 x 140 | 480 x **160** (one plot + axis) |
- *
- * L9's deliverable is *"the one place a future panel gets a chart's pixel box from"*, and a
- * panel asking this file how tall COOLING's chart is was told 210 for a 450px element — under
- * a key named `height`, beside an entry where `height` does mean height. The field is now named
- * for what it is, so the type checker refuses the confusion at every call site.
- *
- * ⚠ **And the reasoning recorded for `gpuPromoted` was derived from that misreading** — see
- * `10c3-build.md` §1's correction. *"140, shorter than COOLING's 210 because COOLING stacks two
- * plots and this is one"* is not a valid derivation: if 210 is per-plot, stacking two plots is a
- * reason for COOLING's TOTAL to be larger and says nothing about its per-plot box; taken at face
- * value that argument would give `gpuPromoted` the same **210**. The NUMBER is unchanged from
- * 10b and nothing regressed — what is corrected is the justification, which L9 explicitly asked
- * for ("say what computes it and where"). The honest statement is below.
- *
- * **What actually computes these numbers.** Nothing does: they are AUTHORED here, once, in the
- * module that owns layout, and every chart-bearing panel asks for one rather than inventing it.
- * A live, measured size would need `ResizeObserver` + `useState`, which `purity.test.ts` forbids
- * anywhere under `components/`. `gpuPromoted`'s real justification is empirical: 480 wide to
- * match `cooling` (so a "big" chart is one width on this page) and a 160px painted total, which
- * is what fits a GPU card's remaining height beside its headline row, toggle, meter and rows.
+ * **Widths are fixed at the 1280 design width and leave slack at 1600/1920** (10e §3.2): a
+ * `viewBox` + `width:100%` would scale height with width and break every budget in §2, and
+ * `components/` cannot measure its own container (no `ResizeObserver`, no state —
+ * `purity.test.ts` forbids the hook that would need). One constant per chart, sized for the
+ * design target, is what this file has always done; the four entries below are simply the
+ * mock's own measured numbers instead of the pre-10e placeholders.
  */
 export const CHART_SIZE = {
-  /** Total `<svg>` height — `Sparkline` draws no axis. */
-  sparkline: { width: 220, height: 44 },
-  /** PER PLOT. COOLING stacks two, so it paints 450px in total. */
-  cooling: { width: 480, plotHeight: 210 },
-  /** PER PLOT. One plot, so it paints 160px in total (140 + the 20px axis). */
-  gpuPromoted: { width: 480, plotHeight: 140 },
+  /** GPU card, 1280–1599px — fills the hero row beside the 34px figure and the power block
+   *  (10e §3.2: 601 − 59 − 67 − 28 = 447 available; 440 leaves a small margin). */
+  gpuSparkline: { width: 440, height: 38 },
+  /** GPU card, ≥1600px — §6.1's "promoted" form: the SAME `Sparkline` primitive, 50px tall,
+   *  with the time axis and §6.3's two reference lines (607px available at 1600). */
+  gpuPromoted: { width: 600, height: 50 },
+  /** CPU's two traces (temperature AND utilisation, OQ-7), 1280–1599px — a 307px column has
+   *  285px of content. */
+  cpuSparkline: { width: 280, height: 38 },
+  /** CPU's two traces, ≥1600px (365px available). */
+  cpuPromoted: { width: 360, height: 50 },
+  /** COOLING, PER PLOT. Two plots paint 2 × 72 + 10 (gap) + 20 (axis) = 174px total (the
+   *  mock's 160 + its 14.8px legend line, drawn inside the chart's own SVG legend). */
+  cooling: { width: 480, plotHeight: 72 },
 } as const;
 
 export interface GridProps {

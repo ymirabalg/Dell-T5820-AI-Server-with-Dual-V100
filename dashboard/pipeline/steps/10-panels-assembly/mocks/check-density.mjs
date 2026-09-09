@@ -58,7 +58,8 @@ const note2 = OQ.has('notes') ? [NOTE2] : [];
 const targets = (wide) => {
   const spark = wide ? SPARK.wide : SPARK.narrow;
   const gpu = panel([HEAD, spark, ...caption, METER, METER, STRIP]);
-  const cpu = panel([HEAD, HERO, ...caption, wide ? 50 : 38, METER, STRIP]);
+  // OQ-7 RULED 2026-09-09: CPU keeps BOTH traces (temperature + utilisation), so two sparklines are the spec target.
+  const cpu = panel([HEAD, HERO, ...caption, wide ? 50 : 38, wide ? 50 : 38, METER, STRIP]);
   const memory = panel([HEAD, HERO, METER, METER, ...note2]);
   const safety = panel([HEAD, 4 * ROW + 3 * ROWS_GAP]);
   const storage = panel([HEAD, METER, METER, STRIP, LINK_LINE, ...note2]);
@@ -106,11 +107,11 @@ for (const [vp, m] of Object.entries(B.viewports)) {
   // its own. What CAN fail is the painted chart box, read from the anatomy: COOLING's stacked
   // chart must paint 174 px (2 × 72 + 10 + 20) and the GPU cards' visible chart 38 px below
   // 1600 / 50 px at and above it. Needs `--anatomy` in the measuring run.
+  // ⚠ 2026-09-09: `matchAll`, not `exec`. A part can hold MORE THAN ONE svg — the GPU card's
+  // two promotion wrappers both live inside its hero row — and reading only the first meant
+  // the hidden narrow chart (0 px) shadowed the visible promoted one at >=1600.
   const svgHeights = (slot) =>
-    (m.anatomy?.[slot]?.parts ?? [])
-      .map((p) => /\(svg \d+x(\d+)\)/.exec(p.part)?.[1])
-      .filter((h) => h !== undefined)
-      .map(Number);
+    (m.anatomy?.[slot]?.parts ?? []).flatMap((p) => [...p.part.matchAll(/\(svg \d+x(\d+)\)/g)].map((mm) => Number(mm[1])));
   if (m.anatomy) {
     line(svgHeights('cooling').includes(COOLING_CHART), `cooling chart paints ${COOLING_CHART} px → svg heights seen ${JSON.stringify(svgHeights('cooling'))}`);
     const wantGpu = width >= 1600 ? 50 : 38;
@@ -124,7 +125,20 @@ for (const [vp, m] of Object.entries(B.viewports)) {
   const r4 = Math.max(measured.serving ?? 0, measured['session-event-log'] ?? 0);
   const expectedPage = BAND + GRID_PAD + r1 + rows23 + r4 + 2 * GRID_GAP;
   line(m.overflow <= 0, `page: scrollHeight ${m.scrollHeight} vs viewport ${m.clientHeight} → overflow ${m.overflow} (band ${m.band}, grid ${m.grid?.height}; expected page ≈ ${expectedPage.toFixed(0)})`);
-  line(height - m.scrollHeight >= 200, `page: spare ≥ 200 px for degraded states → ${height - m.scrollHeight} px`);
+  // ⚠ 2026-09-09: spare is measured from the CONTENT bottom, not from `scrollHeight`.
+  // `document.documentElement.scrollHeight` is defined as at least the viewport height, so on
+  // any page that fits it equals `clientHeight` and `height - scrollHeight` is 0 — the check
+  // was unsatisfiable for exactly the state it grades, and only ever ran against an
+  // overflowing tree where it happened to look right. The bottom of the grid IS the bottom of
+  // the page here (the band is the only other body child and it sits above the grid), which is
+  // the number §2.10's "spare" column predicts (249 / 213 / 269 under OQ-7).
+  const contentBottom = m.grid?.bottom;
+  line(
+    Number.isFinite(contentBottom) && height - contentBottom >= 200,
+    contentBottom === undefined
+      ? 'page: spare ≥ 200 px — NOT MEASURED: the run recorded no grid box, so there is no content bottom to measure from'
+      : `page: spare ≥ 200 px for degraded states → ${(height - contentBottom).toFixed(1)} px (content bottom ${contentBottom}, viewport ${height})`,
+  );
   const wb = B.withBanner?.[vp];
   if (wb) line(wb.overflow <= 0, `page with §6.4 banner pinned: overflow ${wb.overflow} (band ${wb.band})`);
 }

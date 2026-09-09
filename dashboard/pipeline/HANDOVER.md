@@ -1,73 +1,82 @@
-# Handover — after 10c-3. **Step 10 is closed WITH A KNOWN FAILURE. Next is step 11.**
+# Handover — after 10e. **Step 10 closes here: §6.1's promise is measured TRUE on the healthy page.**
 
-**Rewritten 2026-09-09 by 10c-3's reconciliation** (sizing and visual — the loop step 10 closes
-with), on top of 10c-2's. Steps 1–8 are closed, **step 9** is closed, **Q1** and **Q2** are
-closed, and every loop of **step 10** — 10a, 10b, 10b-S-G, 10c-1, 10c-2 and now **10c-3** — is
-closed pending the parent's review. This file is the whole inheritance: the next phase's agents
-get clean context and read it as fact.
+**Rewritten 2026-09-09 by 10e's reconciliation** (the density build), on top of 10c-3's. Steps 1–8
+are closed, **step 9** is closed, **Q1** and **Q2** are closed, and every loop of **step 10** — 10a,
+10b, 10b-S-G, 10c-1, 10c-2, 10c-3 and now **10e** — is closed pending the parent's review. 10d is a
+withdrawn design investigation kept as a record. This file is the whole inheritance: the next
+phase's agents get clean context and read it as fact.
 
 ---
 
-## 0.0 ⚠⚠ READ THIS FIRST — §6.1's promise is measured false in the BUILD, and measured TRUE in the DESIGN. The fix is density, not layout.
+## 0.0 ⚠⚠ READ THIS FIRST — 10e closed pending parent review. **§6.1's promise is measured TRUE on the healthy page**, and the one remaining overflow is an owner question, not a density miss.
 
-`SPEC.md` §6.1: *"The 'no scroll' promise holds at ≥1280px **wide and ≥1024px tall** … At
-1920×1080 it fits comfortably."* The built page breaks it — and the design it was built from does
-not. Both measured in real headless Chrome, 2026-09-09.
+`SPEC.md` §6.1's only quantitative promise — *"the page fits at ≥1280 wide and ≥1024 tall"* — was
+measured **false** in the build at 10c-3 (356 / 418 / 362 px of overflow at 1280×1024 / 1600×1024 /
+1920×1080) and **true** in `MOCK.html`, the same nine-panel four-row grid. The cause was never the
+layout: the built panels were **1.8–2.4× taller than the design**, a 16 px root with one reading per
+24 px line against the mock's 12 px and horizontal readings. 10e is the loop that closed that, and
+its acceptance is a browser measurement, never arithmetic.
 
-**The build** (`measure-breakpoints.mjs` measurement 9, healthy box-faithful telemetry, no banner):
+**Measured 2026-09-09 by 10e's reconciliation, in real headless Chrome, on the tree this file
+describes** (`mocks/measure-arrangements.mjs --fixture box … --anatomy` → `mocks/check-density.mjs`,
+**no `--oq` flag**, every owner question declined):
 
-| viewport | `scrollHeight` | viewport | overflow |
-|---|---|---|---|
-| 1280 × 1024 | ~1380 | 1024 | **356** |
-| 1600 × 1024 | ~1442 | 1024 | **418** |
-| 1920 × 1080 | ~1442 | 1080 | **362** |
+| viewport | band | grid | content bottom | **spare** | with §6.4's two-alarm banner pinned |
+|---|---|---|---|---|---|
+| 1280 × 1024 | 43 | 717.8 | 760.8 | **263.2 px** | band 108.7 → **overflow 0** |
+| 1600 × 1024 | 43 | 753.4 | 796.4 | **227.6 px** | band 108.7 → **overflow 0** |
+| 1920 × 1080 | 43 | 753.4 | 796.4 | **283.6 px** | band 108.7 → **overflow 0** |
 
-(10c-3's first figures — 596 / 632 / 560 — included ~200 px of `errors[]` notes that only a
-GPU-less development Mac produces; 10d §2.2 corrected them.)
+**`ALL PASS`** — every per-slot height within ±10 % of §8's spec-only targets (four of the nine at
+exactly **0.0 %**, the rest between −0.4 % and −3.0 %), every painted chart box the size §8 item 4 names, page fit and the ≥200 px spare bar met
+at all three viewports, with and without the banner. The build agent measured this first and this
+phase reproduced every digit independently.
 
-**The design** — `MOCK.html`, the §8.2 mock, **same four-row nine-panel grid** — with
-`mocks/measure-mock.mjs`, minus the 31 px mock-viewer strip the real app lacks:
+**The one thing that does NOT pass, and what it actually says.**
+`measure-breakpoints.mjs` reports **10 pass, 2 fail, 0 blocked, 12 total**: measurements 0–8 pass,
+measurement 9 passes at 1920×1080 and fails at 1280×1024 by **27 px** and at 1600×1024 by **49 px**
+(down from 10c-3's 596 / 632 and 10d's 356 / 418). That script fabricates only `gpus[]` and takes
+the rest of `/api/telemetry` as this **development Mac** returns it — so it grades a page on which
+**all seven non-GPU collectors have filed an `errors[]` message**, each a long absolute path that
+wraps to two and three lines. §2.11 budgets **14.2 px** for a source's message. The same build under
+`--fixture box` — the *"fabricated healthy telemetry"* §6.1's own acceptance sentence names — fits
+at all three with 227–284 px to spare.
 
-| viewport | healthy | with the mock's six-alarm banner |
-|---|---|---|
-| 1280 × 1024 | **fits by ~19** | over by ~166 |
-| 1600 × 1024 | **fits by ~90** | over by ~52 |
-| 1920 × 1080 | **fits by ~159** | **fits by ~86** |
+⚠ **So the open question is not "is the page dense enough". It is: does §6.1's promise hold on a
+DEGRADED page, and if so, what bounds an `errors[]` block?** Nothing caps a `PanelNotes` block or a
+`StatusRow`'s `detail` today, the text is the collector's own (S-H), and this is **not** a dev-Mac
+artefact: this box's own documented DKMS failure message is 152 characters and measures **65.6 px**
+in a 285 px column. That is `10e-Q1` in §8, and it is the owner's. **Nothing was chosen.**
 
-**Per panel at 1920 — mock vs built:** GPU **220 vs 485** · COOLING **472 vs 868** · CPU **204 vs
-458** · MEMORY **195 vs 458** · SAFETY **259 vs 397** · STORAGE **182 vs 397** · SERVING **140 vs
-190** · LOG **134 vs 190**. **The built panels are 1.8–2.4× taller than the design.** That is the
-whole failure.
+**The two shipped defects 10d found are both closed, and one of them was closed twice.**
 
-**Consequences, ruled by the owner 2026-09-09:**
+- **F5** — SERVING's instance row overflowing a narrow column — is fixed as 10e §7 specified
+  (`.value` can shrink and wrap; the composite string split into `secondaryLabel`/`inline`/
+  `endPrefix`). ⚠ 10e then **re-created the identical defect one primitive over**: `Strip`'s `.v`
+  shipped `white-space: nowrap`, and GPU's `served by instance N` carries `/v1/models`'s model id,
+  which is an absolute `.gguf` path whenever `set-model` was given no alias. Measured `scrollWidth`
+  **345 in a 285 px column**. Fixed with F5's own three declarations (10e-A2).
+- **F1** — the session event log growing the *page* through its clipped scroll box — was fixed
+  **wrongly** and is now fixed for real. ⚠ **`panel-shell.module.css`'s `.panel { position:
+  relative }`, which 10e §7 specified and the build shipped, does nothing at all.** Measured on the
+  real page at 1280×1024 with 200 log entries: `documentElement.scrollHeight` is **5189 with that
+  line and 5189 without it**. An `.sr-only` span is `position: absolute` with `top`/`left` auto, so
+  it is placed at its **static** position either way; and a scroll container clips an
+  absolutely-positioned descendant only when it is in that descendant's **containing-block chain**,
+  which a `position: static` box never is. `.panel` is `overflow: visible`, so the overflow
+  propagates straight past it. **The fix is `position: relative` on the CLIPPING box** — `.scroll`
+  in `session-event-log-panel.module.css`, and `.tableView` in both chart primitives. Measured
+  after: **1024 at 200 entries and 1024 at 500** (`MAX_EVENTS`). `components/styles.test.ts` now
+  carries the general rule (*a scrolling box must be a positioned box*) over every stylesheet.
 
-- **The §6.1 grid stays exactly as drawn** — four rows, COOLING spanning rows 2–3 in columns 1–2,
-  **all nine panels on the wall**. Nothing moves, nothing is hidden.
-- **10d's recommendation (arrangement B, a `<details>` for SERVING and the log) is WITHDRAWN.** Its
-  measurements, mocks and harness stay as a record under `steps/10-panels-assembly/`.
-- **`MOCK.html` is the source for FORM** — density, anatomy, type scale, spacing, chart sizes —
-  **and for nothing else.** Data, strings and rules come from `SPEC.md`, and where they disagree
-  the spec wins (`ANCHOR.md` §9, the owner's words). The mock predates O19, the raw-name and
-  full-bus rules, and every S-* ruling; the builder takes its form and keeps the built behaviour.
-- **The work is 10e**: a builder spec bringing `components/` and `app/` to the mock's density,
-  measured, then a full build loop implementing it. **Step 11 waits for it** (owner's ruling).
+**Rulings that stand, and that no later loop re-asks** (owner, 2026-09-09; all in `SPEC.md` §6.1):
+the §6.1 grid is unchanged and all nine panels stay on the wall; **`MOCK.html` is the source for
+FORM only** and the spec wins wherever the two disagree; the banner promise is **unconditional**;
+OQ-1/2/3/5/6 **declined**; **OQ-4 no chip on the session event log**; **OQ-7 keep BOTH CPU traces**;
+OQ-8 recorded for the loop that owns §6.4's SAFETY.
 
-**Two shipped defects found by measuring, both to be fixed in that loop (owner's ruling):**
-**F1** — the session event log grows the *page* through its clipped scroll box: every `Chip`
-renders a `position: absolute` `.sr-only` span and nothing between it and the viewport is
-positioned (`position: relative` on `.panel` closes it, and the same leak reaches the sparkline
-table's `<caption>`). **F5** — SERVING's instance row overflows horizontally in any column under
-~450 px (`status-row`'s `.value` is `flex: 0 0 auto`).
-
-**One open owner question this raises:** the mock itself overflows at 1280×1024 and 1600×1024
-**under a six-alarm banner** and holds only at 1920. Whether §6.1's promise is conditioned on
-"no banner pinned" is not settled anywhere — bring it with 10e's questions.
-
-**How this went unnoticed until the last loop of step 10:** none of the seven §6.1 measurements
-10a-F4 asked for checked page height, and the script measured the 1280 checkpoint at height
-**900**, below the 1024 the promise is conditioned on (fixed in 10c-3, measurement 9). And nobody
-measured the mock — the spec called it "a reference, never a source", which was read as "never
-consult it", when it was the one artefact that answered the question.
+**Next is step 11** (packaging), then step 12 (deploy, and the box redeploys — it still serves
+`b3969cd`).
 
 ## 0.1 ⚠ NEW — what Q1 found, and the three rules that came out of it
 
@@ -624,6 +633,77 @@ them.
 
 ---
 
+## 0.9 ⚠ NEW — what 10e found, and the five rules to carry out of it
+
+10e brought `components/` to `MOCK.html`'s density. Its adversarial phase raised fifteen findings,
+twelve of which were accepted and fixed; the full adjudication is
+`steps/10-panels-assembly/10e-reconciliation.md`. Five rules are worth more than the diff.
+
+### ⚠ THE RULE — a scroll container only clips what it is the CONTAINING BLOCK of
+
+The single most expensive mistake of this loop, and it was in a *fix*. `.sr-only` is
+`position: absolute`; every `Chip` renders one; the session event log's bounded 84 px well was
+`position: static`. An absolutely-positioned box is clipped by an ancestor scroller **only when that
+scroller is in its containing-block chain**, and a static box is in no chain at all — so 200 entries'
+hidden spans escaped the well and grew `documentElement.scrollHeight` to **5189** on a 1024 px
+viewport, the page acquiring a scrollbar at about **fifteen** entries.
+
+The shipped fix put `position: relative` on `.panel` instead, reasoning that the panel would become
+the containing block. It does — and it changes **nothing**, because `top`/`left` are `auto` (the box
+is placed at its static position either way) and `.panel` is `overflow: visible` (the overflow
+propagates straight through). Measured on the real page: **5189 with that line and 5189 without
+it.** The lesson is not about CSS trivia; it is that **a plausible mechanism, written into a comment
+in the file it is wrong about, survived a build, a test phase and a spec** — and only fell to a
+measurement. `components/styles.test.ts` now carries the rule for the whole directory: *a rule
+setting `overflow*: auto|scroll` must also set `position`.*
+
+### ⚠ Fixing a defect in one primitive does not fix it in the primitive you write next
+
+F5 — `status-row`'s `.value` could neither shrink nor wrap, so SERVING's composite string overflowed
+a narrow column — was fixed in this loop, by this loop, with `min-width: 0; white-space: normal;
+overflow-wrap: anywhere`. **The same loop then created `Strip` with `white-space: nowrap`** and moved
+GPU's `served by instance N` into it — a value that carries `/v1/models`'s model id, which is an
+absolute `.gguf` path whenever `serve-llm.sh set-model` was given no alias. Measured `scrollWidth`
+**345 in the 285 px GPU column**, and the same 345 at 262 and 200. A defect class closed in one file
+is not closed in the tree; grep for the shape, not the file.
+
+### ⚠ `aria-label` on a role-less element is an attribute that renders and does nothing
+
+`Hero` put `aria-label` on a plain `<div>`, which maps to ARIA's `generic` role, for which *ARIA in
+HTML* lists the attribute as **prohibited** (axe-core's `aria-prohibited-attr`). Two mutations went
+RED when it was deleted, so the suite read as covered while defending nothing. Worse, it was the
+only carrier of the words **`fan 5`** on the COOLING panel: 10e had moved that reading out of a
+`<Row label="fan 5">` into a `Hero`, and the string then appeared **nowhere in the panel body**.
+Two rules: **an ARIA attribute needs a role that permits it** (`group`, not `img`, when the element's
+own text must still be announced), and **visible text is the accessible name that cannot be got
+wrong** — the fix was a visible key costing 0 px, not a better attribute.
+
+### ⚠ A test that names a tone, a size, a tick or a wiring and asserts only the TEXT is §0.4's shape again
+
+Nine of the fifteen findings were this, at eleven call sites, in the loop **after** §0.8 wrote the
+rule down (*"wiring a prop is a property, and an optional prop makes it an untested one"*). Two
+tests were literally named *"watch-toned"* and asserted only the wording; a test named *"chip renders
+the explicit no-band state"* asserted a substring the `<section>`'s own attribute already supplied,
+and its name stated the opposite of the ruling the code had implemented. **Read every test name
+against its body — and when the property is a colour, a size or a class, assert the class.** The
+mechanical form that works here: an exact occurrence **count**, or the extracted class string, never
+a whole-document `toContain`.
+
+### ⚠ `lib/source-text.ts`'s `codeOnly` cannot see a regex literal, and six guards read through it
+
+`codeOnly` is a character state machine over `'`, `"`, `` ` ``, `//` and `/* */`. A **regular
+expression literal** is none of those, so `/class="_noteWatch[^"]*">…/` — three `"` characters —
+leaves it in string mode, and every comment after it, to the next `"` anywhere in the file, reads as
+**live code**. It bit this loop in the safe direction (`tocontain-scope` flagged a dangerous literal
+quoted inside a comment) and it is endemic: measured, **16 test files** currently desynchronise it,
+`components/sparkline.test.tsx` over 672 lines and `lib/tocontain-scope.test.ts` — the guard itself —
+over 333. Six guards read source through it. **Not fixed** (see §8, `10e-Q10`): the one-line fix is
+that a `'`/`"` may not open a string that does not close before the next newline, but it changes what
+six guards can see and its failures are the point. Until then: **a regex in a file a guard reads must
+have an even number of quote characters, or be built with `new RegExp` over a `'…'` string.**
+
+---
+
 ## 1. How to run anything
 
 `pnpm` is installed through corepack into a directory that is **not** on this machine's
@@ -708,16 +788,36 @@ shell **and** 10b's nine panel bodies; `components/panels/*.test.*` files belong
 harness's `LEDGER_FILES` and to no other (ledger ownership follows the FILE, §5.2 rule 6).
 
 ```bash
-python3 pipeline/steps/02-format-severity/regressions.py                    #  55 mutations + ledger
+python3 pipeline/steps/02-format-severity/regressions.py                    #  60 mutations + ledger
 python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  73 mutations + ledger
-python3 pipeline/steps/04-collector-cooling/regressions.py                  #  92 mutations + ledger
+python3 pipeline/steps/04-collector-cooling/regressions.py                  #  94 mutations + ledger
 python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 130 mutations + ledger
 python3 pipeline/steps/06-telemetry-route/regressions.py                    #  63 mutations + ledger
 python3 pipeline/steps/07-auth-login/regressions.py                         # 128 mutations + ledger
 python3 pipeline/steps/08-client-runtime/regressions.py                     # 174 mutations + ledger
-python3 pipeline/steps/09-ui-primitives/regressions.py                      # 102 mutations + ledger
-python3 pipeline/steps/10-panels-assembly/regressions.py                    # 175 mutations + ledger
+python3 pipeline/steps/09-ui-primitives/regressions.py                      # 127 mutations + ledger
+python3 pipeline/steps/10-panels-assembly/regressions.py                    # 212 mutations + ledger
 ```
+
+⚠ **10e RAN ALL NINE, serially, in one foreground call, and this is the current state.** Re-derived
+by this run's own `All N regressions failed their check` lines, not carried forward:
+
+| harness | mutations | red-test ledger | result |
+|---|---|---|---|
+| `02-format-severity` | 60 | not printed — the run returns at the moved anchors, before the ledger | ⚠ **exit 1 — the three PRE-EXISTING orphans ONLY** (`02-R20`/`R30`/`R31`, `ANCHOR NOT FOUND in lib/format.ts`). Not a regression; see §8 `10e-Q13` |
+| `03-collectors-gpu-host` | 73 | 115 red across 73; 25 ⚠ checked | **exit 0** |
+| `04-collector-cooling` | 94 | 188 red across 94; 85 ⚠ checked | **exit 0** |
+| `05-collectors-serving-storage-safety` | 130 | 190 red across 130; 100 ⚠ checked | **exit 0** |
+| `06-telemetry-route` | 63 | 88 red across 63; 56 ⚠ checked | **exit 0** |
+| `07-auth-login` | 128 | 202 red across 128; 130 ⚠ checked | **exit 0** |
+| `08-client-runtime` | 174 | 288 red across 174; 221 ⚠ checked | **exit 0** |
+| `09-ui-primitives` | **127** | 186 red across 127; **138 ⚠ checked** | **exit 0** |
+| `10-panels-assembly` | **212** | 253 red across 212; **232 ⚠ checked** | **exit 0** |
+
+**1061 mutation ids across the nine, zero cross-harness collisions, zero within-file duplicates** —
+re-derived by parsing each `REGRESSIONS` list with `ast`, never by `grep -c` (which the id-prefix
+guard's own literal inflates by one). ⚠ That total goes stale on the next item that adds a mutation;
+the authoritative number is always each harness's own printed line.
 
 ⚠ **10c-2 touched THREE and re-ran three — steps 2, 3 and 10 — and its reconcile phase re-ran
 step 10's alone.** The build re-anchored step 2's `02-R3` onto `UNIT_GIB` (`lib/format.ts`'s
@@ -1729,16 +1829,38 @@ top of `lib/guardrails.test.ts` — not by a text assertion.
 
 ---
 
-## 8. Spec gaps — re-verified by 10b's reconciliation, 2026-09-08
+## 8. Spec gaps and open owner questions — 10e's thirteen added 2026-09-09; the rest re-verified by 10b's reconciliation, 2026-09-08
 
 ⚠ This table has now been **stale five times** (92 % before step 5, 100 % before step 6, again
 before step 7, again in step 8, and again in Q2). **Every time, in the safe direction: entries
 carried as open that the spec had already answered.** Re-check every row against the spec text
 before trusting it. Invariant 7 stands: if the spec is silent, **report it — do not assume**.
 
-**Open, with owners — thirteen rows: Q2's two, 10a's four, 10b's three still-open ones (S-G is
-now RULED and implemented), and 10b-S-G's own four successors. S11/G5's rendering residue is
-CLOSED.**
+**Open, with owners — twenty-six rows: 10e's thirteen (below, and the most urgent of them gates
+step 11's sequencing decision), Q2's two, 10a's four, 10b's three still-open ones (S-G is now RULED
+and implemented), and 10b-S-G's own four successors. S11/G5's rendering residue is CLOSED.**
+
+### ⚠ NEW — 10e's thirteen, 2026-09-09. **Questions, not proposals** — each names what the code does today.
+
+Raised by 10e's build, test, adversarial and reconcile phases; full statements with the
+measurements are in `steps/10-panels-assembly/10e-reconciliation.md` §6. **Nothing below was
+chosen** (invariant 7). `10e-Q1` is the one that decides whether step 10 is finished.
+
+| # | Gap | What stands today | Owner |
+|---|---|---|---|
+| **10e-Q1** ⚠ **RULED 2026-09-09: unconditional; bound the block (scroll box). SPEC §6.1. → 10f** | **Is §6.1's no-scroll promise conditioned on healthy telemetry, and if not, what bounds an `errors[]` block?** §6.1's acceptance sentence says *"fabricated healthy telemetry"*, and under that fixture the page fits at all three viewports with 227–284 px spare. `measure-breakpoints.mjs` measurement 9 grades an **all-collectors-failed** page and is **27 px** over at 1280 and **49 px** at 1600. §2.11 budgets **14.2 px** for a source's `errors[]` line; this box's own documented DKMS message is **152 characters** and measures **65.6 px** in a 285 px column, so it is not a dev-Mac artefact | Nothing caps `PanelNotes` or a `StatusRow`'s `detail`; the message text is the collector's own (S-H), so a long one simply wraps. If the promise is unconditional, the sub-question is **truncation, a scroll box, or a per-panel budget** | **owner**, then step 10/11 |
+| **10e-Q2** | **§2.11's throttle budget is measured 1.8× under at the design width.** A notable mask (`0x4` + `✕ 0x20 sw thermal slowdown`) costs **44.0 px** in the 285 px GPU column against **24.5** budgeted, and 17.0 at ≥1600; a third, unknown bit takes it to **71 px** and overflows the caption horizontally below ~245 px | The line renders only when `decodeThrottleMask(...).notable`, so the healthy page carries none of it — this is a degraded-state budget only | **owner** |
+| **10e-Q3** ⚠ **RULED 2026-09-09: neutral unbanded code chip. SPEC §6.2. → 10f** | **How is `0x4` presented once ANOTHER bit makes the throttle line notable?** §6.2 says the normal power cap *"is not news and must not be styled as a warning"*. It is not styled as a warning; it is styled as a **verdict** — a green `✓` pill asserting the routine 250 W cap is healthy. §6.3 bands the metric `GPU throttle`, never a bit, and the per-reason severity is `lib/throttle.ts`'s own construction, invisible before 10e | One `Chip md code` per reason, banded by that reason's own `r.severity`. Note the tension: 10e decided in the same loop that a `normal` **`Meter`** is deliberately grey (*"colour is spent almost entirely on state"*), so the throttle caption is the one place a `normal` band is painted its status colour | **owner** |
+| **10e-Q4** | **The GPU *retired*-card branch renders no `errors[]` at all.** With `gpus: []` and an `nvidia-smi` entry present the card renders `card not enumerated` and nothing else, while the `gpus: null` branch two lines below maps `errorsForPanel` into `.takeoverNote` | Byte-identical to `HEAD` — 10b's S-E residue, not 10e's. Verified by rendering both | **owner** |
+| **10e-Q5** | **The GPU card prints the power pair twice** — the `Figure` (`249.8` `W` + `cap 250.0 W`) and the power `Meter`'s own head (`249.8 W / 250.0 W`): four numerals for two facts, on a density loop | The mock's form, recorded as such in `gpu-panel.tsx`. Flagged against §6.5's *"one fact, stated once"* | **owner** |
+| **10e-Q6** | **A severity-bearing row announces its band twice** to a screen reader — `Chip sm`'s `sr-only` word and `Chip md`'s | Unchanged; both chips carry the word by design | **owner** |
+| **10e-Q7** | **`aria-pressed` beside a label that names the NEXT action.** `header.tsx:182-184` gives `aria-pressed={paused}` *and* `aria-label={paused ? 'Resume polling' : 'Pause polling'}`, so a paused control announces *"Resume polling, toggle button, **pressed**"*. The APG's rule is that the two must not be combined. `ChartViewToggle` has the same shape | Inherited: `aria-pressed` predates 10e (the visible `▶ resume` was the name), and 10e only moved the name into the attribute | **owner** |
+| **10e-Q8** | **Delete COOLING's dead fourth chan column, or keep the slot §2.2 specifies?** `ChanRowSpec.note` exists, `.chan` reserves a fourth `minmax(0, 1fr)` track, and **all four call sites pass `note: null`** — four empty spans | 10e §2.0/§2.2 specify the column as *"S-B stale age or nothing"*, and no loop has rendered a per-channel stale age yet. It costs 0 px, and `dangling-css-class.test.ts` cannot see it (the class IS referenced, just never populated) | **owner**, then the loop that renders S-B on channels 1–4 |
+| **10e-Q9** | **Nothing runs the density grader.** `check-density.mjs` is the only tool that can see six one-line CSS reverts that leave the whole suite green (`.track`/`.scroll` `box-sizing`, `body { font-size: 12px }`, `.grid { gap: 9px }`, the well's fixed `height`, `.panel`'s `position`), and it is not wired into any command a later loop must run | Run by hand, twice, by two sessions; **ALL PASS**. Two of the six are now guarded by CSS-text tests (`10e-SE4`/`SE5`) and one by `styles.test.ts`'s new rule (`10e-CS2`) | **owner**, then step 11/12 |
+| **10e-Q10** ⚠ | **Fix `lib/source-text.ts`'s `codeOnly` regex blind spot?** A regex literal containing an odd number of `"` leaves the comment-stripper in string mode, so comments read as live code for the rest of the file. Measured: **16 test files** currently desynchronise it (`sparkline.test.tsx` 672 lines; `tocontain-scope.test.ts`, the guard itself, 333). **Six** guards read source through it | Unfixed. The fix is that a `'`/`"` may not open a string that does not close before the next newline — small, but it changes what six guards can see, and its failures are the point. 10e balanced or `new RegExp`-wrapped every regex in the files it touched so it adds no new desync | **owner**, then the next loop touching `lib/source-text.ts` |
+| **10e-Q11** | **SERVING's row severity is `worstSeverity(unitSeverity, healthSeverity)` and the pill's LABEL is `unitState`**, so an instance whose unit is `active` but whose `/health` is `unreachable` paints the word **`active`** alarm-red. No rule is broken — the same single severity governed the old hand-joined string — but the colour now visually attaches to the healthier of the two facts | Unchanged. The `/health` verdict sits outside the pill as muted `endPrefix` text | **owner** |
+| **10e-Q12** **RULED 2026-09-09: delete it. → 10f** | **Delete the now-dead `Row` primitive?** `<Row` appears only in `row.test.tsx`; at `HEAD` there were seven call sites and 10e converted every one. 10e added a pill branch and two mutations (`10e-R1`/`R2`) for callers that do not exist, and widened `09-CS1` over a stylesheet no page loads | Kept, green, defending no shipped rendering. `status-row.tsx`'s doc no longer claims a caller `Row` does not have | **owner**, then a later loop |
+| **10e-Q13** ⚠ **RULED 2026-09-09: re-aim now, before step 11. → 10f** | **Re-aim `02-R20`/`R30`/`R31` so step 2's ledger runs again?** `regressions.py:635` returns before the ledger whenever an anchor has moved, so the three pre-existing orphans have kept **step 2's whole ⚠ check dark** since `formatUptime` gained its `prefix` parameter. `lib/format.test.ts` has **no second owner**, so its marks — including the seven 10e added for the `format*Parts` variants — are checked by nothing that runs | Left untouched (HANDOVER §1 says they are not this loop's). The test phase ran the ledger diagnostically with only those three excluded: **261 red tests across 57 mutations, 22 ⚠ checked, every one reddened** — the coverage exists; nothing is checking it. It is one `formatUptime` signature away | **owner**, then the next loop touching step 2 |
 
 ### ⚠ NEW — 10b-S-G's four, 2026-09-08. None is implemented; each names what stands today.
 

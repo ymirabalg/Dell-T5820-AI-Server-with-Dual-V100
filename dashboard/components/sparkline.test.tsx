@@ -616,6 +616,258 @@ describe('⚠ 10c-3/F14b — a gap between two readable points breaks the run, e
 
 });
 
+// ---------------------------------------------------------------------------------------
+// 10e §3.2 — the three optional additions for the ≥1600px promoted form: `domain` (a fixed
+// y-scale), `refs` (dashed threshold lines) and `timeLabels`. Fixture symmetry throughout
+// (HANDOVER §5.1): every prop is tested WITH and WITHOUT, and "without" must still be
+// byte-for-byte what this file's tests above already prove.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ 10e — domain clamps a reading INTO a fixed y-scale, never dropping the point', () => {
+  const points: SparklinePoint[] = [
+    { tMs: 0, v: 60 },
+    { tMs: 1000, v: 95 }, // above the domain max
+    { tMs: 2000, v: 70 },
+  ];
+
+  test('without domain: autoscale, exactly as before — the values ARE the scale', () => {
+    const withDomain = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={points} color="#3987e5" formatValue={formatValue} formatTime={formatTime} />,
+    );
+    // 95 is the series max here, so it draws at y=0 (the top) under autoscale.
+    expect(ysOf(withDomain)[1]).toBeCloseTo(0, 5);
+  });
+
+  test('⚠ with domain {min:30,max:90}: a reading of 95 clamps to the max rail, y=0 — never NaN, never dropped', () => {
+    const html = renderToStaticMarkup(
+      <Sparkline
+        ariaLabel={ARIA}
+        points={points}
+        color="#3987e5"
+        formatValue={formatValue}
+        formatTime={formatTime}
+        domain={{ min: 30, max: 90 }}
+      />,
+    );
+    expect(html).not.toContain('NaN');
+    // Three points still drawn — the clamp changes the Y position, not whether it is drawn.
+    expect(ysOf(html).length).toBe(3);
+    // Clamped to the top rail (padT is 0 here — no timeLabels), same as a real 90 would be.
+    expect(ysOf(html)[1]).toBeCloseTo(0, 5);
+  });
+
+  // ⚠ ADDED BY 10e's TEST PHASE, 2026-09-09 — HANDOVER §5.1, fixture symmetry. Every `domain`
+  // fixture in this file sat ABOVE the rail (95 against a max of 90); nothing anywhere sat
+  // below the min. A one-sided clamp (`Math.min(domainMax, v)`, dropping the `Math.max`) passed
+  // the entire suite and both harnesses, and `10e-SP6` could not see it either because it
+  // removes BOTH rails at once. Not hypothetical: `gpu-panel.tsx`'s `TEMP_DOMAIN.min` is 30 °C
+  // and this room is ~25, so a cold power-on reads under the rail — with no lower clamp its
+  // vertex is at y > height and the trace leaves the viewBox entirely.
+  test('⚠ with domain {min:30,max:90}: a reading of 25 clamps to the MIN rail, y=height — the other side of the same clamp', () => {
+    const cold: SparklinePoint[] = [
+      { tMs: 0, v: 25 }, // below the domain min
+      { tMs: 1000, v: 60 },
+    ];
+    const html = renderToStaticMarkup(
+      <Sparkline
+        ariaLabel={ARIA}
+        points={cold}
+        color="#3987e5"
+        formatValue={formatValue}
+        formatTime={formatTime}
+        domain={{ min: 30, max: 90 }}
+      />,
+    );
+    expect(html).not.toContain('NaN');
+    expect(ysOf(html).length).toBe(2);
+    // The default height is 24 and padT/padB are 0 without `timeLabels`, so the bottom rail
+    // is exactly y = 24 — the same y a real 30 would draw at, never below it.
+    expect(ysOf(html)[0]).toBeCloseTo(24, 5);
+  });
+
+  test('⚠ two cards share ONE scale: a 66°C reading on a 30–90 domain is NOT drawn at the same y a 90°C reading would be under autoscale', () => {
+    const flatIsh: SparklinePoint[] = [{ tMs: 0, v: 66 }, { tMs: 1000, v: 66 }];
+    const html = renderToStaticMarkup(
+      <Sparkline
+        ariaLabel={ARIA}
+        points={flatIsh}
+        color="#3987e5"
+        formatValue={formatValue}
+        formatTime={formatTime}
+        domain={{ min: 30, max: 90 }}
+        height={60}
+      />,
+    );
+    // 66 is 60% of the way from 30 to 90, so y = (1 - 0.6) * 60 = 24 — NOT the centre line
+    // (30) autoscale would draw a flat series at.
+    expect(ysOf(html)).toEqual([24, 24]);
+  });
+});
+
+describe('⚠ 10e — refs draw only when given, and reserve room on the right', () => {
+  const points: SparklinePoint[] = [{ tMs: 0, v: 60 }, { tMs: 1000, v: 70 }];
+
+  test('without refs: no reference line or label in the markup', () => {
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={points} color="#3987e5" formatValue={formatValue} formatTime={formatTime} />,
+    );
+    expect(html).not.toContain('data-role="sparkline-ref"');
+    expect(html).not.toContain('80');
+  });
+
+  test('⚠ refs render one line+label per entry, coloured by alarm', () => {
+    const html = renderToStaticMarkup(
+      <Sparkline
+        ariaLabel={ARIA}
+        points={points}
+        color="#3987e5"
+        formatValue={formatValue}
+        formatTime={formatTime}
+        domain={{ min: 30, max: 90 }}
+        refs={[
+          { v: 80, label: '80', alarm: true },
+          { v: 70, label: '70' },
+        ]}
+      />,
+    );
+    expect((html.match(/data-role="sparkline-ref"/g) ?? []).length).toBe(2);
+    expect(html).toContain('>80<');
+    expect(html).toContain('>70<');
+  });
+
+  test('⚠ an empty refs array behaves exactly like omitting refs — no reserved width', () => {
+    const withEmpty = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={points} color="#3987e5" formatValue={formatValue} formatTime={formatTime} refs={[]} width={90} />,
+    );
+    const withoutProp = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={points} color="#3987e5" formatValue={formatValue} formatTime={formatTime} width={90} />,
+    );
+    expect(withEmpty).toBe(withoutProp);
+  });
+});
+
+describe('⚠ 10e — timeLabels draws the window’s first and last real instants', () => {
+  const points: SparklinePoint[] = [
+    { tMs: 1000, v: 60 },
+    { tMs: 2000, v: 62 },
+    { tMs: 3000, v: 61 },
+  ];
+
+  const timeLabelGroup = (html: string): string =>
+    /<g data-role="sparkline-time-labels">[\s\S]*?<\/g>/.exec(html)?.[0] ?? '';
+
+  test('without timeLabels: no time-axis group at all', () => {
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={points} color="#3987e5" formatValue={formatValue} formatTime={formatTime} />,
+    );
+    expect(html).not.toContain('data-role="sparkline-time-labels"');
+  });
+
+  test('⚠ timeLabels renders the FIRST and LAST point’s real time, not the visually-last-drawn one', () => {
+    const html = renderToStaticMarkup(
+      <Sparkline
+        ariaLabel={ARIA}
+        points={points}
+        color="#3987e5"
+        formatValue={formatValue}
+        formatTime={formatTime}
+        timeLabels
+      />,
+    );
+    // Scoped to the time-axis group itself — the hover layer's own per-point tooltips also
+    // contain every TIME(...) string, so an unscoped `toContain` would pass vacuously.
+    const group = timeLabelGroup(html);
+    expect(group).toContain('TIME(1000)');
+    expect(group).toContain('TIME(3000)');
+    expect(group).not.toContain('TIME(2000)');
+  });
+
+  test('empty points with timeLabels renders the empty state, never throws', () => {
+    expect(() =>
+      renderToStaticMarkup(
+        <Sparkline ariaLabel={ARIA} points={[]} color="#3987e5" formatValue={formatValue} formatTime={formatTime} timeLabels />,
+      ),
+    ).not.toThrow();
+  });
+});
+
+// ⚠ RENAMED BY 10e's TEST PHASE, 2026-09-09. This described itself as proving output
+// "byte-identical to today's" and asserted nothing of the kind — and byte-identity is FALSE
+// anyway (the area path and the r=4.5 end dot are unconditional 10e additions, and `yFor`'s
+// rewrite is not bit-equal in IEEE754). The ⚠ also sat on the DESCRIBE, where no ledger in the
+// project can see it (HANDOVER §5.3). Renamed to what the body actually proves.
+describe('10e — with none of the three props given, neither optional group is emitted (10e §3.2)', () => {
+  test('a plain call with only the required props emits no refs group and no time-label group', () => {
+    const points: SparklinePoint[] = [{ tMs: 0, v: 60 }, { tMs: 1000, v: 62 }];
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={points} color="#3987e5" formatValue={formatValue} formatTime={formatTime} />,
+    );
+    expect(html).not.toContain('data-role="sparkline-ref"');
+    expect(html).not.toContain('data-role="sparkline-time-labels"');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// 10e §3.2 — the area fill and the enlarged end dot (form only, 0px of layout height).
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ 10e — the area fill is one path per run, breaking at the same points the line does', () => {
+  test('⚠ a single run draws one area path; a gap in the middle draws two', () => {
+    const onePiece = renderToStaticMarkup(
+      <Sparkline
+        ariaLabel={ARIA}
+        points={[{ tMs: 0, v: 60 }, { tMs: 1000, v: 62 }]}
+        color="#3987e5"
+        formatValue={formatValue}
+        formatTime={formatTime}
+      />,
+    );
+    const twoPieces = renderToStaticMarkup(
+      <Sparkline
+        ariaLabel={ARIA}
+        points={[{ tMs: 0, v: 60 }, { tMs: 1000, v: null }, { tMs: 2000, v: 62 }]}
+        color="#3987e5"
+        formatValue={formatValue}
+        formatTime={formatTime}
+      />,
+    );
+    const areaCount = (html: string): number => (html.match(/data-role="area"/g) ?? []).length;
+    expect(areaCount(onePiece)).toBe(1);
+    expect(areaCount(twoPieces)).toBe(2);
+  });
+});
+
+describe('⚠ 10e — the table view is unaffected by domain/refs/timeLabels — decoration never grows the accessibility floor', () => {
+  // ⚠ NOT marked — structurally guaranteed rather than mutation-tested: `Sparkline`'s table
+  // branch returns before `domain`/`refs`/`timeLabels` are even read, so `SparklineTableView`
+  // has no code path that could see them at all. Recorded per HANDOVER's "properties with no
+  // mutation" pattern rather than given a ⚠ with nothing plausible to break it.
+  test('the table has the SAME row count with or without every new prop', () => {
+    const points: SparklinePoint[] = [{ tMs: 0, v: 60 }, { tMs: 1000, v: 95 }];
+    const plain = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={points} color="#3987e5" view="table" formatValue={formatValue} formatTime={formatTime} />,
+    );
+    const decorated = renderToStaticMarkup(
+      <Sparkline
+        ariaLabel={ARIA}
+        points={points}
+        color="#3987e5"
+        view="table"
+        formatValue={formatValue}
+        formatTime={formatTime}
+        domain={{ min: 30, max: 90 }}
+        refs={[{ v: 80, label: '80', alarm: true }]}
+        timeLabels
+      />,
+    );
+    const rowsOf = (html: string): number => (html.match(/<tr/g) ?? []).length;
+    expect(rowsOf(decorated)).toBe(rowsOf(plain));
+    // And the printed VALUE is the caller's real reading, not clamped — the domain clamp is a
+    // CHART-geometry decision (§6.3's Y-axis clamp), never a change to the reported number.
+    expect(decorated).toContain('95 u');
+  });
+});
+
 describe('⚠ 10c-3/F14b — the table view now carries a gap row, matching the chart form', () => {
   const points: SparklinePoint[] = [
     { tMs: 0, v: 60 },

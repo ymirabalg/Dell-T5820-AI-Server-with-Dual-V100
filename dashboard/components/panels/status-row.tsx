@@ -40,6 +40,29 @@
  * S-B's stale age (watch-toned when `noteTone` says so) and `detail` is the `errors[]`
  * explanation, always muted — an explanation is informational and must never read as a second
  * alarm, which is the same reasoning `noteTone` itself was built on.
+ *
+ * ### 10e §2.0/§2.7 — the value becomes a pill, and three SERVING-only slots
+ *
+ * When `severity` is given (§2.0, matching `Row`'s identical rule), `value` no longer renders
+ * as plain text: it becomes a `Chip md` pill inside a right-aligned `.end` group — the mock's
+ * `chip(sev, state)`. `note`/`detail` are UNCHANGED: both still force their own full line
+ * (the mock's `.row__note--full`, +13.1px each) exactly as before this loop.
+ *
+ * SERVING's row (§2.7) needs three more pieces `Row`/`StatusRow` never had, because its value
+ * used to be one hand-joined string (`:8080 · qwen3.6-27b · ctx 131,072 · health ok`) that F5
+ * found could neither shrink nor wrap. It is now three separate pieces, none of them forced
+ * onto their own line the way `note`/`detail` are — they wrap naturally WITH the row's first
+ * line, which is what keeps a healthy instance on one line at 1280px and lets a narrow column
+ * wrap it instead of overflowing:
+ *
+ * - `secondaryLabel` — a second name span right after `label` (the port, `:8080`).
+ * - `inline` — plain supplementary text (model · ctx), positioned like `.note` but WITHOUT
+ *   `note`'s forced-full-width rule — the mock's plain, non-`--full` `.note`.
+ * - `endPrefix` — plain muted text inside `.end`, before the value/pill (`health ok`, ahead
+ *   of the unit-state pill).
+ *
+ * All three are optional and unused by every caller but SERVING, which is why they do not
+ * disturb SAFETY, COOLING or STORAGE's simpler rows.
  */
 
 import type { Severity } from '@/lib/types';
@@ -56,7 +79,18 @@ export interface StatusRowProps {
   readonly value: string;
   /** Omit for a row with no severity of its own. `null` renders the explicit no-band chip. */
   readonly severity?: Severity | null;
-  /** A trailing detail — an `errors[]` explanation, or S-B's stale-age text. */
+  /** 10e §2.7 — a second name span right after `label` (SERVING's `:${port}`). Non-full-width,
+   *  wraps naturally with the row rather than forcing its own line. */
+  readonly secondaryLabel?: string;
+  /** 10e §2.7 — plain supplementary text (SERVING's `model · ctx`), positioned like `.note`
+   *  but never forced onto its own line — the mock's plain `.note`, distinct from `note`/
+   *  `detail` below, which ARE forced full-width. */
+  readonly inline?: string | null;
+  /** 10e §2.7 — plain muted text inside `.end`, ahead of the value/pill (SERVING's `health
+   *  ok`, ahead of the unit-state pill). */
+  readonly endPrefix?: string;
+  /** A trailing detail — an `errors[]` explanation, or S-B's stale-age text. Forces its own
+   *  full-width line (the mock's `.row__note--full`), unlike `inline` above. */
   readonly note?: string | null;
   /** `'watch'` for S-B's stale-age text; `'muted'` (default) for everything else. */
   readonly noteTone?: StatusRowNoteTone;
@@ -71,16 +105,40 @@ export interface StatusRowProps {
 const shown = (text: string | null | undefined): text is string =>
   text !== undefined && text !== null && text !== '';
 
-export function StatusRow({ label, value, severity, note, noteTone = 'muted', detail }: StatusRowProps) {
+export function StatusRow({
+  label,
+  value,
+  severity,
+  secondaryLabel,
+  inline,
+  endPrefix,
+  note,
+  noteTone = 'muted',
+  detail,
+}: StatusRowProps) {
   return (
-    <div className={styles.row}>
+    <div
+      className={styles.row}
+      data-severity={severity === undefined ? undefined : (severity ?? 'none')}
+    >
       {severity === undefined ? null : (
         <span className={styles.chip}>
           <Chip severity={severity} size="sm" />
         </span>
       )}
       <span className={styles.label}>{label}</span>
-      <span className={styles.value}>{value}</span>
+      {secondaryLabel === undefined ? null : (
+        <span className={styles.secondaryLabel}>{secondaryLabel}</span>
+      )}
+      {!shown(inline) ? null : <span className={styles.inline}>{inline}</span>}
+      <span className={styles.end}>
+        {endPrefix === undefined ? null : <span className={styles.endPrefix}>{endPrefix}</span>}
+        {severity === undefined ? (
+          <span className={styles.value}>{value}</span>
+        ) : (
+          <Chip severity={severity} size="md" label={value} />
+        )}
+      </span>
       {!shown(note) ? null : (
         <span className={noteTone === 'watch' ? styles.noteWatch : styles.note}>{note}</span>
       )}

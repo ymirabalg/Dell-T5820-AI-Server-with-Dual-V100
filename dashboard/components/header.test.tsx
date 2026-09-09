@@ -50,6 +50,17 @@ describe('§6.2 — the header list is EXHAUSTIVE', () => {
     for (const s of [1, 2, 5, 10, 30]) expect(html).toContain(`>${s} s<`);
   });
 
+  // ⚠ ADDED BY 10e's TEST PHASE, 2026-09-09. 10e §4 renamed the cadence control's visible key
+  // `refresh` -> `cadence` (§6.2's own word for it), and nothing asserted the rename. It is
+  // load-bearing beyond cosmetics: this span reading `refresh` is exactly what made
+  // `toContain('refresh')` inert in 10a (HANDOVER §0.4's second founding instance), and it is
+  // the whole ground on which `10a-H13` was retired this loop. Backed by `10e-H3`.
+  test('⚠ the cadence control is labelled "cadence", not "refresh" — the rename 10a-H13 was retired on', () => {
+    const html = renderToStaticMarkup(<Header {...BASE} />);
+    expect(html).toContain('>cadence<');
+    expect(html).not.toContain('>refresh<');
+  });
+
   test('⚠ every window option renders — 10 min/30 min/2 h', () => {
     const html = renderToStaticMarkup(<Header {...BASE} />);
     expect(html).toContain('>10 min<');
@@ -57,27 +68,28 @@ describe('§6.2 — the header list is EXHAUSTIVE', () => {
     expect(html).toContain('>2 h<');
   });
 
-  test('⚠ refresh now and a pause control both render', () => {
-    // `toContain('refresh')` alone is inert here — it is also satisfied by the cadence
-    // control's own label (`<span>refresh</span>`, §6.2's name for the cadence selector) and
-    // by that select's `aria-label="refresh cadence"`, so it would still pass with the actual
-    // refresh-now button deleted entirely. Assert the button's own glyph+text, which nothing
-    // else in the markup produces (found the same way `10a-HS4` found the sibling on
-    // "paused · 6 alarms" above — a second `toContain` this loose, checked because the first
-    // one turned out real).
+  /*
+   * ⚠ 10e §4 — the five controls lose their visible words (`⟳ refresh` → `⟳`, `❙❙ pause` →
+   * `❙❙`, `⏻ logout` → `⏻`): the mock's glyph-only form, read by `aria-label`/`title` rather
+   * than squeezed-in text. `toContain('refresh')`/`toContain('pause')`/`toContain('logout')`
+   * are no longer safe substrings at all — `pause`, for one, is also satisfied by nothing else
+   * in the markup once the button's own visible text is gone, so the assertion now targets the
+   * ACCESSIBLE NAME, which is where the word actually lives post-10e.
+   */
+  test('⚠ refresh now and a pause control both render, named by their accessible names', () => {
     const html = renderToStaticMarkup(<Header {...BASE} />);
-    expect(html).toContain('⟳ refresh');
-    expect(html).toContain('pause');
+    expect(html).toContain('aria-label="Refresh now"');
+    expect(html).toContain('aria-label="Pause polling"');
   });
 
   test('⚠ logout renders behind a visual separator element', () => {
     const html = renderToStaticMarkup(<Header {...BASE} />);
-    expect(html).toContain('logout');
+    expect(html).toContain('aria-label="Log out"');
     // The separator is its own element between the four controls and logout — not merely a
     // margin, so it survives independent of exact spacing values (unverifiable in jsdom).
-    const controlsIndex = html.indexOf('pause');
+    const controlsIndex = html.indexOf('aria-label="Pause polling"');
     const separatorIndex = html.indexOf('aria-hidden="true"', controlsIndex);
-    const logoutIndex = html.indexOf('logout');
+    const logoutIndex = html.indexOf('aria-label="Log out"');
     expect(separatorIndex).toBeGreaterThan(controlsIndex);
     expect(logoutIndex).toBeGreaterThan(separatorIndex);
   });
@@ -198,40 +210,47 @@ describe('interaction — real DOM events, real callbacks', () => {
     expect(onSetWindow).toHaveBeenCalledWith(120 satisfies WindowMinutes);
   });
 
+  // ⚠ 10e §4 — every button is glyph-only now, so lookups go through `aria-label`, not
+  // `textContent`: a `textContent?.includes('refresh')` search finds nothing once the visible
+  // word is gone, which would silently leave every one of these tests clicking `undefined`.
   test('⚠ clicking refresh calls onRefreshNow', () => {
     const onRefreshNow = vi.fn();
     mount({ ...BASE, onRefreshNow });
-    const button = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('refresh'));
+    const button = container.querySelector('button[aria-label="Refresh now"]');
+    expect(button).not.toBeNull();
     act(() => {
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onRefreshNow).toHaveBeenCalledTimes(1);
   });
 
-  test('⚠ clicking pause/resume calls onPauseResume, and the label tracks `paused`', () => {
+  test('⚠ clicking pause/resume calls onPauseResume, and the accessible name tracks `paused`', () => {
     const onPauseResume = vi.fn();
     mount({ ...BASE, onPauseResume, paused: false });
-    const pauseButton = [...container.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('pause'),
-    );
-    expect(pauseButton?.textContent).toContain('pause');
+    const pauseButton = container.querySelector('button[aria-label="Pause polling"]');
+    expect(pauseButton).not.toBeNull();
     act(() => {
       pauseButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onPauseResume).toHaveBeenCalledTimes(1);
   });
 
-  test('⚠ `paused=true` labels the same control "resume", not "pause"', () => {
+  test('⚠ `paused=true` labels the same control "Resume polling", not "Pause polling"', () => {
     mount({ ...BASE, paused: true });
-    const button = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('resume'));
-    expect(button).toBeDefined();
-    expect(button?.textContent).not.toContain('❙❙ pause');
+    const resumeButton = container.querySelector('button[aria-label="Resume polling"]');
+    expect(resumeButton).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Pause polling"]')).toBeNull();
+    // ⚠ The accessible name is one guard; the VISIBLE glyph is a separate piece of markup
+    // (`{paused ? '▶' : '❙❙'}`) that a bug could leave stuck on `❙❙` while the aria-label
+    // above still correctly says "Resume polling" — the two are computed independently.
+    expect(resumeButton?.textContent).toBe('▶');
   });
 
   test('⚠ clicking logout calls onLogout', () => {
     const onLogout = vi.fn();
     mount({ ...BASE, onLogout });
-    const button = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('logout'));
+    const button = container.querySelector('button[aria-label="Log out"]');
+    expect(button).not.toBeNull();
     act(() => {
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });

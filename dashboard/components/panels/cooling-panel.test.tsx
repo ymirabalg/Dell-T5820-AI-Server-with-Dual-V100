@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 
@@ -24,6 +27,89 @@ const rowContaining = (html: string, needle: string): string => {
   return html.slice(start, end);
 };
 
+/**
+ * ⚠ 10e — `Hero` (fan5's headline, §2.2) renders `{ value, unit }` as TWO sibling `<span>`s
+ * (O14), never one concatenated string like `"4,308 RPM"`. `rowContaining` above would also
+ * catch the MODE pill sitting beside it in the same `.heroRow` (a `<div>`-then-`<span>` sibling
+ * pair confuses "nearest preceding `<div`" once the mode chip's own text sits after Hero's own
+ * closing tag).
+ *
+ * ⚠ 10e-A8, reconciliation: this used to anchor on `aria-label="fan 5"` — an attribute that,
+ * on a role-less `<div>`, ARIA prohibits and assistive technology does not expose. The words
+ * `fan 5` are now VISIBLE beside the hero (`.heroKey`) and the attribute is gone, so the
+ * anchor is `Hero`'s own root class instead. `_hero_` with the trailing underscore does not
+ * match this panel's `_heroRow_…` wrapper, and COOLING mounts exactly one `Hero`.
+ */
+/** The whole hero row — key, `Hero` and the mode pill — bounded by the next sibling section's
+ *  own class. `coolingHero` below is the `Hero` alone. */
+/**
+ * ⚠ These are built with `new RegExp` over single-quoted strings rather than `/…/` literals,
+ * and the reason is a real trap found by 10e's reconciliation (HANDOVER §0.9).
+ * `lib/source-text.ts`'s `codeOnly` — the comment-stripper every `lib/*` guard runs over these
+ * files — has no regex-literal state, so a regex containing an ODD number of `"` characters
+ * leaves it stuck in string mode: it silently stops stripping comments for the rest of the
+ * file, and a dangerous literal quoted in prose then reads as live code. `class="X[^"]*"` has
+ * exactly three. A `'…'` string is read correctly whatever it contains.
+ */
+const HERO_ROW_OPEN = new RegExp('<div class="_heroRow_[^"]*"[^>]*>');
+const HERO_ROW_END = new RegExp('<(?:p|div) class="_(?:staleCaption|chart)_[^"]*"[^>]*>');
+const HERO_OPEN = new RegExp('<div class="_hero_[^"]*"[^>]*>');
+const CHAN_VALUE_SPAN = new RegExp('<span class="([^"]*)"[^>]*>');
+const STALE_CAPTION_AGE = new RegExp('class="_staleCaption[^"]*"[^>]*>last read 6:12 ago<');
+
+const heroRowOf = (html: string): string => {
+  const at = html.search(HERO_ROW_OPEN);
+  const end = html.search(HERO_ROW_END);
+  return html.slice(at, end === -1 ? undefined : end);
+};
+
+const coolingHero = (html: string): string => {
+  const at = html.search(HERO_OPEN);
+  const end = html.indexOf('</div>', at);
+  return html.slice(at, end);
+};
+
+/**
+ * ⚠ 10e — the chan table (fan2/1/3/4, §2.0) is ONE `<div class="chan">` with all four
+ * channels' glyph/id/value/note laid out as flat CSS-grid children (no per-row wrapper
+ * element to scope on, unlike `Row`/`StatusRow`). This finds ONE channel's own leading `Chip`
+ * — the nearest `data-severity="…"` attribute BEFORE that channel's id text — so a bug on fan
+ * 2 cannot be masked by (or mistaken for) fan 1's, 3's or 4's.
+ */
+const chanSeverityFor = (html: string, channelLabel: string): string | undefined => {
+  const idAt = html.indexOf(`>${channelLabel}<`);
+  const sevAt = html.lastIndexOf('data-severity="', idAt);
+  return /data-severity="([^"]+)"/.exec(html.slice(sevAt, idAt))?.[1];
+};
+
+/** The chan table's own value cell for one channel — between its id and the next channel's
+ *  (or the table's own close). */
+const chanValueFor = (html: string, channelLabel: string): string => {
+  const idAt = html.indexOf(`>${channelLabel}<`);
+  const afterId = html.indexOf('</span>', idAt) + '</span>'.length;
+  const valueMatch = /<span class="[^"]*">([^<]*)<\/span>/.exec(html.slice(afterId));
+  return valueMatch?.[1] ?? '';
+};
+
+/**
+ * ⚠ 10e-A3 — the same cell's CLASS, which `chanValueFor` deliberately discards.
+ *
+ * `chanValueClass` (`cooling-panel.tsx`) has three branches and §2.11 requires all three:
+ * unreadable is `--ink-muted` and letter-spaced, a genuine `0 RPM` is `--status-alarm-ink`,
+ * and an ordinary reading is the row's primary ink. Nothing asserted any of them — the two
+ * tests below `chanValueFor` fixture `'0 RPM'` vs `'—'`, the STRINGS, which `formatRpm`
+ * already guarantees, and `chanSeverityFor` reads the sibling `Chip`, which comes from
+ * `severityFanStopped`. So deleting `if (value === 0) return styles.valueZero` — a dead fan
+ * printing in the same ink as a healthy one, on a box with two passively-cooled 250 W cards —
+ * left all 2892 tests green. The class names are the CSS module's own hashed forms
+ * (`_valueZero_xxxxxx`); the hash is not asserted, only the local name it is built from.
+ */
+const chanValueClassFor = (html: string, channelLabel: string): string => {
+  const idAt = html.indexOf(`>${channelLabel}<`);
+  const afterId = html.indexOf('</span>', idAt) + '</span>'.length;
+  return CHAN_VALUE_SPAN.exec(html.slice(afterId))?.[1] ?? '';
+};
+
 describe('§6.1/§6.2 — COOLING', () => {
   test('subtitle names the exact channel', () => {
     const html = renderToStaticMarkup(<CoolingPanel state={emptyState()} nowMs={0} panelId="cooling" />);
@@ -32,7 +118,26 @@ describe('§6.1/§6.2 — COOLING', () => {
 
   test('fan 5 is the headline reading, banded by the absolute row', () => {
     const html = renderToStaticMarkup(<CoolingPanel state={stateWith(withCooling(ch5Manual))} nowMs={0} panelId="cooling" />);
-    expect(html).toContain('4,308 RPM');
+    // 10e: `Hero` renders the value and unit as two sibling spans (O14), never one
+    // concatenated string.
+    const hero = coolingHero(html);
+    expect(hero).toContain('4,308');
+    expect(hero).toContain('RPM');
+  });
+
+  // ⚠ 10e-A8, added by the RECONCILIATION. 10e moved the fan-5 reading out of a
+  // `<Row label="fan 5" …>` into a `Hero` and put the words in an `aria-label` on a role-less
+  // `<div>`, where ARIA prohibits them — so `fan 5` appeared NOWHERE in this panel's body: the
+  // head reads `cooling`, the chan table reads `fan 2 / fan 1 / fan 3 / fan 4`, and a 34px
+  // numeral sat unlabelled beside a pill. The words are visible again, at 0px of height.
+  test('⚠ the headline names its subject VISIBLY — `fan 5` is body text, not an aria-label', () => {
+    const html = renderToStaticMarkup(<CoolingPanel state={stateWith(withCooling(ch5Manual))} nowMs={0} panelId="cooling" />);
+    const heroRow = heroRowOf(html);
+    expect(heroRow).toMatch(/>fan 5</);
+    // …and it precedes the reading it names.
+    expect(heroRow.indexOf('>fan 5<')).toBeLessThan(heroRow.indexOf('4,308'));
+    // The prohibited-attribute form is gone, on this panel and on the Hero itself.
+    expect(html).not.toContain('aria-label="fan 5"');
   });
 
   test('⚠ invariant 3 — EC auto is HEALTHY, never styled as an error', () => {
@@ -43,6 +148,22 @@ describe('§6.1/§6.2 — COOLING', () => {
     // itself, not the whole document — the head's own chip is a different computation and
     // must not be able to mask a bug in this row's.
     expect(rowContaining(html, 'EC auto')).not.toContain('data-severity="alarm"');
+  });
+
+  // ⚠ 10e-A5 (mutation F), added by 10e's RECONCILIATION, 2026-09-09. Turning this call site's
+  // `size="md"` into `size="sm"` — the bare glyph, no pill — left all 2892 tests green. §2.2
+  // makes the mode a `Chip md` whose LABEL is `formatCh5Pwm` verbatim; an `sm` chip renders no
+  // label at all, so the mode string would vanish from the panel with nothing red. Scoped to
+  // the hero row, because the panel head's own chip is `md` too and a document-wide count
+  // could not tell the two apart.
+  test('⚠ 10e-A5 — the mode is a labelled `md` pill in the hero row, never the bare `sm` glyph', () => {
+    const html = renderToStaticMarkup(<CoolingPanel state={stateWith(withCooling(ch5Manual))} nowMs={0} panelId="cooling" />);
+    const heroRow = heroRowOf(html);
+    expect(heroRow).toContain('HIGH pwm 255');
+    expect((heroRow.match(/data-size="md"/g) ?? []).length).toBe(1);
+    expect(heroRow).not.toContain('data-size="sm"');
+    // invariant 3 / O13 again, from the other side: the pill is unbanded whatever it prints.
+    expect(heroRow).toMatch(/data-severity="none" data-size="md"/);
   });
 
   test('unavailable channel 5 renders "unavailable", not a blank RPM that reads as zero', () => {
@@ -80,9 +201,9 @@ describe('§6.1/§6.2 — COOLING', () => {
     // with different words — `'channel 5 is not reporting a tach'` — passed it with the file's
     // 11 tests green (10b-reconcile, adversarial F6). A guard that tracks the wording of one
     // mutation is a guard for that mutation, not for the rule.
-    const fan5Row = rowContaining(html, 'fan 5');
-    expect(fan5Row).toContain('—');
-    expect(fan5Row).not.toMatch(/class="_note/);
+    const fan5Hero = coolingHero(html);
+    expect(fan5Hero).toContain('—');
+    expect(html).not.toMatch(/class="_note/);
   });
 
   test('⚠ invariant 1 — fan5 reading 0 RPM alarms; fan5 reading null does not', () => {
@@ -90,24 +211,27 @@ describe('§6.1/§6.2 — COOLING', () => {
     const unread = withCooling({ ...ch5Manual, fan5Rpm: null });
     const deadHtml = renderToStaticMarkup(<CoolingPanel state={stateWith(dead)} nowMs={0} panelId="cooling" />);
     const unreadHtml = renderToStaticMarkup(<CoolingPanel state={stateWith(unread)} nowMs={0} panelId="cooling" />);
-    expect(deadHtml).toContain('0 RPM');
-    // Scoped to the fan5 row itself — the panel HEAD derives its own chip from the same
+    // Scoped to the fan5 HERO itself — the panel HEAD derives its own chip from the same
     // underlying severity independently, so a whole-document check could not tell "the row
-    // shows it" from "something else on the page happens to".
-    expect(rowContaining(deadHtml, '0 RPM')).toContain('data-severity="alarm"');
-    // ⚠ On the fan5 row's VALUE CELL, not the document. `expect(unreadHtml).toContain('—')` —
+    // shows it" from "something else on the page happens to". 10e: value/unit are two spans.
+    const deadHero = coolingHero(deadHtml);
+    expect(deadHero).toContain('>0<');
+    expect(deadHero).toContain('data-severity="alarm"');
+    // ⚠ On the fan5 hero's VALUE CELL, not the document. `expect(unreadHtml).toContain('—')` —
     // what this line used to say — is satisfied by `Chip`'s own no-band glyph beside the row,
     // whatever the value cell prints: under `?? rpm(0)` the panel rendered **`fan 5  0 RPM`**
     // and this test stayed green (10b-reconcile, adversarial F1a — the parent reproduced it).
-    expect(valueCells(rowContaining(unreadHtml, 'fan 5'))).toEqual(['—']);
+    expect(valueCells(coolingHero(unreadHtml))).toEqual(['—']);
     expect(unreadHtml.slice(0, unreadHtml.indexOf('</header>'))).not.toContain('data-severity="alarm"');
   });
 
   test('⚠ invariant 1 on fan1–4 too — a 0 reading on fan2 alarms', () => {
     const dead = withCooling({ ...ch5Manual, fan2Rpm: rpm(0) });
     const html = renderToStaticMarkup(<CoolingPanel state={stateWith(dead)} nowMs={0} panelId="cooling" />);
-    expect(html).toContain('0 RPM');
-    expect(rowContaining(html, '0 RPM')).toContain('data-severity="alarm"');
+    // 10e: the chan table prints the value WITH its unit as one string (`formatRpm`, unlike
+    // `Hero`'s split parts) — only the wrapping element changed, not this formatter call.
+    expect(chanValueFor(html, 'fan 2')).toBe('0 RPM');
+    expect(chanSeverityFor(html, 'fan 2')).toBe('alarm');
   });
 
   test('⚠ invariant 1 on fan1–4 too — an UNREAD fan2 renders — and does NOT alarm', () => {
@@ -118,10 +242,35 @@ describe('§6.1/§6.2 — COOLING', () => {
     // guard needs a fixture on both sides — this project's own structural rule.
     const unread = withCooling({ ...ch5Manual, fan2Rpm: null });
     const html = renderToStaticMarkup(<CoolingPanel state={stateWith(unread)} nowMs={0} panelId="cooling" />);
-    const row = rowContaining(html, 'fan 2');
-    expect(valueCells(row)).toEqual(['—']);
-    expect(row).not.toContain('data-severity="alarm"');
-    expect(row).toContain('data-severity="none"');
+    expect(chanValueFor(html, 'fan 2')).toBe('—');
+    expect(chanSeverityFor(html, 'fan 2')).toBe('none');
+  });
+
+  test('⚠ 10e-A3 — invariant 1’s THREE chan inks are three different classes, one per branch', () => {
+    // `0 RPM` and `—` must not merely READ differently, they must be INKED differently
+    // (§2.11: "the numeral turns `--status-alarm-ink`"; `.valueUnknown` is muted and spaced).
+    // Each of the three branches is fixtured, and each is asserted to be distinct from the
+    // other two — an implementation collapsing any pair (`if (!value)`, or dropping the zero
+    // branch) reddens this.
+    const zero = renderToStaticMarkup(
+      <CoolingPanel state={stateWith(withCooling({ ...ch5Manual, fan2Rpm: rpm(0) }))} nowMs={0} panelId="cooling" />,
+    );
+    const unread = renderToStaticMarkup(
+      <CoolingPanel state={stateWith(withCooling({ ...ch5Manual, fan2Rpm: null }))} nowMs={0} panelId="cooling" />,
+    );
+    const ordinary = renderToStaticMarkup(
+      <CoolingPanel state={stateWith(withCooling(ch5Manual))} nowMs={0} panelId="cooling" />,
+    );
+
+    const zeroClass = chanValueClassFor(zero, 'fan 2');
+    const unreadClass = chanValueClassFor(unread, 'fan 2');
+    const ordinaryClass = chanValueClassFor(ordinary, 'fan 2');
+
+    expect(zeroClass).toMatch(/(^|_)valueZero_/);
+    expect(unreadClass).toMatch(/(^|_)valueUnknown_/);
+    expect(ordinaryClass).toMatch(/(^|_)value_/);
+
+    expect(new Set([zeroClass, unreadClass, ordinaryClass]).size).toBe(3);
   });
 
   test('the fan service state renders and is banded', () => {
@@ -205,7 +354,24 @@ describe('⚠ §6.5 on a COOLING row — the stale rule has two halves and both 
     );
     const row = rowContaining(html, 'fan 5');
     expect(valueCells(row)).toEqual(['4,308 RPM']);
-    expect(row).toContain('last read 6:12 ago');
+    // 10e §2.2: the stale age is no longer NESTED inside the hero (Hero has no note slot of
+    // its own) — it is the sibling `<p>` directly under the hero row, degraded-only. Checked
+    // over the whole render rather than the hero's own div for that reason.
+    expect(html).toContain('last read 6:12 ago');
+    // ⚠ 10e-A7, reconciliation: `.staleCaption` is the THIRD copy of S-B's `--status-watch`
+    // (after `status-row.module.css`'s `.noteWatch` and `alarm-banner.module.css`'s `.stale`)
+    // and was the only one nothing asserted, on any surface. §6.5: watch, never alarm — the
+    // condition is still an alarm and this text is about not being able to LOOK.
+    expect(html).toMatch(STALE_CAPTION_AGE);
+    const staleCaptionCss = readFileSync(
+      fileURLToPath(new URL('./cooling-panel.module.css', import.meta.url)),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const rule = staleCaptionCss.slice(
+      staleCaptionCss.indexOf('.staleCaption {'),
+      staleCaptionCss.indexOf('}', staleCaptionCss.indexOf('.staleCaption {')),
+    );
+    expect(rule).toMatch(/color:\s*var\(--status-watch\)/);
   });
 
   test('⚠ a stale row still shows its errors[] cause — the age must not displace it', () => {
@@ -220,9 +386,12 @@ describe('⚠ §6.5 on a COOLING row — the stale rule has two halves and both 
     const html = renderToStaticMarkup(
       <CoolingPanel state={stateWith(snapshot, { displayed: [staleFan5] })} nowMs={372_000} panelId="cooling" />,
     );
-    const row = rowContaining(html, 'fan 5');
-    expect(row).toContain('last read 6:12 ago');
-    expect(row).toContain('no hwmon named dell_smm');
+    // 10e §2.2: the stale age is the sibling `<p>` under the hero row and the errors[] cause
+    // is `PanelNotes`, once per panel (S-H) — neither is nested inside the Hero div any more,
+    // so both are checked over the whole render. Both still being present, together, is the
+    // property this test is actually about.
+    expect(html).toContain('last read 6:12 ago');
+    expect(html).toContain('no hwmon named dell_smm');
   });
 
   test('⚠ the errors[] message is the LAST entry for the source, as the event log reads it', () => {
@@ -238,9 +407,9 @@ describe('⚠ §6.5 on a COOLING row — the stale rule has two halves and both 
       ],
     };
     const html = renderToStaticMarkup(<CoolingPanel state={stateWith(snapshot)} nowMs={0} panelId="cooling" />);
-    const row = rowContaining(html, 'fan 5');
-    expect(row).toContain('LAST dell-smm problem');
-    expect(row).not.toContain('FIRST dell-smm problem');
+    // 10e §2.2: the dell-smm message renders once, in `PanelNotes`, not nested in the Hero.
+    expect(html).toContain('LAST dell-smm problem');
+    expect(html).not.toContain('FIRST dell-smm problem');
   });
 
   test('⚠ 10b-S-G — a dbus entry that names an llama-server instance never explains THIS fan service', () => {
@@ -306,10 +475,12 @@ describe('⚠ 10c1 — the chart/table toggle (Q2-S2), now shell-owned', () => {
   });
 
   test('⚠ the toggle control renders ONLY when the caller supplies onToggleView', () => {
+    // 10e §2.0 shortened the visible label `table view` → `table`; the aria-label sentence is
+    // unchanged and is what this checks, so it is unaffected by that rewording.
     const withoutHandler = renderToStaticMarkup(
       <CoolingPanel state={stateWith(withCooling(ch5Manual))} nowMs={0} panelId="cooling" />,
     );
-    expect(withoutHandler).not.toContain('table view');
+    expect(withoutHandler).not.toContain('show as table');
     const withHandler = renderToStaticMarkup(
       <CoolingPanel
         state={stateWith(withCooling(ch5Manual))}
@@ -318,6 +489,6 @@ describe('⚠ 10c1 — the chart/table toggle (Q2-S2), now shell-owned', () => {
         onToggleView={() => undefined}
       />,
     );
-    expect(withHandler).toContain('table view');
+    expect(withHandler).toContain('show as table');
   });
 });

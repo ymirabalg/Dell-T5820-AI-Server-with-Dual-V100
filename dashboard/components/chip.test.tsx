@@ -94,3 +94,26 @@ describe('size', () => {
     expect(renderToStaticMarkup(<Chip severity="normal" size="sm" />)).toContain('data-size="sm"');
   });
 });
+
+/*
+ * ⚠ 10e §2.0 — the mock's `.chip--code`, for a throttle reason printed as data. Both sides of
+ * the boundary (HANDOVER §5.1): omitted vs `code`.
+ */
+describe('⚠ 10e — the code modifier, for a throttle reason that must never be shouted uppercase', () => {
+  test('omitted by default — no data-code attribute at all', () => {
+    const html = renderToStaticMarkup(<Chip severity="alarm" label="0x20 sw thermal slowdown" />);
+    expect(html).not.toContain('data-code');
+  });
+
+  test('⚠ code renders data-code="true", the hook the stylesheet drops uppercase for', () => {
+    const html = renderToStaticMarkup(
+      <Chip severity="alarm" label="0x20 sw thermal slowdown" code />,
+    );
+    expect(html).toContain('data-code="true"');
+    // The label itself is passed through verbatim — this component never transforms case in
+    // either direction, so a caller relying on the CSS `text-transform: none` is not betrayed
+    // by a JS-side `.toUpperCase()` hiding in here too.
+    expect(html).toContain('0x20 sw thermal slowdown');
+    expect(html).not.toContain('0X20');
+  });
+});

@@ -11,7 +11,7 @@ import { EMPTY_RING, appendSample } from '@/lib/client/ring';
 import type { SampleRing } from '@/lib/client/ring';
 import type { RuntimeState, TelemetryRuntime } from '@/lib/client/runtime';
 import { everythingZero } from '@/lib/fixtures';
-import { celsius, isoTimestamp } from '@/lib/types';
+import { celsius, isoTimestamp, mhz, mib, percent, watts } from '@/lib/types';
 import type { TelemetrySnapshot } from '@/lib/types';
 
 import { DashboardShell } from './dashboard-shell';
@@ -143,8 +143,10 @@ const render = (state: RuntimeState, runtime: TelemetryRuntime = runtimeStub().r
   return html;
 };
 
-const buttonWith = (text: string): HTMLButtonElement | undefined =>
-  [...container.querySelectorAll('button')].find((b) => b.textContent?.includes(text));
+// ⚠ 10e §4 — every header button is glyph-only now (`⟳`, `❙❙`/`▶`, `⏻`); the word that used to
+// be in `textContent` lives in `aria-label` instead. Looked up by that name, not by text.
+const buttonWith = (accessibleName: string): HTMLButtonElement | null =>
+  container.querySelector<HTMLButtonElement>(`button[aria-label="${accessibleName}"]`);
 
 describe('⚠ PLAN.md’s green criterion, through the shell that actually renders it', () => {
   test('⚠ a paused dashboard on six alarms shows the MODE and the COUNT, from the state', () => {
@@ -214,7 +216,7 @@ describe('⚠ every §6.2 control reaches the right runtime method', () => {
     handle = { state: stateOf({ paused: false }), runtime: live.runtime };
     let unmount = mount();
     act(() => {
-      buttonWith('pause')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      buttonWith('Pause polling')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(live.spies.pause).toHaveBeenCalledTimes(1);
     expect(live.spies.resume).not.toHaveBeenCalled();
@@ -224,7 +226,7 @@ describe('⚠ every §6.2 control reaches the right runtime method', () => {
     handle = { state: stateOf({ paused: true, mode: 'paused' }), runtime: paused.runtime };
     unmount = mount();
     act(() => {
-      buttonWith('resume')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      buttonWith('Resume polling')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(paused.spies.resume).toHaveBeenCalledTimes(1);
     expect(paused.spies.pause).not.toHaveBeenCalled();
@@ -266,7 +268,7 @@ describe('⚠ every §6.2 control reaches the right runtime method', () => {
     handle = { state: stateOf(), runtime };
     const unmount = mount();
     act(() => {
-      buttonWith('⟳ refresh')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      buttonWith('Refresh now')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(spies.refreshNow).toHaveBeenCalledTimes(1);
     unmount();
@@ -357,7 +359,7 @@ describe('⚠ F15 — logout must survive its own navigation', () => {
     handle = { state: stateOf(), runtime: runtimeStub().runtime };
     const unmount = mount();
     act(() => {
-      buttonWith('logout')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      buttonWith('Log out')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -413,6 +415,13 @@ const SLOT_TITLE: Readonly<Record<string, string>> = {
  */
 const GPU0_TEMP_C = celsius(66);
 const GPU1_TEMP_C = celsius(55);
+// ⚠ WIDENED BY 10e's TEST PHASE, 2026-09-09. The rule above was applied to four fields only —
+// `index`, `name`, `bus`, `tempC` — while `powerW`, `memUsedMiB`, `utilPct` and `smClockMHz`
+// stayed identical (all zero, from `everythingZero`). A positional read of ANY of those four is
+// still observationally identical here, which is the same defect the doc above describes, at
+// the fields it did not reach. Every value below is chosen to keep card 1's §6.3 bands equal to
+// card 0's (VRAM 16,384/32,768 = 50 %, normal, as 0 % is), so widening the fixture cannot move
+// a chip, the aggregate dot or the alarm count in any other test in this file.
 const stateOfTwoGpus = (): RuntimeState => {
   const gpu0 = everythingZero.gpus?.[0];
   if (gpu0 === undefined) throw new Error('fixture invariant: everythingZero.gpus[0] must exist');
@@ -420,7 +429,17 @@ const stateOfTwoGpus = (): RuntimeState => {
     ring: ringWithSample({
       gpus: [
         { ...gpu0, tempC: GPU0_TEMP_C },
-        { ...gpu0, index: 1, name: 'Tesla PG500-216', bus: '00000000:65:00.0', tempC: GPU1_TEMP_C },
+        {
+          ...gpu0,
+          index: 1,
+          name: 'Tesla PG500-216',
+          bus: '00000000:65:00.0',
+          tempC: GPU1_TEMP_C,
+          powerW: watts(231),
+          memUsedMiB: mib(16384),
+          utilPct: percent(97),
+          smClockMHz: mhz(1290),
+        },
       ],
     }),
   });
@@ -439,18 +458,23 @@ describe('⚠ F16 — all nine slots really receive PanelProps, panelId included
     }
   });
 
-  test('⚠ GPU 0 and GPU 1 mint DISTINCT, panelId-prefixed chart ids — the namespace 10b-F12 protects', () => {
+  test('⚠ GPU 0 and GPU 1 mint DISTINCT, index-derived accessible names — the namespace 10b-F12 protects', () => {
     // `GpuPanel` derives its card index FROM `panelId` (10b-F12) — this is the one place a
     // wrong literal `panelId="gpu0"` reaching the `gpu1` slot in `dashboard-shell.tsx` itself
     // (as opposed to inside `GpuPanel`) would be caught: it fails here, not in `gpu-panel.test.tsx`,
     // because that file cannot see which literal the SHELL chose to pass.
-    // `StackedTimeSeriesChart`'s `id` prop surfaces as `${id}-hatch` on its gap pattern
-    // (`stacked-time-series-chart.tsx:669`) — the one internal id it derives from the prop.
+    // ⚠ 10e replaced the ≥1600px promotion's `StackedTimeSeriesChart` (whose `id` prop used to
+    // surface as `${id}-hatch` on its gap pattern) with the SAME `Sparkline` primitive GPU
+    // already used below 1600px — and `Sparkline` mints no ids at all (its own module doc:
+    // "this component draws no `<pattern>`... it has never needed one"). The index-derived
+    // `aria-label` (`Hero`'s and both `Sparkline`s') is the namespace that survives instead —
+    // still index-derived, still asserted here rather than in `gpu-panel.test.tsx`, for the
+    // same reason the id used to be.
     const html = render(stateOfTwoGpus());
-    expect(cellFor(html, 'gpu0')).toContain('id="gpu0-temp-chart-hatch"');
-    expect(cellFor(html, 'gpu1')).toContain('id="gpu1-temp-chart-hatch"');
-    expect(cellFor(html, 'gpu0')).not.toContain('id="gpu1-temp-chart-hatch"');
-    expect(cellFor(html, 'gpu1')).not.toContain('id="gpu0-temp-chart-hatch"');
+    expect(cellFor(html, 'gpu0')).toContain('aria-label="GPU 0 temperature over the selected window"');
+    expect(cellFor(html, 'gpu1')).toContain('aria-label="GPU 1 temperature over the selected window"');
+    expect(cellFor(html, 'gpu0')).not.toContain('aria-label="GPU 1 temperature over the selected window"');
+    expect(cellFor(html, 'gpu1')).not.toContain('aria-label="GPU 0 temperature over the selected window"');
   });
 
   test('⚠ each GPU cell renders ITS OWN card’s readings — the two slots are not one card twice', () => {
@@ -459,10 +483,24 @@ describe('⚠ F16 — all nine slots really receive PanelProps, panelId included
     // same card, or a panel that read `gpus[position]`, was invisible here. These assertions
     // are over the SLOT (`cellFor`), never the document, per HANDOVER §0.4.
     const html = render(stateOfTwoGpus());
+    // ⚠ 10e's test phase: `66 °C` as ONE string is now only reachable through the chart
+    // tooltip's `formatValue` — `Hero` renders the value and the unit as two sibling spans —
+    // so these four lines discriminate the TRACE and no longer the headline figure. `>66<` /
+    // `>55<` are the Hero's own element, added beside them rather than instead of them.
     expect(cellFor(html, 'gpu0')).toContain('66 °C');
     expect(cellFor(html, 'gpu0')).not.toContain('55 °C');
     expect(cellFor(html, 'gpu1')).toContain('55 °C');
     expect(cellFor(html, 'gpu1')).not.toContain('66 °C');
+    expect(cellFor(html, 'gpu0')).toContain('>66<');
+    expect(cellFor(html, 'gpu1')).toContain('>55<');
+    // The four readings the fixture used to share, now per card — a positional read of any of
+    // them was invisible here until 10e's test phase widened `stateOfTwoGpus`.
+    expect(cellFor(html, 'gpu1')).toContain('231.0');
+    expect(cellFor(html, 'gpu0')).not.toContain('231.0');
+    expect(cellFor(html, 'gpu1')).toContain('1,290 MHz');
+    expect(cellFor(html, 'gpu0')).not.toContain('1,290 MHz');
+    expect(cellFor(html, 'gpu1')).toContain('16,384');
+    expect(cellFor(html, 'gpu0')).not.toContain('16,384');
     // Identity, not just measurement: the subtitle is the driver's raw name/bus per card.
     expect(cellFor(html, 'gpu1')).toContain('00000000:65:00.0');
     expect(cellFor(html, 'gpu0')).not.toContain('00000000:65:00.0');
@@ -478,21 +516,22 @@ describe('⚠ 10c1 — the chart/table toggle is shell state, per PANEL, not one
   test('⚠ every chart-bearing panel starts in chart view, with its own toggle control present', () => {
     const html = render(stateOfTwoGpus());
     expect(html).not.toContain('data-role="table-view"');
-    // The control itself: `chart-view-toggle.tsx` renders "table view" only when a caller
-    // supplies `onToggleView` — GPU 0, GPU 1, CPU and COOLING all wire it, so the label appears
-    // at least that many times.
-    expect(html.split('table view').length - 1).toBeGreaterThanOrEqual(4);
+    // The control itself: `chart-view-toggle.tsx` renders `aria-label="…: show as table"` only
+    // when a caller supplies `onToggleView` — GPU 0, GPU 1, CPU and COOLING all wire it, so the
+    // sentence appears at least that many times. (10e §2.0 shortened the VISIBLE label to
+    // `table`/`chart`, which is too short a substring to count reliably on its own; the fuller
+    // aria-label sentence is unchanged and unambiguous.)
+    expect(html.split('show as table').length - 1).toBeGreaterThanOrEqual(4);
   });
 
-  /** Click the `table view`/`chart view` control inside one grid slot, and return the markup
-   *  the shell re-rendered. ⚠ The button's LABEL tracks the current view (`chart-view-toggle.tsx`),
-   *  so match on the shared `view` rather than on `table view` — otherwise a second click on an
-   *  already-flipped panel silently finds nothing and the test asserts a fixture again. */
+  /** Click the chart/table toggle inside one grid slot, and return the markup the shell
+   *  re-rendered. ⚠ 10e §2.0 moved the control into the panel HEAD and shortened its visible
+   *  label to `table`/`chart` — too short and too generic a substring to match reliably (the
+   *  word "chart" appears elsewhere in this markup). `aria-pressed` is the toggle's own,
+   *  stable hook: it is the only button in a chart-bearing panel that carries it. */
   const clickToggleIn = (slot: string): void => {
-    const button = [...container.querySelectorAll(`[data-slot="${slot}"] button`)].find((b) =>
-      b.textContent?.includes('view'),
-    );
-    expect(button, `no chart/table toggle rendered in the ${slot} slot`).not.toBeUndefined();
+    const button = container.querySelector(`[data-slot="${slot}"] button[aria-pressed]`);
+    expect(button, `no chart/table toggle rendered in the ${slot} slot`).not.toBeNull();
     act(() => {
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -554,9 +593,7 @@ describe('⚠ 10c1 — the chart/table toggle is shell state, per PANEL, not one
     handle = { state: stateOf(), runtime: runtimeStub().runtime };
     const unmount = mount();
     const toggleFor = (slot: string) =>
-      [...container.querySelectorAll(`[data-slot="${slot}"] button`)].find((b) =>
-        b.textContent?.includes('view'),
-      );
+      container.querySelector(`[data-slot="${slot}"] button[aria-pressed]`);
     act(() => {
       toggleFor('gpu0')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });

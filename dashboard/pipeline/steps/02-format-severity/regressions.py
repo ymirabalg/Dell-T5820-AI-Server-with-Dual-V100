@@ -285,8 +285,11 @@ REGRESSIONS = [
      "lib/format.test.ts"),
 
     # ---------------------------------------------------------------- §6.3 bands
+    # ⚠ 10e re-aimed this anchor: `severityGpuTemp` now reads `GPU_TEMP_ALARM_C` (10e / §3.2)
+    # rather than the bare literal `80`, so the GPU sparkline's reference line and this band
+    # cannot drift apart. Same property, same boundary, new source text.
     ("02-R5 GPU temp alarm at >80 instead of >=80", "lib/severity.ts",
-     "    : tempC >= 80\n      ? 'alarm'", "    : tempC > 80\n      ? 'alarm'",
+     "    : tempC >= GPU_TEMP_ALARM_C\n      ? 'alarm'", "    : tempC > GPU_TEMP_ALARM_C\n      ? 'alarm'",
      "lib/severity.test.ts"),
     ("02-R6 the engaged fan5 band applied in every mode", "lib/severity.ts",
      "  if (ch5Engagement(cooling) !== 'engaged') return null;", "  if (false) return null;",
@@ -514,6 +517,35 @@ REGRESSIONS = [
      "{ ...ZONE_OPTIONS, timeZone });",
      "{ ...ZONE_OPTIONS });", "lib/format.test.ts"),
 
+    # ---------------------------------------------------------------- 10e — the `parts` variants (O14)
+    # `renderParts` is the one function all four `format*Parts` functions share, so a single
+    # mutation on it exercises every one of them — see `format.test.ts`'s own note on why the
+    # four "null keeps the real unit" ⚠ tests share this anchor rather than each getting a
+    # private one.
+    ("10e-F1 the parts helper drops its readable() gate, so null renders as though it were 0",
+     "lib/format.ts",
+     "  value: readable(v) ? fmt.format(v === 0 ? 0 : v) : EM_DASH,",
+     "  value: fmt.format(v === 0 ? 0 : (v ?? 0)),", "lib/format.test.ts"),
+    ("10e-F3 the parts helper treats a real zero as unreadable, inverting invariant 1",
+     "lib/format.ts",
+     "  value: readable(v) ? fmt.format(v === 0 ? 0 : v) : EM_DASH,",
+     "  value: readable(v) && v !== 0 ? fmt.format(v === 0 ? 0 : v) : EM_DASH,",
+     "lib/format.test.ts"),
+    ("10e-F2 formatGiBParts rounds to 2dp (swap's precision), not formatGiB's 1dp",
+     "lib/format.ts",
+     "export const formatGiBParts = (v: GiB | null): FormattedParts => renderParts(v, ONE_DP, UNIT_GIB.trim());",
+     "export const formatGiBParts = (v: GiB | null): FormattedParts => renderParts(v, TWO_DP, UNIT_GIB.trim());",
+     "lib/format.test.ts"),
+
+    # ---------------------------------------------------------------- 10e — the GPU-temp constants
+    ("10e-S1 GPU_TEMP_WATCH_C drifts from §6.3's 70", "lib/severity.ts",
+     "export const GPU_TEMP_WATCH_C = 70;", "export const GPU_TEMP_WATCH_C = 71;",
+     "lib/severity.test.ts"),
+    ("10e-S2 severityGpuTemp's watch floor is a strict >, so the boundary reads normal",
+     "lib/severity.ts",
+     "      : tempC >= GPU_TEMP_WATCH_C\n        ? 'watch'",
+     "      : tempC > GPU_TEMP_WATCH_C\n        ? 'watch'",
+     "lib/severity.test.ts"),
 ]
 
 

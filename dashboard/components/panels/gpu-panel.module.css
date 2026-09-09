@@ -1,20 +1,31 @@
 .takeover {
   color: var(--ink-primary);
   font-weight: 600;
+  margin: 0;
 }
 
 .takeoverNote {
   color: var(--ink-secondary);
-  font-size: 0.85em;
+  font-size: 10.5px;
+  margin: 0;
 }
 
-.headline {
-  font-size: 1.1em;
+/* 10e §2.1 — the mock's hero row: the dominant temperature figure, the sparkline (or its
+   ≥1600px promotion), and the power `Figure`, side by side. */
+.heroRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
-/* §6.1's ≥1600px promotion (`gpu-panel.tsx`'s module doc): both the sparkline and the
-   promoted chart are always in the DOM; only one is shown, by width. Not observable from
-   `renderToStaticMarkup` — see that file's own note. */
+.sparklineArea {
+  flex: 1 1 130px;
+  min-width: 110px;
+}
+
+/* §6.1's ≥1600px promotion: both sizes are always in the DOM; only one is shown, by width.
+   Not observable from `renderToStaticMarkup` — see gpu-panel.tsx's module doc. */
 .fullChartWrap {
   display: none;
 }

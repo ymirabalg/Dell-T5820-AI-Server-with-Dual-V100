@@ -13,9 +13,16 @@ const rootMeterOf = (html: string): string => html.slice(html.indexOf('>/<'), ht
  *  the `§6.5` describe below) so the `§6.2` tests can scope past the PanelShell HEAD too
  *  (10c2's toContain-scope guard: the head is a reduction over root/home/link, so it can
  *  independently satisfy the same `data-severity` value a row's own bug would fail to). */
-const rowContaining = (html: string, needle: string): string => {
-  const at = html.indexOf(needle);
-  return html.slice(html.lastIndexOf('<div', at), html.indexOf('</div>', at));
+/**
+ * ⚠ 10e §2.6 — the link row is no longer a `StatusRow` `<div>`: it is a `Caption` `<p>`
+ * (`link` + a `Chip md` pill), with the stale age and the `net-operstate` detail as their own
+ * SIBLING `<p>` lines rather than nested inside it (`Caption` has no note/detail slot).
+ * Scoped to the LINK caption's own `<p>`, not its siblings — a `<div>`-based search would
+ * otherwise return an unrelated ancestor (or nothing) once the row is a `<p>`.
+ */
+const linkCaptionOf = (html: string): string => {
+  const at = html.indexOf('>link<');
+  return html.slice(html.lastIndexOf('<p', at), html.indexOf('</p>', at));
 };
 
 import { StorageNetworkPanel } from './storage-network-panel';
@@ -25,6 +32,10 @@ const snapshotWith = (overrides: Partial<TelemetrySnapshot['storage']>): Telemet
   ...everythingZero,
   storage: { ...everythingZero.storage, ...overrides },
 });
+
+// `new RegExp` for the reason given with the other regex consts in this file: an odd number
+// of `"` in a regex LITERAL desynchronises `lib/source-text.ts`'s comment-stripper.
+const TICK_CLASS = new RegExp('class="_tick', 'g');
 
 describe('§6.2 — STORAGE & NETWORK', () => {
   test('subtitle names both sources', () => {
@@ -91,7 +102,7 @@ describe('§6.2 — STORAGE & NETWORK', () => {
     const html = renderToStaticMarkup(<StorageNetworkPanel state={stateWith(down)} nowMs={0} panelId="storage-and-network" />);
     // Scoped to the link row — same head-reduction risk as the disk test above (10c2's
     // toContain-scope guard).
-    const row = rowContaining(html, 'eno1 link');
+    const row = linkCaptionOf(html);
     expect(row).toContain('data-severity="alarm"');
     expect(row).toContain('down');
   });
@@ -118,6 +129,14 @@ describe('§6.2 — STORAGE & NETWORK', () => {
     const state = stateWith(nullLinkSnapshot, { displayed });
     const html = renderToStaticMarkup(<StorageNetworkPanel state={state} nowMs={372_000} panelId="storage-and-network" />);
     expect(html).toContain('last read 6:12 ago');
+    // ⚠ 10e-A7, reconciliation: this test said "watch-toned" in its name and asserted only the
+    // WORDING, so deleting the tone left it green. S-B (SPEC §6.5) requires the age to read
+    // `--status-watch` and NOT `--status-alarm` — the condition is still an alarm, and what
+    // this text says is that nobody has been able to look since. `Caption` has no tone variant
+    // (the build recorded it as silence #4), so this one caller carries an inline style; the
+    // one-off is exactly why nothing else can guard it.
+    expect(html).toMatch(/<span style="color:var\(--status-watch\)">last read 6:12 ago<\/span>/);
+    expect(html).not.toContain('var(--status-alarm)');
   });
 
   test('⚠ invariant 1 — a missing root-disk reading renders — with the no-band track, not 0.0 GiB', () => {
@@ -177,7 +196,29 @@ describe('⚠ §6.5 — statvfs and proc-net-dev had no rendering path at all', 
       errors: [{ source: 'proc-net-dev', message: '/proc/net/dev: EACCES' }],
     };
     const html = renderToStaticMarkup(<StorageNetworkPanel state={stateWith(snapshot)} nowMs={0} panelId="storage-and-network" />);
-    expect(rowContaining(html, 'eno1 rx')).toContain('/proc/net/dev: EACCES');
+    // 10e §2.6: `eno1 rx`/`tx` move into a `Strip` line with no note slot of its own —
+    // `proc-net-dev`'s message now renders once, in `PanelNotes`, under the whole card.
+    expect(html).toContain('/proc/net/dev: EACCES');
+  });
+
+  // ⚠ 10e-A13, fixed by the reconciliation. This panel read the FIRST `proc-net-dev` entry —
+  // `.find` — two lines under its own ⚠ comment saying LAST, and while every sibling in the
+  // loop (`cooling-panel.tsx:148,159`, `safety-panel.tsx:75`, and `linkError` on the line
+  // directly above it) uses `findLast`. `lib/client/events.ts` folds `errors[]` into a `Map`
+  // keyed by source and keeps the LAST, so with two entries the panel showed one message and
+  // the session event log showed a different one — 10b's F10 exactly. Both directions were
+  // green before this fixture existed.
+  test('⚠ with two proc-net-dev entries the panel shows the LAST — the one the event log shows', () => {
+    const snapshot: TelemetrySnapshot = {
+      ...snapshotWith({ net: { rxBytesPerSec: null, txBytesPerSec: null, link: 'up' } }),
+      errors: [
+        { source: 'proc-net-dev', message: '/proc/net/dev: EACCES' },
+        { source: 'proc-net-dev', message: 'eno1 vanished from /proc/net/dev' },
+      ],
+    };
+    const html = renderToStaticMarkup(<StorageNetworkPanel state={stateWith(snapshot)} nowMs={0} panelId="storage-and-network" />);
+    expect(html).toContain('eno1 vanished from /proc/net/dev');
+    expect(html).not.toContain('/proc/net/dev: EACCES');
   });
 
   test('⚠ a stale link row keeps its LAST VALUE and still shows its errors[] cause', () => {
@@ -191,10 +232,13 @@ describe('⚠ §6.5 — statvfs and proc-net-dev had no rendering path at all', 
     const html = renderToStaticMarkup(
       <StorageNetworkPanel state={stateWith(snapshot, { displayed })} nowMs={372_000} panelId="storage-and-network" />,
     );
-    const row = rowContaining(html, 'eno1 link');
+    // 10e §2.6: the link's LAST VALUE stays inside the pill on the `link` caption itself; the
+    // stale age and the errors[] detail are sibling `<p>` lines now (`Caption` has neither
+    // slot), so they are checked over the whole render rather than nested inside one row.
+    const row = linkCaptionOf(html);
     expect(valueCells(row)).toEqual(['up']);
-    expect(row).toContain('last read 6:12 ago');
-    expect(row).toContain('eno1/operstate: ENOENT');
+    expect(html).toContain('last read 6:12 ago');
+    expect(html).toContain('eno1/operstate: ENOENT');
   });
 });
 
@@ -204,5 +248,20 @@ describe('⚠ invariant 1, across EVERY reading on this panel', () => {
     const cells = valueCells(html);
     expect(cells.length).toBeGreaterThanOrEqual(5);
     for (const cell of cells) expect(cell).not.toMatch(/[0-9]/);
+  });
+});
+
+// ⚠ 10e-A5 (mutation D2), added by 10e's RECONCILIATION, 2026-09-09. BOTH `tickPercent={85}`
+// wirings could be deleted together with all 2892 tests green. §6.3 bands disk on FREE space
+// (`≥ 15 %` normal), so the mark sits at 85 % USED — the one place on this panel where the two
+// readings of the same bar meet, and the reason a single shared fixture is not enough: the
+// mutation deleted both, so a test asserting "a tick exists" would have to count them.
+describe('⚠ 10e-A5 — both disk bars carry the 85 %-used watch tick', () => {
+  test('⚠ exactly two ticks, both at 85 %', () => {
+    const html = renderToStaticMarkup(
+      <StorageNetworkPanel state={stateWith(everythingZero)} nowMs={0} panelId="storage-and-network" />,
+    );
+    expect((html.match(/class="_tick[^"]*"[^>]*style="left:85%[^"]*"/g) ?? []).length).toBe(2);
+    expect((html.match(TICK_CLASS) ?? []).length).toBe(2);
   });
 });

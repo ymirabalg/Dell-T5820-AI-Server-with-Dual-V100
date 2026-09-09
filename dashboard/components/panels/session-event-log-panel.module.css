@@ -1,42 +1,70 @@
-/* §6.4's "compact scrolling list" — scrolls within its own container, per this file's module
-   doc: §6.1's no-scroll promise governs the page, not a component. `--table-scroll-max` is
-   the same stopgap `stacked-time-series-chart.module.css` and `sparkline.module.css` use for
-   their own table views (SCOPE 2.5f: replacing it with `max-height: 100%` is 10c's, once a
-   panel body has a real bounded height to hand it). */
+/* 10e §2.8 — the mock's "compact scrolling list": a genuinely bounded well now (`height`, not
+   `max-height`), so the panel is 133.8px whether the log holds one entry or five hundred. */
 .scroll {
-  max-height: var(--table-scroll-max);
+  /* The 84px is the mock's TOTAL box (`MOCK.html` is globally `border-box`; this app is not),
+     so the hairline below must be inside it or the well measures 86 — see meter.module.css. */
+  box-sizing: border-box;
+  height: 84px;
+  /* ⚠ F1, and the ONLY line that closes it (10e-A1, measured 2026-09-09 — `panel-shell.module.css`'s
+     `.panel { position: relative }` does not). Every entry's `Chip` renders a `position: absolute`
+     `.sr-only` span at its static position, thousands of px down the list. A scroll container
+     clips such a descendant only when the container is in that descendant's CONTAINING-BLOCK
+     chain, and a `position: static` box is in no chain at all — so without this the hidden spans
+     escaped the well and grew `documentElement.scrollHeight` by 21.85px per entry past the fold.
+     Measured on the real page at 1280x1024, with this line and without it: at 200 entries
+     5189 without, 1024 (= the viewport, no scrollbar) with; at 500 (`MAX_EVENTS`) still 1024. */
+  position: relative;
   overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--border-lo);
+  border-radius: 2px;
+  background: var(--surface-sunken);
 }
 
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2em;
 }
 
+/* 10e §2.8 — time · source · chip · sentence, the mock's column order (was time · chip ·
+   sentence · source). */
 .entry {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  gap: 0 9px;
+  padding: 3px 9px;
+  border-bottom: 1px solid var(--border-lo);
+  font-size: 11px;
   align-items: baseline;
-  gap: 0.5em;
   font-family: var(--font-mono);
-  font-size: 0.85em;
-  flex-wrap: wrap;
+}
+
+.list li:last-child {
+  border-bottom: none;
+}
+
+.entry[data-severity='alarm'] {
+  background: rgba(208, 59, 59, 0.07);
+}
+
+.entry[data-severity='alarm'] .sentence {
+  color: var(--ink-max);
+}
+
+.entry[data-severity='watch'] {
+  background: rgba(250, 178, 25, 0.05);
 }
 
 .time {
   color: var(--ink-muted);
-  flex: 0 0 auto;
 }
 
 .sentence {
   color: var(--ink-primary);
-  flex: 1 1 auto;
+  white-space: normal;
 }
 
 .source {
   color: var(--ink-secondary);
-  flex: 0 0 auto;
 }

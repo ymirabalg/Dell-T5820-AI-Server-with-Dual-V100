@@ -27,6 +27,25 @@
  * so the ruling's downgrade (`normal` + a null reading → no band) has no `'normal'` to ever
  * downgrade. Recorded rather than left to be re-derived the next time this file is read next
  * to the ruling.
+ *
+ * ### 10e/OQ-4 — the chip is OMITTED, not `chip={null}`
+ *
+ * §9's ruling on OQ-4 (declined): the head renders NOTHING in the chip slot — not the hatched
+ * `—` `chip={null}` would draw (which reads as "this panel HAS readings and none of them
+ * band"), and not an invented debounce constant either. `PanelShell`'s `chip` prop is now
+ * OPTIONAL for exactly this: omitting it entirely renders no `<Chip>` element at all, which is
+ * this file's only change from the pre-10e version — the log itself, and this rationale, are
+ * otherwise the same as before this loop (§6.1's `PanelShell` docs have the full contrast
+ * between "omitted" and "null").
+ *
+ * ### 10e §2.8 — the fixed-height well, and the row's new column order
+ *
+ * `.scroll` becomes a genuinely bounded well (`height: 84px`, not `max-height`) with its own
+ * border and sunken ground, so the panel is 133.8px whether the log holds one entry or five
+ * hundred (F1, §7, already closed by `panel-shell.module.css`'s `position: relative`). Each
+ * row's column order moves from `time · chip · sentence · source` to the mock's
+ * `time · source · chip · sentence` — `describeEvent`'s sentences and `entry.source` are
+ * unchanged, only where they sit.
  */
 
 import { PanelShell } from '../panel-shell';
@@ -47,7 +66,7 @@ import styles from './session-event-log-panel.module.css';
 // here; no other panel puts `panelId` in user-visible text either.
 export function SessionEventLogPanel({ state }: PanelProps) {
   return (
-    <PanelShell title="session event log" subtitle="state transitions since page load" chip={null}>
+    <PanelShell title="session event log" subtitle="state transitions since page load">
       <div
         className={styles.scroll}
         role="group"
@@ -56,11 +75,11 @@ export function SessionEventLogPanel({ state }: PanelProps) {
       >
         <ul className={styles.list}>
           {state.events.entries.map((entry) => (
-            <li key={entry.seq} className={styles.entry}>
+            <li key={entry.seq} className={styles.entry} data-severity={entry.severity ?? 'none'}>
               <span className={styles.time}>{formatTimeOfDayMs(entry.atMs)}</span>
+              <span className={styles.source}>{entry.source}</span>
               <Chip severity={entry.severity} size="sm" />
               <span className={styles.sentence}>{describeEvent(entry)}</span>
-              <span className={styles.source}>{entry.source}</span>
             </li>
           ))}
         </ul>

@@ -10,6 +10,41 @@
   stroke-linecap: round;
 }
 
+/* 10e §3.2 — the mock's `areaFrom`: a flat fill under the line, form only. */
+.area {
+  opacity: 0.1;
+  pointer-events: none;
+}
+
+/* 10e §3.2 — §6.3's reference lines (the GPU sparkline's ≥1600px form only; the caller
+   decides whether to pass `refs` at all). */
+.refLine {
+  stroke: var(--ink-muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.55;
+}
+
+.refAlarm {
+  stroke: var(--status-alarm);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.55;
+}
+
+.refLabel {
+  fill: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+}
+
+/* 10e §3.2 — the promoted form's time axis. */
+.timeLabel {
+  fill: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+}
+
 /* 10c-3/F14b — a real sampling gap between two rendered points. A flat, muted tint rather
    than `StackedTimeSeriesChart`'s diagonal hatch: that pattern needs a per-instance SVG `id`
    (see `sparkline.tsx`'s module doc for why this component has never needed one), and a
@@ -35,9 +70,10 @@
   pointer-events: none;
 }
 
+/* 10e §3.2 — the mock's end dot: r 4.5 (was 2.5), a 2px ground-coloured stroke (was 1). */
 .end {
   stroke: var(--surface-1);
-  stroke-width: 1;
+  stroke-width: 2;
 }
 
 /* A run holding exactly one readable point — see the component's note on one-vertex
@@ -82,6 +118,12 @@
 .tableView {
   max-height: var(--table-scroll-max);
   overflow-y: auto;
+  /* ⚠ 10e-A1: `.sr-only` (the `<caption>`) is `position: absolute`, and a scroll container
+     clips such a descendant only when it is in that descendant's containing-block chain. One
+     table means the caption sits at the top and nothing escapes today, but the rule that makes
+     that safe is this one, not luck — `stacked-time-series-chart.module.css` has the same rule
+     and a second caption that really does sit thousands of px down. */
+  position: relative;
 }
 
 .tableView:focus-visible {

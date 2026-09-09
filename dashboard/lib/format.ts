@@ -145,6 +145,58 @@ export const formatCelsius = (v: Celsius | null): string => render(v, INTEGER, U
 /** GPU power — 1 dp W, checked against `power.draw`. `249.8 W`. */
 export const formatWatts = (v: Watts | null): string => render(v, ONE_DP, UNIT_WATTS);
 
+// ---------------------------------------------------------------------------
+// `parts` variants — 10e / O14
+// ---------------------------------------------------------------------------
+//
+// A `Hero` sizes its numeral and its unit at two different font sizes (34px / 13px), so it
+// needs the two pieces SEPARATELY rather than one formatted string — and O14 forbids getting
+// there by splitting a formatter's output on whitespace (`formatCelsius(v).split(' ')` breaks
+// the moment a unit ever contains a space of its own, silently). These four functions are the
+// sanctioned way: built from the SAME `render` internals — same `Intl.NumberFormat` instance,
+// same rounding, same `EM_DASH` for an unreadable value — as their string-returning siblings,
+// so a hero's numeral can never disagree with what `formatCelsius`/`formatWatts`/`formatGiB`/
+// `formatRpm` would have printed for the same input.
+//
+// ⚠ **`unit` is always the real unit, even when `value` is `EM_DASH`.** `Hero`'s own contract
+// (10e §2.0) keeps the unit visible beside an unavailable reading — "the unit stays the unit
+// (°C, RPM), never prose" — so `formatCelsiusParts(null)` is `{ value: '—', unit: '°C' }`, not
+// `{ value: '—', unit: '' }`. That means the concatenation identity
+// `` `${parts.value} ${parts.unit}` === formatX(v) `` holds only for a READABLE `v`: the
+// string-returning formatter drops the unit entirely for `null` (`render`'s own `EM_DASH`
+// branch, no suffix), while the parts formatter deliberately keeps it. Recorded here rather
+// than left for a reader to discover as a test failure — see `format.test.ts`'s table, which
+// checks the identity on every readable fixture and checks the `null` shape explicitly instead.
+
+/** One formatted quantity, split for a caller (`Hero`) that sizes the numeral and the unit
+ *  at two different type sizes. */
+export interface FormattedParts {
+  /** The rounded numeral, `en-US`-separated — or `EM_DASH` when `v` is not a reading. */
+  readonly value: string;
+  /** The bare unit, with NO leading space (unlike the `UNIT_*` constants) — always present,
+   *  even when `value` is `EM_DASH` (see the module note above). */
+  readonly unit: string;
+}
+
+const renderParts = (v: number | null, fmt: Intl.NumberFormat, unit: string): FormattedParts => ({
+  value: readable(v) ? fmt.format(v === 0 ? 0 : v) : EM_DASH,
+  unit,
+});
+
+/** {@link formatCelsius}, split — `{ value: '66', unit: '°C' }`. */
+export const formatCelsiusParts = (v: Celsius | null): FormattedParts =>
+  renderParts(v, INTEGER, UNIT_CELSIUS.trim());
+
+/** {@link formatWatts}, split — `{ value: '249.8', unit: 'W' }`. */
+export const formatWattsParts = (v: Watts | null): FormattedParts =>
+  renderParts(v, ONE_DP, UNIT_WATTS.trim());
+
+/** {@link formatRpm}, split — `{ value: '4,308', unit: 'RPM' }`. */
+export const formatRpmParts = (v: Rpm | null): FormattedParts => renderParts(v, INTEGER, UNIT_RPM.trim());
+
+/** {@link formatGiB}, split — `{ value: '33.2', unit: 'GiB' }`. RAM/disk's 1 dp, not swap's 2. */
+export const formatGiBParts = (v: GiB | null): FormattedParts => renderParts(v, ONE_DP, UNIT_GIB.trim());
+
 /** VRAM — MiB, thousands separated. `26,452 MiB`. */
 export const formatMiB = (v: MiB | null): string => render(v, INTEGER, UNIT_MIB);
 

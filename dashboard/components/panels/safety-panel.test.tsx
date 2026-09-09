@@ -22,6 +22,17 @@ const rowContaining = (html: string, needle: string): string => {
  * rows rendered but kept out of the panel's own chip.
  */
 
+/**
+ * ⚠ These are built with `new RegExp` over single-quoted strings rather than `/…/` literals,
+ * and the reason is a real trap found by 10e's reconciliation (HANDOVER §0.9).
+ * `lib/source-text.ts`'s `codeOnly` — the comment-stripper every `lib/*` guard runs over these
+ * files — has no regex-literal state, so a regex containing an ODD number of `"` characters
+ * leaves it stuck in string mode: it silently stops stripping comments for the rest of the
+ * file, and a dangerous literal quoted in prose then reads as live code. `class="X[^"]*"` has
+ * exactly three. A `'…'` string is read correctly whatever it contains.
+ */
+const NOTE_WATCH_AGE = new RegExp('class="_noteWatch[^"]*"[^>]*>last read 6:12 ago<');
+
 describe('§6.2 — SAFETY: the four checks', () => {
   test('subtitle names all four checks', () => {
     const html = renderToStaticMarkup(<SafetyPanel state={emptyState()} nowMs={0} panelId="safety" />);
@@ -42,13 +53,15 @@ describe('§6.2 — SAFETY: the four checks', () => {
 
   test('⚠ booleans render yes/no, never true/false', () => {
     const html = renderToStaticMarkup(<SafetyPanel state={stateWith(everythingZero)} nowMs={0} panelId="safety" />);
-    // Scoped to the VALUE cells, not the whole document — `aria-hidden="true"` is legitimate
-    // markup on every chip glyph and has nothing to do with how a boolean READING renders.
-    expect(rowContaining(html, 'ufw enforcing')).not.toMatch(/class="[^"]*value[^"]*">(?:true|false)</);
-    expect(rowContaining(html, 'pwm5 present')).not.toMatch(/class="[^"]*value[^"]*">(?:true|false)</);
-    expect(rowContaining(html, 'DKMS for running kernel')).not.toMatch(
-      /class="[^"]*value[^"]*">(?:true|false)</,
-    );
+    // ⚠ 10e §2.0: the value now renders as a `Chip md` pill (`.label`), not a `.value` span —
+    // every SAFETY row carries `severity`, so the old `class="…value…"` scope no longer
+    // matches anything at all and would pass vacuously regardless of this bug. Scoped to the
+    // row instead — still not the whole document, since the row's own glyph (`aria-hidden`)
+    // and the chip's sr-only word are legitimate markup that has nothing to do with how a
+    // boolean READING renders.
+    expect(rowContaining(html, 'ufw enforcing')).not.toMatch(/>(?:true|false)</);
+    expect(rowContaining(html, 'pwm5 present')).not.toMatch(/>(?:true|false)</);
+    expect(rowContaining(html, 'DKMS for running kernel')).not.toMatch(/>(?:true|false)</);
   });
 
   test('§6.3 — pwm5Present: false is the ALARM, and it carries its own errors[] explanation', () => {
@@ -137,6 +150,12 @@ describe('⚠ S-B — a stale row uses the exact banner wording, watch-toned', (
     const state = stateWith(everythingZero, { displayed });
     const html = renderToStaticMarkup(<SafetyPanel state={state} nowMs={372_000} panelId="safety" />);
     expect(html).toContain('last read 6:12 ago');
+    // ⚠ 10e-A7, reconciliation: the name says "watch-toned" and the body asserted only the
+    // WORDING, so forcing this row's `noteTone` to `'muted'` left it green. S-B (SPEC §6.5)
+    // requires the age to read `--status-watch`, *"matching `AlarmBanner`'s own `.stale` span
+    // exactly"*; `status-row.module.css`'s `.noteWatch` is where that colour lives, and
+    // `status-row.test.tsx` guards the PRIMITIVE's two tones — nothing guarded this call site.
+    expect(html).toMatch(NOTE_WATCH_AGE);
   });
 });
 

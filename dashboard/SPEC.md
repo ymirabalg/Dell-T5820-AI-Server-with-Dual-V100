@@ -867,15 +867,62 @@ Breakpoints, since it must survive every display:
 | 900–1279px | 2 columns: GPU cards stack side by side, the four small panels become 2×2, storage and safety stack below. Scrolling begins here and that is accepted |
 | < 900px | 1 column, panels in priority order: GPUs → cooling → safety → serving → host → storage |
 
-The "no scroll" promise holds at ≥1280px **wide and ≥1024px tall** — measured on the
-mock, the panel is ~1026px tall at 1280 wide, so a 1280×800 display does scroll. At
-1920×1080 it fits comfortably. Below either bound, legibility wins.
+The "no scroll" promise holds at ≥1280px **wide and ≥1024px tall**. Below either bound,
+legibility wins, so a 1280×800 display does scroll.
+
+**⚠ Measured, not estimated — rewritten 2026-09-09.** The earlier sentence here ("~1026px tall
+at 1280 wide … fits comfortably at 1920×1080") was never measured, and the first build of this
+grid overflowed the fold by **356 / 418 / 362 px** at 1280×1024 / 1600×1024 / 1920×1080 with
+healthy telemetry. The grid was not the cause. `MOCK.html` — this same four-row, nine-panel
+grid — **fits at all three** (healthy: ~19 / ~90 / ~159 px to spare; per panel at 1920: GPU 220,
+COOLING 472, CPU 204, MEMORY 195, SAFETY 259, STORAGE 182, SERVING 140, LOG 134). The built
+panels were 1.8–2.4× those heights because they stacked one reading per 24 px line at a 16 px
+base where the mock lays readings out horizontally at 12 px. Three rules fall out of that:
+
+- **`MOCK.html` is the source for FORM** — density, anatomy, type scale, spacing, chart sizes —
+  **and for nothing else.** Data, strings and rules come from this document, and where the two
+  disagree this document wins (owner, 2026-09-09: *"if the mock says V100 but the data says
+  PG500-216 then it is PG500-216"*). The builder specification is
+  `pipeline/steps/10-panels-assembly/10e-match-the-mock.md`; its §6 enumerates the places the
+  mock's data or rules predate this document.
+- **The promise is unconditional on the banner** (owner, 2026-09-09). The page must fit the
+  viewport at all three sizes with §6.4's alarm banner pinned, not only when healthy. The
+  spec-only density leaves ~250–310 px spare healthy, which is what the degraded states —
+  a throttle row, `errors[]` lines under SAFETY rows, a six-alarm banner — spend.
+- **Acceptance is a browser measurement, never arithmetic**: `documentElement.scrollHeight ≤
+  clientHeight` at 1280×1024, 1600×1024 and 1920×1080, with and without the banner, on the
+  real app under fabricated healthy telemetry
+  (`pipeline/steps/10-panels-assembly/measure-breakpoints.mjs` measurement 9 and
+  `mocks/check-density.mjs`).
+
+**Rulings on what the mock draws that this document does not require (owner, 2026-09-09; 10e's
+§9 questions).** Declined, so not built: the min/max/now caption under traces (OQ-1); per-panel
+note footers (OQ-2); count chips such as `1 of 4 failing` — a panel's chip is its severity word
+only (OQ-3); a paused banner — the header pill and the counting age are the announcement (OQ-5);
+the `engage 55` / `EC auto 2210` reference lines — only §6.3's 70/80 are drawn, and only on the
+GPU sparkline's ≥1600 form (OQ-6). The SESSION EVENT LOG renders **no head chip** — it has no
+severity and no reading that can fail, so neither a hatched `—` nor a debounce constant belongs
+there (OQ-4). The CPU panel **keeps both traces** — utilisation and temperature — so its height
+target is the mock's plus one sparkline (OQ-7; see the CPU entry in §6.2). The `standing` pill's
+form (OQ-8) is recorded for the loop that owns §6.4's SAFETY rendering.
 
 ⚠ **The promise is about the PAGE, not about every component** — clarified 2026-09-08. A
 component whose content is unbounded by nature may scroll inside its own fixed-size box: the
 session event log below is specified that way, and §6.2's table view is ruled the same. What
 the promise forbids is the *grid* growing past the viewport and the reader having to scroll
 the dashboard to see a panel.
+
+⚠ **The promise holds on a DEGRADED page too, and `errors[]` blocks are bounded** — owner's
+ruling 2026-09-09 (10e-Q1). Nothing in the density build capped a panel's `errors[]` notes or a
+row's explanation, so a page on which every collector has failed missed the fold by 27 px at
+1280×1024 and 49 px at 1600×1024, and this box's own 152-character DKMS failure message alone
+costs 65.6 px in a 285 px column against the 14.2 px budgeted. The ruling: the promise is
+**unconditional on telemetry**, and each panel's notes block (`PanelNotes`, and a `StatusRow`'s
+`detail`) becomes a **fixed-height scroll box** in the same way the session event log is — the
+messages stay whole and readable by scrolling within the panel, and the grid never grows. The
+height per panel is a builder decision measured against §2.11's budgets; acceptance is measurement
+9 of `measure-breakpoints.mjs` passing at all three viewports on the **all-collectors-failed
+fixture as well as the healthy one**.
 
 ### 6.2 Panels
 
@@ -968,7 +1015,10 @@ whose `name` failed to parse does not lose its subtitle; it shows what it has.
 power against the 250 W cap, VRAM as a bar with absolute MiB, utilisation, SM clock, and
 the model currently served on that card (joined from the serving data by instance index).
 Throttle reasons appear only when something other than `0x4` is active; the normal power
-cap is not news and must not be styled as a warning.
+cap is not news and must not be styled as a warning. ⚠ **Nor as a verdict** — owner's ruling
+2026-09-09 (10e-Q3): when another bit makes the line notable, `0x4` is listed beside it as a
+**neutral, unbanded code chip** (no colour, no glyph); only the notable bits carry their
+severity colour. Colour on this line, as everywhere, is spent on state.
 
 **⚠ The card's name is the driver's own string, and it is not prettified.** `nvidia-smi`
 returns **`Tesla PG500-216`** on this hardware — the board code, not the marketing name — and
@@ -980,8 +1030,8 @@ laundered. ⚠ `MOCK.html` shows `Tesla V100-PCIE-32GB`, **a string this box nev
 **⚠ The bus id is rendered RAW, in the full domain form** — `00000000:17:00.0`, not `17:00.0`.
 §3.1 already forbids trimming it on the wire; this says the rendering does not trim it either,
 so the figure on screen can be compared with `nvidia-smi` and `lspci` without arithmetic, which
-is §6.6's whole principle. ⚠ `MOCK.html` renders the short form; it is a reference, not a
-source. §6.6 carries the formatting row.
+is §6.6's whole principle. ⚠ `MOCK.html` renders the short form; the mock is a source for
+form only, never for data (§6.1). §6.6 carries the formatting row.
 
 **⚠ The GPU↔instance join is `gpu.index === serving.instance`, and it is a fact about the
 deployment that the dashboard cannot verify.** `llama-server@.service` carries
@@ -1001,7 +1051,11 @@ worth it today; the assumption is written down here so it is a decision rather t
 
 **CPU** — package temperature, aggregate utilisation with a trace, and load average. **The
 model and the core/thread count are the subtitle**, not body rows: they are identity, they
-never change while the box is up, and the panel is short.
+never change while the box is up, and the panel is short. ⚠ **Both temperature and
+utilisation carry a trace** (owner's ruling 2026-09-09, 10e OQ-7): the mock draws one spark
+and the wording above attaches the trace to utilisation, but the built temperature trace
+stays. It costs the CPU panel one sparkline (38 px below 1600, 50 px at ≥1600, plus the 5 px
+gap) over the mock's height, and §6.1's budget carries it.
 
 **RAM** — used against 61 GiB as a bar, plus swap. Swap gets its own row because any swap
 in use is meaningful here, where 12 GiB × 2 of host RAM prompt cache is configured.

@@ -1,58 +1,80 @@
+/* 10e §2.0 — the mock's `.panel`. */
+
 .panel {
   display: flex;
   flex-direction: column;
-  gap: 0.6em;
+  gap: 5px;
+  padding: 8px 10px 9px;
   background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0.85em 1em;
+  border-radius: var(--radius);
   min-width: 0;
   min-height: 0;
+  /* ⚠ 10e-A1, measured 2026-09-09: this line is NOT the F1 fix, and the paragraph that used
+     to stand here was wrong about the mechanism. An `.sr-only` span is `position: absolute`
+     with `top`/`left` auto, so it is placed at its STATIC position — inside the 200th `<li>`,
+     thousands of px down — whichever ancestor is its containing block; and a scroll container
+     clips an absolutely-positioned descendant only when it is in that descendant's
+     CONTAINING-BLOCK chain. Making `.panel` (which is `overflow: visible`) the containing
+     block moves the chain's first link off the initial containing block and changes nothing
+     else: the span's scrollable overflow still propagates to the document. Measured on the
+     real page at 1280x1024 with 200 log entries: `documentElement.scrollHeight` **5189 either
+     way** — `.panel` relative and `.panel` static are the same number to the pixel.
+     **The fix is `position: relative` on each CLIPPING box** — `.scroll` in
+     `panels/session-event-log-panel.module.css` and `.tableView` in `sparkline.module.css` /
+     `stacked-time-series-chart.module.css`. This rule is kept because it is §2.0's `.panel`
+     and because it keeps a stray absolutely-positioned descendant in the panel's own
+     coordinate space, not because it bounds anything. */
+  position: relative;
+}
+
+/* 10e §2.0 — the mock's severity stripe. Was a hook with no rule behind it; now it paints. */
+.panel[data-severity='watch'] {
+  border-color: rgba(250, 178, 25, 0.34);
+}
+
+.panel[data-severity='alarm'] {
+  border-color: rgba(208, 59, 59, 0.46);
+  background:
+    linear-gradient(180deg, rgba(208, 59, 59, 0.045), transparent 90px),
+    var(--surface-1);
 }
 
 .head {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  column-gap: 0.75em;
-  row-gap: 0.15em;
-  align-items: start;
-  border-bottom: 1px solid var(--gridline);
-  padding-bottom: 0.5em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-lo);
 }
 
 .title {
-  grid-column: 1;
-  grid-row: 1;
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.95em;
-  font-weight: 600;
-  color: var(--ink-primary);
+  font: 600 10px/1.35 var(--font-sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+  white-space: nowrap;
 }
 
 .subtitle {
-  grid-column: 1;
-  grid-row: 2;
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.8em;
+  font: 11px/1.35 var(--font-mono);
   color: var(--ink-muted);
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
-/* Targets `Chip`'s root by its `data-severity` attribute rather than by class name: a CSS
-   module hash-scopes its own classes, so a sibling module cannot select another component's
-   class by name — this selector reaches across that boundary the way `data-*` always can. */
-.head > [data-severity] {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
+.spacer {
+  flex: 1 1 auto;
 }
 
 .body {
   display: flex;
   flex-direction: column;
-  gap: 0.4em;
+  gap: 5px;
   min-width: 0;
   min-height: 0;
 }

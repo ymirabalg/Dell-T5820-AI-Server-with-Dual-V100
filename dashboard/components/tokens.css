@@ -26,33 +26,64 @@
  */
 
 :root {
-  /* Surfaces. `--surface-1` is the panel/card ground; `--surface-0` is a recessed well
-     inside a panel (a meter's empty track) — one step toward the page's near-black plane. */
-  --surface-0: #0d0d0d;
-  --surface-1: #1a1a19;
+  /* Surfaces. `--surface-1` is the panel/card ground; `--surface-0` is the page ground, one
+     step further toward black; `--surface-2` is a RAISED step (rows, pills, chip grounds,
+     header controls) and `--surface-sunken` is a recessed well (meter track, log well, table
+     wells) — the mock's four-step surface ramp (10e §1.2). */
+  --surface-0: #07090c;
+  --surface-1: #0d1116;
+  --surface-2: #11161d;
+  --surface-sunken: #090c11;
 
   /* Ink. SPEC §9: "Numerals: monospace, tabular-nums, throughout" — deliberately overriding
      the dataviz skill's own hero-figure guidance (which prefers proportional figures for a
      big standalone number): this is a wall panel refreshed every few seconds, and digits
      that jitter in place are worse than optically uneven ones. Recorded, not silently
-     followed against the skill. */
-  --ink-primary: #ffffff;
-  --ink-secondary: #c3c2b7;
-  --ink-muted: #898781;
+     followed against the skill. Four steps (10e §1.2): `--ink-primary` for values/hero
+     figures/row names, `--ink-secondary` for titles/meter values/chip text, `--ink-muted` for
+     subtitles/labels/tick labels, `--ink-faint` for note footers/control keys — plus
+     `--ink-max`, pure white, reserved for the alarm/watch hero value and the banner lead. */
+  --ink-primary: #e4eaf1;
+  --ink-secondary: #98a5b4;
+  --ink-muted: #6b7889;
+  --ink-faint: #4a5566;
+  --ink-max: #ffffff;
 
-  /* Chrome. */
-  --gridline: #2c2c2a;
-  --baseline: #383835;
-  --border: rgba(255, 255, 255, 0.1);
+  /* Chrome. `--gridline`/`--baseline` are the chart's own hairlines (PAL.grid/PAL.axis);
+     `--border`/`--border-lo`/`--border-hi` are the mock's three-step hairline ramp for
+     panels, rows, chips and controls (10e §1.2). */
+  --gridline: #1c232c;
+  --baseline: #28313d;
+  --border: #1c232c;
+  --border-lo: #151b23;
+  --border-hi: #28313d;
 
   /* Status — fixed, reserved, never a series hue (dataviz: "status colours are reserved").
      This project's Severity is three-valued (normal/watch/alarm), so only three of the
-     skill's four status steps are used; there is no "serious" band here. */
+     skill's four status steps are used; there is no "serious" band here. The `-ink` steps are
+     the mock's text-contrast variants (10e §1.2) — the glyph/chip-text colour on a tinted
+     band, distinct from the raw hex used for rules and fills. */
   --status-good: #0ca30c;
+  --status-good-ink: #3fc63f;
   --status-watch: #fab219;
   --status-alarm: #d03b3b;
+  --status-alarm-ink: #ef6a6a;
 
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* The neutral meter fill (10e §1.2) — a `normal` meter is NOT green; colour on this wall is
+     spent almost entirely on state (§6.3), and a bar with nothing wrong reads in ink, not hue. */
+  --meter: #55697f;
+
+  /* The "no reading" hatch — the same texture a chart's gap mark uses, reused verbatim for a
+     no-band chip, an unavailable hero and a paused/stale status pill (10e §1.2). */
+  --nodata: repeating-linear-gradient(45deg, rgba(152, 165, 180, 0.13) 0 3px, transparent 3px 6px);
+
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas,
+    'DejaVu Sans Mono', 'Liberation Mono', 'Courier New', monospace;
+  /* Uppercase labels only — panel titles, chips, banner count, control keys, log severity tag
+     (10e §1.2). Everything numeric stays `--font-mono`. */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Panel/header/banner radius; chips and controls use 2px, the status pill 999px (10e §1.2). */
+  --radius: 3px;
 
   /* Q2-S2 — the table view's own scroll cap (SPEC §6.2, ruled 2026-09-08: "the table view
      scrolls within its own container"). §6.1 puts real sizing in the GRID's hands and step 10
@@ -84,6 +115,32 @@
      is not a small addition step 10 merely forgot; it is a bigger layout decision for whoever
      next touches §6.1's breakpoints, and it stays open. */
   --table-scroll-max: 40vh;
+}
+
+/* 10e §1.1 — the base that a third of the density fix is. The built stylesheets used to size
+   everything in `em`/`rem` against the browser's 16px root; every `components/` primitive now
+   sizes in `px`, never `em`/`rem`, so a panel's height is arithmetic (10e §2), not a function
+   of an ancestor's font size. This is the one place the root size is set. */
+body {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The mock's own focus ring — series-0 blue, deliberately not a status hue, so keyboard focus
+   is never mistaken for a severity band. */
+:focus-visible {
+  outline: 2px solid #3987e5;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 /* Visually hidden but reachable by assistive tech — used wherever a glyph or colour alone

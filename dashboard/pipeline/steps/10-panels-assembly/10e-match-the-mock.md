@@ -890,6 +890,16 @@ by item 1.
 
 ## 9. Owner questions — nothing below is assumed; the builder omits it until ruled
 
+> **RULED by the owner, 2026-09-09 (recorded in `SPEC.md` §6.1 and §6.2 by the parent):**
+> banner — **the promise is unconditional**; the page must fit with the banner pinned at all three
+> viewports (§8 item 2 stands). **OQ-1 declined. OQ-2 declined, all four. OQ-3 severity word only.
+> OQ-4 no chip on the log** (neither `—` nor a debounce constant). **OQ-5 declined. OQ-6 leave out**
+> (only §6.3's 70/80, on the GPU sparkline's ≥1600 form). **OQ-7 KEEP BOTH CPU traces** — the CPU
+> target becomes spec-only + one sparkline + gap: **216.1 / 240.1 / 240.1**; rows 2–3 become
+> max(366.3, CPU + 9 + 160) = 385.1 / 409.1 / 409.1, page ≈ 775 / 811 / 811, spare ≈ 249 / 213 / 269,
+> with a six-alarm banner ≈ 848 / 884 / 884 — still fits. `check-density.mjs`'s `cpu` row now
+> carries the second sparkline by default. **OQ-8 recorded** for the loop that owns §6.4's SAFETY.
+
 - **OQ-1 — the trace readout caption.** The mock prints `30 min · min 43 · max 67 · now 66 °C`
   under every sparkline (and writes the hover value into it). Min/max over the window are
   readings §6.2 does not list. Cost 19.2 px on each GPU card and CPU; with it the GPU card is the

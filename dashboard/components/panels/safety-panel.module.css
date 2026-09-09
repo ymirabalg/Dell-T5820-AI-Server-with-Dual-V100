@@ -1,15 +1,24 @@
+/* 10e §2.0 — the mock's `.rows` list. */
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* 10e §2.5 — px everywhere, never em/rem. D3's block is otherwise unchanged: one row per
+   malformed STANDING entry, kept out of the panel's own chip (severity={null}, O12). */
 .unknownStanding {
-  margin-top: 0.4em;
-  border-top: 1px solid var(--ink-muted);
-  padding-top: 0.4em;
+  margin-top: 5px;
+  border-top: 1px solid var(--border-lo);
+  padding-top: 5px;
 }
 
 .unknownRow {
   display: flex;
   align-items: baseline;
-  gap: 0.5em;
+  gap: 7px;
   font-family: var(--font-mono);
-  font-size: 0.85em;
+  font-size: 10.5px;
 }
 
 .unknownLabel {

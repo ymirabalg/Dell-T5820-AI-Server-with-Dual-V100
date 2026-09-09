@@ -11,6 +11,8 @@ import { describe, expect, test } from 'vitest';
 import { pwmStateName } from './format';
 import { ch5EcAuto, ch5Manual, everythingZero, nothingReadable } from './fixtures';
 import {
+  GPU_TEMP_ALARM_C,
+  GPU_TEMP_WATCH_C,
   SEVERITY_RANK,
   ch5Engagement,
   freePercent,
@@ -146,6 +148,23 @@ describe('GPU temp — normal ≤ 69, watch 70–79, alarm ≥ 80', () => {
   test('the measured production mean and worst case sit where the bands say', () => {
     expect(severityGpuTemp(celsius(66.2))).toBe('normal');
     expect(severityGpuTemp(celsius(75.3))).toBe('watch');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10e / §3.2 — the GPU-temp boundaries are EXPORTED so the sparkline's reference lines
+// (`GPU_TEMP_WATCH_C` / `GPU_TEMP_ALARM_C`) and this function read the same two numbers.
+// ---------------------------------------------------------------------------
+
+describe('⚠ 10e — the exported GPU-temp constants are what severityGpuTemp actually reads', () => {
+  test('⚠ GPU_TEMP_WATCH_C is 70 and GPU_TEMP_ALARM_C is 80 — §6.3’s own boundaries, exported', () => {
+    expect(GPU_TEMP_WATCH_C).toBe(70);
+    expect(GPU_TEMP_ALARM_C).toBe(80);
+  });
+
+  test('⚠ severityGpuTemp bands the WATCH floor from the exported constant, not a second copy', () => {
+    expect(severityGpuTemp(celsius(GPU_TEMP_WATCH_C - 1))).toBe('normal');
+    expect(severityGpuTemp(celsius(GPU_TEMP_WATCH_C))).toBe('watch');
   });
 });
 

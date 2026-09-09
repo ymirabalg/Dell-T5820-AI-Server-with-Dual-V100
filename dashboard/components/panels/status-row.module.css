@@ -1,5 +1,6 @@
-/* Mirrors `row.module.css` exactly, plus `.noteWatch`. See `status-row.tsx`'s module doc for
-   why this is a sibling file rather than an edit to that one. */
+/* Mirrors `row.module.css` (10e §2.0), plus `.noteWatch` and the three SERVING-only slots
+   (`.secondaryLabel`, `.inline`, `.endPrefix`) — see `status-row.tsx`'s module doc for why
+   this is a sibling file rather than an edit to that one. */
 
 .row {
   display: flex;
@@ -7,11 +8,33 @@
      `components/styles.test.ts`, which asserts every `flex-basis: 100%` in this directory
      sits inside a `flex-wrap: wrap` container. */
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.5em;
-  padding: 0.15em 0;
+  align-items: center;
+  gap: 6px 9px;
+  padding: 4px 7px;
+  line-height: 1.25;
+  background: var(--surface-2);
+  border-left: 2px solid var(--border-hi);
+  min-width: 0;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+.row[data-severity='normal'] {
+  border-left-color: rgba(12, 163, 12, 0.55);
+}
+
+.row[data-severity='watch'] {
+  border-left-color: var(--status-watch);
+  background: rgba(250, 178, 25, 0.07);
+}
+
+.row[data-severity='alarm'] {
+  border-left-color: var(--status-alarm);
+  background: rgba(208, 59, 59, 0.09);
+}
+
+.row[data-severity='none'] {
+  border-left-color: var(--ink-faint);
 }
 
 .chip {
@@ -19,20 +42,60 @@
 }
 
 .label {
-  color: var(--ink-muted);
-  flex: 1 1 auto;
-}
-
-.value {
   color: var(--ink-primary);
   flex: 0 0 auto;
+}
+
+/* 10e §2.7 — SERVING's second name span, right after `.label` (`:8080`). */
+.secondaryLabel {
+  color: var(--ink-primary);
+  flex: 0 0 auto;
+}
+
+/* 10e §2.7 — SERVING's `model · ctx`: plain, like `.note`, but NEVER forced full-width — it
+   wraps naturally with the row's own first line instead of always claiming its own. */
+.inline {
+  color: var(--ink-muted);
+  font-size: 10.5px;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* F5 (10e §7): SERVING's composite row overflowed a narrow column because this could neither
+   shrink nor wrap. Now it does either. */
+.value {
+  color: var(--ink-primary);
+  flex: 0 1 auto;
+  min-width: 0;
   text-align: right;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* 10e §2.0/§2.7 — the mock's `chip(sev, state)` group: a value pill (or plain `.value` text
+   when no severity), optionally preceded by `endPrefix` plain text (SERVING's `health ok`). */
+.end {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.endPrefix {
+  color: var(--ink-muted);
+  font-size: 11px;
 }
 
 .note {
-  color: var(--ink-secondary);
+  color: var(--ink-muted);
   flex-basis: 100%;
-  font-size: 0.85em;
+  padding-left: 20px;
+  font-size: 10.5px;
+  min-width: 0;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 
@@ -42,6 +105,9 @@
 .noteWatch {
   color: var(--status-watch);
   flex-basis: 100%;
-  font-size: 0.85em;
+  padding-left: 20px;
+  font-size: 10.5px;
+  min-width: 0;
+  white-space: normal;
   overflow-wrap: anywhere;
 }

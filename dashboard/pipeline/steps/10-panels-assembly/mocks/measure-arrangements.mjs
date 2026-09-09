@@ -347,9 +347,20 @@ async function anatomy(page) {
         for (const child of body.children) {
           const r = child.getBoundingClientRect();
           const text = (child.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 48);
-          const svg = child.matches('svg') ? child : child.querySelector('svg');
+          // ⚠ 10e-BUILD-2, 2026-09-09: this used to be `querySelector('svg')` — the FIRST
+          // svg in the subtree. The GPU card holds BOTH ≥1600px promotion wrappers inside ONE
+          // hero-row child, so the first svg is always the narrow one, which is the HIDDEN one
+          // at ≥1600 — and the part read `(svg 440x0)` while a visible 600x50 chart sat beside
+          // it. `check-density.mjs`'s item-4 chart-box check could therefore never pass for
+          // `gpu0` at 1600/1920 no matter what the app painted. Every svg in the part is listed
+          // now; CPU (two wrappers as two separate children) is unaffected either way.
+          const svgs = child.matches('svg') ? [child] : [...child.querySelectorAll('svg')];
           parts.push({
-            part: child.tagName.toLowerCase() + (svg ? '(svg ' + svg.getAttribute('width') + 'x' + Math.round(svg.getBoundingClientRect().height) + ')' : ''),
+            part:
+              child.tagName.toLowerCase() +
+              svgs
+                .map((svg) => '(svg ' + svg.getAttribute('width') + 'x' + Math.round(svg.getBoundingClientRect().height) + ')')
+                .join(''),
             height: Math.round(r.height),
             text,
           });

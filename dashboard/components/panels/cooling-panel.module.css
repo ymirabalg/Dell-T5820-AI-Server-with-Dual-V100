@@ -1,12 +1,86 @@
-.headline {
-  font-size: 1.1em;
+/* 10e §2.2 — COOLING's own density: hero row (fan5 + mode pill), the stale caption
+   (degraded-only), the chan table (fan2/1/3/4), the fan-service row. */
+
+.heroRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* ⚠ 10e-A8: the headline's subject, VISIBLE. Before 10e the fan-5 reading was
+   `<Row label="fan 5" …>`; 10e moved it into a `Hero` whose only carrier of the words was an
+   `aria-label` on a `<div>`, where ARIA prohibits it — so the string `fan 5` appeared nowhere
+   in this panel's body at all, and a 34px numeral sat unlabelled beside a chan table reading
+   `fan 2 / fan 1 / fan 3 / fan 4`. Same register as `.chanId`, and 0px of height: the hero row
+   is `align-items: flex-end` and this line is far shorter than the 32.3px `Hero` beside it. */
+.heroKey {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding-bottom: 3px;
+}
+
+/* Degraded-only (0px healthy): S-B's stale age, watch-toned, matching status-row's own
+   `.noteWatch` exactly. */
+.staleCaption {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--status-watch);
+  font-family: var(--font-mono);
 }
 
 .chart {
-  margin: 0.5em 0;
+  min-width: 0;
 }
 
-.smaller {
-  font-size: 0.9em;
-  opacity: 0.9;
+/* 10e §2.0 — the mock's `.chan`: glyph · id · value · trailing note, four channels. */
+.chan {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  gap: 3px 10px;
+  align-items: center;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.chanId {
+  color: var(--ink-muted);
+}
+
+.value {
+  color: var(--ink-primary);
+  text-align: right;
+  min-width: 42px;
+}
+
+/* invariant 1 — a channel that did not enumerate reads `—`, muted and spaced, never confused
+   with a genuine zero. */
+.valueUnknown {
+  color: var(--ink-muted);
+  letter-spacing: 0.18em;
+  text-align: right;
+  min-width: 42px;
+}
+
+/* invariant 1's other half — a genuine `0 RPM` is a stopped fan, alarm-inked. */
+.valueZero {
+  color: var(--status-alarm-ink);
+  text-align: right;
+  min-width: 42px;
+}
+
+.chanNote {
+  font-size: 10.5px;
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }

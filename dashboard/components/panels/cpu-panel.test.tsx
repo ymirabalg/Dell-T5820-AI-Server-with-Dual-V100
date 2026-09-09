@@ -61,7 +61,8 @@ describe('§6.2 — the CPU card', () => {
     // still satisfies a document-wide `toContain('data-severity="alarm"')`).
     const row = rowContaining(html, 'temperature');
     expect(row).toContain('data-severity="alarm"');
-    expect(row).toContain('95 °C');
+    expect(row).toContain('>95<');
+    expect(row).toContain('°C');
   });
 
   test('load average renders §6.6’s 2dp / -separated form', () => {
@@ -93,7 +94,8 @@ describe('§6.2 — the CPU card', () => {
       <CpuPanel state={stateWith(snapshotWith({ cpuTempC: celsius(0) }))} nowMs={0} panelId="cpu" />,
     );
     const row = rowContaining(html, 'temperature');
-    expect(row).toContain('0 °C');
+    expect(row).toContain('>0<');
+    expect(row).toContain('°C');
     expect(row).toContain('data-severity="normal"');
   });
 
@@ -113,7 +115,12 @@ describe('⚠ §6.5 — every source routed to this panel reaches the screen', (
     errors,
   });
 
-  test('⚠ coretemp lands on the temperature row, proc-stat on utilisation, proc-loadavg on load average', () => {
+  // ⚠ 10e §2.3: the hero and the strip have no note slot of their own (unlike the built `Row`s
+  // this panel used to carry), so EVERY CPU source's message now lands together in one
+  // `PanelNotes` call under the whole card (S-H: "the panel satisfies 'beside it'") rather than
+  // attributed to individual rows. This still proves the property that matters — every one of
+  // the three sources reaches the screen, none silently dropped — just not per-row any more.
+  test('⚠ coretemp, proc-stat and proc-loadavg all reach the screen, together, under the card', () => {
     const html = renderToStaticMarkup(
       <CpuPanel
         state={stateWith(
@@ -127,9 +134,9 @@ describe('⚠ §6.5 — every source routed to this panel reaches the screen', (
         panelId="cpu"
       />,
     );
-    expect(rowContaining(html, 'temperature')).toContain('no hwmon named coretemp');
-    expect(rowContaining(html, 'utilisation')).toContain('/proc/stat: EACCES');
-    expect(rowContaining(html, 'load average')).toContain('/proc/loadavg: EACCES');
+    expect(html).toContain('no hwmon named coretemp');
+    expect(html).toContain('/proc/stat: EACCES');
+    expect(html).toContain('/proc/loadavg: EACCES');
   });
 
   test('⚠ proc-cpuinfo blanks the SUBTITLE, which has no note slot, so it renders under the rows', () => {
@@ -176,16 +183,18 @@ describe('⚠ 10c1 — the chart/table toggle (Q2-S2), now shell-owned', () => {
     const html = renderToStaticMarkup(
       <CpuPanel state={stateWith(everythingZero)} nowMs={0} panelId="cpu" view="table" />,
     );
-    expect(html.split('data-role="table-view"').length - 1).toBe(2);
+    // 10e/OQ-7: CPU carries BOTH traces (temperature + utilisation) at BOTH sizes — 4
+    // `Sparkline` mounts, not 2 — so one `view` reaching this panel flips all four.
+    expect(html.split('data-role="table-view"').length - 1).toBe(4);
   });
 
   test('⚠ the toggle control renders ONLY when the caller supplies onToggleView', () => {
     const withoutHandler = renderToStaticMarkup(<CpuPanel state={stateWith(everythingZero)} nowMs={0} panelId="cpu" />);
-    expect(withoutHandler).not.toContain('table view');
+    expect(withoutHandler).not.toContain('show as table');
     const withHandler = renderToStaticMarkup(
       <CpuPanel state={stateWith(everythingZero)} nowMs={0} panelId="cpu" onToggleView={() => undefined} />,
     );
-    expect(withHandler).toContain('table view');
+    expect(withHandler).toContain('show as table');
   });
 });
 
@@ -228,18 +237,80 @@ describe('⚠ 10c-3/A6 — state.gaps reaches BOTH sparklines, or the design-tar
 
   test('⚠ both sparklines mark the gap — one `data-role="gap"` each', () => {
     const html = renderToStaticMarkup(<CpuPanel state={gappyState(GAP)} nowMs={0} panelId="cpu" />);
-    expect((html.match(/data-role="gap"/g) ?? []).length).toBe(2);
+    // 10e/OQ-7: 4 `Sparkline` mounts (2 traces x 2 sizes), each marking the gap once.
+    expect((html.match(/data-role="gap"/g) ?? []).length).toBe(4);
   });
 
   test('⚠ and both list it in the table view, the accessibility floor', () => {
     const html = renderToStaticMarkup(
       <CpuPanel state={gappyState(GAP)} nowMs={0} panelId="cpu" view="table" />,
     );
-    expect((html.match(/data-role="gap-row"/g) ?? []).length).toBe(2);
+    expect((html.match(/data-role="gap-row"/g) ?? []).length).toBe(4);
   });
 
   test('with no gap in state, neither sparkline invents one — the negative half of the fixture', () => {
     const html = renderToStaticMarkup(<CpuPanel state={gappyState([])} nowMs={0} panelId="cpu" />);
     expect(html).not.toContain('data-role="gap"');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// ⚠ 10e-A5 (mutation A), added by 10e's RECONCILIATION, 2026-09-09. This is the GPU hole the
+// test phase closed (`10e-GP1`..`GP5`), left open on CPU: deleting `timeLabels` from BOTH
+// promoted mounts left all 2892 tests green and both harnesses green. `10c-P2`/`P3`'s anchors
+// merely CONTAIN the `timeLabels` token as surrounding context, so they still match after it is
+// deleted. The scoping below is by `data-role` wrapper, never document-wide — the four mounts
+// are two traces x two sizes and only the ≥1600 pair carries the axis.
+// ---------------------------------------------------------------------------------------
+describe('⚠ 10e §3.2 — the ≥1600px CPU promotion carries the time axis; the 1280 pair does not', () => {
+  const SMALL = 'data-role="cpu-sparkline-wrap"';
+  const PROMOTED = 'data-role="cpu-full-chart-wrap"';
+
+  const html = (): string =>
+    renderToStaticMarkup(
+      <CpuPanel
+        state={stateOf(
+          ringOfSeries(
+            [
+              snapshotWith({ cpuTempC: celsius(60), cpuPct: percent(20) }),
+              snapshotWith({ cpuTempC: celsius(70), cpuPct: percent(40) }),
+            ],
+            1_500_000,
+          ),
+        )}
+        nowMs={0}
+        panelId="cpu"
+      />,
+    );
+
+  test('⚠ exactly TWO time axes are drawn — one per promoted trace, none on the 1280 pair', () => {
+    const markup = html();
+    expect((markup.match(/data-role="sparkline-time-labels"/g) ?? []).length).toBe(2);
+    const small = markup.slice(markup.indexOf(SMALL), markup.indexOf(PROMOTED));
+    expect(small).not.toContain('data-role="sparkline-time-labels"');
+    expect(small).toContain('<svg'); // not vacuous: the 1280 pair really is in this slice
+  });
+
+  test('⚠ both time axes sit inside the promoted wrapper', () => {
+    const markup = html();
+    const promotedAt = markup.indexOf(PROMOTED);
+    for (const m of markup.matchAll(/data-role="sparkline-time-labels"/g)) {
+      expect(m.index).toBeGreaterThan(promotedAt);
+    }
+  });
+});
+
+// ⚠ 10e-A8, added by 10e's RECONCILIATION — the CPU twin of the GPU note in
+// `gpu-panel.test.tsx`. The hero is a point reading and must not be named with the chart's
+// window sentence, which already names both `<svg role="img">` temperature mounts.
+describe('⚠ 10e-A8 — the CPU hero is named as a point reading, with a role that permits naming', () => {
+  test('⚠ role="group" and the package-temperature name, on the hero’s own element', () => {
+    const html = renderToStaticMarkup(
+      <CpuPanel state={stateWith(snapshotWith({ cpuTempC: celsius(55), cpuPct: percent(20) }))} nowMs={0} panelId="cpu" />,
+    );
+    expect(html).toMatch(/<div[^>]*role="group"[^>]*aria-label="CPU package temperature"[^>]*>/);
+    expect(html).not.toContain('aria-label="CPU temperature over the selected window"><span');
+    // The chart keeps the window sentence — this is not a rename of that one.
+    expect(html).toContain('CPU temperature over the selected window');
   });
 });

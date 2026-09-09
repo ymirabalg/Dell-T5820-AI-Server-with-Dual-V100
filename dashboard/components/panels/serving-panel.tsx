@@ -21,33 +21,29 @@
  * ### An `errors[]` entry reaches a row only when it NAMES that instance
  *
  * Added 2026-09-08 by 10b's reconciliation (adversarial F2); made structural the same day by
- * the owner's ruling (10b-S-G). The first draft read `servingErrors[0]?.message` once and hung
- * it on **every** row: rendered from the shipped `servingPopulated` fixture, the healthy
- * `llama-server@0` carried `connect ECONNREFUSED 127.0.0.1:8081` — instance 1's port, beside
- * instance 0's `health ok` row. §6.5 is explicit that *"an `llama-server` instance is down →
- * **its** row shows the unit state and the reason; the other instance is unaffected"*, and
- * §3.7's whole point is that an alarm carries the explanation that fits it.
+ * the owner's ruling (10b-S-G). `TelemetryError` carries an optional `instance` (§4), and this
+ * file matches on that field alone — an entry belongs to instance `i` when
+ * `error.instance === i`, full stop. Nothing about the message is read to decide attribution;
+ * the message is only ever displayed. An entry with no `instance` is collector-wide and
+ * renders once under the rows via {@link PanelNotes}.
  *
- * The second draft (10b's reconciliation) fixed the symptom by matching the message text for
- * a unit name, an `<i>.env` path or a port — honest, tested, and a heuristic: a collector
- * rewording a message mis-attributes it silently, because a substring match cannot fail
- * loudly. **`TelemetryError` now carries an optional `instance` (§4), and this file matches on
- * that field alone** — an entry belongs to instance `i` when `error.instance === i`, full
- * stop. Nothing about the message is read to decide attribution any more; the message is only
- * ever displayed. An entry with no `instance` (most sources, and any old server that predates
- * this field) is collector-wide and renders once under the rows via {@link PanelNotes}, on the
- * same terms as before.
+ * ⚠ **"Nothing is dropped" is true ACROSS sources and false WITHIN one.** {@link errorFor} folds
+ * by `source`, so two entries with the same `source` **and** the same `instance` collapse to
+ * the last: `readEnv` files one entry per parse problem, so a `1.env` missing `MODEL` *and*
+ * carrying an unparseable `CTX` yields two `llama-env` entries for instance 1 and only the
+ * second is rendered. Whether the row should join them (as it already joins across sources) is
+ * a §6.5 question the spec does not answer; it is recorded for the owner rather than decided
+ * here.
  *
- * ⚠ **"Nothing is dropped" is true ACROSS sources and false WITHIN one** — corrected
- * 2026-09-08 by this ruling's reconciliation (adversarial A3), because the sentence that used
- * to stand here claimed otherwise and a reader would have concluded the case was closed.
- * {@link errorFor} folds by `source`, so two entries with the same `source` **and** the same
- * `instance` collapse to the last: `readEnv` files one entry per parse problem, so a `1.env`
- * missing `MODEL` *and* carrying an unparseable `CTX` yields two `llama-env` entries for
- * instance 1 and only the second is rendered — on the row or anywhere else, since the first
- * also matched an instance and so is excluded from `unattributed`. Whether the row should
- * join them (as it already joins across sources) is a §6.5 question the spec does not answer;
- * it is recorded for the owner rather than decided here. What is fixed is the claim.
+ * ### 10e §2.7 — the composite value becomes three separate `StatusRow` slots
+ *
+ * F5 found that `:${port} · ${model} · ctx ${ctx} · health ${health}` as ONE hand-joined
+ * string could neither shrink nor wrap in a narrow column. It is now three pieces, none of
+ * them forced onto their own line: `secondaryLabel` (the port, right after the unit-name
+ * label), `inline` (`model · ctx`, wraps naturally with the row), and `endPrefix` (`health
+ * …`, ahead of the unit-state pill inside `.end`) — the three slots `status-row.tsx` built
+ * for exactly this row. `note`/`detail` are UNCHANGED: S-B's stale age and the S-G-attributed
+ * `errors[]` message still force their own full-width line.
  */
 
 import type { DisplayedCondition } from '@/lib/conditions';
@@ -92,18 +88,14 @@ const instanceRow = (
   const healthCondition = findDisplayed(displayed, conditionId('health', String(instance.instance)));
   const age = staleAgeNote(unitCondition, nowMs) ?? staleAgeNote(healthCondition, nowMs);
 
-  const value = [
-    `:${formatPort(instance.port)}`,
-    formatText(instance.model),
-    `ctx ${formatTokens(instance.ctx)}`,
-    `health ${formatText(instance.health)}`,
-  ].join(' · ');
-
   return (
     <StatusRow
       key={instance.instance}
       label={`llama-server@${instance.instance}`}
-      value={value}
+      secondaryLabel={`:${formatPort(instance.port)}`}
+      inline={`${formatText(instance.model)} · ctx ${formatTokens(instance.ctx)}`}
+      endPrefix={`health ${formatText(instance.health)}`}
+      value={formatText(instance.unitState)}
       severity={severity}
       note={age}
       noteTone={age === null ? 'muted' : 'watch'}
@@ -129,22 +121,7 @@ export function ServingPanel({ state, nowMs }: PanelProps) {
         );
 
   const servingErrors = snapshot === null ? [] : errorsForPanel(snapshot, 'serving');
-  // ⚠ The LAST message PER SOURCE that names this instance. A panel that showed the first (or
-  // only one of two sources) would print a different sentence for the same fault in the same
-  // session (adversarial F10). Both sources survive: a `dbus` "NoSuchUnit" and the
-  // `llama-health` probe failure explain different halves of one dead instance, and dropping
-  // either is what §3.7 calls not actionable. ⚠ Two entries from the SAME source about the
-  // same instance still collapse to the last — see this module's doc; that is the known
-  // limit of this fold, not something the fold's justification covers.
-  //
-  // ⚠ The `events.ts:400` citation this comment used to lean on is only HALF true since
-  // 10b-S-G (adversarial A10, corrected 2026-09-08). That fold is last-per-source across
-  // **all** instances; this one is last-per-source **per instance**. With instance 0 and
-  // instance 1 both failing their `/health` probe, the log's single `llama-health` sentence
-  // is instance 1's (array order) while row 0 shows instance 0's — so the log and this panel
-  // now legitimately differ, which is the outcome the citation was invoked to rule out.
-  // Whether the session log should itself be per-instance is 10c's question; the reason the
-  // fold reads LAST rather than FIRST is unaffected either way.
+  // ⚠ The LAST message PER SOURCE that names this instance — see the module doc.
   const errorFor = (instance: ServingInstance): string | null => {
     const bySource = new Map<string, string>();
     for (const e of servingErrors) if (namesInstance(e, instance)) bySource.set(e.source, e.message);
@@ -169,9 +146,11 @@ export function ServingPanel({ state, nowMs }: PanelProps) {
         </div>
       ) : (
         <>
-          {instances.map((instance) =>
-            instanceRow(instance, state.displayed, nowMs, errorFor(instance)),
-          )}
+          <div className={styles.rows}>
+            {instances.map((instance) =>
+              instanceRow(instance, state.displayed, nowMs, errorFor(instance)),
+            )}
+          </div>
           <PanelNotes messages={unattributed} />
         </>
       )}

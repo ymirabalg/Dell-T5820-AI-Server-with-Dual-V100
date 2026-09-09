@@ -130,3 +130,34 @@ describe('⚠ the band is a word as well as a colour, and nothing is announced t
     expect((html.match(/116\.3 \/ 232\.6 GiB/g) ?? []).length).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// 10e §2.0 — the optional tick mark (VRAM 90, RAM 85, disk-free 15). Fixture symmetry
+// (HANDOVER §5.1): omitted vs given, and the given position is independent of the fill.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ 10e — the optional tick mark, a fixed threshold position independent of the fill', () => {
+  test('omitted by default — no left: style appears anywhere in the markup', () => {
+    const html = renderToStaticMarkup(
+      <Meter label="VRAM" formattedValue="26,452 / 32,768 MiB" used={26452} total={32768} severity="normal" />,
+    );
+    expect(html).not.toMatch(/left:\s*\d/);
+  });
+
+  test('⚠ tickPercent renders a mark at that exact position, distinct from the fill percentage', () => {
+    const html = renderToStaticMarkup(
+      <Meter
+        label="VRAM"
+        formattedValue="26,452 / 32,768 MiB"
+        used={26452}
+        total={32768}
+        severity="normal"
+        tickPercent={90}
+      />,
+    );
+    expect(html).toMatch(/left:\s*90%/);
+    // the fill's own width is 80.7% here — a DIFFERENT number — so the tick is not merely an
+    // alias for the fill, and a mutation that aliased the two would be caught by this.
+    expect(widthOf(html)).not.toBe('90%');
+  });
+});

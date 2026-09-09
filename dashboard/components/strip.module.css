@@ -1,0 +1,40 @@
+/* 10e §2.0 — the mock's `.strip`. */
+
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 20px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.item {
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.k {
+  color: var(--ink-muted);
+}
+
+/* ⚠ 10e-A2, measured 2026-09-09: this was `white-space: nowrap` (the mock's `dd`) and it
+   re-created F5's exact defect one primitive over. GPU's third item is
+   `served by instance N` / `formatText(instance.model)`, and `instance.model` is
+   `/v1/models`'s `data[0].id` — which `llama-server` reports as the `-m` PATH unless
+   `--alias` is given, e.g. `/home/yorman/models/Qwen3.6-27B-Q4_K_M.gguf`. `.strip`'s
+   `flex-wrap: wrap` only wraps BETWEEN items, so one item wider than the column just spilled:
+   scrollWidth 345 in a 285px GPU column at the 1280 design target, and the same 345 at 262
+   and 200. The three declarations below are `status-row.module.css`'s `.value` verbatim —
+   F5's own fix (10e §7) — and they return the column to 285. §2.0's own sentence for this
+   primitive is *"it wraps rather than truncates, which is the only way it grows"*; the
+   `nowrap` contradicted it for a single long value. */
+.v {
+  margin: 0;
+  color: var(--ink-primary);
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

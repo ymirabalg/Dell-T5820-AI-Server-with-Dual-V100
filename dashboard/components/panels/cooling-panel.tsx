@@ -12,9 +12,9 @@
  * chart precedent).
  *
  * ⚠ **Invariant 3 — `ENODATA` from `pwm5` is `EC auto`, and it is HEALTHY.** The derived-mode
- * row (`formatCh5Pwm`) never carries a `severity` prop: `EC auto` and `unavailable` are not
- * §6.3 bands (O13), so this row renders as identity text beside the headline reading's own
- * chip, never a second colour that could disagree with it.
+ * pill (`formatCh5Pwm`) never carries a real `severity`: `EC auto` and `unavailable` are not
+ * §6.3 bands (O13), so it is always `severity={null}` — identity text beside the headline
+ * reading's own colour, never a second colour that could disagree with it.
  *
  * ⚠ **Invariant 4 — `fanN_input` is the only trustworthy fan telemetry.** Nothing here reads
  * `pwmN_enable` or `fanN_target`; neither is in `lib/types.ts`'s contract at all, so neither
@@ -22,17 +22,19 @@
  *
  * ⚠ **A stale row keeps its LAST VALUE and BOTH its facts** (added 2026-09-08 by 10b's
  * reconciliation, adversarial F3/F4). §6.5 says in bold that a stale condition *"shows its LAST
- * VALUE, unchanged — not an em dash"*; `staleValueOr` supplies it, so this row and
- * `components/alarm-banner.tsx` can no longer print two different numbers for one condition in
- * one frame. And the stale age no longer *displaces* the `errors[]` explanation the way
- * `note={age ?? message}` did — the age is the `note`, the message is the `detail`, and the
- * case where both exist is exactly the case where a source died, i.e. the one that matters.
+ * VALUE, unchanged — not an em dash"*; the age no longer *displaces* the `errors[]` explanation
+ * the way `note={age ?? message}` did — the age is the `note`, the message is the `detail`, and
+ * the case where both exist is exactly the case where a source died, i.e. the one that matters.
  *
- * The fan service row is the one place in this panel §6.5's stale treatment is reachable: its
- * severity function (`severityUnitState`) returns `null` for an unreadable input, so a D-Bus
- * outage can make `conditionsFrom` drop the observation on successive polls and `observePoll`
- * confirm it stale. `fan5`'s absolute row can too, via the same mechanism when `dell-smm`
- * itself stops answering, so both carry `condition-lookup.ts`'s treatment.
+ * ⚠ **10e / invariant 7 — the headline `Hero` cannot use `staleValueOr` directly.** That helper
+ * substitutes a `DisplayedCondition.value`, which `conditionsFrom` has ALREADY formatted into
+ * one string (`'4,308 RPM'`) — exactly the shape O14 forbids a `Hero` from splitting back apart
+ * into `{ value, unit }`. Recorded rather than guessed at silently: when the current reading is
+ * unreadable AND the condition is confirmed stale, this file renders the condition's whole
+ * formatted string as `Hero`'s `value` with an EMPTY `unit` — the unit is already inside that
+ * string — rather than parsing it back into parts. This is a degraded-only path (0 px, 0
+ * occurrences, in every healthy fixture `check-density.mjs` grades) and the visual cost is
+ * cosmetic: the stale numeral and its unit share one type size instead of two.
  *
  * ⚠ **S11/G5, settled 2026-09-08 (widened while this loop was building): a `fan5` em dash next
  * to the "unavailable" mode neighbour needs NO entry of its own.** §6.5's "no second
@@ -44,22 +46,19 @@
  * requires explanation text to come from the `errors[]` source match, never copy written in the
  * UI), or expect an `errors[]` entry to exist for it (the collector deliberately files none —
  * reporting a failure for a documented-normal state would be the fabricated-alarm mistake this
- * project keeps paying to avoid). The fan5 row's two note slots are therefore exactly
- * `note={fan5Age}` and `detail={dellSmmError}` — nothing appended, nothing defaulted — so when
- * neither is present **the row renders no note element at all**, and "unavailable" on the row
- * below is the whole explanation. That last sentence is what `10b-CO5`'s ⚠ test now asserts:
- * the *absence of the element*, not the absence of three particular words (10b-reconcile,
- * adversarial F6 — a fallback sentence with different wording passed the old guard).
+ * project keeps paying to avoid).
  */
+
+import { Fragment } from 'react';
 
 import { conditionId } from '@/lib/conditions';
 import { errorsForPanel } from '@/lib/client/observations';
 import { traceFor } from '@/lib/client/series';
 import { latestSample } from '@/lib/client/runtime';
-import { formatCh5Pwm, formatRpm, formatText } from '@/lib/format';
+import { EM_DASH, formatCh5Pwm, formatRpm, formatRpmParts, formatText } from '@/lib/format';
 import { severityFan5, severityFanStopped, severityUnitState } from '@/lib/severity';
 import { celsius, rpm } from '@/lib/types';
-import type { Cooling, TelemetrySnapshot } from '@/lib/types';
+import type { Cooling, Rpm, Severity, TelemetrySnapshot } from '@/lib/types';
 import { FAN_SERVICE_UNIT } from '@/lib/units';
 import { formatCelsius } from '@/lib/format';
 
@@ -67,12 +66,14 @@ import { CHART_SIZE } from '../grid';
 import { SERIES_COLORS } from '../palette';
 import { PanelShell } from '../panel-shell';
 import type { PanelProps } from '../panel-props';
-import { Row } from '../row';
+import { Hero } from '../hero';
+import { Chip } from '../chip';
 import { StackedTimeSeriesChart } from '../stacked-time-series-chart';
 import { chartDomainOf, formatTimeOfDayMs } from './panel-chart';
 import { findDisplayed, staleAgeNote, staleValueOr } from './condition-lookup';
 import { panelChip } from './panel-chip';
 import { StatusRow } from './status-row';
+import { PanelNotes } from './panel-notes';
 import { ChartViewToggle } from './chart-view-toggle';
 
 import styles from './cooling-panel.module.css';
@@ -85,25 +86,53 @@ export interface CoolingPanelProps extends PanelProps {
   readonly onToggleView?: () => void;
 }
 
+/** One row of the chan table (§2.0/§2.2): glyph, id, value (with invariant 1's two special
+ *  inks), a trailing note. Inline here — this shape is COOLING-only. */
+interface ChanRowSpec {
+  readonly id: string;
+  readonly value: Rpm | null;
+  readonly severity: Severity | null;
+  readonly note: string | null;
+}
+
+/** invariant 1's `--unk`/`--zero` inks (§2.0): unreadable is muted+spaced, a genuine zero is
+ *  alarm-inked — the ordinary reading in between takes the row's own primary ink. */
+const chanValueClass = (value: Rpm | null): string => {
+  if (value === null || !Number.isFinite(value)) return styles.valueUnknown as string;
+  if (value === 0) return styles.valueZero as string;
+  return styles.value as string;
+};
+
+function ChanTable({ rows }: { rows: readonly ChanRowSpec[] }) {
+  return (
+    <div className={styles.chan}>
+      {rows.map((row) => (
+        <Fragment key={row.id}>
+          <Chip severity={row.severity} size="sm" />
+          <span className={styles.chanId}>{row.id}</span>
+          <span className={chanValueClass(row.value)}>{formatRpm(row.value)}</span>
+          <span className={styles.chanNote}>{row.note ?? ''}</span>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
 export function CoolingPanel({ state, nowMs, panelId, view = 'chart', onToggleView }: CoolingPanelProps) {
   const snapshot: TelemetrySnapshot | null = latestSample(state)?.snapshot ?? null;
   const cooling: Cooling | null = snapshot?.cooling ?? null;
 
   const fan5Severity = cooling === null ? null : severityFan5(cooling);
   const serviceSeverity = cooling === null ? null : severityUnitState(cooling.serviceState);
-  // ⚠ 10b-S-F: `panelChip` over the four fan1-4 LEAVES directly, not a pre-combined
-  // `worstSeverity` of them (the old `fan1234Severity`) — a lone `null` among the four would
-  // otherwise be thrown away by that inner combination before `panelChip` ever saw it. See
-  // `panel-chip.ts`'s module doc. `fan5Severity` is passed whole: it is `severityFan5`'s own
-  // documented job not to lose a `null` this way.
-  const chip = panelChip(
-    fan5Severity,
-    severityFanStopped(cooling?.fan1Rpm ?? null),
-    severityFanStopped(cooling?.fan2Rpm ?? null),
-    severityFanStopped(cooling?.fan3Rpm ?? null),
-    severityFanStopped(cooling?.fan4Rpm ?? null),
-    serviceSeverity,
-  );
+  const fan1Severity = severityFanStopped(cooling?.fan1Rpm ?? null);
+  const fan2Severity = severityFanStopped(cooling?.fan2Rpm ?? null);
+  const fan3Severity = severityFanStopped(cooling?.fan3Rpm ?? null);
+  const fan4Severity = severityFanStopped(cooling?.fan4Rpm ?? null);
+  // ⚠ 10b-S-F: `panelChip`, not `worstSeverity` — a panel that would read `normal` while one
+  // of the four fan1-4 LEAVES is `null` shows no band instead. See `panel-chip.ts`'s module
+  // doc. `fan5Severity` is passed whole: it is `severityFan5`'s own documented job not to lose
+  // a `null` this way.
+  const chip = panelChip(fan5Severity, fan1Severity, fan2Severity, fan3Severity, fan4Severity, serviceSeverity);
 
   const fan5Condition = findDisplayed(state.displayed, 'fan5_absolute');
   const serviceCondition = findDisplayed(state.displayed, FAN_SERVICE_ID);
@@ -134,35 +163,40 @@ export function CoolingPanel({ state, nowMs, panelId, view = 'chart', onToggleVi
   const gpu1Trace = traceFor(state, (s) => s.gpus?.find((g) => g.index === 1)?.tempC ?? null);
   const fan5Trace = traceFor(state, (s) => s.cooling.fan5Rpm);
 
+  // ⚠ 10e/invariant 7 — see the module doc: `Hero` cannot take `staleValueOr`'s combined
+  // string apart again, so a confirmed-stale, currently-unreadable fan5 renders that whole
+  // string as the VALUE with an empty unit instead. The ordinary path (reading present, or no
+  // stale condition yet) is unaffected — `parts` exactly as every other Hero.
+  const fan5Parts = formatRpmParts(cooling?.fan5Rpm ?? null);
+  const fan5Stale =
+    fan5Condition !== undefined && fan5Condition.stale && fan5Parts.value === EM_DASH;
+  const heroValue = fan5Stale ? fan5Condition.value : fan5Parts.value;
+  const heroUnit = fan5Stale ? '' : fan5Parts.unit;
+
+  const toggle =
+    onToggleView === undefined ? undefined : (
+      <ChartViewToggle view={view} onToggle={onToggleView} label="GPU temperature and fan 5 RPM" />
+    );
+
   return (
-    <PanelShell title="cooling" subtitle="dell_smm · channel 5 = FAN_HDD (PCIe/GPU)" chip={chip}>
-      <div className={styles.headline}>
-        <StatusRow
-          label="fan 5"
-          value={staleValueOr(fan5Condition, formatRpm(cooling?.fan5Rpm ?? null))}
-          severity={fan5Severity}
-          note={fan5Age}
-          noteTone={fan5Age === null ? 'muted' : 'watch'}
-          detail={dellSmmError}
-        />
+    <PanelShell title="cooling" subtitle="dell_smm · channel 5 = FAN_HDD (PCIe/GPU)" chip={chip} headControl={toggle}>
+      <div className={styles.heroRow}>
+        {/* ⚠ 10e-A8 — VISIBLE, not an `aria-label`. See `.heroKey` in this panel's stylesheet
+            for why the label had to come back, and `hero.tsx`'s `ariaLabel` doc for why the
+            attribute it replaces could not carry it. `Hero` takes no `ariaLabel` here now:
+            this span is adjacent visible text and a second, identical accessible name on the
+            group beside it would only announce "fan 5" twice. */}
+        <span className={styles.heroKey}>fan 5</span>
+        <Hero value={heroValue} unit={heroUnit} severity={fan5Severity} />
+        {/* invariant 3/O13 — the derived mode is never a severity: `severity={null}`
+            unconditionally, whatever `formatCh5Pwm` prints (`HIGH pwm 255` / `EC auto` /
+            `unavailable`), so it can never disagree in colour with the headline reading. */}
+        <Chip severity={null} size="md" label={cooling === null ? formatText(null) : formatCh5Pwm(cooling)} />
       </div>
-      <Row label="mode" value={cooling === null ? formatText(null) : formatCh5Pwm(cooling)} />
-      <StatusRow
-        label="fan service"
-        value={staleValueOr(serviceCondition, formatText(cooling?.serviceState ?? null))}
-        severity={serviceSeverity}
-        note={serviceAge}
-        noteTone={serviceAge === null ? 'muted' : 'watch'}
-        detail={dbusError}
-      />
+      {/* Degraded only (0 px healthy): S-B's stale age is a fact the operator must see even
+          though the hero row itself has no note slot. */}
+      {fan5Age === null ? null : <p className={styles.staleCaption}>{fan5Age}</p>}
       <div className={styles.chart}>
-        {onToggleView === undefined ? null : (
-          <ChartViewToggle
-            view={view}
-            onToggle={onToggleView}
-            label="GPU temperature and fan 5 RPM"
-          />
-        )}
         <StackedTimeSeriesChart
           id={`${panelId}-chart`}
           ariaLabel="GPU temperature and fan 5 RPM over the selected window"
@@ -198,28 +232,25 @@ export function CoolingPanel({ state, nowMs, panelId, view = 'chart', onToggleVi
           view={view}
         />
       </div>
-      <div className={styles.smaller}>
-        <Row
-          label="fan 2"
-          value={formatRpm(cooling?.fan2Rpm ?? null)}
-          severity={severityFanStopped(cooling?.fan2Rpm ?? null)}
-        />
-        <Row
-          label="fan 1"
-          value={formatRpm(cooling?.fan1Rpm ?? null)}
-          severity={severityFanStopped(cooling?.fan1Rpm ?? null)}
-        />
-        <Row
-          label="fan 3"
-          value={formatRpm(cooling?.fan3Rpm ?? null)}
-          severity={severityFanStopped(cooling?.fan3Rpm ?? null)}
-        />
-        <Row
-          label="fan 4"
-          value={formatRpm(cooling?.fan4Rpm ?? null)}
-          severity={severityFanStopped(cooling?.fan4Rpm ?? null)}
+      <ChanTable
+        rows={[
+          { id: 'fan 2', value: cooling?.fan2Rpm ?? null, severity: fan2Severity, note: null },
+          { id: 'fan 1', value: cooling?.fan1Rpm ?? null, severity: fan1Severity, note: null },
+          { id: 'fan 3', value: cooling?.fan3Rpm ?? null, severity: fan3Severity, note: null },
+          { id: 'fan 4', value: cooling?.fan4Rpm ?? null, severity: fan4Severity, note: null },
+        ]}
+      />
+      <div className={styles.rows}>
+        <StatusRow
+          label="fan service"
+          value={staleValueOr(serviceCondition, formatText(cooling?.serviceState ?? null))}
+          severity={serviceSeverity}
+          note={serviceAge}
+          noteTone={serviceAge === null ? 'muted' : 'watch'}
+          detail={dbusError}
         />
       </div>
+      <PanelNotes messages={dellSmmError === null ? [] : [{ source: 'dell-smm', message: dellSmmError }]} />
     </PanelShell>
   );
 }

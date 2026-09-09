@@ -1,5 +1,5 @@
 /**
- * §6.1's header band.
+ * 10e §4 — the mock's header band.
  *
  * ⚠ **Stickiness lives on the band that WRAPS this, not here (10a-reconcile, adversarial
  * F13).** §6.1 wants the header on screen while the grid scrolls below 1280px ("scrolling
@@ -13,59 +13,69 @@
  * handoff). `styles.test.ts` catches the one class of silent-no-op this project has actually
  * shipped (an un-wrapped `flex-basis: 100%`); everything else here — sticky positioning,
  * the three-region layout actually lining up, colour contrast — is asserted by authorship
- * against §6.1/§6.3 and by opening a real browser, not by the suite. Said here rather than
- * implied, per the bar this step was handed.
+ * against §6.1/§6.3 and by opening a real browser, not by the suite.
  */
 
 .header {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5em 1.5em;
-  padding: 0.6em 1em;
+  gap: 6px 13px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
   background: var(--surface-1);
-  border-bottom: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 .identity {
   display: flex;
   align-items: baseline;
-  gap: 0.75em;
+  gap: 10px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .hostname {
-  color: var(--ink-primary);
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-primary);
+  white-space: nowrap;
+  font-family: var(--font-mono);
 }
 
 .uptime {
+  font-size: 11px;
   color: var(--ink-muted);
-  font-size: 0.9em;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.spacer {
+  flex: 1 1 auto;
 }
 
 .status {
   display: flex;
-  align-items: baseline;
-  gap: 0.6em;
-  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px 3px 8px;
+  border: 1px solid var(--border-hi);
+  border-radius: 999px;
+  background: var(--surface-2);
+  white-space: nowrap;
 }
 
 .dot {
-  display: inline-block;
-  width: 1em;
-  text-align: center;
+  font-size: 11px;
+  line-height: 1;
 }
 
 /* Colour is spent on the glyph only (dataviz: "text never wears the data colour"), same rule
    `chip.module.css` follows — `data-mode` never colours anything, only `data-severity` does,
    so a paused dashboard sitting on an alarm stays visibly red rather than fading to neutral. */
 .dot[data-severity='normal'] {
-  color: var(--status-good);
+  color: var(--status-good-ink);
 }
 
 .dot[data-severity='watch'] {
@@ -73,59 +83,83 @@
 }
 
 .dot[data-severity='alarm'] {
-  color: var(--status-alarm);
+  color: var(--status-alarm-ink);
 }
 
 .dot[data-severity='none'] {
   color: var(--ink-muted);
 }
 
+/* §6.2's paused/stale mode adds the mock's hatch to the same pill, over its severity colour. */
+.status[data-mode='paused'],
+.status[data-mode='stale'] {
+  background: var(--nodata), var(--surface-2);
+}
+
 .statusText {
+  font-size: 11px;
+  letter-spacing: 0.03em;
   color: var(--ink-primary);
+  font-family: var(--font-mono);
 }
 
 .time {
+  font-size: 11px;
   color: var(--ink-muted);
-  font-size: 0.9em;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .controls {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.6em;
+  gap: 5px;
 }
 
 .control {
-  display: flex;
-  align-items: center;
-  gap: 0.35em;
-  font-size: 0.9em;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 7px 3px 8px;
+  border: 1px solid var(--border-hi);
+  border-radius: 2px;
+  background: var(--surface-2);
 }
 
 .controlLabel {
-  color: var(--ink-muted);
-}
-
-.controls button {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-  color: var(--ink-secondary);
-  background: var(--surface-0);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.3em 0.6em;
-  cursor: pointer;
+  font: 8.5px var(--font-sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
 
 .controls select {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
+  appearance: none;
+  font: 11px/1.35 var(--font-mono);
+  color: var(--ink-primary);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  height: 15px;
+}
+
+.controls button {
+  font: 11px/1 var(--font-mono);
+  min-width: 26px;
+  height: 23px;
+  padding: 0 7px;
   color: var(--ink-secondary);
-  background: var(--surface-0);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.2em 0.4em;
+  background: var(--surface-2);
+  border: 1px solid var(--border-hi);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.controls button[aria-pressed='true'] {
+  color: var(--ink-primary);
+  border-color: #3a4552;
+  background: var(--nodata);
 }
 
 /* §6.2: logout is "visually separated" from the four controls. A hairline rather than extra
@@ -133,9 +167,10 @@
 .separator {
   width: 1px;
   align-self: stretch;
-  background: var(--gridline);
+  background: var(--border-hi);
+  margin: 0 3px;
 }
 
 .logout {
-  color: var(--ink-primary);
+  color: var(--ink-secondary);
 }
