@@ -1,10 +1,49 @@
 /* §6.5's panel-level `errors[]` explanations — muted, never a second alarm colour, and the
    same type scale `status-row.module.css`'s own `.note` uses. */
+
+/* ⚠ 10f/Q1 (SPEC §6.1, ruled 2026-09-09) — a BOUNDED, POSITIONED, border-box well. Four
+   declarations, and each is load-bearing:
+
+   - `max-height` is what bounds the PAGE. Without it a panel grew with the length of its
+     collector's message, and an all-collectors-failed page missed the fold by 27 px at
+     1280x1024 and 49 px at 1600x1024 (92 / 115 with §6.4's banner pinned). `max-height`
+     rather than `height` so a panel with ONE short message does not reserve empty rows the
+     way a fixed well would; it bounds the page exactly as well as `height` does.
+   - `overflow-y: auto` is what keeps the messages WHOLE. §3.7 forbids truncating them.
+   - `position: relative` is what makes the box actually clip: every `Chip` renders a
+     `position: absolute` `.sr-only` span, and a scroll container clips such a descendant only
+     when it is in that descendant's containing-block chain (10e-A1, measured — a
+     `position: static` box is in no chain at all, and the page grew to 5189 px because of it).
+   - `box-sizing: border-box` is what makes the max-height the TOTAL box, so the padding below
+     is inside the budget rather than added to it.
+
+   The two heights are per-panel: `tight` is one 14 px message line inside 2+2 px of padding.
+   ⚠ `roomy` is 60 px, which is THREE message lines and part of a fourth, not four — measured
+   by 10f's test phase, 2026-09-09: a message line is 13.77 px and this rule's own `gap` is
+   3 px, so four messages need 4 + 4x13.77 + 3x3 = 68.1. The build's `60 = 4 + 4 x 14` dropped
+   the gap term. 60 is kept rather than raised to 68 because STORAGE has only 15.3 px of slack
+   under SAFETY before it sets row 3 (10f-build.md §1.3) — the +8 would spend 8 of it and take
+   STORAGE to 240.1 against SAFETY's 239.4. The bound is what matters and 60 is the bound;
+   only the sentence describing it was wrong. Which panel takes which, and why, is in
+   `panel-notes.tsx`'s module doc and
+   `pipeline/steps/10-panels-assembly/10f-build.md` §2. */
 .notes {
   display: flex;
   flex-direction: column;
   gap: 0.25em;
-  padding: 0.15em 0;
+  padding: 2px 5px;
+  box-sizing: border-box;
+  position: relative;
+  overflow-y: auto;
+  max-height: 18px;
+  border-radius: 2px;
+  background: var(--surface-sunken);
+}
+
+/* COOLING, MEMORY and STORAGE: their growth is absorbed by the CPU+SAFETY column that sets
+   rows 2-3, so four lines here cost the page nothing. */
+.notes[data-bound='roomy'] {
+  max-height: 60px;
 }
 
 .note {

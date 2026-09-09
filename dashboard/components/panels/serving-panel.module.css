@@ -3,12 +3,6 @@
   margin: 0;
 }
 
-.emptyNote {
-  color: var(--ink-secondary);
-  font-size: 10.5px;
-  margin: 0;
-}
-
 /* 10e §2.0 — the mock's `.rows` list. */
 .rows {
   display: flex;

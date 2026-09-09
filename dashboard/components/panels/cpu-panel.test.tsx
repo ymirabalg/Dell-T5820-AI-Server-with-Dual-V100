@@ -139,6 +139,31 @@ describe('⚠ §6.5 — every source routed to this panel reaches the screen', (
     expect(html).toContain('/proc/loadavg: EACCES');
   });
 
+  /*
+   * ⚠ 10f/Q1, added by the TEST phase — the OTHER side of the `bound` boundary, which nothing
+   * asserted and no mutation reached. MEMORY, STORAGE, COOLING and the two takeovers each have
+   * a test proving they take `roomy`; the three call sites that must take the TIGHT default had
+   * none, and CPU is the one that matters most. §6.1's rows 2 and 3 size independently, so
+   * `row 2 = max(CPU, MEMORY)` and CPU governs it: CPU's notes block costs the page 1:1, where
+   * MEMORY's costs it nothing (10f-build.md §1.3/§1.4). `roomy` here is +42 px straight onto a
+   * page whose worst case already lands 1-8 px over budget at 1600x1024. HANDOVER §0.8: wiring
+   * a prop is a property, and an optional prop makes it an untested one.
+   */
+  test('⚠ 10f/Q1 — CPU takes the TIGHT notes bound: it governs row 2, so its growth costs the page 1:1', () => {
+    const html = renderToStaticMarkup(
+      <CpuPanel
+        state={stateWith(withErrors([{ source: 'coretemp', message: 'no hwmon named coretemp' }]))}
+        nowMs={0}
+        panelId="cpu"
+      />,
+    );
+    const at = html.indexOf('no hwmon named coretemp');
+    expect(at).toBeGreaterThan(-1);
+    const well = html.slice(html.lastIndexOf('<div', at), at);
+    expect(well).toContain('data-bound="tight"');
+    expect(well).not.toContain('data-bound="roomy"');
+  });
+
   test('⚠ proc-cpuinfo blanks the SUBTITLE, which has no note slot, so it renders under the rows', () => {
     const html = renderToStaticMarkup(
       <CpuPanel

@@ -190,6 +190,20 @@ describe('⚠ §6.5 — statvfs and proc-net-dev had no rendering path at all', 
     expect(html.split('/home: ENOENT').length - 1).toBe(1);
   });
 
+  test('⚠ 10f/Q1 — STORAGE takes the ROOMY notes bound, because its column has the slack to pay for it', () => {
+    // Same column as MEMORY, ~94 px under the CPU + SAFETY column that sets rows 2-3, so four
+    // message lines here cost the page nothing. `bound` is a wired prop (HANDOVER §0.8); the
+    // height itself is CSS text, asserted in `panel-notes.test.tsx`.
+    const snapshot: TelemetrySnapshot = {
+      ...snapshotWith({ root: { usedGiB: null, totalGiB: null } }),
+      errors: [{ source: 'statvfs', message: '/home: ENOENT' }],
+    };
+    const html = renderToStaticMarkup(<StorageNetworkPanel state={stateWith(snapshot)} nowMs={0} panelId="storage-and-network" />);
+    const at = html.indexOf('/home: ENOENT');
+    expect(html.slice(0, at)).toContain('data-bound="roomy"');
+    expect(html.slice(0, at)).not.toContain('data-bound="tight"');
+  });
+
   test('⚠ a proc-net-dev failure explains the blanked counters', () => {
     const snapshot: TelemetrySnapshot = {
       ...snapshotWith({ net: { rxBytesPerSec: null, txBytesPerSec: null, link: 'up' } }),
@@ -239,6 +253,32 @@ describe('⚠ §6.5 — statvfs and proc-net-dev had no rendering path at all', 
     expect(valueCells(row)).toEqual(['up']);
     expect(html).toContain('last read 6:12 ago');
     expect(html).toContain('eno1/operstate: ENOENT');
+  });
+
+  test('⚠ 10f/Q1 — the link explanation reaches the screen, inside a TIGHT bounded well', () => {
+    // ⚠ It used to render as a bare `<Caption>` — a fourth unbounded `errors[]` block, measured
+    // 43 px (three wrapped lines) on a failed `net-operstate`, in a panel §6.1 gives a fixed
+    // cell. It keeps its POSITION (§6.5 puts the explanation beside the figure it blanks, and
+    // this one blanks the link line, not the two mounts) and gains the well. Two properties,
+    // both previously backed by nothing: that the message reaches the screen at all, and that
+    // it is bounded when it does.
+    const snapshot: TelemetrySnapshot = {
+      ...snapshotWith({ net: { rxBytesPerSec: null, txBytesPerSec: null, link: null } }),
+      errors: [{ source: 'net-operstate', message: 'eno1/operstate: ENOENT' }],
+    };
+    const html = renderToStaticMarkup(<StorageNetworkPanel state={stateWith(snapshot)} nowMs={0} panelId="storage-and-network" />);
+    const at = html.indexOf('eno1/operstate: ENOENT');
+    expect(at).toBeGreaterThan(-1);
+    const well = html.slice(html.lastIndexOf('<div', at), at);
+    // ⚠ TIGHT, not roomy: rows 2 and 3 size independently, so STORAGE's slack is SAFETY's own
+    // height. Two roomy wells here measure 130 px and take STORAGE past SAFETY, which makes it
+    // set row 3 and grows the page (§2 of `10f-build.md`). One roomy block plus this tight one
+    // stays under.
+    expect(well).toContain('data-bound="tight"');
+    expect(well).toContain('role="group"');
+    // ...and it is the LINK's own block, below the link caption, not folded into the panel-level
+    // one that explains the two mounts above.
+    expect(at).toBeGreaterThan(html.indexOf('>link<'));
   });
 });
 

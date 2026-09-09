@@ -691,3 +691,96 @@ describe('⚠ the identity fields come from the snapshot, not from a placeholder
     expect(html).not.toContain('ai-server');
   });
 });
+
+/**
+ * ⚠ 10f-A6, 2026-09-09 — **a bounded well's accessible NAME must be unique on the page.**
+ *
+ * 10f's build gave every `PanelNotes` block the constant name `collector messages` and every
+ * `StatusRow` well `` `${label} explanation` ``. Measured by the adversarial phase on the
+ * all-collectors-failed page at 1280×1024: **seven** wells announced `collector messages`
+ * (GPU 0, GPU 1, COOLING, CPU, MEMORY, SERVING, and STORAGE twice — its panel block and its
+ * link block, adjacent in the same panel), and `fan service explanation` named two different
+ * units in two different panels (COOLING's `gpu-fan-control.service` row and SAFETY's own
+ * row, both labelled `fan service`, both explained by `dbus` at once). That page has 25 tab
+ * stops, 16 of them wells, and it is the page an operator only reaches BECAUSE something is
+ * wrong.
+ *
+ * ⚠ Why it belongs HERE rather than in either primitive's own test file: uniqueness is a
+ * property of the assembled PAGE. `panel-notes.test.tsx` can prove the name is the subject's,
+ * and `status-row.test.tsx` can prove it carries the panel's — neither can see that nine call
+ * sites chose nine different subjects, which is the property that actually holds the guarantee.
+ * `PanelShell` renders a bare `<section>` with no accessible name (ARIA maps it to `generic`),
+ * so a well's own name is the whole of what a screen reader announces about where it is.
+ *
+ * Backed by `10f-PN5` (the primitive's name goes back to a constant), `10f-SR8` (a row's well
+ * drops its panel qualifier) and `10f-SN4` (two wells in ONE panel are given one subject).
+ */
+describe('⚠ 10f-A6 — every bounded well on the page announces a DIFFERENT name', () => {
+  /** One entry per §3.7 source that reaches a well, so every well on the page renders at once. */
+  const EVERY_WELL_ERRORS = [
+    { source: 'nvidia-smi', message: 'nvidia-smi: ENOENT' },
+    { source: 'coretemp', message: 'coretemp: no hwmon of that name' },
+    { source: 'proc-meminfo', message: '/proc/meminfo: EACCES' },
+    { source: 'dell-smm', message: 'no hwmon named dell_smm' },
+    { source: 'dbus', message: 'dbus: connection refused' },
+    { source: 'statvfs', message: '/home: ENOENT' },
+    { source: 'net-operstate', message: 'eno1/operstate: ENOENT' },
+    { source: 'llama-env', message: '/etc/llama-server: ENOENT' },
+    { source: 'ufw', message: '/etc/ufw/ufw.conf: ENOENT' },
+    { source: 'dkms', message: 'dkms: not built for 7.0.0-31-generic' },
+  ] as const;
+
+  const degradedPage = (): string =>
+    render(
+      stateOf({
+        ring: ringWithSample({
+          errors: [...EVERY_WELL_ERRORS],
+          // Both cards enumerated, so BOTH GPU wells render — the retired-card branch renders
+          // no `errors[]` at all (10e-Q4), which would hide half of this property.
+          gpus: [
+            { ...everythingZero.gpus![0]!, index: 0 },
+            { ...everythingZero.gpus![0]!, index: 1, bus: '98:00.0' },
+          ],
+          // A real instance row, so SERVING renders rows rather than its takeover branch.
+          serving: [
+            { instance: 0, port: null, unitState: null, model: null, ctx: null, health: null },
+          ],
+        }),
+      }),
+    );
+
+  test('⚠ no two role="group" wells share an accessible name', () => {
+    const html = degradedPage();
+    const names = [...html.matchAll(/role="group"[^>]*aria-label="([^"]*)"/g)].map((m) => m[1]!);
+    // Non-vacuity: this fixture must actually put the wells on the page. Ten sources reach a
+    // well; a run that finds a handful is a run measuring the wrong page.
+    expect(names.length).toBeGreaterThanOrEqual(12);
+    const seen = new Map<string, number>();
+    for (const n of names) seen.set(n, (seen.get(n) ?? 0) + 1);
+    const duplicated = [...seen].filter(([, n]) => n > 1).map(([name, n]) => `${name} ×${n}`);
+    expect(duplicated).toEqual([]);
+  });
+
+  test('⚠ the names are the PANELS’ own, not one constant repeated', () => {
+    // The positive half: a run in which every well were named `collector messages` would
+    // satisfy "distinct" only by accident of some other group. These are the subjects the
+    // nine call sites pass, and they are the panel titles already on the screen.
+    const html = degradedPage();
+    for (const name of [
+      'GPU 0 messages',
+      'GPU 1 messages',
+      'cpu messages',
+      'memory messages',
+      'cooling messages',
+      'storage &amp; network messages',
+      'link messages',
+      'serving messages',
+      'safety ufw enforcing explanation',
+      'cooling fan service explanation',
+      'safety fan service explanation',
+    ]) {
+      expect(html).toContain(`aria-label="${name}"`);
+    }
+    expect(html).not.toContain('aria-label="collector messages"');
+  });
+});

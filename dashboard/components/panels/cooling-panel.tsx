@@ -242,6 +242,7 @@ export function CoolingPanel({ state, nowMs, panelId, view = 'chart', onToggleVi
       />
       <div className={styles.rows}>
         <StatusRow
+          panel="cooling"
           label="fan service"
           value={staleValueOr(serviceCondition, formatText(cooling?.serviceState ?? null))}
           severity={serviceSeverity}
@@ -250,7 +251,13 @@ export function CoolingPanel({ state, nowMs, panelId, view = 'chart', onToggleVi
           detail={dbusError}
         />
       </div>
-      <PanelNotes messages={dellSmmError === null ? [] : [{ source: 'dell-smm', message: dellSmmError }]} />
+      {/* 10f/Q1 — `roomy`: COOLING's growth is absorbed by the CPU+SAFETY column that sets
+          rows 2-3, so four message lines here cost the page nothing (see `panel-notes.tsx`). */}
+      <PanelNotes
+        subject="cooling"
+        bound="roomy"
+        messages={dellSmmError === null ? [] : [{ source: 'dell-smm', message: dellSmmError }]}
+      />
     </PanelShell>
   );
 }

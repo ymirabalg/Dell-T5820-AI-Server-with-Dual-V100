@@ -38,6 +38,38 @@
  * monospace face, so `0x4` cannot render `0X4`. It modifies the `md` pill's typography only;
  * the border/background/padding it sits inside are unchanged, which is why `code` is a
  * boolean modifier rather than a third `size`.
+ *
+ * ### ⚠ 10f/Q3 — `band={false}`: a chip that carries a FACT, not a verdict
+ *
+ * Owner's ruling 2026-09-09 (`SPEC.md` §6.2's GPU card paragraph): when another bit makes the
+ * throttle line notable, the routine `0x4 sw power cap` *"is listed beside it as a **neutral,
+ * unbanded code chip** (no colour, no glyph); only the notable bits carry their severity
+ * colour."* Before this it painted a green `✓ NORMAL` pill — not styled as a *warning*, which
+ * §6.2 forbids, but styled as a **verdict**, asserting the routine 250 W cap is healthy, and
+ * `lib/throttle.ts`'s per-bit `normal` is that module's own construction rather than a §6.3
+ * band (10e-A11). The same loop had already decided a `normal` `Meter` is deliberately grey
+ * (*"colour is spent almost entirely on state"*), which this makes consistent.
+ *
+ * ⚠ **`band={false}` is NOT `severity={null}`, and the difference is the whole point.**
+ * `severity={null}` is O12's *"this reading has no §6.3 row to band it"*: it renders the em
+ * dash glyph on a hatched `--nodata` ground, and announces *"no severity band"* — the
+ * vocabulary of a reading that could not be judged. `0x4` is not that. It was read, it is
+ * known, and what it says is not a claim about state. So an unbanded chip drops the glyph, the
+ * band word and the `data-severity` attribute entirely, and takes the base pill's own neutral
+ * border and ground. Nothing else changes: it is still the same `code` pill in the same place.
+ *
+ * The default is `true`, so a caller that says nothing gets the banded chip it always got.
+ *
+ * ⚠ **`band` is a `md`-only modifier, and an `sm` chip is banded whatever it is passed
+ * (10f-A6/A8, 2026-09-09).** An `sm` chip has no `label` slot at any call site: its entire
+ * VISIBLE content is the glyph and its entire ANNOUNCED content is the `sr-only` band word, and
+ * `.chip[data-size='sm']` fixes `width: 11px`. So `band={false}` there would render an empty
+ * 11 px box with no `data-severity`, no glyph and nothing announced — a severity indicator that
+ * says nothing, in the four places `sm` is used (`status-row.tsx`, `cooling-panel.tsx`,
+ * `session-event-log-panel.tsx`, `safety-panel.tsx`). Nothing in the type forbade it and no
+ * caller does it today (`band` is passed at exactly ONE site in the tree), which is precisely
+ * why nothing would have caught it. `md` still honours `band={false}` — that is Q3's whole
+ * point, and both directions are asserted in `chip.test.tsx` behind `10f-C5`.
  */
 
 import { EM_DASH } from '@/lib/format';
@@ -88,24 +120,38 @@ export interface ChipProps {
    *  reason (`0x20 sw thermal slowdown`) that must never be shouted into uppercase. Modifies
    *  a `size="md"` pill's typography only; omit (or `false`) for the ordinary uppercase pill. */
   readonly code?: boolean;
+  /**
+   * 10f/Q3 — `false` renders §6.2's **neutral, unbanded** chip: no glyph, no colour, no
+   * announced band word. See the module doc. Defaults to `true`, so every chip is banded
+   * unless a caller says the fact it carries is not a state claim. ⚠ `md` only: an `sm` chip
+   * is banded whatever this says, because the band is all it has (10f-A8).
+   */
+  readonly band?: boolean;
 }
 
 /** §6.2/§6.3's severity indicator — a glyph, an accessible word, and an optional label. */
-export function Chip({ severity, label, size = 'md', code = false }: ChipProps) {
+export function Chip({ severity, label, size = 'md', code = false, band = true }: ChipProps) {
   const glyph = severity === null ? EM_DASH : GLYPH[severity];
   const word = severity === null ? NO_BAND_WORD : SEVERITY_WORD[severity];
+  // ⚠ 10f-A8 — an `sm` chip IS its band: unbanding one leaves an empty 11px box that says
+  // nothing at all. See the module doc; `md` still honours the prop, which is Q3's point.
+  const banded = band || size === 'sm';
 
   return (
     <span
       className={styles.chip}
-      data-severity={severity ?? 'none'}
+      data-severity={banded ? (severity ?? 'none') : undefined}
       data-size={size}
       data-code={code ? 'true' : undefined}
     >
-      <span aria-hidden="true" className={styles.glyph}>
-        {glyph}
-      </span>
-      <span className="sr-only">{word}</span>
+      {!banded ? null : (
+        <>
+          <span aria-hidden="true" className={styles.glyph}>
+            {glyph}
+          </span>
+          <span className="sr-only">{word}</span>
+        </>
+      )}
       {label === undefined ? null : <span className={styles.label}>{label}</span>}
     </span>
   );

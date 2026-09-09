@@ -200,6 +200,48 @@ describe("⚠ §6.5 — an instance's row carries ITS reason, and no other insta
     }
   });
 
+  test('⚠ 10f/Q1 — the takeover explanation renders through the bounded PanelNotes, ROOMY here', () => {
+    // ⚠ This branch used to map `servingErrors` into its own `<p className={styles.emptyNote}>`
+    // list — a second, bespoke copy of `PanelNotes` and so a second UNBOUNDED `errors[]` block:
+    // with `serving: null` and several `llama-env` entries it grew row 4 without limit, which is
+    // what the ruling closes ("bound every notes block"). `roomy` is free here — the SESSION
+    // EVENT LOG sets row 4 at 129.8 px and this takeover body is well under it.
+    const snapshot: TelemetrySnapshot = {
+      ...everythingZero,
+      serving: null,
+      errors: [{ source: 'llama-env', message: '/etc/llama-server: EACCES' }],
+    };
+    const html = renderToStaticMarkup(<ServingPanel state={stateWith(snapshot)} nowMs={0} panelId="serving" />);
+    const at = html.indexOf('/etc/llama-server: EACCES');
+    expect(at).toBeGreaterThan(-1);
+    const well = html.slice(html.lastIndexOf('<div', at), at);
+    expect(well).toContain('data-bound="roomy"');
+    expect(well).toContain('role="group"');
+  });
+
+  /*
+   * ⚠ 10f/Q1, added by the TEST phase — the OTHER side of the same boundary. When instances DO
+   * enumerate, the panel-level block holds only the entries no row claimed, and it takes the
+   * TIGHT default: row 4 is `max(SERVING, SESSION EVENT LOG 129.8)` and a healthy SERVING is
+   * 103.8, so it has 26 px of slack while its two per-instance explanations already spend 40
+   * of it (10f-build.md §1.4's 37 px term). `roomy` here is +42 px on a page whose worst case
+   * already lands 1-8 px over budget at 1600x1024. Only the TAKEOVER branch — no rows, no
+   * chart — can afford the taller well. Nothing asserted this and no mutation reached it.
+   */
+  test('⚠ 10f/Q1 — the UNATTRIBUTED block takes the TIGHT bound: row 4 has 26 px of slack, not 42', () => {
+    const snapshot: TelemetrySnapshot = {
+      ...everythingZero,
+      serving: servingInstances,
+      errors: [{ source: 'llama-models', message: '/v1/models: connection refused' }],
+    };
+    const html = renderToStaticMarkup(<ServingPanel state={stateWith(snapshot)} nowMs={0} panelId="serving" />);
+    const at = html.indexOf('/v1/models: connection refused');
+    expect(at).toBeGreaterThan(-1);
+    const well = html.slice(html.lastIndexOf('<div', at), at);
+    expect(well).toContain('data-bound="tight"');
+    expect(well).not.toContain('data-bound="roomy"');
+  });
+
   test('⚠ 10b-S-G — an entry whose MESSAGE names an instance but has no `instance` field is unattributed', () => {
     // The mirror of the case above: a message that reads as though it names instance 1 (a
     // port, a unit name) but carries no structural `instance` must NOT land on that row —

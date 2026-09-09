@@ -67,7 +67,9 @@ export function MemoryPanel({ state }: PanelProps) {
       {/* §6.5's "is available" half. `proc-meminfo` is this panel's ONLY source and it blanks
           BOTH figures at once, so it is rendered once under them rather than twice beside them
           — `errorsForPanel`'s "granularity is per source, not per figure". */}
-      <PanelNotes messages={snapshot === null ? [] : errorsForPanel(snapshot, 'memory')} />
+      {/* 10f/Q1 — `roomy`: MEMORY + STORAGE's column sits ~94 px under the one that sets rows
+          2-3, so four message lines here cost the page nothing (see `panel-notes.tsx`). */}
+      <PanelNotes subject="memory" bound="roomy" messages={snapshot === null ? [] : errorsForPanel(snapshot, 'memory')} />
     </PanelShell>
   );
 }

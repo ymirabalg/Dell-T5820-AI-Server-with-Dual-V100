@@ -1,26 +1,22 @@
 /**
- * A {@link Row}-shaped line that can carry a WATCH-coloured trailing note, for the one case
- * `Row` was never built to say: §6.5's stale row.
+ * §6.2's `label · value · chip` line — every row on every panel, and the one carrier of §6.5's
+ * stale age and its `errors[]` explanation.
  *
- * `Row`'s own `note` (`components/row.tsx`) is one fixed colour (`--ink-secondary`) for every
- * caller — right for an `errors[]` explanation, which is informational rather than a claim
- * about state. But S-B's ruling (`SPEC.md` §6.5, ruled 2026-09-08) requires a stale row's age
- * text to read `--status-watch`, matching `AlarmBanner`'s own `.stale` span exactly: *"the
- * CONDITION is still whatever it was — what this says is that nobody has been able to look
- * since, which is a different fact and must not read as a second alarm."*
+ * ### ⚠ It began as a sibling of step 9's `Row`, and it is now the only one (10f/Q12)
  *
- * ### Why this is a new component instead of a prop added to `Row`
+ * `components/row.tsx` was step 9's primitive, and this file was written beside it rather than
+ * as a prop added to it: S-B's ruling (`SPEC.md` §6.5, ruled 2026-09-08) requires a stale row's
+ * age text to read `--status-watch` — matching `AlarmBanner`'s own `.stale` span exactly, *"the
+ * CONDITION is still whatever it was … which must not read as a second alarm"* — where `Row`'s
+ * `note` was one fixed `--ink-secondary` for every caller, and adding `noteTone` there would
+ * have entangled an already-reconciled step-9 primitive, and its harness, with 10b's churn.
  *
- * `components/row.tsx` is step 9's, tested and mutation-backed by
- * `pipeline/steps/09-ui-primitives/regressions.py` — a harness this step does not own (ledger
- * ownership follows the FILE, per `HANDOVER.md` §5.2 rule 6). Adding a `noteTone` prop there
- * would need a mutation backed in THAT harness under a `10b-` id, which the id-prefix rule
- * (ANCHOR §9: "the prefix names the step that CREATED the mutation") does not forbid outright
- * but which risks entangling a foundational, already-reconciled primitive with this loop's
- * churn for a need only a handful of 10b rows have. A sibling component under `components/panels/`
- * — new, and squarely this loop's to own and to back — is the smaller, more reversible change.
+ * 10e then converted all seven remaining `Row` call sites to this component, leaving `Row`
+ * green, mutation-backed and defending no shipped rendering at all — `<Row` appeared only in
+ * its own test file. **The owner ruled it deleted on 2026-09-09 (10e-Q12)**, so `row.tsx`,
+ * `row.module.css`, `row.test.tsx` and their mutations are gone, and this is the row.
  *
- * Every other rule `Row` documents applies unchanged here: `value` is pre-formatted by
+ * Every rule `Row` documented applies unchanged here: `value` is pre-formatted by
  * `lib/format.ts` and rendered verbatim; `severity` omitted (not `null`) renders no chip at
  * all, `severity={null}` renders the explicit no-band state (O12); `note` is shown exactly as
  * given, with no redundancy policy (that is the caller's, per §6.5's "already shown beside it"
@@ -63,6 +59,35 @@
  *
  * All three are optional and unused by every caller but SERVING, which is why they do not
  * disturb SAFETY, COOLING or STORAGE's simpler rows.
+ *
+ * ### ⚠ 10f/Q1 — `detail` renders inside a BOUNDED scroll box (SPEC §6.1, ruled 2026-09-09)
+ *
+ * `detail` carries the collector's own message (S-H), so its length is not this component's to
+ * choose and was not bounded by anything: four explained SAFETY rows measured **+143 px** at
+ * 1280×1024 against §2.11's budgeted +76.4, and the page missed the fold. The ruling makes it a
+ * fixed-height scroll box — the message stays whole and is read by scrolling — and the height
+ * lives in `status-row.module.css`'s `.note`, with the arithmetic beside it.
+ *
+ * Two consequences visible here: the well is a named, keyboard-reachable `role="group"` (a
+ * scroll box no one can scroll hides the very text §3.7 requires beside the alarm), and the
+ * WATCH-toned `note` deliberately does not get one — S-B's `last read 6:12 ago` is bounded by
+ * its own construction. A muted `note` renders through the same bounded class as `detail`,
+ * since nothing distinguishes the two as text: both are a trailing explanation.
+ *
+ * ### ⚠ `panel` — a well's name must be unique on the PAGE, not within its row (10f-A6)
+ *
+ * 10f first named both wells `` `${label} explanation` ``. Measured on the all-collectors-failed
+ * page: that name is announced by **two different units in two different panels** — COOLING's
+ * `gpu-fan-control.service` row and SAFETY's own `fan service` row are both labelled
+ * `fan service`, and both render a `dbus` explanation at the same time. `PanelShell` renders a
+ * bare `<section>` with no accessible name, so ARIA maps it to `generic` and the panel supplies
+ * the well no context at all: the well's name is the whole announcement. Hence `panel`, which
+ * every caller fills with its own `PanelShell` title, and hence two different words for the two
+ * slots — a row carrying a muted `note` AND a `detail` would otherwise put two identically-named
+ * groups side by side inside one row (no caller does today: every call site passes `note` as
+ * S-B's age with `noteTone="watch"`, which is not a well — but nothing forbids it, and the
+ * collision would be silent). `panel` is required for the same reason `PanelNotes.subject` is:
+ * a defaulted one lets the next call site re-create the collision without a test noticing.
  */
 
 import type { Severity } from '@/lib/types';
@@ -74,6 +99,12 @@ import '../tokens.css';
 export type StatusRowNoteTone = 'muted' | 'watch';
 
 export interface StatusRowProps {
+  /**
+   * The panel this row is in — its `PanelShell` title, used only to make the well's accessible
+   * name unique on the page (`` `${panel} ${label} explanation` ``). ⚠ Required, not defaulted:
+   * see the module doc (10f-A6). It renders no visible text.
+   */
+  readonly panel: string;
   readonly label: string;
   /** Pre-formatted by `lib/format.ts`. Rendered verbatim. */
   readonly value: string;
@@ -106,6 +137,7 @@ const shown = (text: string | null | undefined): text is string =>
   text !== undefined && text !== null && text !== '';
 
 export function StatusRow({
+  panel,
   label,
   value,
   severity,
@@ -139,10 +171,19 @@ export function StatusRow({
           <Chip severity={severity} size="md" label={value} />
         )}
       </span>
-      {!shown(note) ? null : (
-        <span className={noteTone === 'watch' ? styles.noteWatch : styles.note}>{note}</span>
+      {!shown(note) ? null :
+        noteTone === 'watch' ? (
+          <span className={styles.noteWatch}>{note}</span>
+        ) : (
+          <span className={styles.note} role="group" tabIndex={0} aria-label={`${panel} ${label} note`}>
+            {note}
+          </span>
+        )}
+      {!shown(detail) ? null : (
+        <span className={styles.note} role="group" tabIndex={0} aria-label={`${panel} ${label} explanation`}>
+          {detail}
+        </span>
       )}
-      {!shown(detail) ? null : <span className={styles.note}>{detail}</span>}
     </div>
   );
 }

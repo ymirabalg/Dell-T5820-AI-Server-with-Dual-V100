@@ -83,6 +83,7 @@ export function SafetyPanel({ state, nowMs }: PanelProps) {
           panel body's own 5px gap between different KINDS of content. */}
       <div className={styles.rows}>
         <StatusRow
+          panel="safety"
           label="ufw enforcing"
           value={yesNo(safety?.ufwEnforcing ?? null)}
           severity={ufwSeverity}
@@ -91,6 +92,7 @@ export function SafetyPanel({ state, nowMs }: PanelProps) {
           detail={messageFor('ufw')}
         />
         <StatusRow
+          panel="safety"
           label="pwm5 present"
           value={yesNo(safety?.pwm5Present ?? null)}
           severity={pwm5Severity}
@@ -99,6 +101,7 @@ export function SafetyPanel({ state, nowMs }: PanelProps) {
           detail={messageFor('dell-smm')}
         />
         <StatusRow
+          panel="safety"
           label="DKMS for running kernel"
           value={yesNo(safety?.dkmsForRunningKernel ?? null)}
           severity={dkmsSeverity}
@@ -111,6 +114,7 @@ export function SafetyPanel({ state, nowMs }: PanelProps) {
           detail={messageFor('dkms')}
         />
         <StatusRow
+          panel="safety"
           label="fan service"
           value={staleValueOr(fanServiceCondition, formatText(safety?.fanServiceState ?? null))}
           severity={fanServiceSeverity}

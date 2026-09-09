@@ -117,3 +117,66 @@ describe('⚠ 10e — the code modifier, for a throttle reason that must never b
     expect(html).not.toContain('0X20');
   });
 });
+
+/**
+ * ⚠ 10f/Q3 — `band={false}`, §6.2's *"neutral, unbanded code chip (no colour, no glyph)"*.
+ *
+ * Both sides of the boundary (HANDOVER §5.1): the default must still band, and the unbanded
+ * form must differ from `severity={null}` in every one of the three channels a band travels
+ * on. That last point is the one worth asserting hardest — `severity={null}` is O12's "this
+ * reading has NO §6.3 row to band it" and paints a hatched `--nodata` ground under an em dash
+ * announced as *"no severity band"*, which is the vocabulary of a reading that could not be
+ * judged. `0x4` was read, is known, and is simply not a state claim.
+ */
+describe('⚠ 10f/Q3 — the neutral, unbanded chip', () => {
+  test('band defaults to true — every existing caller still gets its band', () => {
+    const omitted = renderToStaticMarkup(<Chip severity="normal" label="0x4 sw power cap" code />);
+    const explicit = renderToStaticMarkup(
+      <Chip severity="normal" label="0x4 sw power cap" code band />,
+    );
+    expect(omitted).toBe(explicit);
+    expect(omitted).toContain('data-severity="normal"');
+  });
+
+  test('⚠ band={false} drops the band attribute, the glyph AND the announced word — all three', () => {
+    const html = renderToStaticMarkup(
+      <Chip severity="normal" label="0x4 sw power cap" code band={false} />,
+    );
+    expect(html).not.toContain('data-severity');
+    expect(html).not.toContain('✓');
+    expect(html).not.toContain('normal');
+    // It is still the same code pill, in the same place, carrying the same text.
+    expect(html).toContain('data-code="true"');
+    expect(html).toContain('data-size="md"');
+    expect(html).toContain('0x4 sw power cap');
+  });
+
+  test('⚠ 10f-A8 — an sm chip is banded WHATEVER band says: unbanding it leaves an empty 11 px box', () => {
+    // An `sm` chip has no `label` at any call site, so the glyph IS its visible content and the
+    // `sr-only` word IS its announced content; `.chip[data-size='sm']` fixes `width: 11px`.
+    // `band={false}` there would render a severity indicator that says nothing, in the four
+    // places `sm` is used. No caller does it today — `band` is passed at exactly one site in the
+    // tree — which is why nothing else in the suite can see it.
+    const forced = renderToStaticMarkup(<Chip severity="alarm" size="sm" band={false} />);
+    const plain = renderToStaticMarkup(<Chip severity="alarm" size="sm" />);
+    expect(forced).toBe(plain);
+    expect(forced).toContain('data-severity="alarm"');
+    expect(forced).toContain('alarm');
+
+    // ...and the md side is untouched, or the rule would be a blanket ignore of Q3's own prop.
+    const md = renderToStaticMarkup(<Chip severity="normal" size="md" label="0x4 sw power cap" code band={false} />);
+    expect(md).not.toContain('data-severity');
+  });
+
+  test('⚠ unbanded is NOT the same rendering as severity={null} — O12 says something else', () => {
+    const unbanded = renderToStaticMarkup(<Chip severity="normal" label="0x4 sw power cap" code band={false} />);
+    const noBand = renderToStaticMarkup(<Chip severity={null} label="0x4 sw power cap" code />);
+    expect(unbanded).not.toBe(noBand);
+    // `severity={null}`'s three carriers, none of which an unbanded chip may borrow.
+    expect(noBand).toContain('data-severity="none"');
+    expect(noBand).toContain('—');
+    expect(noBand).toContain('no severity band');
+    expect(unbanded).not.toContain('—');
+    expect(unbanded).not.toContain('no severity band');
+  });
+});

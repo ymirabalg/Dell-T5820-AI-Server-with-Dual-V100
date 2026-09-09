@@ -142,6 +142,22 @@ describe("⚠ §6.5 — proc-meminfo is this panel's only source and it must rea
     expect(html.split('/proc/meminfo: EACCES').length - 1).toBe(1);
   });
 
+  test('⚠ 10f/Q1 — MEMORY takes the ROOMY notes bound, because its column has the slack to pay for it', () => {
+    // §6.1's spare height is not shared evenly: MEMORY + STORAGE sits ~94 px under the
+    // CPU + SAFETY column that sets rows 2-3, so four message lines here cost the page NOTHING,
+    // where the same four on CPU cost it 1:1. `bound` is a wired prop and a wired prop asserted
+    // by nothing is an untested one (HANDOVER §0.8); the height itself is CSS text, asserted in
+    // `panel-notes.test.tsx`.
+    const snapshot: TelemetrySnapshot = {
+      ...snapshotWith({ memUsedGiB: null, memTotalGiB: null, swapUsedGiB: null }),
+      errors: [{ source: 'proc-meminfo', message: '/proc/meminfo: EACCES' }],
+    };
+    const html = renderToStaticMarkup(<MemoryPanel state={stateWith(snapshot)} nowMs={0} panelId="memory" />);
+    const at = html.indexOf('/proc/meminfo: EACCES');
+    expect(html.slice(0, at)).toContain('data-bound="roomy"');
+    expect(html.slice(0, at)).not.toContain('data-bound="tight"');
+  });
+
   test("another panel's errors[] entry never leaks in", () => {
     const snapshot: TelemetrySnapshot = {
       ...snapshotWith({ memUsedGiB: null }),

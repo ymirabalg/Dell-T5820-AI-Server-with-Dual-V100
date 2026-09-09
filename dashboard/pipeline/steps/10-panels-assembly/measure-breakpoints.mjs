@@ -340,8 +340,21 @@ async function measure(page) {
   );
 
   // ---- 9. §6.1's no-scroll promise ----------------------------------------------------
-  // ⚠ 10c-3/A1. One `page.evaluate` per size. This is the number §6.1 actually commits to and
-  // the only one in this file that can put the SPEC, rather than the build, in the wrong.
+  await recordFit(page, record, '9');
+
+  return results;
+}
+
+/**
+ * §6.1's no-scroll promise at each of the three viewports, recorded under `label`.
+ *
+ * ⚠ 10c-3/A1. One `page.evaluate` per size. This is the number §6.1 actually commits to and the
+ * only one in this file that can put the SPEC, rather than the build, in the wrong. ⚠ Extracted
+ * from `measure` by 10f so measurement **10** — the real-box degraded fixture — grades the page
+ * with the identical primitives rather than a second, agreeing implementation of them
+ * (HANDOVER §0.8: *"two views of one dataset must be computed from ONE derivation"*).
+ */
+async function recordFit(page, record, label) {
   for (const vp of NO_SCROLL_VIEWPORTS) {
     await page.setViewportSize(vp);
     await page.waitForTimeout(200);
@@ -369,14 +382,25 @@ async function measure(page) {
         slotHeights: slots,
       };
     });
+    // ⚠ `spare` is measured from the CONTENT bottom, never from `scrollHeight`:
+    // `documentElement.scrollHeight` is defined as at least the viewport height, so on any page
+    // that FITS it equals `clientHeight` and the difference is a constant 0. The grid's bottom
+    // is the page's bottom here (the sticky band is the only other body child, and it sits
+    // above the grid). Reported on PASS as well as FAIL — a promise met by 2 px and one met by
+    // 100 are the same word and very different facts. Same correction `check-density.mjs`
+    // carries for its own spare check, 2026-09-09.
+    const contentBottom = overflow.grid === null ? null : overflow.grid.y + overflow.grid.height;
     record(
-      `9. ${vp.width}x${vp.height}: §6.1's no-scroll promise — the grid does not grow past the viewport`,
-      ok(overflow.scrollHeight <= overflow.clientHeight),
-      { ...overflow, overflowPx: overflow.scrollHeight - overflow.clientHeight },
+      `${label}. ${vp.width}x${vp.height}: §6.1's no-scroll promise — the grid does not grow past the viewport`,
+      overflow.scrollHeight <= overflow.clientHeight ? 'pass' : 'fail',
+      {
+        ...overflow,
+        overflowPx: overflow.scrollHeight - overflow.clientHeight,
+        contentBottom,
+        spare: contentBottom === null ? null : overflow.clientHeight - contentBottom,
+      },
     );
   }
-
-  return results;
 }
 
 /**
@@ -418,6 +442,94 @@ const fabricatedCard = (index) => ({
   throttleReasons: '0x0000000000000004',
 });
 
+/**
+ * ⚠ 10f/Q1 — THE REAL-BOX DEGRADED FIXTURE, and why it is not the dev Mac's.
+ *
+ * Measurement 9 grades a page on which all seven non-GPU collectors have failed, because that
+ * is what `/api/telemetry` returns on THIS Mac (no Linux, no hwmon, no `/proc/meminfo`) — and
+ * every one of those messages is a long absolute path. It is a real and useful worst case, but
+ * it is not the machine the dashboard is for, and 10e's build argued the residual overflow away
+ * on exactly that ground (*"the messages that wrap are dev-Mac paths … that the real box does
+ * not produce"*). 10e-A10 measured that argument false: **`lib/collectors/safety.ts`'s DKMS
+ * failure is the box's own documented failure mode** — `CLAUDE.md`: *"DKMS only builds for the
+ * RUNNING kernel … the next reboot would have landed on a kernel with no `pwm5`"* — it is 150
+ * characters, and it measured **65.6 px** in the 285 px SAFETY column against §2.11's 14.2 px
+ * budget.
+ *
+ * So this fixture is that failure, and nothing else: a healthy box (`fixtureBox` below carries
+ * `CLAUDE.md`'s own figures) on which DKMS has not built for the running kernel, so `pwm5` is
+ * gone. It puts the DKMS message under SAFETY, `collectCooling`'s own `pwm5`-node message under
+ * COOLING **and** on SAFETY's `pwm5` row, and blanks `fan5`. Both strings are copied from the
+ * collectors that emit them, so a reworded message changes this fixture rather than silently
+ * leaving it grading something the box no longer says.
+ */
+const DKMS_RELEASE = '7.0.0-31-generic';
+const DKMS_MESSAGE =
+  `/lib/modules/${DKMS_RELEASE}/updates/dkms: does not exist — DKMS has not built the 5-fan ` +
+  `module for \`${DKMS_RELEASE}\`, so the next boot loses \`pwm5\``;
+const DELL_SMM_MESSAGE =
+  '/sys/class/hwmon/hwmon3: no `pwm5` node — the DKMS 5-fan module did not load, ' +
+  'so channel 5 is uncontrollable';
+
+/** The healthy box, from `CLAUDE.md` — the same values `mocks/measure-arrangements.mjs` uses. */
+const fixtureBox = () => ({
+  ts: new Date().toISOString(),
+  hostname: 'ai-server',
+  standing: [],
+  gpus: [fabricatedCard(0), fabricatedCard(1)],
+  host: {
+    cpuPct: 31.4,
+    loadAvg: [2.14, 1.87, 1.62],
+    cpuTempC: 47,
+    memUsedGiB: 33.2,
+    memTotalGiB: 61.6,
+    swapUsedGiB: 0,
+    swapTotalGiB: 8,
+    uptimeSec: 180_063,
+    kernel: DKMS_RELEASE,
+    cpuModel: 'Intel(R) Xeon(R) W-2135 CPU @ 3.70GHz',
+    cores: 6,
+    threads: 12,
+  },
+  cooling: {
+    fan1Rpm: 1001,
+    fan2Rpm: 725,
+    fan3Rpm: 716,
+    fan4Rpm: 1102,
+    fan5Rpm: 4308,
+    ch5Mode: 'manual',
+    ch5Pwm: 255,
+    serviceState: 'active',
+  },
+  serving: [
+    { instance: 0, port: 8080, unitState: 'active', model: 'qwen3.6-27b', ctx: 131072, health: 'ok' },
+    { instance: 1, port: 8081, unitState: 'active', model: 'qwen3.6-27b', ctx: 131072, health: 'ok' },
+  ],
+  storage: {
+    root: { usedGiB: 41.7, totalGiB: 233.1 },
+    home: { usedGiB: 312.4, totalGiB: 915.8 },
+    net: { rxBytesPerSec: 184_320, txBytesPerSec: 2_621_440, link: 'up' },
+  },
+  safety: { ufwEnforcing: true, pwm5Present: true, dkmsForRunningKernel: true, fanServiceState: 'active' },
+  errors: [],
+});
+
+const fixtureBoxDegraded = () => {
+  const box = fixtureBox();
+  return {
+    ...box,
+    cooling: { ...box.cooling, fan5Rpm: null, ch5Mode: null, ch5Pwm: null },
+    safety: { ...box.safety, pwm5Present: false, dkmsForRunningKernel: false },
+    errors: [
+      { source: 'dell-smm', message: DELL_SMM_MESSAGE },
+      { source: 'dkms', message: DKMS_MESSAGE },
+    ],
+  };
+};
+
+/** Which body the route handler serves. Read on every poll, so it can be switched mid-run. */
+const fabrication = { mode: 'gpus-only' };
+
 async function installGpuFabrication(page) {
   await page.route('**/api/telemetry**', async (route) => {
     const response = await route.fetch();
@@ -432,12 +544,73 @@ async function installGpuFabrication(page) {
       await route.fulfill({ response });
       return;
     }
+    const replaced =
+      fabrication.mode === 'box-degraded'
+        ? { ...fixtureBoxDegraded(), ts: body.ts ?? new Date().toISOString() }
+        : { ...body, gpus: [fabricatedCard(0), fabricatedCard(1)] };
     await route.fulfill({
       response,
       contentType: 'application/json',
-      body: JSON.stringify({ ...body, gpus: [fabricatedCard(0), fabricatedCard(1)] }),
+      body: JSON.stringify(replaced),
     });
   });
+}
+
+/**
+ * Measurement 10 — §6.1's promise on the REAL BOX's own degraded page.
+ *
+ * ⚠ It asserts its own precondition FIRST (HANDOVER §0.8: *"a measurement that names a subject
+ * must prove the subject EXISTS"*). A fixture that failed to take — a wire-validation refusal, a
+ * route that stopped matching — would otherwise be graded as a healthy page and reported PASS,
+ * which is the shape 10c-3/A3 found twice in this very file. Proved non-vacuous by breaking the
+ * fixture on purpose (`10f-test.md` §5): the precondition FAILS and the script exits 1, while
+ * the three fit measurements under it still say PASS — which is exactly why it exists.
+ *
+ * ### ⚠ What this PASS does and does not mean (10f-A9, recorded 2026-09-09)
+ *
+ * Three limits, none of them errors, all of them worth knowing before quoting the line:
+ *
+ * 1. **It is a CONTAINMENT check, not an exclusivity one.** It asserts the DKMS text is under
+ *    SAFETY, not that it is under SAFETY *only*. `panelsForSource` maps `dkms -> ['safety']`
+ *    today, so it can land nowhere else — but adding a second panel to that list is a one-line
+ *    edit in `lib/client/observations.ts` and this would still report PASS with an extra well on
+ *    the page. Deliberately not tightened: exclusivity is `panelsForSource`'s own property,
+ *    guarded by `lib/client/observations.test.ts` under step 8's harness, and a second
+ *    derivation of a guarded fact is what HANDOVER §0.8 tells this project not to build. The
+ *    same check is already half-blind the other way: `dell-smm -> ['cooling', 'safety']`, so
+ *    `DELL_SMM_MESSAGE` renders in TWO panels and the precondition names only COOLING.
+ * 2. **It is evaluated ONCE**, at `NO_SCROLL_VIEWPORTS[0]`, before `recordFit` changes the
+ *    viewport three times. A fixture that took at 1280 and stopped taking at 1920 would not be
+ *    seen — nothing makes that possible today (the response is the same at every size).
+ * 3. **`textContent` sees text that is not visible**: a `display: none` subtree, or a message
+ *    scrolled out of one of Q1's bounded wells. So "the fixture took" is strictly weaker than
+ *    "the fixture is on screen". The fit is measured separately and does not depend on it.
+ */
+async function measureBoxDegraded(page, record) {
+  await page.setViewportSize(NO_SCROLL_VIEWPORTS[0]);
+  await page.waitForTimeout(200);
+  const present = await page.evaluate(
+    ([dkms, dellSmm]) => {
+      const textOf = (slot) =>
+        document.querySelector(`[data-slot="${slot}"]`)?.textContent?.replace(/\s+/g, ' ') ?? '';
+      const safety = textOf('safety');
+      const cooling = textOf('cooling');
+      const flat = (s) => s.replace(/\s+/g, ' ');
+      return {
+        dkmsUnderSafety: safety.includes(flat(dkms)),
+        dellSmmUnderCooling: cooling.includes(flat(dellSmm)),
+        safetySample: safety.slice(0, 240),
+        coolingSample: cooling.slice(0, 240),
+      };
+    },
+    [DKMS_MESSAGE, DELL_SMM_MESSAGE],
+  );
+  record(
+    "10. the real-box degraded fixture TOOK — the DKMS message is under SAFETY and dell-smm's under COOLING",
+    present.dkmsUnderSafety && present.dellSmmUnderCooling ? 'pass' : 'fail',
+    present,
+  );
+  await recordFit(page, record, '10');
 }
 
 async function main() {
@@ -498,9 +671,25 @@ async function main() {
 
     const results = await measure(page);
 
+    // ---- 10f/Q1: the same promise, on the REAL BOX's own degraded page --------------------
+    // Switch the fabricated body, reload so the client's ring starts clean, and re-grade.
+    fabrication.mode = 'box-degraded';
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    await page
+      .waitForSelector('[data-slot="gpu0"] [data-role="gpu-sparkline-wrap"]', { state: 'attached', timeout: 20_000 })
+      .catch(() => {
+        console.warn('⚠ the box-degraded fixture did not take — measurement 10 will report it.');
+      });
+    await page.waitForTimeout(1200);
+    const record10 = (name, status, detail) => results[status].push({ name, detail });
+    await measureBoxDegraded(page, record10);
+
     console.log('\n=== 10a-F4 / §6.1 breakpoint measurements ===\n');
-    for (const { name } of results.pass) {
+    for (const { name, detail } of results.pass) {
       console.log(`PASS     ${name}`);
+      if (detail && typeof detail.spare === 'number') {
+        console.log(`         spare ${detail.spare} px (content bottom ${detail.contentBottom}, viewport ${detail.clientHeight}); slots ${JSON.stringify(detail.slotHeights)}`);
+      }
     }
     for (const { name, detail } of results.blocked) {
       console.log(`BLOCKED  ${name}`);

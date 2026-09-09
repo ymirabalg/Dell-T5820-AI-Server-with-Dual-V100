@@ -130,6 +130,58 @@ describe('⚠ throttle — the normal power cap must never be styled as a warnin
     for (const chip of throttleChips) expect(chip).toContain('data-code="true"');
     expect((html.match(/data-code="true"/g) ?? []).length).toBe(2);
   });
+
+  /**
+   * ⚠ 10f/Q3 — owner's ruling 2026-09-09, `SPEC.md` §6.2's GPU card paragraph: *"when another
+   * bit makes the line notable, `0x4` is listed beside it as a **neutral, unbanded code chip**
+   * (no colour, no glyph); only the notable bits carry their severity colour."*
+   *
+   * Before this, `0x4` painted a green `✓ NORMAL` pill (10e-A11) — a verdict asserting the
+   * routine 250 W cap is *healthy*, on a line §6.2 says is not news. Both sides are asserted,
+   * because they are two different rules and each has its own way of going wrong: `0x4` ALONE
+   * must still render no line at all (`notable` is false, so the neutral chip must not become
+   * an excuse to start drawing one), and `0x4 | 0x20` must render exactly one unbanded chip
+   * and exactly one banded one.
+   */
+  test('⚠ 10f/Q3 — beside a notable bit, 0x4 is a NEUTRAL unbanded chip and only 0x20 keeps its band', () => {
+    const snapshot = rawGpuSnapshot({ throttleReasons: throttleMask('0x0000000000000024') });
+    const html = renderToStaticMarkup(<GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu0" />);
+    // Scoped to the throttle CAPTION and then to each chip inside it — never whole-document.
+    // A chip's band cannot be read off a document that holds other chips carrying the same
+    // attribute (the panel head's own, the VRAM meter's), which is 10c-2's toContain rule.
+    const CHIP_OPEN = '<span class="_chip';
+    const throttleAt = html.indexOf('>throttle<');
+    const caption = html.slice(html.lastIndexOf('<p', throttleAt), html.indexOf('</p>', throttleAt));
+    const chips = caption.split(CHIP_OPEN).slice(1);
+    expect(chips.length).toBe(2);
+    const chipWith = (needle: string): string => chips.find((c) => c.includes(needle)) ?? '';
+    const cap = chipWith('0x4 sw power cap');
+    const thermal = chipWith('0x20 sw thermal slowdown');
+    expect(cap).not.toBe('');
+    expect(thermal).not.toBe('');
+
+    // The routine cap: no band attribute, no glyph, and no announced band word.
+    expect(cap).not.toContain('data-severity');
+    expect(cap).not.toContain('✓');
+    expect(cap).not.toContain('normal<');
+    // The notable bit keeps its own severity band, glyph and word.
+    expect(thermal).toContain('data-severity="alarm"');
+    expect(thermal).toContain('✕');
+    expect(thermal).toContain('alarm<');
+    // Exactly one of the two reasons is banded — a mutation that bands both, or neither,
+    // fails here rather than only in one of the two chips above.
+    expect(chips.filter((c) => c.includes('data-severity')).length).toBe(1);
+  });
+
+  test('⚠ 10f/Q3 — 0x4 ALONE still renders no throttle line: a neutral chip is not a reason to draw one', () => {
+    // The other side of the ruling. `decodeThrottleMask(...).notable` is what gates the line,
+    // and Q3 changed only how a `normal` reason is PAINTED once the line is already drawn.
+    const html = renderToStaticMarkup(
+      <GpuPanel state={stateWith(rawGpuSnapshot())} nowMs={0} panelId="gpu0" />,
+    );
+    expect(html).not.toContain('throttle');
+    expect(html).not.toContain('sw power cap');
+  });
 });
 
 describe('⚠ the GPU↔instance join is gpu.index === serving.instance', () => {
@@ -265,6 +317,47 @@ describe('§6.5 — gpus: null takes the whole body over', () => {
     // `nothingReadable`'s one error is filed under `dell-smm`, not `nvidia-smi` — so this GPU
     // panel must show no error line, proving the panel-source filter really is `'gpu'`-scoped.
     expect(html).not.toContain('no hwmon named dell_smm');
+  });
+
+  test('⚠ 10f/Q1 — the takeover explanation renders through the bounded PanelNotes, ROOMY here', () => {
+    // ⚠ This branch used to map `errorsForPanel` into its own `<p className={styles.takeoverNote}>`
+    // list — a second, bespoke copy of `PanelNotes` and so a second UNBOUNDED `errors[]` block,
+    // which is exactly what the ruling closes ("bound every notes block"). It renders through the
+    // one primitive that owns the bounded well now. `roomy` costs the page nothing here: this
+    // branch draws no chart, so the card is far under the 176 px its healthy form sets row 1 to.
+    const snapshot: TelemetrySnapshot = {
+      ...nothingReadable,
+      errors: [{ source: 'nvidia-smi', message: 'nvidia-smi: ENOENT' }],
+    };
+    const html = renderToStaticMarkup(<GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu0" />);
+    const at = html.indexOf('nvidia-smi: ENOENT');
+    expect(at).toBeGreaterThan(-1);
+    const well = html.slice(html.lastIndexOf('<div', at), at);
+    expect(well).toContain('data-bound="roomy"');
+    expect(well).toContain('role="group"');
+  });
+
+  /*
+   * ⚠ 10f/Q1, added by the TEST phase — the OTHER side of the same boundary, and it is the
+   * ENUMERATED card rather than the takeover. Row 1 is `max(gpu0, gpu1)` and nothing else, so a
+   * GPU card's notes block costs the page 1:1: `roomy` here is +42 px on a page whose worst case
+   * already lands 1-8 px over budget at 1600x1024 (10f-build.md §1.4). Only the takeover branch
+   * — which draws no chart and sits far under the height the healthy card sets row 1 to — can
+   * afford the taller well. Nothing asserted this and no mutation reached it.
+   */
+  test('⚠ 10f/Q1 — the ENUMERATED card takes the TIGHT bound: row 1 is max(gpu0, gpu1), so it pays 1:1', () => {
+    const snapshot: TelemetrySnapshot = {
+      ...rawGpuSnapshot(),
+      errors: [{ source: 'nvidia-smi', message: 'nvidia-smi: query failed for utilization.gpu' }],
+    };
+    const html = renderToStaticMarkup(<GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu0" />);
+    // The card is enumerated, not taken over — this is the branch with the chart in it.
+    expect(html).not.toContain('no GPUs enumerated');
+    const at = html.indexOf('nvidia-smi: query failed');
+    expect(at).toBeGreaterThan(-1);
+    const well = html.slice(html.lastIndexOf('<div', at), at);
+    expect(well).toContain('data-bound="tight"');
+    expect(well).not.toContain('data-bound="roomy"');
   });
 
   test('before the first poll (empty ring), the panel renders without throwing and shows —', () => {

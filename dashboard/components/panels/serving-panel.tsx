@@ -90,6 +90,7 @@ const instanceRow = (
 
   return (
     <StatusRow
+      panel="serving"
       key={instance.instance}
       label={`llama-server@${instance.instance}`}
       secondaryLabel={`:${formatPort(instance.port)}`}
@@ -138,11 +139,12 @@ export function ServingPanel({ state, nowMs }: PanelProps) {
           <p className={styles.empty}>
             {instances === null ? 'serving instances unknown' : 'no llama-server instances discovered'}
           </p>
-          {servingErrors.map((e) => (
-            <p key={`${e.source}:${e.message}`} className={styles.emptyNote}>
-              {e.message}
-            </p>
-          ))}
+          {/* ⚠ 10f/Q1 — this was a second, bespoke copy of `PanelNotes` (`.emptyNote`) and so a
+              second UNBOUNDED `errors[]` block: with `serving: null` and several `llama-env`
+              entries this branch grew row 4 without limit. Rendered through the one primitive
+              that owns the bounded well. `roomy` is free here — the SESSION EVENT LOG sets row
+              4 at 129.8 px and this takeover body is well under it. */}
+          <PanelNotes subject="serving" bound="roomy" messages={servingErrors} />
         </div>
       ) : (
         <>
@@ -151,7 +153,7 @@ export function ServingPanel({ state, nowMs }: PanelProps) {
               instanceRow(instance, state.displayed, nowMs, errorFor(instance)),
             )}
           </div>
-          <PanelNotes messages={unattributed} />
+          <PanelNotes subject="serving" messages={unattributed} />
         </>
       )}
     </PanelShell>

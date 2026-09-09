@@ -394,6 +394,21 @@ describe('⚠ §6.5 on a COOLING row — the stale rule has two halves and both 
     expect(html).toContain('no hwmon named dell_smm');
   });
 
+  test('⚠ 10f/Q1 — COOLING takes the ROOMY notes bound, because rows 2-3 absorb its growth', () => {
+    // COOLING's slot is `align-self: stretch`: rows 2-3 are `max(COOLING intrinsic, CPU + gap +
+    // SAFETY)` and the CPU + SAFETY column governs once either of those carries an explanation,
+    // so four message lines here cost the page nothing. `bound` is a wired prop (HANDOVER §0.8);
+    // the height itself is CSS text, asserted in `panel-notes.test.tsx`.
+    const snapshot: TelemetrySnapshot = {
+      ...withCooling({ ...ch5Manual, fan5Rpm: null }),
+      errors: [{ source: 'dell-smm', message: 'no hwmon named dell_smm' }],
+    };
+    const html = renderToStaticMarkup(<CoolingPanel state={stateWith(snapshot)} nowMs={0} panelId="cooling" />);
+    const at = html.indexOf('no hwmon named dell_smm');
+    expect(html.slice(0, at)).toContain('data-bound="roomy"');
+    expect(html.slice(0, at)).not.toContain('data-bound="tight"');
+  });
+
   test('⚠ the errors[] message is the LAST entry for the source, as the event log reads it', () => {
     // `lib/client/events.ts:400` folds `errors[]` into a `Map` keyed by source, so the log shows
     // the LAST message; a panel reading the FIRST shows a different sentence for one fault in

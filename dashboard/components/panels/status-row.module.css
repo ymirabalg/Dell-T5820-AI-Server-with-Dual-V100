@@ -1,12 +1,15 @@
-/* Mirrors `row.module.css` (10e §2.0), plus `.noteWatch` and the three SERVING-only slots
-   (`.secondaryLabel`, `.inline`, `.endPrefix`) — see `status-row.tsx`'s module doc for why
-   this is a sibling file rather than an edit to that one. */
+/* 10e §2.0's row, plus `.noteWatch` and the three SERVING-only slots (`.secondaryLabel`,
+   `.inline`, `.endPrefix`). It began as a mirror of step 9's `row.module.css`; the owner ruled
+   that file DELETED on 2026-09-09 (10e-Q12) once every call site had moved here, so this is now
+   the only row stylesheet — see `status-row.tsx`'s module doc. */
 
 .row {
   display: flex;
-  /* ⚠ Load-bearing, not tidiness — see `row.module.css`'s identical comment and
-     `components/styles.test.ts`, which asserts every `flex-basis: 100%` in this directory
-     sits inside a `flex-wrap: wrap` container. */
+  /* ⚠ Load-bearing, not tidiness: `components/styles.test.ts` asserts every `flex-basis: 100%`
+     in this directory sits inside a `flex-wrap: wrap` container, and `.note`/`.noteWatch` below
+     both ask for one. `09-CS1` (step 9's harness) is the mutation that proves it, re-aimed onto
+     this file by 10f/Q12 — it removes THIS copy and `.end`'s together, since the guard is
+     file-wide and either one alone satisfies it. */
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 9px;
@@ -89,14 +92,37 @@
   font-size: 11px;
 }
 
+/* ⚠ 10f/Q1 (SPEC §6.1, ruled 2026-09-09) — the row's `errors[]` explanation is a BOUNDED,
+   POSITIONED, border-box well, for the same reason `panel-notes.module.css`'s `.notes` is (see
+   that file's comment for what each of the four declarations does and what it was measured to
+   be worth). This is the class `detail` renders with, and `detail` carries the collector's own
+   text: this box's documented DKMS failure is 152 characters and measured 65.6 px in the 285 px
+   SAFETY column against §2.11's 14.2 px budget, on the panel §6.2 calls "the panel that earns
+   the dashboard's existence".
+
+   ⚠ ONE line, not two, and the reason is arithmetic rather than taste: SAFETY carries FOUR of
+   these rows, each one costing its own height plus `.row`'s 6 px row gap. At one line that is
+   4 x 19.1 = 76.4 px — exactly what §2.11 budgets ("a `StatusRow` with a one-line explanation:
+   +19.1 per row … SAFETY, all four rows explained: 160.0 -> 236.4"). At two it is 132 px, and
+   the page no longer fits at 1600x1024 with §6.4's banner pinned. `10f-build.md` §2 has the
+   whole sum. `.noteWatch` below is deliberately NOT bounded: S-B's `last read 6:12 ago` is
+   bounded by its own construction, and a well round a fixed-width age reading would be chrome
+   spent on nothing. */
 .note {
   color: var(--ink-muted);
   flex-basis: 100%;
-  padding-left: 20px;
+  padding: 0 5px 0 20px;
   font-size: 10.5px;
   min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
+  display: block;
+  box-sizing: border-box;
+  position: relative;
+  overflow-y: auto;
+  max-height: 14px;
+  border-radius: 2px;
+  background: var(--surface-sunken);
 }
 
 /* §6.5's stale row (S-B, ruled 2026-09-08): watch-coloured, matching `alarm-banner.module.css`'s

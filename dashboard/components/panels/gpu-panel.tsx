@@ -178,11 +178,13 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
       ) : snapshot !== null && snapshot.gpus === null ? (
         <div>
           <p className={styles.takeover}>no GPUs enumerated</p>
-          {errorsForPanel(snapshot, 'gpu').map((e) => (
-            <p key={e.source} className={styles.takeoverNote}>
-              {e.message}
-            </p>
-          ))}
+          {/* ⚠ 10f/Q1 — this was a second, bespoke copy of `PanelNotes` (`.takeoverNote`, one
+              `<p>` per source) and so a second UNBOUNDED `errors[]` block. The ruling is
+              "bound every notes block"; rendering it through the one primitive that owns the
+              bounded well is how it stays bound as that well changes. `roomy` costs the page
+              nothing here — this branch draws no chart, so the card is far under the 176 px
+              its healthy form sets row 1 to. */}
+          <PanelNotes subject={`GPU ${index}`} bound="roomy" messages={errorsForPanel(snapshot, 'gpu')} />
         </div>
       ) : (
         <>
@@ -259,8 +261,22 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
           />
           {decode !== null && decode.notable ? (
             <Caption label="throttle">
+              {/* ⚠ 10f/Q3, owner's ruling 2026-09-09 (§6.2): the routine `0x4 sw power cap` is
+                  listed beside a notable bit as a NEUTRAL, UNBANDED code chip — no colour, no
+                  glyph — and only the notable bits carry their severity band. It used to paint
+                  a green `✓ NORMAL` pill: not a warning, which §6.2 forbids, but a VERDICT
+                  asserting the routine 250 W cap is healthy (10e-A11). `lib/throttle.ts`'s
+                  severities are untouched — this is presentation, and `r.severity` is still
+                  what decides which chips are banded. */}
               {decode.reasons.map((r) => (
-                <Chip key={r.label} severity={r.severity} size="md" code label={r.label} />
+                <Chip
+                  key={r.label}
+                  severity={r.severity}
+                  size="md"
+                  code
+                  band={r.severity !== 'normal'}
+                  label={r.label}
+                />
               ))}
             </Caption>
           ) : null}
@@ -269,7 +285,7 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
               them; before this, an enumerated card whose readings all failed showed four em
               dashes with the message reachable only when `gpus` was null entirely
               (10b-reconcile, adversarial F5). */}
-          <PanelNotes messages={snapshot === null ? [] : errorsForPanel(snapshot, 'gpu')} />
+          <PanelNotes subject={`GPU ${index}`} messages={snapshot === null ? [] : errorsForPanel(snapshot, 'gpu')} />
         </>
       )}
     </PanelShell>

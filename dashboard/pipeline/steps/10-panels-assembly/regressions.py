@@ -730,8 +730,11 @@ REGRESSIONS = [
     # components/panels/status-row.tsx
     ("10b-SR1 a stale note and an errors[] note share one CSS class, so the two can no longer be told apart",
      STATUS_ROW_SRC,
-     "className={noteTone === 'watch' ? styles.noteWatch : styles.note}",
-     "className={styles.note}",
+     # ⚠ 10f/Q1 re-aimed: the class ternary became a two-branch conditional when the muted
+     # branch gained Q1's well attributes. Same property — collapse the WATCH branch onto the
+     # muted class and the two facts become indistinguishable.
+     "          <span className={styles.noteWatch}>{note}</span>",
+     "          <span className={styles.note}>{note}</span>",
      [STATUS_ROW_TEST]),
     ("10b-SR2 severity===undefined loosens to ==null, so an explicit severity={null} (O12's no-band chip) silently renders no chip at all",
      STATUS_ROW_SRC,
@@ -907,8 +910,9 @@ REGRESSIONS = [
     # RIGHT reason from one reddened for another.
     ("10b-CO5 the fan5 explanation invents a fallback \"no reading reported\" sentence when no errors[] entry exists, violating the widened S11/G5 exception",
      COOLING_PANEL_SRC,
-     "<PanelNotes messages={dellSmmError === null ? [] : [{ source: 'dell-smm', message: dellSmmError }]} />",
-     "<PanelNotes messages={[{ source: 'dell-smm', message: dellSmmError ?? 'channel 5 is not reporting a tach' }]} />",
+     # ⚠ 10f/Q1 re-aimed: the call gained `bound="roomy"` and wrapped onto its own lines.
+     "        messages={dellSmmError === null ? [] : [{ source: 'dell-smm', message: dellSmmError }]}",
+     "        messages={[{ source: 'dell-smm', message: dellSmmError ?? 'channel 5 is not reporting a tach' }]}",
      [COOLING_PANEL_TEST]),
 
     # components/panels/serving-panel.tsx
@@ -1016,7 +1020,13 @@ REGRESSIONS = [
     # ---- F3: the stale age displaces the errors[] explanation.
     ("10b-SR3 StatusRow drops its second note slot, so a stale row goes silent about its cause again",
      STATUS_ROW_SRC,
-     "      {!shown(detail) ? null : <span className={styles.note}>{detail}</span>}\n",
+     # ⚠ 10f/Q1 re-aimed: the detail span gained the bounded well's role/tabIndex/aria-label
+     # and now spans five lines. Same property — the slot is removed entirely.
+     "      {!shown(detail) ? null : (\n"
+     "        <span className={styles.note} role=\"group\" tabIndex={0} aria-label={`${panel} ${label} explanation`}>\n"
+     "          {detail}\n"
+     "        </span>\n"
+     "      )}\n",
      "",
      [STATUS_ROW_TEST, COOLING_PANEL_TEST, SAFETY_PANEL_TEST, STORAGE_NETWORK_PANEL_TEST, SERVING_PANEL_TEST]),
 
@@ -1045,8 +1055,9 @@ REGRESSIONS = [
     # source set (rather than emptying it) is caught there and nowhere here.
     ("10b-MP5 the MEMORY panel drops proc-meminfo's explanation, so a blanked RAM pair is unexplained anywhere on the page",
      MEMORY_PANEL_SRC,
-     "<PanelNotes messages={snapshot === null ? [] : errorsForPanel(snapshot, 'memory')} />",
-     "<PanelNotes messages={[]} />",
+     # ⚠ 10f/Q1 re-aimed: the call gained `bound="roomy"`.
+     "<PanelNotes subject=\"memory\" bound=\"roomy\" messages={snapshot === null ? [] : errorsForPanel(snapshot, 'memory')} />",
+     "<PanelNotes subject=\"memory\" bound=\"roomy\" messages={[]} />",
      [MEMORY_PANEL_TEST]),
     ("10b-SN5 the STORAGE panel drops statvfs's explanation, so both mounts blank with no cause shown",
      STORAGE_NETWORK_PANEL_SRC,
@@ -1061,8 +1072,8 @@ REGRESSIONS = [
 
     ("10b-CP6 the CPU panel drops its error explanations entirely, so every blanked reading is unexplained",
      CPU_PANEL_SRC,
-     "  <PanelNotes messages={cpuErrors} />",
-     "  <PanelNotes messages={[]} />",
+     "  <PanelNotes subject=\"cpu\" messages={cpuErrors} />",
+     "  <PanelNotes subject=\"cpu\" messages={[]} />",
      [CPU_PANEL_TEST]),
     ("10b-SN6 the STORAGE panel drops proc-net-dev's explanation, so both blanked counters are unexplained",
      STORAGE_NETWORK_PANEL_SRC,
@@ -1184,8 +1195,11 @@ REGRESSIONS = [
      [SERVING_PANEL_TEST]),
     ("10b-SG7 the serving: null / serving: [] takeover swallows the entries that explain WHY nothing was enumerated",
      SERVING_PANEL_SRC,
-     "          {servingErrors.map((e) => (",
-     "          {[].map((e: TelemetryError) => (",
+     # ⚠ 10f/Q1 re-aimed: the takeover branch had a bespoke `.emptyNote` list — a second,
+     # UNBOUNDED copy of `PanelNotes` — and is now the primitive itself. Same property: the
+     # entries that explain WHY nothing was enumerated are dropped from the takeover body.
+     '          <PanelNotes subject="serving" bound="roomy" messages={servingErrors} />',
+     '          <PanelNotes subject="serving" bound="roomy" messages={[]} />',
      [SERVING_PANEL_TEST]),
 
     # ================================== 10c1 — the wiring loop
@@ -1526,8 +1540,9 @@ REGRESSIONS = [
 
     ("10e-CO1 the dell-smm errors[] cause is dropped from PanelNotes, so a stale fan5 loses its explanation",
      COOLING_PANEL_SRC,
-     "<PanelNotes messages={dellSmmError === null ? [] : [{ source: 'dell-smm', message: dellSmmError }]} />",
-     "<PanelNotes messages={[]} />",
+     # ⚠ 10f/Q1 re-aimed: the call gained `bound="roomy"` and wrapped onto its own lines.
+     "        messages={dellSmmError === null ? [] : [{ source: 'dell-smm', message: dellSmmError }]}",
+     "        messages={[]}",
      [COOLING_PANEL_TEST]),
 
     ("10e-SP1 a boolean check renders the raw JS boolean instead of yes/no",
@@ -1701,8 +1716,10 @@ REGRESSIONS = [
     # ---- 10e-A5: the `code` modifier, at the ONE call site chip.tsx's own doc names.
     ("10e-GP6 the throttle chips lose `code`, so the mask is uppercased into `0X4` - not a mask any more",
      GPU_PANEL_SRC,
-     'severity={r.severity} size="md" code label={r.label}',
-     'severity={r.severity} size="md" label={r.label}',
+     # ⚠ 10f/Q3 re-aimed: the chip gained `band={r.severity !== 'normal'}` and the call now
+     # spans several lines. Same property — `code` at the only call site in the tree.
+     '                  code\n                  band=',
+     '                  band=',
      [GPU_PANEL_TEST]),
 
     # ---- 10e-A5: the power Figure's caption - the `cap` half of §6.2's "power against the cap".
@@ -1751,6 +1768,215 @@ REGRESSIONS = [
      "{label === undefined ? null : <b className={styles.label}>{label}</b>}",
      "<b className={styles.label}>{label}</b>",
      [CAPTION_TEST]),
+    # =========================================================================
+    # ⚠ 10f — the owner's four rulings of 2026-09-09 (SPEC §6.1 / §6.2).
+    #   Q1: every `errors[]` block is a bounded scroll box, so a DEGRADED page fits.
+    #   Q3: `0x4` beside a notable bit is a neutral, unbanded code chip.
+    #   Q12: `Row` deleted — its two orphaned properties ported here (`10f-SR1`/`SR2`).
+    # =========================================================================
+
+    # ---- Q1: PanelNotes, the primitive. The well is what keeps §6.1's promise on a page where
+    # every collector has failed; before it, that page missed the fold by 27 / 49 px (92 / 115
+    # with §6.4's banner pinned).
+    # ⚠ 10f RECONCILE re-aimed the ANCHOR (`aria-label` gained `${subject}`) and the
+    # REPLACEMENT: dropping the name outright now leaves `subject` unread, which `tsc`'s
+    # `noUnusedParameters` catches before a single test runs — a mutation that fails to compile
+    # proves nothing about the tests. The wrong implementation it writes instead is the one this
+    # project has already shipped once (10e-A8): an `aria-label` on a role-less `<div>`, which
+    # ARIA prohibits on the `generic` role, plus no tab stop. Same property, same red tests.
+    ("10f-PN2 the notes well is not keyboard-reachable and its name is an attribute ARIA ignores, so its scrolled-away messages cannot be read at all",
+     PANEL_NOTES_SRC,
+     '      data-bound={bound}\n      role="group"\n      tabIndex={0}\n      aria-label={`${subject} messages`}\n',
+     "      data-bound={bound}\n      aria-label={`${subject} messages`}\n",
+     [PANEL_NOTES_TEST]),
+    ("10f-PN3 bound defaults to roomy, so a call site that forgets the prop gets the TALLER box - the unsafe direction",
+     PANEL_NOTES_SRC,
+     "export function PanelNotes({ messages, subject, bound = 'tight' }: PanelNotesProps) {",
+     "export function PanelNotes({ messages, subject, bound = 'roomy' }: PanelNotesProps) {",
+     [PANEL_NOTES_TEST]),
+    ("10f-PN4 the tight well is given the ROOMY height, so GPU/CPU/SERVING each cost the page 60px instead of 18",
+     "components/panels/panel-notes.module.css",
+     "  max-height: 18px;",
+     "  max-height: 60px;",
+     [PANEL_NOTES_TEST]),
+
+    # ---- Q1: the per-panel `bound` wiring. A wired prop asserted by nothing is an untested one
+    # (HANDOVER §0.8), and `roomy` is exactly the value a panel with no column slack must NOT get.
+    ("10f-MP1 MEMORY loses its roomy bound, so its notes block silently drops to one line",
+     MEMORY_PANEL_SRC,
+     '<PanelNotes subject="memory" bound="roomy" messages={snapshot === null ? [] : errorsForPanel(snapshot, \'memory\')} />',
+     "<PanelNotes subject=\"memory\" messages={snapshot === null ? [] : errorsForPanel(snapshot, 'memory')} />",
+     [MEMORY_PANEL_TEST]),
+    ("10f-SN1 STORAGE loses its roomy bound, so its notes block silently drops to one line",
+     STORAGE_NETWORK_PANEL_SRC,
+     '<PanelNotes subject="storage & network" bound="roomy" messages={notes} />',
+     '<PanelNotes subject="storage & network" messages={notes} />',
+     [STORAGE_NETWORK_PANEL_TEST]),
+    ("10f-SN2 the LINK explanation is given the ROOMY bound, taking STORAGE past SAFETY so it sets row 3 and grows the page",
+     STORAGE_NETWORK_PANEL_SRC,
+     '<PanelNotes subject="link" messages={linkError === null ? [] : [linkError]} />',
+     '<PanelNotes subject="link" bound="roomy" messages={linkError === null ? [] : [linkError]} />',
+     [STORAGE_NETWORK_PANEL_TEST]),
+    ("10f-SN3 net-operstate's explanation is dropped, so a blanked link state is unexplained anywhere on the page",
+     STORAGE_NETWORK_PANEL_SRC,
+     "messages={linkError === null ? [] : [linkError]}",
+     "messages={[]}",
+     [STORAGE_NETWORK_PANEL_TEST]),
+    ("10f-CO1 COOLING loses its roomy bound, so its notes block silently drops to one line",
+     COOLING_PANEL_SRC,
+     '        bound="roomy"\n',
+     "",
+     [COOLING_PANEL_TEST]),
+    ("10f-GP1 the GPU takeover explanation loses its roomy bound",
+     GPU_PANEL_SRC,
+     '<PanelNotes subject={`GPU ${index}`} bound="roomy" messages={errorsForPanel(snapshot, \'gpu\')} />',
+     '<PanelNotes subject={`GPU ${index}`} messages={errorsForPanel(snapshot, \'gpu\')} />',
+     [GPU_PANEL_TEST]),
+    ("10f-SV1 the SERVING takeover explanation loses its roomy bound",
+     SERVING_PANEL_SRC,
+     '<PanelNotes subject="serving" bound="roomy" messages={servingErrors} />',
+     '<PanelNotes subject="serving" messages={servingErrors} />',
+     [SERVING_PANEL_TEST]),
+
+    # ---- Q1: StatusRow's `detail` well.
+    ("10f-SR3 a row's errors[] well is not keyboard-reachable and not named, so a wrapped message cannot be scrolled to",
+     STATUS_ROW_SRC,
+     '        <span className={styles.note} role="group" tabIndex={0} aria-label={`${panel} ${label} explanation`}>\n          {detail}',
+     "        <span className={styles.note}>\n          {detail}",
+     [STATUS_ROW_TEST]),
+    ("10f-SR4 S-B's stale age is boxed like an errors[] explanation, spending a scroll well on a reading bounded by construction",
+     STATUS_ROW_SRC,
+     "          <span className={styles.noteWatch}>{note}</span>",
+     '          <span className={styles.note} role="group" tabIndex={0} aria-label={`${panel} ${label} note`}>{note}</span>',
+     [STATUS_ROW_TEST]),
+    ("10f-SR5 a row's errors[] well is given two lines, which is 55.6px more than §6.1 has at 1600x1024",
+     "components/panels/status-row.module.css",
+     "  max-height: 14px;",
+     "  max-height: 28px;",
+     [STATUS_ROW_TEST]),
+
+    # ---- Q12: the two properties `row.test.tsx` carried that `StatusRow` did not (see step 9's
+    # harness, where `09-R1`/`09-R3` were retired with this note beside them).
+    ("10f-SR1 the value is reformatted - an em dash is 'helpfully' blanked instead of passed through",
+     STATUS_ROW_SRC,
+     "          <span className={styles.value}>{value}</span>",
+     "          <span className={styles.value}>{value === '—' ? '' : value}</span>",
+     [STATUS_ROW_TEST]),
+    ("10f-SR2 StatusRow invents §6.5's \"already explained\" exception for itself, off its own value",
+     STATUS_ROW_SRC,
+     "      {!shown(detail) ? null : (",
+     "      {!shown(detail) || value === '—' ? null : (",
+     [STATUS_ROW_TEST]),
+
+    # ---- Q3: the neutral `0x4` chip, both directions (fixture symmetry, HANDOVER §5.1).
+    ("10f-GP2 every throttle reason keeps its band, so the routine 0x4 paints a green ✓ NORMAL verdict again",
+     GPU_PANEL_SRC,
+     "                  band={r.severity !== 'normal'}",
+     "                  band",
+     [GPU_PANEL_TEST]),
+    ("10f-GP3 no throttle reason keeps its band, so a notable sw thermal slowdown loses its alarm colour",
+     GPU_PANEL_SRC,
+     "                  band={r.severity !== 'normal'}",
+     "                  band={false}",
+     [GPU_PANEL_TEST]),
+    ("10f-GP4 the throttle line renders for any decodable mask, so the routine 0x4 gets a line of its own",
+     GPU_PANEL_SRC,
+     "{decode !== null && decode.notable ? (",
+     "{decode !== null ? (",
+     [GPU_PANEL_TEST]),
+
+    # ---- Q1, the OTHER side of `bound`, added by 10f's TEST phase. Five call sites had a
+    # `roomy` mutation and a test; the THREE that must take the TIGHT default had neither, and
+    # they are the three that pay 1:1 (§1.4): CPU governs row 2, a GPU card IS row 1, and
+    # SERVING's unattributed block has 26 px of slack under the session log against `roomy`'s
+    # 42. `10f-PN3` proves the DEFAULT is tight; nothing proved these call sites take it.
+    # HANDOVER §0.8 — "wiring a prop is a property, and an optional prop makes it an untested
+    # one" — and ANCHOR §5's "every boundary guard needs a fixture on both sides".
+    ("10f-CP1 the CPU notes block is given the ROOMY bound, +42px on the panel that governs row 2",
+     CPU_PANEL_SRC,
+     '<PanelNotes subject="cpu" messages={cpuErrors} />',
+     '<PanelNotes subject="cpu" bound="roomy" messages={cpuErrors} />',
+     [CPU_PANEL_TEST]),
+    ("10f-GP5 the ENUMERATED GPU card's notes block is given the ROOMY bound, +42px on row 1 twice over",
+     GPU_PANEL_SRC,
+     '<PanelNotes subject={`GPU ${index}`} messages={snapshot === null ? [] : errorsForPanel(snapshot, \'gpu\')} />',
+     '<PanelNotes subject={`GPU ${index}`} bound="roomy" messages={snapshot === null ? [] : errorsForPanel(snapshot, \'gpu\')} />',
+     [GPU_PANEL_TEST]),
+    ("10f-SV2 SERVING's unattributed block is given the ROOMY bound, past the 26px row 4 has for it",
+     SERVING_PANEL_SRC,
+     '<PanelNotes subject="serving" messages={unattributed} />',
+     '<PanelNotes subject="serving" bound="roomy" messages={unattributed} />',
+     [SERVING_PANEL_TEST]),
+
+    # ---- 10f RECONCILE, 2026-09-09. The adversarial phase's A6 (accessible names) and A4 (six
+    # one-line reverts of the 10f diff that left `pnpm verify` and all nine harnesses green).
+    # Each mutation below is one of those reverts, or the naming defect A6 measured.
+    #
+    # ⚠ A6: seven wells announced the constant `collector messages` and `fan service
+    # explanation` named two different units in two different panels, measured in the DOM at
+    # 1280x1024 on the all-collectors-failed page. The page-wide property lives in
+    # `dashboard-shell.test.tsx` because no primitive can see nine call sites at once.
+    # ⚠ TWO edits, because one would not COMPILE: dropping `${subject}` from the name leaves the
+    # parameter unread and `noUnusedParameters` fails the run before a test executes. What a
+    # revert actually looks like is both halves — the parameter gone and the constant back.
+    ("10f-PN5 the notes well is named by a constant again, so seven wells on the degraded page announce the same three words",
+     PANEL_NOTES_SRC,
+     [("export function PanelNotes({ messages, subject, bound = 'tight' }: PanelNotesProps) {",
+       "export function PanelNotes({ messages, bound = 'tight' }: PanelNotesProps) {"),
+      ("      aria-label={`${subject} messages`}",
+       '      aria-label="collector messages"')],
+     [PANEL_NOTES_TEST, DASHBOARD_SHELL_TEST]),
+    ("10f-SR8 a row's well drops the panel from its name, so COOLING's and SAFETY's `fan service` rows announce identically",
+     STATUS_ROW_SRC,
+     "aria-label={`${panel} ${label} explanation`}",
+     "aria-label={`${label} explanation`}",
+     [STATUS_ROW_TEST, DASHBOARD_SHELL_TEST]),
+    ("10f-SN4 STORAGE's link well takes the panel's own subject, so one panel carries two identically-named wells",
+     STORAGE_NETWORK_PANEL_SRC,
+     '<PanelNotes subject="link" messages={linkError === null ? [] : [linkError]} />',
+     '<PanelNotes subject="storage & network" messages={linkError === null ? [] : [linkError]} />',
+     [DASHBOARD_SHELL_TEST]),
+
+    # ⚠ A4/R1: the MUTED note branch is a well too, and it had neither a test nor a mutation —
+    # `10f-SR3` and every new test covered `detail` only. No caller renders it today (every call
+    # site passes `note` as S-B's age, watch-toned), which is exactly why nothing noticed.
+    ("10f-SR6 a muted note becomes a bounded box nobody can reach — no role, no tab stop, no name",
+     STATUS_ROW_SRC,
+     '<span className={styles.note} role="group" tabIndex={0} aria-label={`${panel} ${label} note`}>',
+     "<span className={styles.note}>",
+     [STATUS_ROW_TEST]),
+    # ⚠ A4/R2, R5: the declaration that keeps a 600-character unbroken path inside the well.
+    # Measured overhang past the panel with it: 0.0 px at all three viewports.
+    ("10f-PN7 a panel note stops breaking an unbreakable string, so one long path escapes the well horizontally",
+     "components/panels/panel-notes.module.css",
+     "  font-size: 0.85em;\n  overflow-wrap: anywhere;",
+     "  font-size: 0.85em;",
+     [PANEL_NOTES_TEST]),
+    ("10f-SR7 a row's explanation stops breaking an unbreakable string, so one long path escapes the well horizontally",
+     "components/panels/status-row.module.css",
+     "  overflow-wrap: anywhere;\n  display: block;\n  box-sizing: border-box;",
+     "  display: block;\n  box-sizing: border-box;",
+     [STATUS_ROW_TEST]),
+    # ⚠ A4/R6, R7: the ground is the only cue that text is hidden inside the box, and the
+    # padding is what `box-sizing: border-box` is ABOUT (18 = 4 + 14).
+    ("10f-PN8 the well loses its sunken ground, so a scrollable box reads as body text that simply stops",
+     "components/panels/panel-notes.module.css",
+     "  border-radius: 2px;\n  background: var(--surface-sunken);",
+     "  border-radius: 2px;",
+     [PANEL_NOTES_TEST]),
+    ("10f-PN9 the well loses its padding, so border-box has no subject and the text sits against the panel edge",
+     "components/panels/panel-notes.module.css",
+     "  padding: 2px 5px;",
+     "  padding: 0;",
+     [PANEL_NOTES_TEST]),
+    # ⚠ A4/R4: `collectStorage` files one `statvfs` entry per mount, so a key of `source` alone
+    # collides in the ORDINARY case. React's recovery is to reuse the first element, which the
+    # rendered markup cannot show — the test reads the keys.
+    ("10f-PN6 the notes key is the source alone, so two entries from one source collide (statvfs files one per mount)",
+     PANEL_NOTES_SRC,
+     "key={`${e.source}:${e.message}`}",
+     "key={e.source}",
+     [PANEL_NOTES_TEST]),
 ]
 
 # ---------------------------------------------------------------------------
@@ -1771,10 +1997,11 @@ def _assert_unique_ids() -> None:
     # ⚠ `10c-` added by 10c1 (the wiring loop, first of 10c's three parts) — see the handoff's
     # "back each ⚠ mark with a 10c-prefixed mutation" instruction.
     # ⚠ `10e-` added by 10e (match-the-mock/density loop) — same instruction, same reasoning.
-    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-", "10c-", "10e-")))
+    # ⚠ `10f-` added by 10f (the owner's four rulings of 2026-09-09) — same instruction.
+    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-", "10c-", "10e-", "10f-")))
     if bad_prefix:
         raise SystemExit(
-            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-/10c-/10e-): {', '.join(bad_prefix)}"
+            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-/10c-/10e-/10f-): {', '.join(bad_prefix)}"
         )
 
 

@@ -150,7 +150,7 @@ export function CpuPanel({ state, view = 'chart', onToggleView }: CpuPanelProps)
         severity={null}
       />
       <Strip items={[{ k: 'load', v: formatLoadAverage(host?.loadAvg ?? null) }]} />
-      <PanelNotes messages={cpuErrors} />
+      <PanelNotes subject="cpu" messages={cpuErrors} />
     </PanelShell>
   );
 }

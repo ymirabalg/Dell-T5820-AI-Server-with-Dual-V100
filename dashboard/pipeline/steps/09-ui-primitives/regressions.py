@@ -59,7 +59,12 @@ ROOT = pathlib.Path(__file__).resolve().parents[3]
 
 PALETTE = "components/palette.test.ts"
 CHIP = "components/chip.test.tsx"
-ROW = "components/row.test.tsx"
+# ⚠ RETIRED 2026-09-09 by 10f/Q12 — `components/row.tsx`, `row.module.css` and
+# `row.test.tsx` were DELETED (owner's ruling; 10e had converted all seven call sites to
+# `components/panels/status-row.tsx` and `<Row` appeared only in its own test file). The
+# five mutations that pointed at them — `09-R1`/`R2`/`R3` and `10e-R1`/`R2` — are removed
+# below, each with its reason in place; `09-C2` lost `ROW` from its red-test set and
+# `09-CS1` was re-aimed onto the stylesheet that inherited the property.
 METER = "components/meter.test.tsx"
 PANEL_SHELL = "components/panel-shell.test.tsx"
 SPARKLINE = "components/sparkline.test.tsx"
@@ -94,7 +99,7 @@ STYLES = "components/styles.test.ts"
 # actually checks. The second is that the property has no plausible wrong implementation, in
 # which case drop the ⚠ rather than the standard.
 LEDGER_FILES = [
-    PALETTE, CHIP, ROW, METER, PANEL_SHELL, SPARKLINE, CHART, PURITY, STYLES, HERO, STRIP,
+    PALETTE, CHIP, METER, PANEL_SHELL, SPARKLINE, CHART, PURITY, STYLES, HERO, STRIP,
 ]
 
 # ⚠ CORRECTED IN STEP 9's RECONCILIATION — the regex this used to be could not see a
@@ -265,7 +270,6 @@ def red_test_lines(out):
 
 PALETTE_SRC = "components/palette.ts"
 CHIP_SRC = "components/chip.tsx"
-ROW_SRC = "components/row.tsx"
 METER_SRC = "components/meter.tsx"
 PANEL_SHELL_SRC = "components/panel-shell.tsx"
 SPARKLINE_SRC = "components/sparkline.tsx"
@@ -287,15 +291,48 @@ REGRESSIONS = [
      CHIP_SRC, "alarm: '✕', // ✕ — login-form.tsx's own alarm glyph",
      "alarm: '▲', // ✕ — login-form.tsx's own alarm glyph", [CHIP]),
     # ⚠ 10e re-aimed this anchor: `data-severity`/`data-size` moved onto their own lines when
-    # `data-code` was added (chip.tsx). Same property, new source text.
+    # `data-code` was added (chip.tsx). ⚠ 10f re-aimed it again — the attribute is now guarded by
+    # Q3's `band` (`band ? (severity ?? 'none') : undefined`) — and dropped `ROW` from its
+    # red-test set, `components/row.test.tsx` having been deleted with the primitive. Same
+    # property both times: a `null` severity must not fall back to the GOOD colour.
     ("09-C2 a null severity defaults to the good colour — O12, inverted",
-     CHIP_SRC, "data-severity={severity ?? 'none'}\n      data-size={size}",
-     "data-severity={severity ?? 'normal'}\n      data-size={size}", [CHIP, PANEL_SHELL, ROW]),
+     CHIP_SRC, "data-severity={banded ? (severity ?? 'none') : undefined}\n      data-size={size}",
+     "data-severity={banded ? (severity ?? 'normal') : undefined}\n      data-size={size}",
+     [CHIP, PANEL_SHELL]),
     ("09-C3 the visually-hidden word is dropped, leaving the glyph as the only carrier",
      CHIP_SRC, '      <span className="sr-only">{word}</span>\n', "", [CHIP]),
     ("10e-C1 the code modifier's condition is inverted, so a throttle-reason chip never gets it",
      CHIP_SRC, "data-code={code ? 'true' : undefined}",
      "data-code={code ? undefined : 'true'}", [CHIP]),
+
+    # ---- 10f/Q3: `band={false}`, §6.2's neutral unbanded code chip. Three mutations, because a
+    # band travels on THREE independent carriers and dropping any two of them still looks fixed:
+    # the `data-severity` attribute the stylesheet colours from, the glyph, and the sr-only word.
+    ("10f-C2 band defaults to FALSE, so every chip in the app silently loses its band",
+     CHIP_SRC,
+     "export function Chip({ severity, label, size = 'md', code = false, band = true }: ChipProps) {",
+     "export function Chip({ severity, label, size = 'md', code = false, band = false }: ChipProps) {",
+     [CHIP]),
+    ("10f-C3 an unbanded chip still emits data-severity, so the stylesheet paints it anyway",
+     CHIP_SRC,
+     "      data-severity={banded ? (severity ?? 'none') : undefined}",
+     "      data-severity={severity ?? 'none'}",
+     [CHIP]),
+    ("10f-C4 an unbanded chip still renders the glyph and the announced band word",
+     CHIP_SRC,
+     "      {!banded ? null : (",
+     "      {false ? null : (",
+     [CHIP]),
+    # ⚠ 10f RECONCILE (10f-A8): `band` is a `md`-only modifier. An `sm` chip has no label at any
+    # call site, so the glyph IS its visible content and the sr-only word IS its announced
+    # content — `band={false}` there renders an empty 11px box with no data-severity, no glyph
+    # and nothing announced, in the four places `sm` is used. No caller does it today (`band` is
+    # passed at exactly one site), which is why nothing else in the suite can see it.
+    ("10f-C5 an sm chip honours band={false}, so a severity indicator whose only content IS the band renders empty",
+     CHIP_SRC,
+     "  const banded = band || size === 'sm';",
+     "  const banded = band;",
+     [CHIP]),
 
     # ============================================== components/panel-shell.tsx
     ("09-PS1 the title is lowercased, so \"GPU 0\" renders \"gpu 0\"",
@@ -318,28 +355,20 @@ REGRESSIONS = [
      "        {chip === undefined ? null : <Chip severity={chip} />}",
      [PANEL_SHELL]),
 
-    # ============================================== components/row.tsx
-    ("09-R1 an em-dash value is blanked instead of passed through verbatim",
-     ROW_SRC, "<span className={styles.value}>{value}</span>",
-     "<span className={styles.value}>{value === '—' ? '' : value}</span>", [ROW]),
-    ("09-R2 severity=null is conflated with an omitted prop via a loose equality check",
-     ROW_SRC, "{severity === undefined ? null : (",
-     "{severity == null ? null : (", [ROW]),
-    ("09-R3 Row invents §6.5's \"already explained\" exception for itself",
-     ROW_SRC,
-     "{note === undefined || note === null || note === '' ? null : (",
-     "{note === undefined || note === null || note === '' || value === '—' ? null : (",
-     [ROW]),
-    ("10e-R1 the value never becomes a pill — severity given renders plain text regardless (§2.0)",
-     ROW_SRC,
-     "      {severity === undefined ? (\n        <span className={styles.value}>{value}</span>\n      ) : (",
-     "      {true ? (\n        <span className={styles.value}>{value}</span>\n      ) : (",
-     [ROW]),
-    ("10e-R2 the value ALWAYS becomes a pill, even with no severity of its own to badge it with",
-     ROW_SRC,
-     "      {severity === undefined ? (\n        <span className={styles.value}>{value}</span>\n      ) : (",
-     "      {false ? (\n        <span className={styles.value}>{value}</span>\n      ) : (",
-     [ROW]),
+    # ============================================== components/row.tsx — DELETED
+    # ⚠ RETIRED 2026-09-09 by 10f/Q12: `09-R1`, `09-R2`, `09-R3`, `10e-R1` and `10e-R2` all
+    # mutated `components/row.tsx`, which the owner ruled DELETED on 2026-09-09 (10e-Q12) after
+    # 10e converted all seven call sites to `components/panels/status-row.tsx` and `<Row`
+    # survived only in its own test file. Every property they certified — an em-dash value passed
+    # through verbatim, `severity === undefined` not conflated with `null`, no self-invented
+    # §6.5 "already explained" exception, and the value becoming a pill exactly when a severity
+    # is given — was re-checked one by one against the surviving component before removal:
+    #   09-R2  -> `10b-SR2` (`severity === undefined` must not loosen to `== null`), step 10.
+    #   10e-R1 -> `10e-SR4`, 10e-R2 -> `10e-SR5` (both directions of the pill branch), step 10.
+    #   09-R1, 09-R3 -> had NO equivalent on `StatusRow`. Both ⚠ tests were PORTED into
+    #     `components/panels/status-row.test.tsx` and are backed by `10f-SR1`/`10f-SR2` in step
+    #     10's harness (ledger ownership follows the FILE). A retirement that quietly drops a
+    #     property is what this rule exists to prevent, so neither was simply deleted.
 
     # ============================================== components/meter.tsx
     ("09-M1 the upper clamp is dropped, so an over-full reading overflows the track",
@@ -549,15 +578,17 @@ REGRESSIONS = [
     # ============================================== components/purity.test.ts's subject: chip.tsx
     # ⚠ 10e re-aimed both anchors below: the signature gained `code = false` (chip.tsx). Same
     # property, new source text.
+    # ⚠ 10f re-aimed both PU anchors (same reason as 10e's): `Chip`'s signature gained
+    # `band = true` for Q3's neutral chip. Same property — a hook inside a pure primitive.
     ("09-PU1 Chip holds severity in useState, so its colour can be debounced across renders",
      CHIP_SRC,
      [
          ("import { EM_DASH } from '@/lib/format';\nimport type { Severity } from '@/lib/types';",
           "import { useState } from 'react';\n\n"
           "import { EM_DASH } from '@/lib/format';\nimport type { Severity } from '@/lib/types';"),
-         ("export function Chip({ severity, label, size = 'md', code = false }: ChipProps) {\n"
+         ("export function Chip({ severity, label, size = 'md', code = false, band = true }: ChipProps) {\n"
           "  const glyph = severity === null ? EM_DASH : GLYPH[severity];",
-          "export function Chip({ severity, label, size = 'md', code = false }: ChipProps) {\n"
+          "export function Chip({ severity, label, size = 'md', code = false, band = true }: ChipProps) {\n"
           "  const [heldSeverity] = useState(severity); // exactly what rule 1 forbids\n"
           "  void heldSeverity;\n"
           "  const glyph = severity === null ? EM_DASH : GLYPH[severity];"),
@@ -758,23 +789,30 @@ REGRESSIONS = [
     # property makes the first one's mutation inert). Removing BOTH is the mutation that still
     # represents the real defect — a file with `flex-basis: 100%` and no wrapping container at
     # all — and is what the guard is actually there to catch.
+    # ⚠ 10f/Q12 re-aimed the FILE, not the property: `row.module.css` was deleted with the dead
+    # `Row` primitive, and `components/panels/status-row.module.css` — which took `Row`'s shape
+    # and all seven of its shipped callers in 10e — carries the identical pair (`.row`'s and
+    # `.end`'s `flex-wrap: wrap`, with `flex-basis: 100%` on `.note`/`.noteWatch`). Same two
+    # edits, same guard, same defect: a file asking for a full-basis item with no wrapping
+    # container anywhere in it.
     ("09-CS1 `.row` loses `flex-wrap: wrap` everywhere in the file, so `.note`'s `flex-basis: 100%` silently stops wrapping",
-     "components/row.module.css",
+     "components/panels/status-row.module.css",
      [("  flex-wrap: wrap;\n  align-items: center;", "  align-items: center;"),
       ("  align-items: center;\n  flex-wrap: wrap;\n  gap: 4px 8px;", "  align-items: center;\n  gap: 4px 8px;")],
      ["components/styles.test.ts"]),
 
     # -------------------------------------------- H4: the purity guard itself
-    # ⚠ 10e re-aimed (same reason as 09-PU1): the signature gained `code = false`.
+    # ⚠ 10e re-aimed (same reason as 09-PU1): the signature gained `code = false`; 10f
+    # re-aimed it again for `band = true`.
     ("09-PU2 Chip subscribes to the store with useSyncExternalStore — the hook the old guard missed",
      CHIP_SRC,
      [
          ("import { EM_DASH } from '@/lib/format';\nimport type { Severity } from '@/lib/types';",
           "import { useSyncExternalStore } from 'react';\n\n"
           "import { EM_DASH } from '@/lib/format';\nimport type { Severity } from '@/lib/types';"),
-         ("export function Chip({ severity, label, size = 'md', code = false }: ChipProps) {\n"
+         ("export function Chip({ severity, label, size = 'md', code = false, band = true }: ChipProps) {\n"
           "  const glyph = severity === null ? EM_DASH : GLYPH[severity];",
-          "export function Chip({ severity, label, size = 'md', code = false }: ChipProps) {\n"
+          "export function Chip({ severity, label, size = 'md', code = false, band = true }: ChipProps) {\n"
           "  const held = useSyncExternalStore(sub, get, getServer); // the DEBOUNCED band\n"
           "  void held;\n"
           "  const glyph = severity === null ? EM_DASH : GLYPH[severity];"),
@@ -1366,6 +1404,26 @@ REGRESSIONS = [
      [("<dl className={styles.strip}>", "<div className={styles.strip}>"),
       ("    </dl>", "    </div>")],
      [STRIP]),
+
+    # ---- 10f/Q1: `styles.test.ts`'s new directory-wide rule — a scrolling box must also be a
+    # BOUNDED box. `overflow-y: auto` with no height does nothing at all: the box grows to its
+    # content, nothing is ever scrolled, and the PAGE grows instead. One mutation per bounded
+    # well the ruling added, because the guard is rule-scoped and each file must be seen.
+    ("10f-CS4 the panel notes well loses its height, so overflow-y does nothing and the panel grows with the message",
+     "components/panels/panel-notes.module.css",
+     "  max-height: 18px;\n",
+     "",
+     ["components/styles.test.ts"]),
+    ("10f-CS5 a row's errors[] well loses its height, so four explained SAFETY rows grow the page again",
+     "components/panels/status-row.module.css",
+     "  max-height: 14px;\n",
+     "",
+     ["components/styles.test.ts"]),
+    ("10f-CS6 the panel notes well stops being a containing block, so a Chip's absolutely-positioned .sr-only span escapes it",
+     "components/panels/panel-notes.module.css",
+     "  position: relative;\n  overflow-y: auto;",
+     "  overflow-y: auto;",
+     ["components/styles.test.ts"]),
 ]
 
 # ---------------------------------------------------------------------------

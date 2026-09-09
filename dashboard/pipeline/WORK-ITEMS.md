@@ -772,7 +772,13 @@ not checked.** Worth a habit — when a fix lands, grep for the same shape elsew
 | **10e-Q3** | §6.2 GPU | `0x4` beside a notable bit is a **neutral, unbanded code chip** — not a warning, not a green verdict |
 | **10e-form** | §6.2 bus id | *"a reference, not a source"* → *"a source for form only, never for data (§6.1)"*, so the two sentences about the mock agree |
 
+| **10f-Q1** | §6.1 | A table view **replaces its chart inside the chart's own box** and scrolls there; the `40vh` stopgap is retired. Page growth zero |
+| **10f-Q2** | §6.4 | The alarm banner is a **fixed-height (two-line) scrolling box** with the count always in the lead; further conditions scroll within it |
+| **10f-Q3 + 10e-Q2** | §6.1 | The throttle line becomes a **one-line well**; `roomy` notes wells drop to **three lines (46 px)**; re-measure the all-explained page at 1600 |
+| **10f-Q4/Q5** | §6.1 | A well whose content overflows draws a **bottom fade + `… N more` marker**; heights unchanged |
+
 **Ruled the same day, work items rather than wording:** **10e-Q12** delete the dead `Row` primitive
 (its CSS, tests and the mutations defending it); **10e-Q13** re-aim `02-R20`/`R30`/`R31` now, before
 step 11, so step 2's ledger runs again. Both go into the follow-up loop **10f** with Q1 and Q3.
 
+**Ruled 2026-09-09 after 10f (the four rows above): all four go into the follow-up loop **10g**.**

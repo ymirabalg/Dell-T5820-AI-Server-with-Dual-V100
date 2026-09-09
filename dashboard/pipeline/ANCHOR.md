@@ -27,21 +27,25 @@ adversarial and review phases and fixed before they became wrong code. Several w
 
 ---
 
-## 2. State — READ THIS FIRST. Written 2026-09-09 by the session that ran Q1–Q3, 10a–10c, 10d and 10e; it is the only inheritance.
+## 2. State — READ THIS FIRST. Written 2026-09-09 by the session that ran Q1–Q3, 10a–10c, 10d, 10e and 10f; it is the only inheritance.
 
 ### 2.0 ⚠ The one-paragraph version
 
-**Step 10 is built and, as of 10e (2026-09-09, uncommitted), it MEETS §6.1's only quantitative
-promise on the healthy page.** The build used to overflow the fold by 356 / 418 / 362 px at
-1280×1024 / 1600×1024 / 1920×1080; measured on today's tree with `--fixture box` it **fits at all
-three with 263 / 228 / 284 px to spare, and still fits with §6.4's alarm banner pinned**. The cause
-was never the grid — `MOCK.html`, the same four-row nine-panel layout, always fitted — it was
-density, and 10e brought `components/` to the mock's. **One measurement still fails and it is an
-owner question, not a density miss:** `measure-breakpoints.mjs` measurement 9 grades a page on which
-every Linux-only collector has failed (this dev Mac), and is 27 px over at 1280 and 49 px at 1600;
-nothing bounds an `errors[]` block, and this box's own DKMS message costs 65.6 px against 14.2
-budgeted. That is `HANDOVER.md` §8's `10e-Q1`. **Next: the parent's review of
-`steps/10-panels-assembly/10e-reconciliation.md`, then a commit, then step 11.**
+**Step 10 is built and, as of 10f (2026-09-09, uncommitted), it MEETS §6.1's only quantitative
+promise on the healthy page AND on a degraded one.** The build used to overflow the fold by
+356 / 418 / 362 px at 1280×1024 / 1600×1024 / 1920×1080; measured on today's tree with
+`--fixture box` it **fits at all three with 263 / 228 / 284 px to spare, and still fits with §6.4's
+alarm banner pinned**. The cause was never the grid — `MOCK.html`, the same four-row nine-panel
+layout, always fitted — it was density, and 10e brought `components/` to the mock's. **10e's one
+remaining failure is CLOSED:** the owner ruled the promise unconditional on telemetry, 10f made
+every `errors[]` block a bounded scroll box, and `measure-breakpoints.mjs` is now **16/16, exit 0**
+— measurement 9 (all seven non-GPU collectors failed) passes with 140 / 104 / 160 px to spare, and
+a new measurement 10 grades the real box's own DKMS failure at 157 / 122 / 178. **What is left is
+three UNBOUNDED terms, none of them 10f's and all of them spec wording:** the chart table views
+(five reachable at once at 40vh each — measured +851 px on a healthy page), §6.4's banner (no cap
+at all), and the throttle line. They are `HANDOVER.md` §8's `10f-Q1`, `10f-Q2` and `10e-Q2`.
+**Next: the parent's review of `steps/10-panels-assembly/10f-reconciliation.md`, then a commit,
+then step 11.**
 
 ### 2.1 Branches and tree
 
@@ -50,7 +54,10 @@ main                 3f06e98   [origin/main]                 backend, pushed. Un
 dashboard-frontend   5d9b00e   [origin/dashboard-frontend]   pushed; the 10e handoff is the last commit
 ```
 
-⚠ **The tree is DIRTY and that is the whole of 10e.** As of 2026-09-09 `git status` is ~86 entries:
+⚠ **The tree is DIRTY and that is 10e AND 10f.** 10f's own diff is 31 tracked files
+(1789 insertions, 241 deletions) plus eight untracked `.md` — the bounded wells, the neutral `0x4`
+chip, `Row`'s deletion, three re-aimed harnesses and the four phase notes. As of 2026-09-09
+`git status` is ~86 entries:
 the design record (10d + `mocks/` + the handoffs + `10e-match-the-mock.md`), **`SPEC.md`'s §6.1/§6.2
 rewrite (the parent's — the owner's nine rulings)**, the four 10e phase notes, the two touched
 harnesses, and — unlike every earlier line in this file — **real edits under `components/`,
@@ -72,10 +79,12 @@ this**; a stranded harness mutation looks exactly like an intended edit.
 | 10c-2 | `6c2e64a` | five guards; one of them punished the fix |
 | 10c-3 | `7de7dd3` | sizing/paint; **§6.1 measured false** — step 10 closed-with-a-known-failure |
 | 10e | ⚠ **uncommitted** | the density build; **§6.1 measured TRUE on the healthy page**; F1's shipped fix measured worthless and re-fixed |
+| 10f | ⚠ **uncommitted** | the owner's four rulings: bounded `errors[]` wells (**§6.1 now measured TRUE on a DEGRADED page**), the neutral `0x4` chip, `Row` deleted, step 2's ledger re-aimed and running |
 
 Suite at `7de7dd3`: **99 files · 2793 tests · exit 0**; nine harnesses, ~947 mutations, every ledger clean.
-Suite on today's dirty tree (10e): **102 files · 2933 tests · exit 0**; nine harnesses, **1061**
-mutations, every ledger clean except step 2's three pre-existing orphans.
+Suite on today's dirty tree (10f): **101 files · 2967 tests · exit 0**; nine harnesses, **1093**
+mutations, **all nine exit 0** and every ledger clean — including step 2's, whose three orphaned
+anchors 10f re-aimed.
 
 ### 2.3 ⚠ 10d and 10e — the design investigation, and what was withdrawn
 
@@ -114,6 +123,33 @@ see the line immediately below, which the parent updates when the agent reports.
 > **Thirteen owner questions** are open in `HANDOVER.md` §8 as `10e-Q1`…`10e-Q13`. `10e-Q1` — does
 > §6.1's promise hold on a DEGRADED page, and if so what bounds an `errors[]` block — is the one
 > that decides whether step 10 is finished.
+>
+> ⚠ **FOUR OF THEM ARE NOW RULED AND BUILT — that is 10f** (2026-09-09, uncommitted):
+> `10e-Q1` (unconditional; every `errors[]` block is a bounded scroll box), `10e-Q3` (the neutral
+> unbanded `0x4` chip), `10e-Q12` (`Row` deleted, two orphaned properties ported rather than
+> dropped) and `10e-Q13` (the three anchors re-aimed; step 2's ledger runs again).
+
+### 2.3a ⚠ 10f — the four rulings, built
+
+> **10f status: BUILT, TESTED, ATTACKED and RECONCILED — 2026-09-09, uncommitted, awaiting the
+> parent's review.** The handoff is `handoffs/10f-degraded-fit.md`; the four phase notes are
+> `10f-build.md`, `10f-test.md`, `10f-adversarial.md` and **`10f-reconciliation.md`** (read that
+> one first — its §1 adjudicates all ten adversarial findings and its §3 is the only
+> re-measurement of the two that decide the loop).
+>
+> **Where it landed.** `pnpm verify` exit 0 — **101 files, 2967 tests**. `measure-breakpoints.mjs`
+> **16 passed / 0 failed / 16 total, exit 0** (measurement 9 now passes at all three viewports;
+> measurement 10, new, grades the real box's own DKMS failure and asserts its own precondition
+> first). `check-density.mjs` **ALL PASS**, healthy spare unchanged to the digit — the wells render
+> nothing at all when `errors[]` is empty, which is the whole point of `max-height` over `height`.
+> All nine harnesses run serially, **all nine exit 0**, 1093 mutations, every ledger clean.
+>
+> ⚠ **What 10f did NOT close, measured by its reconciliation and now the owner's:** a chart's
+> **table view** is bounded only per component at 40vh and five are reachable at once (**+851 px
+> on a HEALTHY page**, `10f-Q1`); §6.4's **banner** has no cap and grows with its TEXT rather than
+> its alarm count (`10f-Q2`); and on the worst arithmetic page — every source explained while every
+> reading is still present — the page is **1 px over at 1600×1024** with an ordinary two-alarm
+> banner (`10f-Q3`). Six owner questions in all, `10f-Q1`…`10f-Q6`, in `HANDOVER.md` §8.
 
 ### 2.4 Rulings that STAND (do not re-ask)
 
@@ -139,6 +175,15 @@ is **deferred, not ruled out** — re-evaluate only *after* the density fix is m
 mock's own numbers say it may be unnecessary in the healthy state.
 
 ### 2.6 ⚠ What to do next, in order
+
+> **Progress 2026-09-09, later:** **10e is COMMITTED at `8ad8b9c`** after the full loop (build ×2,
+> test, adversarial, reconcile, parent review — parent re-ran `pnpm verify` 2933/exit 0 and all three
+> browser measurements itself). §6.1 is measured TRUE on the healthy page with 263 / 228 / 284 px
+> spare and the banner pinned. The owner ruled four of the thirteen 10e questions the same day
+> (SPEC §6.1/§6.2, WORK-ITEMS §11): **10f** = bound `errors[]`/`detail` blocks so DEGRADED pages fit
+> (Q1) · `0x4` neutral chip (Q3) · delete `Row` (Q12) · re-aim `02-R20/R30/R31` (Q13). **10f's build
+> was launched from `handoffs/10f-degraded-fit.md`**; test → adversarial → reconcile → parent review
+> follow, then step 11. Remaining open owner questions: `10e-Q2`, `Q4`–`Q11` (HANDOVER §8).
 
 > **Progress 2026-09-09, end of day:** steps 1–5 below are **DONE**. The owner ruled on all nine
 > questions (banner **unconditional**; OQ-1/2/3/5/6 **declined**; OQ-4 **no chip** on the log;

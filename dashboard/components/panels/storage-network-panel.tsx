@@ -7,7 +7,8 @@
  * `lib/format.ts` — the same reasoning applies here verbatim.
  *
  * ⚠ **Every source that reaches this panel is rendered somewhere** (added 2026-09-08 by 10b's
- * reconciliation, adversarial F5). `net-operstate` sits on the link caption's own detail line,
+ * reconciliation, adversarial F5). `net-operstate` sits in its own `PanelNotes` block directly
+ * under the link caption (10f/Q1 — see the second half of this doc),
  * `proc-net-dev` moves into `PanelNotes` (10e §2.6 — the `Strip` line it used to sit beside as
  * a `Row` note has no note slot of its own), and `statvfs` — which blanks BOTH mounts and files
  * one entry per mount — renders in the SAME `PanelNotes` call (§6.5's "one fact, stated once",
@@ -18,11 +19,18 @@
  * `condition-lookup.ts`'s module doc); the two throughput figures are not banded by §6.3 at
  * all and render as plain `Strip` text.
  *
- * ⚠ **10e / invariant 7 — the link's stale age and its `errors[]` detail move into two extra
- * `Caption` lines**, since `Caption` (unlike `StatusRow`) has no `note`/`detail` slots of its
+ * ⚠ **10e / invariant 7 — the link's stale age and its `errors[]` detail move onto two extra
+ * sibling lines**, since `Caption` (unlike `StatusRow`) has no `note`/`detail` slots of its
  * own. Both are degraded-only (0px healthy, absent from every fixture `check-density.mjs`
  * grades) — `staleValueOr` still supplies the LAST VALUE inside the same pill (§6.5), it is
  * only the two supplementary facts that move to sibling lines.
+ *
+ * ⚠ **10f/Q1 corrected the second of those two.** The stale age is still a `Caption`; the
+ * `errors[]` detail is **not** — it was a bare `<Caption>{linkError}</Caption>`, a fourth
+ * unbounded `errors[]` block measured at 43 px (three wrapped lines) on a failed
+ * `net-operstate`, and it now renders through `PanelNotes` (the TIGHT default — see the
+ * comment at the call site for why this one block is not `roomy`) in the same position.
+ * `linkError` is therefore a `TelemetryError`, not a `string`.
  */
 
 import { errorsForPanel } from '@/lib/client/observations';
@@ -58,7 +66,7 @@ export function StorageNetworkPanel({ state, nowMs }: PanelProps) {
   // ⚠ LAST, not first — `events.ts` keys a `Map` by source (10b-reconcile, adversarial F10),
   // and `collectStorage` concatenates root's and home's `statvfs` entries, so more than one
   // entry per source is the ordinary case on this panel rather than a hypothetical.
-  const linkError = storageErrors.findLast((e) => e.source === 'net-operstate')?.message ?? null;
+  const linkError = storageErrors.findLast((e) => e.source === 'net-operstate') ?? null;
   // ⚠ 10e-A13: this was `.find` — the FIRST — two lines under a comment that says LAST, and it
   // is the only reader in the loop that disagreed with its siblings (`cooling-panel.tsx:148,159`,
   // `safety-panel.tsx:75` and `linkError` above all use `findLast`). `events.ts` folds by
@@ -89,7 +97,8 @@ export function StorageNetworkPanel({ state, nowMs }: PanelProps) {
         severity={homeSeverity}
         tickPercent={85}
       />
-      <PanelNotes messages={notes} />
+      {/* 10f/Q1 — `roomy`: same column as MEMORY, ~94 px under the one that sets rows 2-3. */}
+      <PanelNotes subject="storage & network" bound="roomy" messages={notes} />
       <Strip
         items={[
           { k: 'eno1 ↓ rx', v: formatBytesPerSecond(storage?.net.rxBytesPerSec ?? null) },
@@ -111,7 +120,21 @@ export function StorageNetworkPanel({ state, nowMs }: PanelProps) {
           <span style={{ color: 'var(--status-watch)' }}>{linkAge}</span>
         </Caption>
       )}
-      {linkError === null ? null : <Caption>{linkError}</Caption>}
+      {/* ⚠ 10f/Q1 — this was `<Caption>{linkError}</Caption>`: one more unbounded `errors[]`
+          block, measured 43 px (three wrapped lines) on a failed `net-operstate`. It keeps its
+          position — §6.5 puts the explanation beside the figure it blanks, and this one blanks
+          the link line rather than the two mounts above — and gains the bounded well every
+          other block has.
+
+          ⚠ TIGHT, unlike the block above it, and the reason is measured. §6.1's rows 2 and 3
+          size INDEPENDENTLY (row 3 = max(SAFETY, STORAGE)), so STORAGE's slack is SAFETY's
+          height, not the whole column's: 159.4 healthy, 239.4 with all four rows explained.
+          Two roomy wells here are 130 px and take STORAGE to 274.1 — past SAFETY, so STORAGE
+          would set row 3 and the page would grow 34.7 px it has nowhere to put at 1600x1024.
+          One roomy (this panel's `statvfs`/`proc-net-dev` block, up to three messages) plus
+          one tight (this one, which holds exactly one `net-operstate` message) is 88 px and
+          stays under. `10f-build.md` §2 has the sum. */}
+      <PanelNotes subject="link" messages={linkError === null ? [] : [linkError]} />
     </PanelShell>
   );
 }

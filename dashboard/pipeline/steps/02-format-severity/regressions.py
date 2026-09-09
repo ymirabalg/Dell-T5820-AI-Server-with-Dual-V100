@@ -249,13 +249,23 @@ REGRESSIONS = [
     # forms; step 2's code implemented three and rendered a just-booted box `up 0 min`,
     # which is §3.2's own stated defect (`up 0 d 00:14`) one scale down. The fixture pair
     # around the boundary is the point: 59 s and 60 s must render differently.
+    # ⚠ RE-AIMED 2026-09-09 by 10f (owner's ruling on 10e-Q13). `formatUptime` gained a `prefix`
+    # parameter for §6.4's banner (S-C, 2026-09-08), so the four return statements interpolate
+    # `${prefix}` where they used to spell `up`. These three anchors named the old text, matched
+    # nothing, and `main()` returns at the first ANCHOR NOT FOUND — so step 2's ledger, the only
+    # one that owns `lib/format.test.ts`, had not run since. Each is re-aimed onto the SAME
+    # property on the SAME line: R30 deletes the sub-minute form entirely (a fresh boot reads
+    # `up 0 min`), R31 moves its boundary by one so the first whole minute is swallowed too, and
+    # R20 (below) drops the day form's `days >= 1` floor. Nothing is narrowed: the `${prefix}`
+    # interpolation is the only text that moved, and no anchor spans more or less of the
+    # function than it did before.
     ("02-R30 the sub-minute uptime form is dropped - a fresh boot reads `up 0 min` (F1)",
      "lib/format.ts",
-     "  if (total < UPTIME_SUB_MINUTE) return 'up <1 min';\n", "", "lib/format.test.ts"),
+     "  if (total < UPTIME_SUB_MINUTE) return `${prefix} <1 min`;\n", "", "lib/format.test.ts"),
     ("02-R31 the sub-minute boundary swallows the first whole minute too",
      "lib/format.ts",
-     "  if (total < UPTIME_SUB_MINUTE) return 'up <1 min';",
-     "  if (total <= UPTIME_SUB_MINUTE) return 'up <1 min';", "lib/format.test.ts"),
+     "  if (total < UPTIME_SUB_MINUTE) return `${prefix} <1 min`;",
+     "  if (total <= UPTIME_SUB_MINUTE) return `${prefix} <1 min`;", "lib/format.test.ts"),
 
     ("02-R4 HIGH band starts above 192 instead of at 192", "lib/format.ts",
      "  return v >= PWM_HIGH_FLOOR ? 'HIGH' : v >= PWM_LOW_FLOOR ? 'LOW' : 'OFF';",
@@ -279,9 +289,10 @@ REGRESSIONS = [
      "  if (state === null) return 'not-engaged';", "lib/severity.test.ts"),
 
     # ---------------------------------------------------------------- §3.2 uptime
+    # ⚠ RE-AIMED 2026-09-09 by 10f — see the note on `02-R30` above for why all three moved.
     ("02-R20 uptime always uses the day form (§3.2's `up 0 d 00:14`)", "lib/format.ts",
-     "  if (days >= 1) return `up ${days} d ${pad2(hours)}:${pad2(minutes)}`;",
-     "  if (days >= 0) return `up ${days} d ${pad2(hours)}:${pad2(minutes)}`;",
+     "  if (days >= 1) return `${prefix} ${days} d ${pad2(hours)}:${pad2(minutes)}`;",
+     "  if (days >= 0) return `${prefix} ${days} d ${pad2(hours)}:${pad2(minutes)}`;",
      "lib/format.test.ts"),
 
     # ---------------------------------------------------------------- §6.3 bands

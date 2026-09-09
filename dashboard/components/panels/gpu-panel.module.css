@@ -4,12 +4,6 @@
   margin: 0;
 }
 
-.takeoverNote {
-  color: var(--ink-secondary);
-  font-size: 10.5px;
-  margin: 0;
-}
-
 /* 10e §2.1 — the mock's hero row: the dominant temperature figure, the sparkline (or its
    ≥1600px promotion), and the power `Figure`, side by side. */
 .heroRow {

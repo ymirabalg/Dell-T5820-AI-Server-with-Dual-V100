@@ -84,7 +84,11 @@ describe('⚠ a stylesheet declaration that silently does nothing', () => {
     const asking = cssFiles.filter((f) =>
       /flex-basis:\s*100%/.test(declarationsOf(readFileSync(join(stylesRoot, f), 'utf8'))),
     );
-    expect(asking).toContain('row.module.css');
+    // ⚠ Re-aimed by 10f/Q12, not weakened. `row.module.css` was DELETED with the dead `Row`
+    // primitive (owner's ruling 2026-09-09), and `status-row.module.css` — which took `Row`'s
+    // shape and every one of its shipped callers in 10e — is where the same `flex-basis: 100%`
+    // note now lives. The subject moved; the property is identical.
+    expect(asking).toContain('panels/status-row.module.css');
   });
 });
 
@@ -113,18 +117,68 @@ describe('⚠ a scroll container only clips what it is the containing block of',
     }
   });
 
-  test('the guard is not vacuous — the three bounded panes this app really has are all found', () => {
+  test('the guard is not vacuous — the five bounded panes this app really has are all found', () => {
     const scrolling = cssFiles.filter((f) =>
       ruleBodiesOf(declarationsOf(readFileSync(join(stylesRoot, f), 'utf8'))).some((b) =>
         SCROLLS.test(b),
       ),
     );
+    // ⚠ 10f/Q1 added two: `panel-notes.module.css`'s `.notes` and `status-row.module.css`'s
+    // `.note` are the bounded wells §6.1's ruling requires round every `errors[]` block. The
+    // list GREW; nothing left it.
     expect(scrolling.sort()).toEqual(
       [
+        'panels/panel-notes.module.css',
         'panels/session-event-log-panel.module.css',
+        'panels/status-row.module.css',
         'sparkline.module.css',
         'stacked-time-series-chart.module.css',
       ].sort(),
     );
+  });
+});
+
+/**
+ * ⚠ 10f/Q1 — a scrolling box must also be a BOUNDED box (`SPEC.md` §6.1, ruled 2026-09-09).
+ *
+ * `overflow-y: auto` on a box with no `height`/`max-height` does exactly nothing: the box grows
+ * to its content and the content is never scrolled, so the page grows instead. That is the
+ * defect the ruling closes — a panel's `errors[]` block had `overflow` nowhere and no bound
+ * either, and an all-collectors-failed page missed §6.1's fold by 27 px at 1280×1024 and 49 px
+ * at 1600×1024 (92 and 115 with §6.4's banner pinned).
+ *
+ * Written as a rule over the whole directory, for the same reason as the two above: it is a
+ * general fact about CSS, and it is the one-line revert that would silently un-fix Q1 while
+ * leaving every render test green — `max-height: 18px` deleted from `.notes` costs nothing the
+ * suite can see. `min-height` is deliberately NOT accepted: it bounds nothing.
+ *
+ * ⚠ Stated POSITIVELY — the value must begin with a digit or `calc(` — rather than as
+ * `height:\s*(?!auto)`. A negative lookahead after `\s*` is defeated by backtracking: `\s*`
+ * matches the empty string, the lookahead then reads ` auto`, which does not start with `auto`,
+ * and `height: auto` scores as a bound. Measured here, first try.
+ *
+ * `var(...)` counts: `sparkline.module.css` and `stacked-time-series-chart.module.css` both
+ * bound their table view with `max-height: var(--table-scroll-max)`, which is a real bound
+ * named once in `tokens.css` rather than spelled twice.
+ */
+const BOUNDED = /(?:^|[^-])(?:max-)?height:\s*(?:calc\(|var\(|[0-9])/;
+
+describe('⚠ a scrolling box must also be a bounded box', () => {
+  test.each(cssFiles)('⚠ every scrolling box in %s is also a bounded box', (file) => {
+    const bodies = ruleBodiesOf(declarationsOf(readFileSync(join(stylesRoot, file), 'utf8')));
+    for (const body of bodies) {
+      if (!SCROLLS.test(body)) continue;
+      expect(body).toMatch(BOUNDED);
+    }
+  });
+
+  test('the guard reads a real bound and refuses the three shapes that are not one', () => {
+    expect('overflow-y: auto; max-height: 18px;').toMatch(BOUNDED);
+    expect('overflow-y: auto; height: 84px;').toMatch(BOUNDED);
+    expect('overflow-y: auto; max-height: var(--table-scroll-max);').toMatch(BOUNDED);
+    // `line-height` is not a bound, and neither is a height that does not bound.
+    expect('overflow-y: auto; line-height: 1.25;').not.toMatch(BOUNDED);
+    expect('overflow-y: auto; height: auto;').not.toMatch(BOUNDED);
+    expect('overflow-y: auto; min-height: 40px;').not.toMatch(BOUNDED);
   });
 });

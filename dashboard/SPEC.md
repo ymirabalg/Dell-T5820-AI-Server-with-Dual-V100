@@ -912,6 +912,25 @@ session event log below is specified that way, and §6.2's table view is ruled t
 the promise forbids is the *grid* growing past the viewport and the reader having to scroll
 the dashboard to see a panel.
 
+⚠ **"Its own fixed-size box" means a box the PANEL already has — ruled 2026-09-09 (10f-Q1).**
+The table view had been bounded at `40vh` per component, and five are reachable at once, so a
+healthy page with them open overflowed by ~851 px. **A table view replaces its chart inside the
+chart's own box and scrolls there**; opening one changes no panel's height, and the page grows by
+zero. The `--table-scroll-max: 40vh` stopgap (SCOPE 2.5f) is retired by that rule.
+
+⚠ **The remaining unbounded terms are bounded the same way — ruled 2026-09-09 (10f-Q3 and
+10e-Q2).** The GPU card's throttle line is a **one-line well** like the notes blocks (its chips
+scroll within it), so a notable mask costs a fixed height rather than +44 px per card. To buy the
+margin back, a `roomy` notes well is **three lines (46 px), not four (60 px)**. Acceptance after
+this: the all-sources-explained page with a two-alarm banner (measured 1 px over at 1600×1024
+before the ruling) fits at all three viewports, re-measured.
+
+⚠ **A well whose content overflows says so — ruled 2026-09-09 (10f-Q4/Q5).** The wall panel
+has no pointer, so a bounded well draws a **bottom fade and a small `… N more` marker** whenever
+`scrollHeight > clientHeight`, and nothing when it does not. The heights stay as budgeted; the
+full text remains reachable by scrolling the well and in the event log. This is the one place
+the UI adds copy that is not a reading, and it is a count, never a sentence.
+
 ⚠ **The promise holds on a DEGRADED page too, and `errors[]` blocks are bounded** — owner's
 ruling 2026-09-09 (10e-Q1). Nothing in the density build capped a panel's `errors[]` notes or a
 row's explanation, so a page on which every collector has failed missed the fold by 27 px at
@@ -1200,6 +1219,13 @@ the value, and when it started **as an elapsed form** (`for 2 d 06:00`, ruled 20
 is still on screen at 09:00 even though nothing is stored. Multiple conditions collapse
 into one banner with a count. Watch-level conditions colour their cell but never raise a
 banner.
+
+⚠ **The banner has a FIXED height — ruled 2026-09-09 (10f-Q2).** Measured, it was unbounded:
+65.7 px at two and at six alarms, 92.5 at twelve, 173 at twenty-one at 1280, and every §6.1
+budget had been drawn against it as though it were a constant. It is now a **two-line
+(~66 px) scrolling box**: the lead with the **count** (`6 alarms`) is always visible, and
+conditions beyond the second line scroll within the banner. Nothing is dropped; the page grows
+by zero past six alarms. The event log and the panels still carry every condition in full.
 
 **⚠ The "since" is ELAPSED, not a clock time — ruled 2026-09-08 (S-C).** `since 03:00:14` on a
 wall panel that has been open since Friday is indistinguishable from six hours ago, and decision 7
