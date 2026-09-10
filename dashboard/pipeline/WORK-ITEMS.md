@@ -781,4 +781,10 @@ not checked.** Worth a habit — when a fix lands, grep for the same shape elsew
 (its CSS, tests and the mutations defending it); **10e-Q13** re-aim `02-R20`/`R30`/`R31` now, before
 step 11, so step 2's ledger runs again. Both go into the follow-up loop **10f** with Q1 and Q3.
 
+| **10g-A1** | §6.1 | ⚠⚠ **THE GRID ITSELF IS BOUNDED** — every panel has a max-height from its grid row and its body scrolls inside it; the head never scrolls away. Supersedes bounding terms one at a time (four loops, a new term each time). Acceptance is a browser measurement on HOSTILE telemetry, and the fixtures are part of the work — every one hard-codes a non-notable throttle mask today |
+| **10g-A1b** | §3.4 / §6.2 | `model` is **rendered as its filename**; the wire keeps it raw; full string in `title` and the table view |
+| **10g-A6** | §6.4 | The banner shows what fits and a **`+N more`** count, replacing the scrolling form ruled the day before — measured, 16 of 21 conditions were unreachable on a pointerless wall |
+
 **Ruled 2026-09-09 after 10f (the four rows above): all four go into the follow-up loop **10g**.**
+
+**Ruled 2026-09-10 after 10g (the three rows above): all three go into **10h**, which is the loop that closes §6.1 for good.**

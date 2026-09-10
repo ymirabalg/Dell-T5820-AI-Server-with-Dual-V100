@@ -234,6 +234,38 @@ describe('⚠ 10f/Q1 — the errors[] explanation is a bounded, reachable scroll
     expect(watch).not.toMatch(/max-height/);
     expect(watch).not.toMatch(/overflow-y/);
   });
+
+  // ⚠ ADDED 2026-09-10 by 10g's RECONCILIATION (adversarial A3/R2). This well is one of the
+  // FOUR §6.1's affordance ruling names, and all five of its fade declarations could be
+  // deleted — or, worse, `background-attachment` flipped to `scroll, scroll` so it claims
+  // hidden text permanently — with `pnpm verify` green, all nine harnesses green, and not one
+  // anchor moved. `panel-notes.module.css`'s identical five were asserted; this file's were
+  // asserted by nothing in the suite and backed by no mutation in either harness.
+  test('⚠ 10g/Q4 — .note draws the continuation fade, and the ATTACHMENTS are what make it conditional', () => {
+    const css = readFileSync(
+      fileURLToPath(new URL('./status-row.module.css', import.meta.url)),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const note = css.slice(css.indexOf('.note {'), css.indexOf('}', css.indexOf('.note {')));
+
+    // ⚠ The whole mechanism is the pair of attachments: the COVER moves with the content
+    // (`local`) and the FADE is pinned to the container (`scroll`). With both `local` the fade
+    // never shows; with both `scroll` — the one-line revert A3 measured — every row's well
+    // claims hidden text whether or not any is hidden. Either way the rule still reads as
+    // "there is a fade", which is why only the exact pair can be asserted.
+    expect(note).toMatch(/background-attachment:\s*local,\s*scroll/);
+    expect(note).toMatch(/background-image:\s*var\(--well-fade-cover\),\s*var\(--well-fade-edge\)/);
+    expect(note).toMatch(/background-size:\s*100% var\(--well-fade-height\)/);
+    expect(note).toMatch(/background-repeat:\s*no-repeat/);
+    // ⚠ `bottom`: the fade marks the edge the text continues past. At `top` it paints the
+    // wrong edge and says the opposite thing.
+    expect(note).toMatch(/background-position:\s*bottom/);
+    // The cover only vanishes when it is painted in this well's OWN ground.
+    expect(note).toMatch(/background:\s*var\(--surface-sunken\)/);
+    // Not vacuous: `.noteWatch` is deliberately not a well and carries no fade at all.
+    const watchRule = css.slice(css.indexOf('.noteWatch {'), css.indexOf('}', css.indexOf('.noteWatch {')));
+    expect(watchRule).not.toMatch(/background-attachment/);
+  });
 });
 
 // ---------------------------------------------------------------------------------------

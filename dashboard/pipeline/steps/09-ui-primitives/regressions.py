@@ -221,9 +221,20 @@ def _code_only(text):
     return "".join(out)
 
 
+# ⚠ 10g/A7, 2026-09-10 — the ledger keys this scanner could not match, collected so the run
+# FAILS on them instead of printing a warning nobody reads. The ledger's own check is
+# `prefix not in joined`, so a key of `⚠` alone is a substring of every ⚠ FAIL line and the
+# mark scores covered without any mutation touching it. Three such names existed across the
+# nine harnesses on 2026-09-10 — all three added by 10g, one of them 10g's own acceptance
+# test for the `… N more` marker — and both earlier phases reported "every ⚠ mark reddened"
+# off runs that were printing these lines. HANDOVER §5.2 rule 5.
+UNMATCHABLE = []
+
+
 def marked_tests():
     """Every ⚠-marked test name, as (file, name, matchable-prefix) triples."""
     found = []
+    UNMATCHABLE.clear()
     for rel in LEDGER_FILES:
         text = pathlib.Path(rel).read_text()
         read = set()
@@ -251,6 +262,7 @@ def marked_tests():
             # prefix for no reason — and a short prefix is the input to F2's conflation.
             prefix = (name.split("%")[0] if m.group(1) else name).strip()
             if len(prefix) < 12:
+                UNMATCHABLE.append((rel, name, prefix))
                 print(f"!!! {rel}: ⚠ test name is unmatchably short: {name!r}")
             found.append((rel, name, prefix))
         for c in CANDIDATE.finditer(_code_only(text)):
@@ -275,6 +287,11 @@ PANEL_SHELL_SRC = "components/panel-shell.tsx"
 SPARKLINE_SRC = "components/sparkline.tsx"
 CHART_SRC = "components/stacked-time-series-chart.tsx"
 HERO_SRC = "components/hero.tsx"
+# ⚠ 10g/Q1 — the two chart stylesheets. The table view's BOUND is the only part of its box
+# that lives in CSS at all (its value is a custom property the component sets inline), so a
+# mutation of these two rules is the only thing that can prove the bound is guarded.
+SPARKLINE_CSS_SRC = "components/sparkline.module.css"
+CHART_CSS_SRC = "components/stacked-time-series-chart.module.css"
 STRIP_SRC = "components/strip.tsx"
 
 # (name, source file, old, new, check) — or (name, source file, [(old, new), …], check)
@@ -480,9 +497,14 @@ REGRESSIONS = [
      CHART_SRC, "          const toMs = gap.toMs ?? domainEndMs;",
      "          const toMs = gap.toMs ?? domainStartMs + (domainEndMs - domainStartMs) * 0.9;",
      [CHART]),
+    # ⚠ RE-AIMED by 10g's TEST phase, and it is WIDER than it was. The guard moved out of the
+    # chart branch's `if` into the ONE `emptyBox` both branches read (the fix for the 72-px
+    # chart beside a 174-px table), so the same one-character weakening now reaches the table
+    # view as well: `<` here draws a chart on an equal-bounds domain AND gives its table view
+    # the full box. Same boundary, same character, two branches instead of one.
     ("09-T6 the empty-domain guard is off by one, so equal start/end bounds are drawn anyway",
-     CHART_SRC, "if (plots.length === 0 || domainEndMs <= domainStartMs) {",
-     "if (plots.length === 0 || domainEndMs < domainStartMs) {", [CHART]),
+     CHART_SRC, "const emptyBox = plots.length === 0 || domainEndMs <= domainStartMs;",
+     "const emptyBox = plots.length === 0 || domainEndMs < domainStartMs;", [CHART]),
     ("09-T7 a series' points are silently truncated to 100, undoing traceFor's own budget",
      CHART_SRC,
      "                          points={run.points.map((p) => `${xFor(p.tMs)},${yFor(p.v)}`).join(' ')}",
@@ -948,10 +970,13 @@ REGRESSIONS = [
      "    return (\n"
      "      <ChartTableView",
      [CHART]),
+    # ⚠ RE-AIMED by 10g's TEST phase, not weakened: the mapped expression gained the empty
+    # guard (`empty ? [] : plots`), so the anchor moved by that much and nothing else. The same
+    # `.slice(0, 1)` on the same `.map`, dropping the same second unit.
     ("Q2-TV2 only the first plot's table is drawn — a second unit vanishes from the table view",
      CHART_SRC,
-     "      {plots.map((plot) => {",
-     "      {plots.slice(0, 1).map((plot) => {",
+     "      {(empty ? [] : plots).map((plot) => {",
+     "      {(empty ? [] : plots).slice(0, 1).map((plot) => {",
      [CHART]),
     ("Q2-TV3 a null reading in the table renders through the formatter, printing a numeral for no reading",
      CHART_SRC,
@@ -1128,10 +1153,13 @@ REGRESSIONS = [
 
     # ---------------------------------- F3/F4: the "accessibility floor" is a NAME, a
     # caption, column headers and row headers — three of the four were unasserted.
+    # ⚠ RE-AIMED by 10g/Q1, not weakened: the table view's opening tag became MULTI-LINE when it
+    # gained the `style` that carries the chart's own box, so a one-line anchor no longer
+    # matches. Same property, same strength — the attribute is deleted from the same tag.
     ("Q2-TV6 the table view loses the caller's accessible name, so the group reaches a screen reader as unnamed numbers",
      CHART_SRC,
-     '    <div className={styles.tableView} role="group" aria-label={ariaLabel} tabIndex={0} data-role="table-view">',
-     '    <div className={styles.tableView} tabIndex={0} data-role="table-view">',
+     '      role="group"\n      aria-label={ariaLabel}\n      tabIndex={0}\n      data-role="table-view"',
+     '      role="group"\n      tabIndex={0}\n      data-role="table-view"',
      [CHART]),
     ("Q2-TV7 the per-table <caption> is dropped, so two tables in one group cannot be told apart",
      CHART_SRC,
@@ -1179,10 +1207,16 @@ REGRESSIONS = [
      [SPARKLINE]),
     ("Q2-SP10 the sparkline goes back to naming every trend on the page the same, in both views",
      SPARKLINE_SRC,
-     [('        <caption className="sr-only">{ariaLabel}</caption>',
-       '        <caption className="sr-only">trend over the selected window</caption>'),
-      ("      aria-label={ariaLabel}\n",
-       '      aria-label="trend over the selected window"\n')],
+     # ⚠ RE-AIMED by 10g/Q1, and the second edit is the reason `ANCHOR AMBIGUOUS` exists: the
+     # table view's own opening tag is multi-line now and carries `aria-label={ariaLabel}` at
+     # the same indentation as the `<svg>`'s, so the bare attribute matched TWICE and
+     # `replace(old, new, 1)` would have silently taken the first. Both edits are pinned to
+     # their own site — the caption by its new indentation, the chart's label by the
+     # `role="img"` line above it, which only the `<svg>` has.
+     [('          <caption className="sr-only">{ariaLabel}</caption>',
+       '          <caption className="sr-only">trend over the selected window</caption>'),
+      ('      role="img"\n      aria-label={ariaLabel}\n',
+       '      role="img"\n      aria-label="trend over the selected window"\n')],
      [SPARKLINE]),
     # ⚠ Re-anchored by 10c-3/F14b — see the identical note above `Q2-SP5`; only the indentation
     # and the `row.point.` prefix moved, the property (a row header, and a finite-only reading)
@@ -1208,15 +1242,21 @@ REGRESSIONS = [
     # shipping the scrolling CSS while forgetting the accessibility follow-through the ruling
     # itself warns about ("a scrollable region that only a mouse can reach fails the very floor
     # this is meant to hold up").
+    # ⚠ RE-AIMED by 10g/Q1, not weakened: the table view's opening tag became MULTI-LINE when it
+    # gained the `style` that carries the chart's own box, so a one-line anchor no longer
+    # matches. Same property, same strength — the attribute is deleted from the same tag.
     ("Q2-TV11 the table view's scroll container carries no tabIndex, so a keyboard user cannot reach or scroll it",
      CHART_SRC,
-     '    <div className={styles.tableView} role="group" aria-label={ariaLabel} tabIndex={0} data-role="table-view">',
-     '    <div className={styles.tableView} role="group" aria-label={ariaLabel} data-role="table-view">',
+     '      aria-label={ariaLabel}\n      tabIndex={0}\n      data-role="table-view"',
+     '      aria-label={ariaLabel}\n      data-role="table-view"',
      [CHART]),
+    # ⚠ RE-AIMED by 10g/Q1, not weakened: the table view's opening tag became MULTI-LINE when it
+    # gained the `style` that carries the chart's own box, so a one-line anchor no longer
+    # matches. Same property, same strength — the attribute is deleted from the same tag.
     ("Q2-SP13 the sparkline's table-view scroll container carries no tabIndex, so a keyboard user cannot reach or scroll it",
      SPARKLINE_SRC,
-     '    <div className={styles.tableView} role="group" aria-label={ariaLabel} tabIndex={0} data-role="table-view">',
-     '    <div className={styles.tableView} role="group" aria-label={ariaLabel} data-role="table-view">',
+     '      aria-label={ariaLabel}\n      tabIndex={0}\n      data-role="table-view"',
+     '      aria-label={ariaLabel}\n      data-role="table-view"',
      [SPARKLINE]),
 
     # ============================================== 10c-3 / F14b (`pipeline/handoffs/10c3-sizing.md`)
@@ -1424,6 +1464,79 @@ REGRESSIONS = [
      "  position: relative;\n  overflow-y: auto;",
      "  overflow-y: auto;",
      ["components/styles.test.ts"]),
+    # ---- 10g/Q1: a chart's TABLE VIEW is the chart's own painted box (SPEC §6.1, ruled
+    # 2026-09-09). The `--table-scroll-max: 40vh` cap this replaces was measured at +851 px with
+    # the five table views one page can have open, and +371.1 px for GPU 0's alone against
+    # 263.2 px of healthy spare — one click, no telemetry needed.
+    ("10g-SP1 the table view forgets the chart's height, so it renders at the 24px default instead of the chart's box",
+     SPARKLINE_SRC,
+     "        gaps={gaps}\n        // \u26a0 10g/Q1 — the chart's own painted height, so the table is the same box.\n        height={height}\n",
+     "        gaps={gaps}\n",
+     [SPARKLINE]),
+    ("10g-SP2 the empty-series guard is dropped, so an empty table renders a header row over an empty body",
+     SPARKLINE_SRC,
+     "      {points.length === 0 ? (",
+     "      {false ? (",
+     [SPARKLINE]),
+    ("10g-SP3 the table view goes back to the retired 40vh viewport cap, so five open tables bound the page at 200vh",
+     SPARKLINE_CSS_SRC,
+     "  height: var(--table-box-height);\n  box-sizing: border-box;\n  overflow-y: auto;",
+     "  max-height: var(--table-scroll-max);\n  overflow-y: auto;",
+     [SPARKLINE]),
+    ("10g-CH1 chartBoxHeight drops the shared axis, so the table view is 20px shorter than the chart it replaces",
+     CHART_SRC,
+     "    : plotCount * plotHeight + (plotCount - 1) * PLOT_GAP + AXIS_HEIGHT;",
+     "    : plotCount * plotHeight + (plotCount - 1) * PLOT_GAP;",
+     [CHART]),
+    # ⚠ RE-AIMED by 10g's TEST phase, and the property is WIDER, not narrower. The box is
+    # computed ONCE above both branches now (the fix for `10g-CH7` below), so "the table sizes
+    # itself from the default plot height" is no longer expressible at this call site — a wrong
+    # constant there moves BOTH views, which is the whole point of one derivation. What is still
+    # expressible, and is the same property (the table's box is not the chart's), is a box that
+    # is one plot tall rather than the chart's own.
+    ("10g-CH2 the table view's box is ONE PLOT tall rather than the chart's own painted box",
+     CHART_SRC,
+     "        boxHeight={boxHeight}\n        empty={emptyBox}",
+     "        boxHeight={plotHeight}\n        empty={emptyBox}",
+     [CHART]),
+    ("10g-CH3 an empty chart's table is the axis height, not the empty svg's — the one state that still moves the page",
+     CHART_SRC,
+     "  plotCount === 0\n    ? plotHeight",
+     "  plotCount === 0\n    ? AXIS_HEIGHT",
+     [CHART]),
+    ("10g-CH4 the stacked chart's table view goes back to the retired 40vh viewport cap",
+     CHART_CSS_SRC,
+     "  height: var(--table-box-height);\n  box-sizing: border-box;\n  overflow-y: auto;",
+     "  max-height: var(--table-scroll-max);\n  overflow-y: auto;",
+     [CHART]),
+    # ⚠ The other direction, and it is not symmetric with the 40vh revert: a MAXIMUM lets a
+    # one-row table be shorter than the chart it replaced, so the page moves on the toggle just
+    # as surely as it did when the table could be taller. Both are one word.
+    ("10g-SP4 the table box becomes a MAXIMUM, so a one-row table is shorter than the chart it replaced",
+     SPARKLINE_CSS_SRC,
+     "  height: var(--table-box-height);",
+     "  max-height: var(--table-box-height);",
+     [SPARKLINE]),
+    ("10g-CH5 the stacked chart's table box becomes a MAXIMUM, with the same effect one plot at a time",
+     CHART_CSS_SRC,
+     "  height: var(--table-box-height);",
+     "  max-height: var(--table-box-height);",
+     [CHART]),
+    # ---- 10g TEST phase: the divergence the build shipped, and it was MEASURED, not imagined.
+    # `chartDomainOf` returns a degenerate `0 -> 0` domain until the first accepted poll, and
+    # COOLING's two plots are literals — so on the first frame after every reload the chart
+    # painted its empty `<svg>` at 72 px while the table branch, deciding emptiness a second way
+    # from `plots.length`, sized itself at 174. Both mutations restore one half of that.
+    ("10g-CH6 the table view decides EMPTINESS from plots.length again, so a degenerate domain prints tables the chart refuses to draw",
+     CHART_SRC,
+     "        empty={emptyBox}",
+     "        empty={plots.length === 0}",
+     [CHART]),
+    ("10g-CH7 the shared emptiness test drops the degenerate domain, so the table box is 174px beside a 72px chart on the first frame after a reload",
+     CHART_SRC,
+     "  const emptyBox = plots.length === 0 || domainEndMs <= domainStartMs;",
+     "  const emptyBox = plots.length === 0;",
+     [CHART]),
 ]
 
 # ---------------------------------------------------------------------------
@@ -1516,6 +1629,14 @@ def main() -> int:
 
     # ------------------------------------------------------------------ the ledger
     marked = marked_tests()
+    if UNMATCHABLE:
+        print(
+            "\nUNMATCHABLE LEDGER KEYS — these ⚠ names cannot be matched against a FAIL line,\n"
+            "so the ledger's verdict on them means nothing. Move the %-placeholder later:"
+        )
+        for rel, nm, prefix in UNMATCHABLE:
+            print(f"  {rel}\n    {nm}\n    ledger key {prefix!r} ({len(prefix)} chars)")
+        return 1
     joined = "\n".join(covered)
     uncovered = [(rel, nm) for rel, nm, prefix in marked if prefix not in joined]
     print(

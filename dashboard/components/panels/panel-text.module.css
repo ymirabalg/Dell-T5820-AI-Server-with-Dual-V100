@@ -19,3 +19,60 @@
   font-weight: 500;
   font-style: normal;
 }
+
+/* ⚠ 10g/Q3 — the throttle line's one-line well (SPEC §6.1, ruled 2026-09-09). The same four
+   declarations `panel-notes.module.css`'s `.notes` carries, and each does the same job:
+
+   - `max-height: 17px` is the bound, and 17 is MEASURED — one `md` chip line in this caption
+     at every one of §6.1's three widths (a second notable bit still fits on it; a third took
+     the caption to 44 px, i.e. +27 px on the row that sets the page's first term).
+   - `overflow-y: auto` keeps every chip reachable rather than truncating the mask.
+   - `position: relative` is what makes the box actually clip: a `Chip` renders a
+     `position: absolute` `.sr-only` span, and a scroll container clips such a descendant only
+     when it is in that descendant's containing-block chain (10e-A1, measured).
+   - `box-sizing: border-box` makes 17 the TOTAL box.
+
+   `display: flex; flex-wrap: wrap` because the chips were direct children of the caption's own
+   flex line before this and must keep wrapping the same way — inside the well now, which is
+   the whole point: they wrap and SCROLL rather than growing the card.
+
+   ⚠ `flex: 1 1 0`, NOT `1 1 auto` — corrected 2026-09-10 by 10g's reconciliation (adversarial
+   A2), and this is the declaration that makes the ruled ONE-LINE shape true. `.caption` is
+   `flex-wrap: wrap`, and a wrapping flex container breaks lines on each item's HYPOTHETICAL
+   main size, computed BEFORE any shrinking. With `flex-basis: auto` that size is the chips'
+   max-content width (839 px for §6.3's five-bit mask), so past ~542 px of space beside the
+   `throttle` label the WELL ITSELF dropped onto a second line and the caption measured
+   **41.2 px**, not 17 — `min-width: 0` does not prevent it, because it only governs shrinking
+   after the break. Measured on this tree at mask `0x…ec`: caption 41.2 / 41.2 / 17.0 at 1280 /
+   1600 / 1920 before, 17.0 / 17.0 / 17.0 after; GPU card 211 / 222 / 198 -> 186 / 198 / 198,
+   i.e. page spare 158 / 123 / 203 -> 182 / 147 / 203 on a throttling healthy page.
+   `flex-basis: 0` makes the hypothetical main size 0, so the well never forces a break and
+   shrinks into whatever is left beside the label — which is what it was always meant to do.
+   `flex-grow: 1` still gives it the rest of the line. */
+.well {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  flex: 1 1 0;
+  min-width: 0;
+  box-sizing: border-box;
+  position: relative;
+  overflow-y: auto;
+  max-height: 17px;
+  border-radius: 2px;
+  background: var(--surface-sunken);
+  /* ⚠ 10g/Q4 — the continuation fade; `tokens.css` carries the mechanism. No `… N more` here:
+     chips wrap, so "how many are past the first line" is not in the panel's data and this
+     directory cannot measure it. Recorded as a spec silence in `10g-build.md` §6. */
+  background-image: var(--well-fade-cover), var(--well-fade-edge);
+  background-position: bottom;
+  background-size: 100% var(--well-fade-height);
+  background-repeat: no-repeat;
+  background-attachment: local, scroll;
+}
+
+.well:focus-visible {
+  outline: 2px solid var(--ink-primary);
+  outline-offset: -2px;
+}

@@ -113,9 +113,13 @@ const DISCLOSURE_DOM = (open) => `
   details.open = ${open};
 `;
 
-/** Force every chart table view to its `--table-scroll-max` cap — a 600-sample ring's table. */
+/** Force every chart table view to the 40vh cap a 600-sample ring's table used to reach.
+ *  ⚠ 10g/Q1 — the `--table-scroll-max` token this read is RETIRED (a table view is now the
+ *  chart's own painted box, so five open ones grow the page by zero). The literal is kept here
+ *  because these arrangements exist to reproduce the state 10d measured, and an override that
+ *  read a token which no longer exists would silently force nothing at all. */
 const FULL_TABLES = `
-  [data-slot]:not([data-slot="session-event-log"]) div[tabindex="0"] { min-height: var(--table-scroll-max); }
+  [data-slot]:not([data-slot="session-event-log"]) div[tabindex="0"] { min-height: 40vh; }
 `;
 
 /** D as the builder spec's stage 2 states it: bounded grid, positioned panels, disclosure below. */

@@ -52,9 +52,11 @@
  * grid row is the tallest, so at 1280 the four cells in rows 2–3 divide as: CPU + SAFETY is
  * the governing column (216.1 + 9 + 160 = 385.1 against COOLING's 384.5 intrinsic), while
  * MEMORY + STORAGE sits 94 px below it and COOLING has 0.6 px of its own. `'tight'` is one
- * message line (18 px); `'roomy'` is 60 px — ⚠ **three message lines and part of a fourth**,
- * not four: a line is 13.77 px and the block's own `gap` is 3 px, so four need 68.1. Measured
- * by 10f's test phase; see `panel-notes.module.css` for why 60 is kept rather than raised.
+ * message line (18 px); `'roomy'` is ⚠ **46 px since 10g/Q3** — the owner's ruling of
+ * 2026-09-09, *"a `roomy` notes well is three lines (46 px), not four (60 px)"*, taken to buy
+ * back the margin the all-sources-explained page was 1 px short of. At 13.77 px a line and a
+ * 3 px `gap`, 46 px is three lines of one wrapped message and two-and-a-bit separate ones;
+ * `panel-notes.module.css` carries that arithmetic in full.
  * GPU, CPU and SERVING take `'tight'` because each costs the
  * page 1:1 (GPU sets row 1; CPU shares the governing column; SERVING is 26 px under the log
  * that sets row 4). COOLING, MEMORY and STORAGE take `'roomy'` because their growth is
@@ -71,6 +73,29 @@
  * `role="group"` with `tabIndex={0}` — the same shape the session event log's own bounded well
  * already uses. ⚠ `group`, not a bare `aria-label` on a role-less `<div>`: ARIA prohibits the
  * attribute on the `generic` role, which 10e-A8 found shipped and doing nothing.
+ *
+ * ### ⚠ 10g/Q4 — a well whose content overflows SAYS SO, in two halves
+ *
+ * Owner's ruling 2026-09-09 (`SPEC.md` §6.1): *"a bounded well draws a bottom fade and a small
+ * `… N more` marker whenever `scrollHeight > clientHeight`, and nothing when it does not …
+ * this is the one place the UI adds copy that is not a reading, and it is a count, never a
+ * sentence."* 10f measured the affordance that existed as **zero** — `offsetHeight −
+ * clientHeight = 0` on every well, and 7.7 % of CPU's four-source explanation visible.
+ *
+ * The two halves are different mechanisms because they have to be:
+ *
+ * - **The fade is CSS and is EXACT.** A cover layer painted in the well's own ground and
+ *   attached to the content sits over a fade layer attached to the container, so the fade is
+ *   visible precisely while something is below the fold — no measurement, and nothing drawn
+ *   when nothing is hidden. `tokens.css` has the mechanism and why a text-fading `mask-image`
+ *   cannot be made conditional.
+ * - **The count is DATA and is a lower bound.** `components/` is hook-free, so
+ *   {@link hiddenMessageCount} counts the ENTRIES past the well's line budget. Exact for
+ *   one-line messages; 0 for a single message that wraps past the fold, where the fade is the
+ *   only signal. Recorded as a spec silence rather than papered over.
+ *
+ * The marker is out of flow (`position: absolute` against a zero-height wrapper), so it costs
+ * the page nothing — §6.1's *"the heights stay as budgeted"*.
  *
  * ### ⚠ `subject` — the name must be DIFFERENT in every well (10f-A6, measured)
  *
@@ -111,21 +136,57 @@ export interface PanelNotesProps {
   readonly bound?: PanelNotesBound;
 }
 
+/**
+ * ⚠ 10g/Q4 — how many message lines a well shows before it scrolls, per {@link PanelNotesBound}.
+ *
+ * These are the SAME numbers `panel-notes.module.css`'s two `max-height` rules are, written
+ * once here so the marker's count and the box it marks cannot drift apart: `tight` is one
+ * 14 px line inside 4 px of padding (18), `roomy` is three inside the same padding (46, the
+ * owner's ruling of 2026-09-09). The count they feed is a count of **entries**, and §6.1
+ * requires a count and never a sentence.
+ */
+const LINES_SHOWN: Readonly<Record<PanelNotesBound, number>> = { tight: 1, roomy: 3 };
+
+/**
+ * ⚠ 10g/Q4 — the `N` in `… N more`, and it is DATA, not a measurement.
+ *
+ * `components/` is hook-free (`purity.test.ts`), so nothing here can read `scrollHeight`. The
+ * ruling's own instruction is to take the count from what the panel already has: the messages
+ * beyond the well's line budget. Exact when each message is one line, and a **lower bound**
+ * when one of them wraps — a single 150-character message in an 18 px well hides four lines
+ * and this returns 0. That gap is the fade's job (it is measured by the browser, in CSS, and
+ * is exact); it is recorded as a spec silence in `10g-build.md` §6.
+ */
+export const hiddenMessageCount = (total: number, bound: PanelNotesBound): number =>
+  Math.max(0, total - LINES_SHOWN[bound]);
+
 export function PanelNotes({ messages, subject, bound = 'tight' }: PanelNotesProps) {
   if (messages.length === 0) return null;
+  const hidden = hiddenMessageCount(messages.length, bound);
   return (
-    <div
-      className={styles.notes}
-      data-bound={bound}
-      role="group"
-      tabIndex={0}
-      aria-label={`${subject} messages`}
-    >
-      {messages.map((e) => (
-        <p key={`${e.source}:${e.message}`} className={styles.note}>
-          {e.message}
-        </p>
-      ))}
+    // ⚠ 10g/Q4 — the wrapper is `position: relative` and adds no height; the marker is
+    // absolutely positioned against IT rather than against the well, because an abs-positioned
+    // child of a scroller scrolls away with the content. See `panel-notes.module.css`.
+    <div className={styles.well}>
+      <div
+        className={styles.notes}
+        data-bound={bound}
+        role="group"
+        tabIndex={0}
+        aria-label={`${subject} messages`}
+      >
+        {messages.map((e) => (
+          <p key={`${e.source}:${e.message}`} className={styles.note}>
+            {e.message}
+          </p>
+        ))}
+      </div>
+      {hidden === 0 ? null : (
+        // ⚠ `aria-hidden`: nothing is hidden from assistive tech — every message is in the DOM
+        // inside the named, focusable well above. This marker is the WALL PANEL's affordance,
+        // where there is no pointer and no keyboard to discover the scroll with.
+        <span className={styles.more} aria-hidden="true" data-role="notes-more">{`… ${hidden} more`}</span>
+      )}
     </div>
   );
 }

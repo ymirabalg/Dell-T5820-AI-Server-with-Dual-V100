@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 
@@ -904,5 +907,82 @@ describe('⚠ 10c-3/F14b — the table view now carries a gap row, matching the 
     expect(html).not.toContain('data-role="gap-row"');
     const tbody = /<tbody>([\s\S]*?)<\/tbody>/.exec(html)?.[1] ?? '';
     expect((tbody.match(/<tr/g) ?? []).length).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// ⚠ 10g/Q1 — the table view IS the chart's own box (SPEC §6.1, ruled 2026-09-09).
+//
+// The `40vh`-per-component cap this replaces was measured at **+851 px** with the five table
+// views a page can have open at once, and **+371.1 px** for GPU 0's alone against 263.2 px of
+// healthy spare — one click, no telemetry. The property that closes it is that the table's box
+// is the SAME number the `<svg>` beside it is drawn at, so toggling the view moves nothing.
+//
+// ⚠ The height reaches CSS as a custom property, so it IS observable in static markup — which
+// is the only reason this can be a unit test at all. The layout consequence (a slot height
+// that does not move) is a browser measurement and lives in
+// `pipeline/steps/10-panels-assembly/measure-breakpoints.mjs`.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ 10g/Q1 — a table view renders in the chart’s own painted box', () => {
+  const box = (html: string): string | null =>
+    /<div[^>]*data-role="table-view"[^>]*style="([^"]*)"/.exec(html)?.[1] ??
+    /<div[^>]*style="([^"]*)"[^>]*data-role="table-view"/.exec(html)?.[1] ??
+    null;
+
+  test.each([
+    [38, '--table-box-height:38px'],
+    [50, '--table-box-height:50px'],
+  ])('⚠ the table view box is exactly the height prop, not a viewport fraction — height=%i', (height, expected) => {
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={[{ tMs: 1, v: 1 }]} color="#3987e5" view="table" height={height} formatValue={formatValue} formatTime={formatTime} />,
+    );
+    expect(box(html)).toBe(expected);
+  });
+
+  test('⚠ the chart and the table are the same box — the svg’s height and the table’s are one number', () => {
+    // Both views of the SAME component, same props: the `<svg height>` in one and the table's
+    // box in the other must agree, because a table an inch taller than its chart is exactly the
+    // page growth the ruling forbids.
+    const chart = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={[{ tMs: 1, v: 1 }]} color="#3987e5" height={38} formatValue={formatValue} formatTime={formatTime} />,
+    );
+    const table = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={[{ tMs: 1, v: 1 }]} color="#3987e5" view="table" height={38} formatValue={formatValue} formatTime={formatTime} />,
+    );
+    const svgHeight = /<svg[^>]*height="(\d+)"/.exec(chart)?.[1];
+    expect(svgHeight).toBe('38');
+    expect(box(table)).toBe(`--table-box-height:${svgHeight}px`);
+  });
+
+  test('⚠ the EMPTY table renders INSIDE the box too — the one state that could still move the page', () => {
+    // An empty series still paints a full-height `<svg>` in chart view, so an empty table
+    // rendered as a bare `<p>` beside the box would be shorter than the chart it replaced.
+    const html = renderToStaticMarkup(
+      <Sparkline ariaLabel={ARIA} points={[]} color="#3987e5" view="table" height={50} formatValue={formatValue} formatTime={formatTime} />,
+    );
+    expect(box(html)).toBe('--table-box-height:50px');
+    expect(html).toContain('no readings in the selected window');
+    expect(html).not.toContain('<table');
+    // The note is inside the group, not a sibling of it.
+    expect(html.indexOf('data-role="table-view"')).toBeLessThan(html.indexOf('no readings'));
+  });
+
+  test('⚠ sparkline.module.css bounds the table view by that property and by nothing viewport-relative', () => {
+    const css = readFileSync(
+      fileURLToPath(new URL('./sparkline.module.css', import.meta.url)),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const body = css.slice(css.indexOf('.tableView {'), css.indexOf('}', css.indexOf('.tableView {')));
+    // ⚠ `height`, and NOT `max-height` — the `[^-]` is load-bearing, because `/height:/` alone
+    // matches `max-height:` and a MAXIMUM is a real defect in the other direction: a one-row
+    // table would be SHORTER than the chart it replaced, which moves the page just as surely.
+    expect(body).toMatch(/(?:^|[^-])height:\s*var\(--table-box-height\)/);
+    expect(body).not.toMatch(/max-height/);
+    expect(body).toMatch(/box-sizing:\s*border-box/);
+    expect(body).toMatch(/overflow-y:\s*auto/);
+    // The retired stopgap, gone from the declarations rather than merely unused.
+    expect(css).not.toMatch(/--table-scroll-max/);
+    expect(body).not.toMatch(/vh/);
   });
 });

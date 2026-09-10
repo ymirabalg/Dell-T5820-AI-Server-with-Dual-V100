@@ -305,3 +305,25 @@ describe('⚠ 10e-A5 — both disk bars carry the 85 %-used watch tick', () => {
     expect((html.match(TICK_CLASS) ?? []).length).toBe(2);
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// ⚠ 10g/Q3 — added by 10g's TEST phase, because the assertion that claimed this property was
+// in `gpu-panel.test.tsx` and could not see it. That test rendered a GPU card and counted its
+// ONE caption well; the sentence it was named for — STORAGE's link line stays un-boxed —
+// needs the panel that renders that line. `Caption`'s `well` prop has no default precisely so
+// this line cannot acquire an unnamed box and a tab stop for one state pill and an age
+// (10f-A6), and a defaulted `well` is the one-line change that would give it one.
+// ---------------------------------------------------------------------------------------
+describe('⚠ 10g/Q3 — STORAGE’s link caption is not a bounded well', () => {
+  test('⚠ the link line renders no caption well, so it gains no box and no tab stop', () => {
+    const html = renderToStaticMarkup(
+      <StorageNetworkPanel state={stateWith(everythingZero)} nowMs={0} panelId="storage-and-network" />,
+    );
+    // Scoped to the link caption's own `<p>` first — a document-wide `toContain` here would
+    // pass on a panel that had stopped rendering the line at all (HANDOVER §0.4).
+    const caption = linkCaptionOf(html);
+    expect(caption).toContain('link');
+    expect(caption).not.toContain('data-role="caption-well"');
+    expect(html).not.toContain('data-role="caption-well"');
+  });
+});

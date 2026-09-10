@@ -24,6 +24,23 @@
  * ⚠ **A stale item names the age of its reading (§6.5, adversarial F10).** `age` is
  * non-`null` exactly when the condition is stale, and pre-formatted like everything else
  * here. §6.5: "a reading that stopped and a subject that left must never look alike."
+ *
+ * ### ⚠ 10g/Q2 — the banner is a FIXED TWO-LINE BOX, and NOTHING is dropped to make it one
+ *
+ * Owner's ruling 2026-09-09 (`SPEC.md` §6.4): *"it is now a two-line (~66 px) scrolling box:
+ * the lead with the count is always visible, and conditions beyond the second line scroll
+ * within the banner. Nothing is dropped; the page grows by zero past six alarms."*
+ *
+ * The component's own contract is UNCHANGED and that is the point: `rest` is still rendered in
+ * full, one `.item` per condition, so every condition's text is in the DOM at any count and
+ * `lib/client/banner.ts`'s `rest: mapped.slice(1)` still needs no cap. What changed is one
+ * stylesheet rule — `.rest` is a fixed one-line scrolling well — plus the name and tab stop
+ * below that make the well reachable. Capping the LIST was the alternative and was not taken:
+ * a banner that renders fewer conditions than it counts is the lying banner 10a-F14 already
+ * removed from this file once.
+ *
+ * Measured before: 65.7 px at two alarms and at six, 92.5 at twelve, 173.1 / 146.2 / 119.4 at
+ * twenty-one. After: one height at every count (`10g-build.md` §3).
  */
 
 import styles from './alarm-banner.module.css';
@@ -75,7 +92,18 @@ export function AlarmBanner({ lead, rest }: AlarmBannerProps) {
           {lead.age === null ? null : <span className={styles.stale}>{lead.age}</span>}
         </div>
         {rest.length > 0 ? (
-          <div className={styles.rest}>
+          // ⚠ 10g/Q2 — the SCROLLING half of §6.4's fixed two-line banner. Named and
+          // `tabIndex={0}` for the same reason every other bounded box on this page is
+          // (10f-A6): a scroll region nobody can reach hides what it holds, and here what it
+          // holds is every alarm past the first line. The lead above is deliberately outside
+          // it, so §6.4's *"the count is always visible"* needs no sticky positioning.
+          <div
+            className={styles.rest}
+            role="group"
+            tabIndex={0}
+            aria-label="other alarm conditions"
+            data-role="banner-rest"
+          >
             {rest.map((item) => (
               // 10e §5 — `.item` is a REAL class now (10c1-A8's dangling `styles.item` was
               // fixed by removing the reference; this loop restores it as a genuine rule,

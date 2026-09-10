@@ -112,11 +112,16 @@
   font-size: 11px;
 }
 
-/* Q2-S2 — the scroll container (see the module doc). `--table-scroll-max` is the same
-   viewport-relative stopgap `StackedTimeSeriesChart` uses, from `tokens.css`, so the two
-   table views are not carrying two independently-guessed numbers. */
+/* ⚠ 10g/Q1 — the table view is the CHART'S OWN BOX (SPEC §6.1, ruled 2026-09-09), not a
+   viewport fraction. `height`, not `max-height`, and the value is `--table-box-height`, which
+   `sparkline.tsx` sets inline from the same `height` prop the `<svg>` is drawn at — so the
+   table is exactly as tall as the chart it replaces and opening one changes no slot height.
+   `box-sizing: border-box` so the number is the TOTAL box; `overflow-y: auto` so every row
+   stays reachable inside it. The retired `--table-scroll-max` stopgap and why it had to go
+   are in `tokens.css`. */
 .tableView {
-  max-height: var(--table-scroll-max);
+  height: var(--table-box-height);
+  box-sizing: border-box;
   overflow-y: auto;
   /* ⚠ 10e-A1: `.sr-only` (the `<caption>`) is `position: absolute`, and a scroll container
      clips such a descendant only when it is in that descendant's containing-block chain. One

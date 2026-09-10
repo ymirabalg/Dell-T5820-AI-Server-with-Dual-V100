@@ -114,6 +114,49 @@ describe('⚠ throttle — the normal power cap must never be styled as a warnin
     expect(html).toContain('sw thermal slowdown');
   });
 
+  // ⚠ 10g/Q3 — the throttle line is a BOUNDED ONE-LINE WELL (SPEC §6.1, ruled 2026-09-09).
+  // `caption.test.tsx` owns the primitive's half (the box, the name, the label staying
+  // outside); this is the WIRING, which is its own property — HANDOVER §0.8, and the reason
+  // 10e shipped `0X4 SW POWER CAP`: the modifier existed and the call site did not pass it.
+  // Measured before: a third notable bit takes this caption to 44 px, +27 px on the row that
+  // sets the page's first term, on BOTH cards.
+  test('⚠ the throttle caption is a well, and the well is named per CARD', () => {
+    const snapshot = rawGpuSnapshot({ throttleReasons: throttleMask('0x0000000000000024') });
+    const zero = renderToStaticMarkup(<GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu0" />);
+    // The second card is the SAME reading at index 1 — `GpuPanel` finds its card by index, so
+    // a snapshot whose only card is 0 sends this down the "card not enumerated" branch and the
+    // assertion below would be vacuous.
+    const asCardOne: TelemetrySnapshot = {
+      ...snapshot,
+      gpus: [{ ...snapshot.gpus![0]!, index: 1 }],
+    };
+    const one = renderToStaticMarkup(
+      <GpuPanel state={stateWith(asCardOne)} nowMs={0} panelId="gpu1" />,
+    );
+    expect(zero).toContain('data-role="caption-well"');
+    expect(zero).toContain('aria-label="GPU 0 throttle"');
+    // ⚠ The subject, not a constant: both cards are on the page at once and `PanelShell` gives
+    // its contents no accessible context of their own (10f-A6, measured at seven collisions).
+    expect(one).toContain('aria-label="GPU 1 throttle"');
+    expect(zero).not.toContain('aria-label="GPU 1 throttle"');
+    // ⚠ And the chips are INSIDE it — a well beside the chips bounds nothing.
+    const wellAt = zero.indexOf('data-role="caption-well"');
+    expect(zero.indexOf('sw thermal slowdown')).toBeGreaterThan(wellAt);
+  });
+
+  // ⚠ RENAMED by 10g's TEST phase, and the property it was named for moved to the panel that
+  // has it. It was `⚠ STORAGE's link caption is NOT a well` — but it renders a GPU CARD, which
+  // has no link line, so no defect in STORAGE could ever redden it (its ⚠ mark was covered by
+  // `10g-CP1`, a defect in the opposite direction: HANDOVER §5.2 rule 2 exactly). What this
+  // body really checks is worth keeping — the card boxes the throttle line and nothing else —
+  // and STORAGE's half is now `storage-network-panel.test.tsx`'s own ⚠ test, where a defaulted
+  // `well` reddens it.
+  test('⚠ the GPU card boxes its throttle line and NOTHING else — exactly one caption well', () => {
+    const snapshot = rawGpuSnapshot({ throttleReasons: throttleMask('0x0000000000000024') });
+    const html = renderToStaticMarkup(<GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu0" />);
+    expect((html.match(/data-role="caption-well"/g) ?? []).length).toBe(1);
+  });
+
   // ⚠ 10e-A5 (mutation E), reconciliation. `chip.tsx`'s own doc names this by hand: *"`code` …
   // `text-transform: none` and the monospace face, so `0x4` cannot render `0X4`"*. `10e-C1`
   // backs the PRIMITIVE's modifier in step 9's harness; nothing backed the WIRING, so dropping

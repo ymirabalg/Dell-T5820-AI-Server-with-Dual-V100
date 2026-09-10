@@ -91,17 +91,22 @@
 /* Q2 — the table view. One `<table>` per plot (see the module doc); this file just gives it
    the same dark-instrument-panel chrome as the chart it stands in for.
 
-   Q2-S2: this is also the SCROLL CONTAINER (`max-height` + `overflow-y`, SPEC §6.2's
-   2026-09-08 ruling) and, via the `tabIndex={0}` the component puts on this same element, the
-   keyboard tab stop for it. `--table-scroll-max` is `tokens.css`'s viewport-relative stopgap —
-   see the module doc's Q2-S2 section for why it is not a magic pixel number and why it is not
-   the grid's real answer. */
+   Q2-S2: this is also the SCROLL CONTAINER and, via the `tabIndex={0}` the component puts on
+   this same element, the keyboard tab stop for it.
+
+   ⚠ 10g/Q1 — the box is the CHART'S OWN (SPEC §6.1, ruled 2026-09-09): `height`, not
+   `max-height`, and the value is `--table-box-height`, which the component sets inline from
+   `chartBoxHeight(...)` — the SAME derivation the `<svg>`'s own `height` comes from, so the
+   two cannot disagree. COOLING's is 174 px (2 x 72 + 10 + 20). The retired
+   `--table-scroll-max` stopgap this replaces, and the 200vh page bound it produced, are in
+   `tokens.css`. */
 .tableView {
   display: flex;
   flex-direction: column;
   gap: 12px;
   font-family: var(--font-mono);
-  max-height: var(--table-scroll-max);
+  height: var(--table-box-height);
+  box-sizing: border-box;
   overflow-y: auto;
   /* ⚠ 10e-A1's second victim, and it is NOT theoretical: this scroll container holds one
      `<table>` per plot, each with a `<caption class="sr-only">` — and the SECOND caption's

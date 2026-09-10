@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 
-import { PanelNotes } from './panel-notes';
+import type { ErrorSource, TelemetryError } from '@/lib/types';
+
+import { PanelNotes, hiddenMessageCount } from './panel-notes';
 
 /**
  * The panel-level half of §6.5's *"its `errors` entry is available"* — see the component's own
@@ -85,13 +87,19 @@ describe('⚠ 10f/Q1 — the notes block is a bounded, reachable scroll box', ()
     // `statvfs` entry per mount), and React's own recovery from a duplicate key is to reuse the
     // first element — invisible in static markup, which is why this reads the KEYS rather than
     // the HTML. The rendered-both-messages test above passes either way; this one does not.
-    const el = PanelNotes({
+    // ⚠ 10g/Q4 — the well is now WRAPPED (`.well` gives the `… N more` marker a positioned box
+    // that is not the scroller), so the messages are the wrapper's first child's children. The
+    // property is unchanged; only the depth moved.
+    const wrapper = PanelNotes({
       subject: 'storage & network',
       messages: [
         { source: 'statvfs', message: '/: ENOENT' },
         { source: 'statvfs', message: '/home: ENOENT' },
       ],
     }) as React.ReactElement<{ children: readonly React.ReactElement[] }>;
+    const el = wrapper.props.children[0] as React.ReactElement<{
+      children: readonly React.ReactElement[];
+    }>;
     const keys = el.props.children.map((c) => c.key);
     expect(keys).toHaveLength(2);
     expect(new Set(keys).size).toBe(2);
@@ -131,7 +139,10 @@ describe('⚠ 10f/Q1 — the notes block is a bounded, reachable scroll box', ()
     // The DEFAULT rule must carry the tight height — an unbounded `.notes` with the bound only
     // on `[data-bound='roomy']` would leave every tight caller growing without limit.
     expect(heightIn(notes)).toBe(18);
-    expect(heightIn(roomy)).toBe(60);
+    // ⚠ 10g/Q3 — 60 -> 46, owner's ruling 2026-09-09 (SPEC §6.1: "a `roomy` notes well is
+    // three lines (46 px), not four (60 px)"). Re-aimed at the ruled number, not weakened:
+    // both heights are still asserted exactly, and the ordering below still holds.
+    expect(heightIn(roomy)).toBe(46);
     expect(heightIn(roomy)).toBeGreaterThan(heightIn(notes));
 
     // ⚠ 10f-A4, 2026-09-09 — three more declarations in these two rules, each of which could be
@@ -150,5 +161,161 @@ describe('⚠ 10f/Q1 — the notes block is a bounded, reachable scroll box', ()
     expect(padding).not.toMatch(/^0[a-z%]*$/);
     const line = bodyOf('.note {');
     expect(line).toMatch(/overflow-wrap:\s*anywhere/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// ⚠ 10g/Q4/Q5 — a well whose content overflows SAYS SO (SPEC §6.1, ruled 2026-09-09).
+//
+// 10f measured the affordance the bounded wells shipped with as exactly zero — `offsetHeight −
+// clientHeight = 0` on every one of them, with 7.7 % of CPU's four-source explanation visible.
+// The ruling is a bottom fade plus a small `… N more` marker, *"a count, never a sentence"*.
+//
+// The two halves are asserted differently because they ARE different: the fade is CSS and is
+// exact (a cover layer attached to the content over a fade attached to the container — the
+// declarations are asserted below, the behaviour is a browser measurement), and the count is
+// data, because `components/` is hook-free and cannot read `scrollHeight`.
+// ---------------------------------------------------------------------------------------
+
+/** N distinct §3.7 sources, so the keys differ and every message is its own line. */
+const SOURCES = [
+  'coretemp',
+  'proc-stat',
+  'proc-loadavg',
+  'proc-cpuinfo',
+  'proc-meminfo',
+  'statvfs',
+  'proc-net-dev',
+  'net-operstate',
+  'dell-smm',
+  'dbus',
+] as const satisfies readonly ErrorSource[];
+
+const errorsOf = (n: number): TelemetryError[] =>
+  Array.from({ length: n }, (_, i) => ({
+    source: SOURCES[i % SOURCES.length]!,
+    message: `message ${i}`,
+  }));
+
+describe('⚠ 10g/Q4 — the `… N more` marker is a COUNT, from the panel’s own data', () => {
+  test.each([
+    ['tight' as const, 1, ''],
+    ['tight' as const, 2, '… 1 more'],
+    ['tight' as const, 5, '… 4 more'],
+    ['roomy' as const, 3, ''],
+    ['roomy' as const, 4, '… 1 more'],
+    ['roomy' as const, 9, '… 6 more'],
+  ])('⚠ the marker counts ENTRIES, not lines — %s with %i messages marks %s', (bound, n, expected) => {
+    const html = renderToStaticMarkup(
+      <PanelNotes subject="cpu" bound={bound} messages={errorsOf(n)} />,
+    );
+    if (expected === '') {
+      // "and nothing when it does not" — a marker on a well with nothing hidden is a lie in the
+      // one place §6.1 lets the UI add copy that is not a reading.
+      expect(html).not.toContain('data-role="notes-more"');
+      expect(html).not.toContain('more');
+    } else {
+      expect(html).toContain(expected);
+      expect(html).toContain('data-role="notes-more"');
+    }
+  });
+
+  test('⚠ the two bounds have DIFFERENT budgets — the count is not one constant', () => {
+    // Three messages: over the tight budget, exactly at the roomy one. A marker that ignored
+    // `bound` would say the same thing about both, and one of the two would be wrong.
+    const three = errorsOf(3);
+    expect(renderToStaticMarkup(<PanelNotes subject="cpu" bound="tight" messages={three} />)).toContain('… 2 more');
+    expect(renderToStaticMarkup(<PanelNotes subject="cpu" bound="roomy" messages={three} />)).not.toContain('notes-more');
+  });
+
+  test('⚠ hiddenMessageCount is the exported arithmetic, and it never goes negative', () => {
+    expect(hiddenMessageCount(0, 'tight')).toBe(0);
+    expect(hiddenMessageCount(1, 'tight')).toBe(0);
+    expect(hiddenMessageCount(4, 'tight')).toBe(3);
+    expect(hiddenMessageCount(1, 'roomy')).toBe(0);
+    expect(hiddenMessageCount(3, 'roomy')).toBe(0);
+    expect(hiddenMessageCount(4, 'roomy')).toBe(1);
+  });
+
+  test('⚠ the marker is aria-hidden — nothing is hidden from a screen reader, only from the wall', () => {
+    // Every message is in the DOM inside a named, focusable `role="group"`. Announcing "… 4
+    // more" to a reader who is about to be read all five is noise, and worse, it is untrue.
+    const html = renderToStaticMarkup(<PanelNotes subject="cpu" messages={errorsOf(5)} />);
+    expect(/<span[^>]*data-role="notes-more"[^>]*>/.exec(html)?.[0] ?? '').toContain('aria-hidden="true"');
+    for (const e of errorsOf(5)) expect(html).toContain(e.message);
+  });
+
+  test('⚠ the marker sits OUTSIDE the scroll box — inside it, it would scroll away', () => {
+    // An absolutely-positioned child of a scroll container scrolls with the content. The
+    // marker is a sibling of the well, anchored to a wrapper that adds no height of its own.
+    const html = renderToStaticMarkup(<PanelNotes subject="cpu" messages={errorsOf(3)} />);
+    const wellEnd = html.indexOf('</div>');
+    expect(html.indexOf('data-role="notes-more"')).toBeGreaterThan(wellEnd);
+    expect(html.indexOf('role="group"')).toBeLessThan(wellEnd);
+  });
+});
+
+// ⚠ RENAMED by 10g's TEST phase. It said "and it is inert when nothing is hidden", which is
+// two claims this body cannot make: it reads DECLARATIONS, and the paint was measured at
+// 9/255 with nothing hidden rather than nothing at all (`tokens.css` carries the numbers).
+// What these tests really own is that the two layers and their attachments are present and
+// that the cover is painted in the well's own ground.
+describe('⚠ 10g/Q4 — the fade is CSS: both layers, the two attachments, and the well’s own ground', () => {
+  const declarations = (): string =>
+    readFileSync(fileURLToPath(new URL('./panel-notes.module.css', import.meta.url)), 'utf8').replace(
+      /\/\*[\s\S]*?\*\//g,
+      ' ',
+    );
+
+  test('⚠ the well carries BOTH fade layers, and the attachments are what make it conditional', () => {
+    const css = declarations();
+    const body = css.slice(css.indexOf('.notes {'), css.indexOf('}', css.indexOf('.notes {')));
+    // The cover moves with the CONTENT and the fade is pinned to the CONTAINER. With both
+    // `local` the fade never shows; with both `scroll` it always does — either way the rule
+    // reads as "there is a fade" and is wrong in one of the two states.
+    expect(body).toMatch(/background-attachment:\s*local,\s*scroll/);
+    expect(body).toMatch(/background-image:\s*var\(--well-fade-cover\),\s*var\(--well-fade-edge\)/);
+    expect(body).toMatch(/background-size:\s*100% var\(--well-fade-height\)/);
+    expect(body).toMatch(/background-repeat:\s*no-repeat/);
+    expect(body).toMatch(/background-position:\s*bottom/);
+  });
+
+  test('⚠ the cover is painted in the well’s OWN ground, or it is a bar rather than a cover', () => {
+    // The cover only disappears when its colour is the ground it sits on. `.notes` sets
+    // `--surface-sunken`, and `--well-fade-cover` must end at that same token.
+    const tokens = readFileSync(
+      fileURLToPath(new URL('../tokens.css', import.meta.url)),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, ' ');
+    expect(tokens).toMatch(/--well-fade-cover:\s*linear-gradient\(to top, var\(--surface-sunken\), transparent\)/);
+    expect(declarations()).toMatch(/background:\s*var\(--surface-sunken\)/);
+  });
+
+  // ⚠ ADDED 2026-09-10 by 10g's RECONCILIATION (adversarial A3/R1). Every test in the project
+  // asserted `background-size: 100% var(--well-fade-height)` and NOT ONE asserted the token's
+  // value, so `--well-fade-height: 9px` -> `0px` — one line, one file — deleted §6.1's ruled
+  // affordance from ALL FOUR wells at once with `pnpm verify` green. `10g-PN7` mutates
+  // `--well-fade-cover`, one line above it, which is why the hole looked covered.
+  test('⚠ 10g/Q4 — the fade has a REAL height: --well-fade-height is a positive px, not 0', () => {
+    const tokens = readFileSync(
+      fileURLToPath(new URL('../tokens.css', import.meta.url)),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const declared = /--well-fade-height:\s*([\d.]+)px/.exec(tokens);
+    expect(declared).not.toBeNull();
+    // 9 px is the measured band the cover has to travel before the affordance is fully on
+    // (`tokens.css` carries the per-channel numbers). What must never be true is zero: the
+    // background-size collapses, and all four wells lose the fade in one edit.
+    expect(Number(declared![1])).toBe(9);
+    expect(Number(declared![1])).toBeGreaterThan(0);
+  });
+
+  test('⚠ the marker adds no HEIGHT — the wrapper is positioned and the marker is out of flow', () => {
+    const css = declarations();
+    const wrapper = css.slice(css.indexOf('.well {'), css.indexOf('}', css.indexOf('.well {')));
+    const marker = css.slice(css.indexOf('.more {'), css.indexOf('}', css.indexOf('.more {')));
+    expect(wrapper).toMatch(/position:\s*relative/);
+    expect(marker).toMatch(/position:\s*absolute/);
+    expect(marker).toMatch(/bottom:\s*0/);
   });
 });

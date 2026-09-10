@@ -195,9 +195,20 @@ def _code_only(text):
     return "".join(out)
 
 
+# ⚠ 10g/A7, 2026-09-10 — the ledger keys this scanner could not match, collected so the run
+# FAILS on them instead of printing a warning nobody reads. The ledger's own check is
+# `prefix not in joined`, so a key of `⚠` alone is a substring of every ⚠ FAIL line and the
+# mark scores covered without any mutation touching it. Three such names existed across the
+# nine harnesses on 2026-09-10 — all three added by 10g, one of them 10g's own acceptance
+# test for the `… N more` marker — and both earlier phases reported "every ⚠ mark reddened"
+# off runs that were printing these lines. HANDOVER §5.2 rule 5.
+UNMATCHABLE = []
+
+
 def marked_tests():
     """Every ⚠-marked test name, as (file, name, matchable-prefix) triples."""
     found = []
+    UNMATCHABLE.clear()
     for rel in LEDGER_FILES:
         text = pathlib.Path(rel).read_text()
         read = set()
@@ -225,6 +236,7 @@ def marked_tests():
             # prefix for no reason — and a short prefix is the input to F2's conflation.
             prefix = (name.split("%")[0] if m.group(1) else name).strip()
             if len(prefix) < 12:
+                UNMATCHABLE.append((rel, name, prefix))
                 print(f"!!! {rel}: ⚠ test name is unmatchably short: {name!r}")
             found.append((rel, name, prefix))
         for c in CANDIDATE.finditer(_code_only(text)):
@@ -732,6 +744,14 @@ def main() -> int:
 
     # ------------------------------------------------------------------ the ledger
     marked = marked_tests()
+    if UNMATCHABLE:
+        print(
+            "\nUNMATCHABLE LEDGER KEYS — these ⚠ names cannot be matched against a FAIL line,\n"
+            "so the ledger's verdict on them means nothing. Move the %-placeholder later:"
+        )
+        for rel, nm, prefix in UNMATCHABLE:
+            print(f"  {rel}\n    {nm}\n    ledger key {prefix!r} ({len(prefix)} chars)")
+        return 1
     joined = "\n".join(covered)
     uncovered = [(rel, nm) for rel, nm, prefix in marked if prefix not in joined]
     print(

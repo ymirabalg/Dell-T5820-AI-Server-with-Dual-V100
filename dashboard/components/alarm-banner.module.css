@@ -72,11 +72,64 @@
   color: var(--ink-muted);
 }
 
+/* ⚠ 10g/Q2 — §6.4's banner is a FIXED TWO-LINE SCROLLING BOX (ruled 2026-09-09).
+   Measured before this rule: 65.7 px at two alarms AND at six (six chips still wrap to one
+   line), **92.5 at twelve** and **173.1 / 146.2 / 119.4 at twenty-one** across the three
+   viewports — it grows with its TEXT, not with its count, and every §6.1 budget had been drawn
+   against it as though it were a constant.
+
+   The two lines are the LEAD (`.head`, with the count) and ONE line of conditions. `.head` is
+   deliberately OUTSIDE the scrolling region rather than `position: sticky` inside it, which is
+   the ruling's own alternative and the better one here: the banner's ground is a gradient, and
+   a sticky head would need an opaque background of its own to stop chips scrolling visibly
+   under it. So the count §6.4 requires *"always visible"* is not merely pinned — it is not in
+   the scroller at all.
+
+   ⚠ `height`, not `max-height`, and 21 px rather than the measured 20.8 px chip line. Both
+   choices are about the acceptance being EQUALITY: with `max-height` a two-alarm banner would
+   measure 20.8 and a twenty-one-alarm one 21.0, so the "identical at 2 / 6 / 12 / 21" test
+   would fail by 0.2 px on a rule that is working. `height` fixes the line at every count, the
+   way `session-event-log-panel.module.css`'s own well does; 21 is the whole pixel above 20.8,
+   so one line is never clipped by rounding.
+
+   ⚠ The old `margin-top: 7px` is GONE, and that is what buys the page back 6.9 px (65.7 ->
+   58.8 at every viewport). It reserved optical separation under an unbounded, growing block;
+   between the two lines of a fixed two-line box the separation is the body's own 2 px gap,
+   the same as between any two lines of one box. That 6.9 px is what takes the
+   all-sources-explained page from 1 px OVER at 1600x1024 to fitting — `10g-build.md` §2. */
 .rest {
-  margin-top: 7px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px 8px;
+  height: 21px;
+  box-sizing: border-box;
+  position: relative;
+  overflow-y: auto;
+  border-radius: 2px;
+  padding: 0 4px;
+  /* ⚠ 10g/Q4 — the continuation fade, the same two-layer mechanism every other bounded well
+     on the page carries (`tokens.css`), so "there are more conditions below" is drawn rather
+     than left to be discovered. No `… N more` marker here — §6.4 already pins the total
+     (`12 active alarms`) on the line above, and a second count beside it would be the same
+     fact twice.
+
+     ⚠ The sunken GROUND is not decoration and it is not free-hand design: the fade's cover
+     layer only disappears when it is painted in the well's exact ground colour, and this
+     region's ground was the banner's own 90deg red gradient — which no single colour matches,
+     because it varies across the width. `--surface-sunken` is what `tokens.css` reserves for
+     "a recessed well (meter track, log well, table wells)", which is now what this is, so the
+     one surface that makes the affordance exact is also the one the ramp already assigns. */
+  background-color: var(--surface-sunken);
+  background-image: var(--well-fade-cover), var(--well-fade-edge);
+  background-position: bottom;
+  background-size: 100% var(--well-fade-height);
+  background-repeat: no-repeat;
+  background-attachment: local, scroll;
+}
+
+.rest:focus-visible {
+  outline: 2px solid var(--ink-primary);
+  outline-offset: -2px;
 }
 
 /* 10e §5 — a REAL rule now (10c1-A8's dangling `styles.item` is fixed by giving it one). */

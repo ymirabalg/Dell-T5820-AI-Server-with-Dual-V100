@@ -398,9 +398,22 @@ RPM, SMM nominal max 5100. Engage at ≥ 55 °C, release at ≤ 51 °C, `HIGH_DW
 |---|---|---|
 | `unitState` | D-Bus `ActiveState` of `llama-server@N.service` | none |
 | `health` | `GET http://127.0.0.1:PORT/health` — see §3.7 for the value set | **none — returns 200 unauthenticated** |
-| `model` | `GET /v1/models` | **none — returns 200 unauthenticated** |
+| `model` | `GET /v1/models` | **none — returns 200 unauthenticated** ⚠ carried RAW on the wire; **rendered as its filename** — see below |
 | `port` | `/etc/llama-server/<i>.env` (`PORT=`) — **the file only**; the unit's `EnvironmentFile` *is* that file on this box | none |
+
 | `ctx` | same env file (`CTX=`) | none |
+
+⚠ **`model` is RENDERED AS ITS FILENAME — ruled 2026-09-10 (10g-A1).** `/v1/models` returns
+`data[0].id`, which is llama.cpp's `-m` argument: **the full weights path** unless `ALIAS` is set
+in that instance's env file, and `ALIAS` is optional in `serve-llm.sh set-model`. Measured, a
+path-valued `model` costs **+21 px per SERVING row** and **+17.9 px per GPU card** through the
+`served by instance N` strip, and it was the last unbounded string on the page. The wire carries
+it raw, as §3.1 requires of every reading; the **rendering** shows the path's final segment
+(`Qwen3.6-27B-Q4_K_M.gguf`), with the whole string reachable in the row's `title` and the table
+view. A path's identity is its filename, and an alias is already a filename-shaped word, so the
+two forms render alike. This is the one place a reading is shortened for layout; it is not a
+lookup, not a prettification, and nothing is invented — compare §6.2's raw driver name, which
+stays whole because it is not a path.
 
 **The filename must parse as a bare non-negative integer.** `01.env`, `+1.env` and `1 .env`
 are **rejected**, not read as instance 1 — §6.4 makes the condition subject a bare integer,
@@ -925,6 +938,31 @@ margin back, a `roomy` notes well is **three lines (46 px), not four (60 px)**. 
 this: the all-sources-explained page with a two-alarm banner (measured 1 px over at 1600×1024
 before the ruling) fits at all three viewports, re-measured.
 
+⚠⚠ **THE GRID ITSELF IS BOUNDED — ruled 2026-09-10 (10g-A1), and this supersedes the
+term-by-term approach above.** Four loops bounded one term each — notes blocks, the throttle
+line, table views, the banner — and each time a new unbounded term appeared. Measured on the
+all-sources-explained page, which had 6 px of spare at 1600×1024, **any one** of these ordinary
+changes broke the fold: a notable throttle mask (−16), §6.3's four alarm bits (−40), **a third
+`llama-server` instance, which §3.4 requires to work** (−42), or a `model` that is a path (−19 at
+1280). Together: −113 / −64 / −8. Bounding terms one at a time is not convergent, so:
+
+**Every panel has a maximum height derived from its grid row, and its body scrolls inside that
+height when the content exceeds it.** The page then fits at every §6.1 viewport **for any
+telemetry whatsoever** — no fixture, no compound case, no future field can break it — and the
+per-term wells above become a legibility choice rather than the thing holding the promise up.
+This is 10d's deferred "stage 2 — bound the grid", now taken. Consequences to honour:
+
+- **The head of a panel never scrolls away**: title, subtitle and chip stay pinned; only the body
+  scrolls. A reader must always be able to see which panel is which and what its severity is.
+- **A panel that is scrolling says so** — the same fade and `… N more` affordance as a well.
+- **The row model still governs**: rows 2 and 3 size independently, so a max-height is per panel,
+  computed from its row's share, not one global number.
+- **Acceptance is a browser measurement on hostile telemetry**, not on a healthy fixture: the
+  every-source-explained page with a notable throttle mask, four alarm bits, three serving
+  instances and path-valued models must fit at 1280×1024, 1600×1024 and 1920×1080. ⚠ **Every
+  browser fixture in this project hard-codes `throttleReasons: '0x…04'`, which is not notable**,
+  so the throttle line has never appeared on a measured page. The fixtures are part of the work.
+
 ⚠ **A well whose content overflows says so — ruled 2026-09-09 (10f-Q4/Q5).** The wall panel
 has no pointer, so a bounded well draws a **bottom fade and a small `… N more` marker** whenever
 `scrollHeight > clientHeight`, and nothing when it does not. The heights stay as budgeted; the
@@ -1219,6 +1257,14 @@ the value, and when it started **as an elapsed form** (`for 2 d 06:00`, ruled 20
 is still on screen at 09:00 even though nothing is stored. Multiple conditions collapse
 into one banner with a count. Watch-level conditions colour their cell but never raise a
 banner.
+
+⚠ **The banner shows what fits and counts the rest — ruled 2026-09-10 (10g-A6), replacing the
+scrolling form below.** Once the banner was fixed-height and scrolling, **16 of 21 conditions were
+unreachable at 1280**: a wall panel has no pointer, and no scrollbar was drawn. So the banner
+renders the conditions that fit its two lines and a **`+N more`** count for the remainder. Nothing
+is lost — every condition is in its own panel and in the session event log, both reachable — and
+what the banner claims is now what a reader can actually see. The fixed height and the pinned
+alarm count below still hold.
 
 ⚠ **The banner has a FIXED height — ruled 2026-09-09 (10f-Q2).** Measured, it was unbounded:
 65.7 px at two and at six alarms, 92.5 at twelve, 173 at twenty-one at 1280, and every §6.1

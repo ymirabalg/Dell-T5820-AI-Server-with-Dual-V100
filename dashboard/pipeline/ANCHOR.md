@@ -31,6 +31,18 @@ adversarial and review phases and fixed before they became wrong code. Several w
 
 ### 2.0 ⚠ The one-paragraph version
 
+> ⚠⚠ **CORRECTED AND EXTENDED 2026-09-10 by 10g's reconciliation, and read this paragraph first.**
+> 10e and 10f are **committed** (`8ad8b9c`, `5769522`); **10g** is the uncommitted work. §6.1's
+> promise is measured TRUE on every fixture this project grades — healthy (263/228/284 px spare),
+> all-collectors-failed (140/104/160), the real box's DKMS failure (164/129/185) and the
+> all-sources-explained page (41/6/62) — and 10g's adversarial then measured it **FALSE on
+> ordinary telemetry no fixture carries**: one notable throttle mask, or §6.3's four alarm bits,
+> or a third `llama-server` instance §3.4 requires to work, or a `model` that is a path, each
+> breaks the fold on its own. So the owner ruled on 2026-09-10 that **the GRID itself is bounded**
+> — every panel gets a max-height from its grid row and its body scrolls, head pinned — plus a
+> `+N more` banner and `model` rendered as its filename. That is **10h**, and it is what closes
+> §6.1 for good. Everything below stands as the record of how the term-by-term approach ran out.
+
 **Step 10 is built and, as of 10f (2026-09-09, uncommitted), it MEETS §6.1's only quantitative
 promise on the healthy page AND on a degraded one.** The build used to overflow the fold by
 356 / 418 / 362 px at 1280×1024 / 1600×1024 / 1920×1080; measured on today's tree with
@@ -51,18 +63,18 @@ then step 11.**
 
 ```
 main                 3f06e98   [origin/main]                 backend, pushed. Untouched since
-dashboard-frontend   5d9b00e   [origin/dashboard-frontend]   pushed; the 10e handoff is the last commit
+dashboard-frontend   5769522   [origin/dashboard-frontend]   10f is the last commit (10e is 8ad8b9c)
 ```
 
-⚠ **The tree is DIRTY and that is 10e AND 10f.** 10f's own diff is 31 tracked files
-(1789 insertions, 241 deletions) plus eight untracked `.md` — the bounded wells, the neutral `0x4`
-chip, `Row`'s deletion, three re-aimed harnesses and the four phase notes. As of 2026-09-09
-`git status` is ~86 entries:
-the design record (10d + `mocks/` + the handoffs + `10e-match-the-mock.md`), **`SPEC.md`'s §6.1/§6.2
-rewrite (the parent's — the owner's nine rulings)**, the four 10e phase notes, the two touched
-harnesses, and — unlike every earlier line in this file — **real edits under `components/`,
-`app/` and `lib/`**: the density build itself. Nothing under `proxy.ts` or `next.config.mjs` is
-touched and `next-env.d.ts` is byte-identical. **Verify with `git status` before trusting any of
+⚠ **CORRECTED 2026-09-10 by 10g's reconciliation — the two lines above said `5d9b00e` and "10e AND
+10f", both of which stopped being true when 10e and 10f were committed on 2026-09-09.**
+
+⚠ **The tree is DIRTY and that is 10g**, uncommitted on `5769522`: `SPEC.md`'s three 2026-09-10
+rulings and `WORK-ITEMS.md`'s three rows (the parent's), the 10g build/test/adversarial/reconcile
+work under `components/`, the two touched harnesses plus the shared ledger block in all NINE, the
+two measurement scripts, and the untracked phase notes and handoffs. `git status` is ~35 entries.
+Nothing under `proxy.ts`, `next.config.mjs`, `lib/` or `app/` is touched by 10g, there is no
+`.env`, and `next-env.d.ts` is byte-identical. **Verify with `git status` before trusting any of
 this**; a stranded harness mutation looks exactly like an intended edit.
 
 ### 2.2 What is closed
@@ -79,12 +91,18 @@ this**; a stranded harness mutation looks exactly like an intended edit.
 | 10c-2 | `6c2e64a` | five guards; one of them punished the fix |
 | 10c-3 | `7de7dd3` | sizing/paint; **§6.1 measured false** — step 10 closed-with-a-known-failure |
 | 10e | ⚠ **uncommitted** | the density build; **§6.1 measured TRUE on the healthy page**; F1's shipped fix measured worthless and re-fixed |
-| 10f | ⚠ **uncommitted** | the owner's four rulings: bounded `errors[]` wells (**§6.1 now measured TRUE on a DEGRADED page**), the neutral `0x4` chip, `Row` deleted, step 2's ledger re-aimed and running |
+| 10f | `5769522` | the owner's four rulings: bounded `errors[]` wells (**§6.1 now measured TRUE on a DEGRADED page**), the neutral `0x4` chip, `Row` deleted, step 2's ledger re-aimed and running |
+| 10g | ⚠ **uncommitted** | the owner's four rulings of 2026-09-09: the table view inside the chart's own box, §6.4's fixed-height banner, the throttle line as a one-line well + `roomy` 46 px, and the fade / `… N more` affordance. **Its adversarial then measured §6.1 breakable on hostile telemetry**, which is what the owner ruled on the day after (§2.0) |
 
 Suite at `7de7dd3`: **99 files · 2793 tests · exit 0**; nine harnesses, ~947 mutations, every ledger clean.
-Suite on today's dirty tree (10f): **101 files · 2967 tests · exit 0**; nine harnesses, **1093**
-mutations, **all nine exit 0** and every ledger clean — including step 2's, whose three orphaned
-anchors 10f re-aimed.
+Suite at `5769522` (10f): **101 files · 2967 tests · exit 0**; nine harnesses, **1093** mutations,
+all nine exit 0 — including step 2's, whose three orphaned anchors 10f re-aimed.
+⚠ Suite on today's dirty tree (10g): **101 files · 3010 tests · exit 0**; nine harnesses,
+**1130** mutations, **all nine exit 0** — zero anchors moved or ambiguous, zero `DID NOT BITE`,
+zero unmatchable ledger keys (that last one is now a FAILURE rather than a warning, 10g-A7).
+Browser: `measure-breakpoints.mjs` **30/30 exit 0**, `check-density.mjs` **ALL PASS**. Numbers go
+stale on every item; the authoritative ones are each harness's own printed line and
+`HANDOVER.md` §1.
 
 ### 2.3 ⚠ 10d and 10e — the design investigation, and what was withdrawn
 
@@ -170,11 +188,28 @@ see the line immediately below, which the parent updates when the agent reports.
 The owner answered seven 10d questions before the mock was measured. **These no longer apply**:
 the `<summary>` disclosure and moving SERVING/the log off the wall (10d Q2, Q4); one chart width
 "400 everywhere" and `plotHeight` 100 (Q5, Q6 — sizes now come from the mock: sparkline **38 px,
-50 at ≥1600**; COOLING pair **84 + 10 + 46 + 14 = 160 px**); and **stage 2 "bound the grid"** (Q3)
-is **deferred, not ruled out** — re-evaluate only *after* the density fix is measured, since the
-mock's own numbers say it may be unnecessary in the healthy state.
+50 at ≥1600**; COOLING pair **84 + 10 + 46 + 14 = 160 px**).
+
+⚠ **CORRECTED 2026-09-10 — stage 2 "bound the grid" (10d Q3) is now RULED, not deferred.** This
+entry used to read *"deferred, not ruled out — re-evaluate only after the density fix is measured,
+since the mock's own numbers say it may be unnecessary in the healthy state."* The density fix was
+measured and the healthy page has 227–284 px of spare, exactly as predicted — but four loops then
+bounded one term each (notes wells, table views, the banner, the throttle line) and a new unbounded
+term appeared every time. 10g-A1 measured four of them breaking the fold on the same page on
+2026-09-10, and the owner ruled the grid bounded (`SPEC.md` §6.1, `WORK-ITEMS.md` §11). It is
+**10h**. The "unnecessary in the healthy state" reasoning was right about the healthy state and
+that was the wrong state to reason about.
 
 ### 2.6 ⚠ What to do next, in order
+
+> **Progress 2026-09-09, evening:** **10f is COMMITTED at `5769522`** (full loop; parent re-ran verify
+> 2967/exit 0 and all browser measurements: m9 140/104/160, m10 157/122/178, density ALL PASS).
+> §6.1 holds on healthy AND all-collectors-failed pages. The owner then ruled the last four
+> (SPEC §6.1/§6.4, WORK-ITEMS §11): **10g** = table view inside the chart's box (10f-Q1) · fixed
+> two-line scrolling banner (10f-Q2) · throttle line as a one-line well + roomy wells to 46 px, then
+> re-measure the all-explained page (10f-Q3/10e-Q2) · `… N more` affordance (10f-Q4/Q5). **10g's build
+> was launched from `handoffs/10g-bounded-terms.md`**; test → adversarial → reconcile → parent review
+> follow, then step 11. Still open, none blocking: `10e-Q4`–`Q11`, `10f-Q6`.
 
 > **Progress 2026-09-09, later:** **10e is COMMITTED at `8ad8b9c`** after the full loop (build ×2,
 > test, adversarial, reconcile, parent review — parent re-ran `pnpm verify` 2933/exit 0 and all three
@@ -214,8 +249,13 @@ mock's own numbers say it may be unnecessary in the healthy state.
 
 S-G-Q1…Q4 (`HANDOVER.md` §8), F14a (a `:—` copy nit), D1 (the log's third feed), 10b-S-F's "its own
 readings" definition (recorded, not questioned). The banner question is **ruled** (unconditional,
-`SPEC.md` §6.1) and superseded by **`10e-Q1`**: whether the promise holds on a page where every
-collector has failed. 10e added thirteen — `10e-Q1`…`10e-Q13` in `HANDOVER.md` §8.
+`SPEC.md` §6.1) and superseded by **`10e-Q1`**, which is itself ruled and built.
+
+⚠ **Updated 2026-09-10.** Of 10e's thirteen, `10e-Q1`/`Q3`/`Q12`/`Q13` were ruled and built by 10f
+and `10e-Q2` by 10g; `10e-Q4`–`Q11` stay open. Of 10f's six, `10f-Q1`–`Q5` were ruled and built by
+10g and `10f-Q6` stays open. 10g adds **`10g-Q1`…`10g-Q4`** (`HANDOVER.md` §8) and the owner has
+already ruled its three biggest findings into **10h**: the grid is bounded, the banner shows what
+fits plus `+N more`, and `model` renders as its filename.
 
 ### 2.8 Things this session learned that the next one must not re-learn
 

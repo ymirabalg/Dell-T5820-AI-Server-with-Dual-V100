@@ -123,6 +123,16 @@
   max-height: 14px;
   border-radius: 2px;
   background: var(--surface-sunken);
+  /* ⚠ 10g/Q4 — the continuation fade, identical to `panel-notes.module.css`'s and for the same
+     ruling; `tokens.css` carries the mechanism. ⚠ This well gets the fade and NO `… N more`
+     marker: it holds ONE string, not a list, so there is no count in the panel's data to put
+     in the marker and `components/` cannot measure one. Recorded as a spec silence
+     (`10g-build.md` §6) rather than approximated with a number that would be wrong. */
+  background-image: var(--well-fade-cover), var(--well-fade-edge);
+  background-position: bottom;
+  background-size: 100% var(--well-fade-height);
+  background-repeat: no-repeat;
+  background-attachment: local, scroll;
 }
 
 /* §6.5's stale row (S-B, ruled 2026-09-08): watch-coloured, matching `alarm-banner.module.css`'s

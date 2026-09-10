@@ -85,36 +85,58 @@
   /* Panel/header/banner radius; chips and controls use 2px, the status pill 999px (10e §1.2). */
   --radius: 3px;
 
-  /* Q2-S2 — the table view's own scroll cap (SPEC §6.2, ruled 2026-09-08: "the table view
-     scrolls within its own container"). §6.1 puts real sizing in the GRID's hands and step 10
-     has not built the grid yet — `PanelShell`'s `.body` already carries `min-height: 0` in
-     anticipation of a bounded ancestor, but nothing above it is bounded today. Viewport-relative
-     rather than a literal pixel count someone would have to justify from nothing: it scales the
-     way the page's own "does this fit" reasoning already does (§6.1: "the panel is ~1026px
-     tall at 1280 wide"). **This is a stopgap, not the real answer.** Once step 10 gives a
-     panel body a genuine bounded height, this should become `max-height: 100%` inheriting it
-     — recorded for step 10 in `pipeline/steps/Q2-hover-and-table/s2-table-scroll.md`. One
-     token, one place to change, used identically by both table views so the two components
-     do not each carry their own independently-guessed number.
+  /* ⚠ 10g/Q1 — `--table-scroll-max: 40vh` IS RETIRED, and SCOPE 2.5f with it (SPEC §6.1,
+     ruled 2026-09-09). It bounded each chart's table view at 40 % of the viewport, and FIVE
+     table views are reachable at once (GPU 0, GPU 1, COOLING, CPU x2), so the page's own bound
+     was 200vh on a 100vh promise: opening all five measured **+851 / +851 / +862 px** on a
+     HEALTHY page, and GPU 0's alone **+371.1 px** against 263.2 px of spare, one click and
+     ~21 samples away. The ruling replaces it with the chart's OWN painted box — the table now
+     renders at exactly the height of the `<svg>` it stands in for (38/50 px sparklines, 174 px
+     COOLING), handed down from `grid.tsx`'s `CHART_SIZE` through the `--table-box-height`
+     custom property each chart primitive sets inline. So the number is still decided in ONE
+     place, and it is the same place that decides how tall the chart is. There is no token
+     here any more because there is no page-independent number left to name. */
 
-     ⚠ RE-CHECKED by 10c-3, SCOPE 2.5f, after the grid actually landed (10a) — STILL NO
-     bounded ancestor, so the stopgap is UNCHANGED. `grid.module.css` sets `min-height: 0` down
-     the whole chain (`.grid` → each named slot → `panel-shell.module.css`'s `.panel`/`.body`)
-     but never a `height`, `max-height` or `grid-template-rows` track size — grid rows are
-     `auto`, sized to content. Nor does `app/layout.tsx`'s `<body>`, `app/dashboard-shell.tsx`,
-     or anything else up the tree set a height. Verified by grepping every `.css`/`.module.css`
-     under `components/`+`app/` for `height`: the only matches besides this comment and
-     `min-height: 0` are `meter.module.css`'s own 6px bar (unrelated) and this file's own 1px
-     `.sr-only` trick — none of them bound a panel body. Concretely: `max-height: 100%` on an
-     element whose parent chain has no explicit height computes as unconstrained (CSS's own
-     rule for a percentage height with no definite containing-block height), so switching to it
-     today would silently un-cap the table again — precisely the regression the 2026-09-04
-     stopgap was written to prevent. This is deliberate: §6.1's own "no-scroll promise" is about
-     the PAGE, not a component, and below 1280px the page is EXPECTED to scroll — giving the
-     grid a real height (e.g. `height: 100vh` with internal scrolling) would fight that, so it
-     is not a small addition step 10 merely forgot; it is a bigger layout decision for whoever
-     next touches §6.1's breakpoints, and it stays open. */
-  --table-scroll-max: 40vh;
+  /* ⚠ 10g/Q4/Q5 — THE CONTINUATION FADE (SPEC §6.1, ruled 2026-09-09: "a bounded well draws a
+     bottom fade and a small `… N more` marker whenever `scrollHeight > clientHeight`, and
+     nothing when it does not").
+
+     `components/` is hook-free and cannot measure, so the "whenever it overflows" half is done
+     in CSS by the two-layer scroll-shadow: layer 1 is painted in the well's OWN ground and is
+     attached to the CONTENT (`local`), layer 2 is the fade and is attached to the CONTAINER
+     (`scroll`). When there is nothing below the fold the content's bottom edge and the box's
+     bottom edge coincide, so the cover sits over the fade; when there is more, the cover has
+     scrolled up out of view and the fade shows; scroll to the end and the cover comes back
+     over it. No measurement, no state, no JS.
+
+     ⚠ **It is PROPORTIONAL, not exact, and that is measured, not deduced** (10g TEST phase;
+     the build's note here claimed "exactly" and "invisible"). Screenshotting each well twice —
+     as shipped and with `background-image: none` — and decoding both, the maximum per-channel
+     difference over the well is:
+
+       nothing hidden .............. 9/255   (the fade is ~26 % present, not absent)
+       1 px hidden ................. 11/255
+       >= --well-fade-height hidden . 31-34/255  (fully on)
+
+     Two mechanisms, both inherent to the technique. The cover is itself a GRADIENT, so where
+     it is half-transparent it only half-hides the fade beneath it — the residual peaks at a
+     quarter of the fade's own alpha mid-band. And the cover moves with the content, so it
+     uncovers the fade one pixel per pixel scrolled: the affordance reaches full strength only
+     once 9 px is hidden. In practice every real case hides at least a whole line (>= 11 px
+     measured, 13.77 px in the density build's own column), so the signal IS on when it
+     matters — but "and nothing when it does not" is approximated, not met, and a well with
+     nothing hidden carries a faint bottom edge at all times. Recorded for the owner in
+     `10g-test.md` rather than redesigned here: a solid-colour cover was measured too and did
+     NOT reach zero either (8/255), so the fix is not a one-token change.
+
+     ⚠ Why a background and not a `mask-image` that fades the TEXT: a mask has no `local`
+     attachment, so it cannot be made conditional on overflow — it would fade the bottom of
+     every well including the ones with nothing hidden, which is precisely the "and nothing
+     when it does not" half. The `… N more` count is the other half and is data-derived
+     (`panel-notes.tsx`). */
+  --well-fade-height: 9px;
+  --well-fade-cover: linear-gradient(to top, var(--surface-sunken), transparent);
+  --well-fade-edge: linear-gradient(to top, rgba(152, 165, 180, 0.22), transparent);
 }
 
 /* 10e §1.1 — the base that a third of the density fix is. The built stylesheets used to size

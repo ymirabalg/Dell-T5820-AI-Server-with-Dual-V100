@@ -507,7 +507,12 @@ async function main() {
       if (withTables) {
         tableView = {};
         await setAllViews(page, 'table');
-        for (const vp of [VIEWPORTS[0], VIEWPORTS[2]]) {
+        // ⚠ 10g/Q1 — all THREE viewports, not two. A table view is now the chart's own painted
+        // box (SPEC §6.1, ruled 2026-09-09), so "the page with every table open is the page
+        // with every table closed" is a property to be graded at each of §6.1's three widths,
+        // not sampled at the outer two. `measure-breakpoints.mjs` measurement 13 grades it;
+        // this records the same comparison in the JSON `check-density.mjs` reads.
+        for (const vp of VIEWPORTS) {
           await page.setViewportSize(vp);
           await page.waitForTimeout(250);
           tableView[`${vp.width}x${vp.height}`] = await measurePage(page);
@@ -539,6 +544,9 @@ async function main() {
         result.mock = path.relative(ROOT, file);
       }
       console.log(line(name, result.viewports));
+      // ⚠ 10g/Q1 — print the table-open comparison beside the closed one, or the run measures
+      // it and says nothing. `grid=` on both lines is the number the ruling is about.
+      if (result.tableView) console.log(line(`${name}+tables`, result.tableView));
       if (ARRANGEMENTS[name].dom) await reload();
     }
 

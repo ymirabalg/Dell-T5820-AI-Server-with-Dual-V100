@@ -109,7 +109,7 @@ const SCROLLS = /overflow(?:-[xy])?:\s*(?:auto|scroll)\b/;
 const POSITIONED = /position:\s*(?:relative|absolute|sticky|fixed)\b/;
 
 describe('⚠ a scroll container only clips what it is the containing block of', () => {
-  test.each(cssFiles)('⚠ every scrolling box in %s is also a positioned box', (file) => {
+  test.each(cssFiles)('⚠ a scrolling box is also a POSITIONED box — %s', (file) => {
     const bodies = ruleBodiesOf(declarationsOf(readFileSync(join(stylesRoot, file), 'utf8')));
     for (const body of bodies) {
       if (!SCROLLS.test(body)) continue;
@@ -117,7 +117,7 @@ describe('⚠ a scroll container only clips what it is the containing block of',
     }
   });
 
-  test('the guard is not vacuous — the five bounded panes this app really has are all found', () => {
+  test('the guard is not vacuous — the seven bounded panes this app really has are all found', () => {
     const scrolling = cssFiles.filter((f) =>
       ruleBodiesOf(declarationsOf(readFileSync(join(stylesRoot, f), 'utf8'))).some((b) =>
         SCROLLS.test(b),
@@ -126,9 +126,15 @@ describe('⚠ a scroll container only clips what it is the containing block of',
     // ⚠ 10f/Q1 added two: `panel-notes.module.css`'s `.notes` and `status-row.module.css`'s
     // `.note` are the bounded wells §6.1's ruling requires round every `errors[]` block. The
     // list GREW; nothing left it.
+    // ⚠ 10g added two more, and again nothing left: `alarm-banner.module.css`'s `.rest` is
+    // §6.4's fixed two-line banner (Q2) and `panels/panel-text.module.css`'s `.well` is the
+    // GPU throttle line (Q3). Seven bounded panes now; the test name says five and is
+    // rewritten with them rather than left naming a count that has moved twice.
     expect(scrolling.sort()).toEqual(
       [
+        'alarm-banner.module.css',
         'panels/panel-notes.module.css',
+        'panels/panel-text.module.css',
         'panels/session-event-log-panel.module.css',
         'panels/status-row.module.css',
         'sparkline.module.css',
@@ -158,13 +164,17 @@ describe('⚠ a scroll container only clips what it is the containing block of',
  * and `height: auto` scores as a bound. Measured here, first try.
  *
  * `var(...)` counts: `sparkline.module.css` and `stacked-time-series-chart.module.css` both
- * bound their table view with `max-height: var(--table-scroll-max)`, which is a real bound
- * named once in `tokens.css` rather than spelled twice.
+ * bound their table view with `height: var(--table-box-height)`, a real bound whose value each
+ * chart primitive sets inline from the same number its `<svg>` is drawn at (10g/Q1). ⚠ That is
+ * also why this rule is load-bearing in a second way now: the bound is the only part of the
+ * table box that lives in CSS at all, so deleting the declaration would leave the height in a
+ * JSX attribute this guard cannot see — and the un-capped table view is exactly what 10f-A1
+ * measured at +851 px on a healthy page.
  */
 const BOUNDED = /(?:^|[^-])(?:max-)?height:\s*(?:calc\(|var\(|[0-9])/;
 
 describe('⚠ a scrolling box must also be a bounded box', () => {
-  test.each(cssFiles)('⚠ every scrolling box in %s is also a bounded box', (file) => {
+  test.each(cssFiles)('⚠ a scrolling box is also a BOUNDED box — %s', (file) => {
     const bodies = ruleBodiesOf(declarationsOf(readFileSync(join(stylesRoot, file), 'utf8')));
     for (const body of bodies) {
       if (!SCROLLS.test(body)) continue;
@@ -175,7 +185,7 @@ describe('⚠ a scrolling box must also be a bounded box', () => {
   test('the guard reads a real bound and refuses the three shapes that are not one', () => {
     expect('overflow-y: auto; max-height: 18px;').toMatch(BOUNDED);
     expect('overflow-y: auto; height: 84px;').toMatch(BOUNDED);
-    expect('overflow-y: auto; max-height: var(--table-scroll-max);').toMatch(BOUNDED);
+    expect('overflow-y: auto; height: var(--table-box-height);').toMatch(BOUNDED);
     // `line-height` is not a bound, and neither is a height that does not bound.
     expect('overflow-y: auto; line-height: 1.25;').not.toMatch(BOUNDED);
     expect('overflow-y: auto; height: auto;').not.toMatch(BOUNDED);

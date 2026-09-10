@@ -129,12 +129,13 @@
  *   aria-label={ariaLabel}>` that already names the whole table view — carries `tabIndex={0}`.
  *   No second name is introduced: the existing group becomes the scroll container AND the tab
  *   stop, so its one accessible name does both jobs.
- * - **`max-height` is a viewport-relative STOPGAP, not a magic pixel count.** §6.1 makes real
- *   sizing the grid's decision, and step 10 has not built the grid yet — the same reason step 9
- *   deferred the sparkline's own sizing (L9). `--table-scroll-max` (`tokens.css`) is `40vh`,
- *   shared verbatim with the sparkline's table view so there are not two independently-guessed
- *   numbers. Recorded for step 10 to replace with `max-height: 100%` once a panel body has an
- *   actual bounded height to inherit — see `s2-table-scroll.md`.
+ * - **The box is the CHART'S OWN, and `--table-scroll-max` is RETIRED** (10g/Q1, `SPEC.md`
+ *   §6.1 ruled 2026-09-09). This bullet used to describe a `max-height: 40vh` viewport-relative
+ *   stopgap shared with the sparkline; five table views are reachable at once, so that bound
+ *   was 200vh on a 100vh promise and measured +851 px with all five open. `.tableView` now
+ *   carries `height: var(--table-box-height)`, set inline from {@link chartBoxHeight} — the
+ *   same number this component's own `<svg>` is painted at, so opening a table view changes no
+ *   slot height. See `chartBoxHeight` and `tokens.css`.
  * - **A sticky header, since it is cheap and does not fake anything.** `.table thead th` is
  *   `position: sticky; top: 0`, so a reader who has scrolled past row 200 still sees which
  *   column is which. `.table` switched to `border-collapse: separate` (from `collapse`)
@@ -149,6 +150,7 @@
  */
 
 import { Fragment } from 'react';
+import type { CSSProperties } from 'react';
 
 import { EM_DASH } from '@/lib/format';
 import type { Gap } from '@/lib/client/gaps';
@@ -232,6 +234,39 @@ const LEGEND_SWATCH = 16;
 const LEGEND_TEXT_GAP = 4;
 const LEGEND_ENTRY_GAP = 14;
 const MONO_CHAR_WIDTH = 5.4;
+
+/**
+ * ⚠ 10g/Q1 — the chart's PAINTED height, and the ONE derivation of it.
+ *
+ * `SPEC.md` §6.1, ruled 2026-09-09: *"a table view replaces its chart inside the chart's own
+ * box"*. Both branches of {@link StackedTimeSeriesChart} call this — the `<svg>`'s `height`
+ * and the table view's `--table-box-height` — so the two views cannot come to differ by a
+ * pixel while both look correct (HANDOVER §0.8: *"two views of one dataset must be computed
+ * from ONE derivation, not two agreeing ones"*). COOLING's is 2 x 72 + 10 + 20 = **174**.
+ *
+ * The `plots.length === 0` case is `plotHeight`, because that is the height of the empty
+ * `<svg>` the chart branch paints for it — not `AXIS_HEIGHT`, which would make the empty
+ * table the one state where toggling the view moved the page.
+ *
+ * ⚠ **`plotCount` is not `plots.length` — it is 0 whenever the CHART would paint its empty
+ * `<svg>`,** which includes a degenerate domain (`domainEndMs <= domainStartMs`) with plots
+ * present. {@link StackedTimeSeriesChart} computes that once and hands both branches the
+ * result; calling this with `plots.length` at a call site is the defect the test phase
+ * measured (72 px of chart against 174 px of table on the first frame after a reload).
+ */
+export const chartBoxHeight = (plotCount: number, plotHeight: number): number =>
+  plotCount === 0
+    ? plotHeight
+    : plotCount * plotHeight + (plotCount - 1) * PLOT_GAP + AXIS_HEIGHT;
+
+/**
+ * ⚠ 10g/Q1 — the box above, as a style object. A custom property rather than an inline
+ * `height` so the stylesheet still carries the `height:` declaration `components/styles.test.ts`
+ * reads: a scrolling box whose only bound lives in a JSX attribute is a bound no CSS guard can
+ * see, and that guard is what stops the bound being deleted.
+ */
+const tableBoxStyle = (height: number): CSSProperties =>
+  ({ '--table-box-height': `${height}px` }) as CSSProperties;
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -603,17 +638,33 @@ function ChartTableView({
   domainStartMs,
   domainEndMs,
   formatTime,
+  boxHeight,
+  empty,
 }: Pick<
   StackedTimeSeriesChartProps,
   'ariaLabel' | 'plots' | 'gaps' | 'domainStartMs' | 'domainEndMs' | 'formatTime'
->) {
-  if (plots.length === 0) {
-    return <p className={styles.tableEmpty}>{ariaLabel} — no time range to plot</p>;
-  }
-
+> & { readonly boxHeight: number; readonly empty: boolean }) {
   return (
-    <div className={styles.tableView} role="group" aria-label={ariaLabel} tabIndex={0} data-role="table-view">
-      {plots.map((plot) => {
+    // ⚠ 10g/Q1: the box is the CHART's — `boxHeight` is the number the `<svg>` beside it is
+    // painted at, computed ONCE above both branches (see {@link StackedTimeSeriesChart}), and
+    // the empty case renders INSIDE it rather than as a bare `<p>` beside it.
+    <div
+      className={styles.tableView}
+      style={tableBoxStyle(boxHeight)}
+      role="group"
+      aria-label={ariaLabel}
+      tabIndex={0}
+      data-role="table-view"
+    >
+      {/* ⚠ 10g/Q1, corrected by the TEST phase: `empty` is the CHART's own emptiness test, not
+          `plots.length === 0`. A degenerate domain (`domainEndMs <= domainStartMs`) is the
+          state `chartDomainOf` returns before the first accepted poll — with COOLING's two
+          literal plots still present — and the chart paints its `data-empty` `<svg>` for it.
+          Deciding it here a second way put a 174 px table beside a 72 px chart on the first
+          frame after every reload: measured 72 vs 174, which is exactly the toggle that moves
+          the page this ruling forbids. */}
+      {empty ? <p className={styles.tableEmpty}>{ariaLabel} — no time range to plot</p> : null}
+      {(empty ? [] : plots).map((plot) => {
         const rows = tableRowsFor(plot, gaps, domainStartMs, domainEndMs);
         return (
           <table key={plot.id} className={styles.table} data-role="plot-table">
@@ -690,6 +741,17 @@ export function StackedTimeSeriesChart({
   // points exist.
   const plots = clipPlotsToDomain(rawPlots, domainStartMs, domainEndMs);
 
+  // ⚠ 10g/Q1 — EMPTINESS and the BOX are decided once, above both branches, for the same
+  // reason `clipPlotsToDomain` is applied once above them: two branches deciding the same
+  // thing separately is how they come to disagree. `emptyBox` was `plots.length === 0` in the
+  // table branch and `plots.length === 0 || domainEndMs <= domainStartMs` in the chart branch
+  // until the test phase measured the difference — 72 px of chart against 174 px of table on
+  // the first frame after every reload, because `chartDomainOf` returns a degenerate `0 -> 0`
+  // domain before the first accepted poll while COOLING's two plots are literals that are
+  // always present.
+  const emptyBox = plots.length === 0 || domainEndMs <= domainStartMs;
+  const boxHeight = chartBoxHeight(emptyBox ? 0 : plots.length, plotHeight);
+
   if (view === 'table') {
     return (
       <ChartTableView
@@ -699,16 +761,20 @@ export function StackedTimeSeriesChart({
         domainStartMs={domainStartMs}
         domainEndMs={domainEndMs}
         formatTime={formatTime}
+        // ⚠ 10g/Q1 — so the table view is the chart's own box (`chartBoxHeight`), the same
+        // number and the same emptiness test the `<svg>` below is painted from.
+        boxHeight={boxHeight}
+        empty={emptyBox}
       />
     );
   }
 
-  if (plots.length === 0 || domainEndMs <= domainStartMs) {
+  if (emptyBox) {
     return (
       <svg
         className={styles.chart}
         width={width}
-        height={plotHeight}
+        height={boxHeight}
         role="img"
         aria-label={`${ariaLabel} — no time range to plot`}
         data-empty="true"
@@ -724,7 +790,9 @@ export function StackedTimeSeriesChart({
 
   const plotTops = plots.map((_, i) => i * (plotHeight + PLOT_GAP));
   const plotsHeight = plots.length * plotHeight + (plots.length - 1) * PLOT_GAP;
-  const totalHeight = plotsHeight + AXIS_HEIGHT;
+  // ⚠ 10g/Q1 — the SAME NUMBER the table view's box is, not a second call that agrees with
+  // it: `boxHeight` above is what both branches paint. See `chartBoxHeight`.
+  const totalHeight = boxHeight;
   const hatchId = `${id}-hatch`;
 
   // Q2's hover layer — see the module doc for the cost analysis and the "why exact-match,

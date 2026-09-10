@@ -214,9 +214,20 @@ def _code_only(text):
     return "".join(out)
 
 
+# ⚠ 10g/A7, 2026-09-10 — the ledger keys this scanner could not match, collected so the run
+# FAILS on them instead of printing a warning nobody reads. The ledger's own check is
+# `prefix not in joined`, so a key of `⚠` alone is a substring of every ⚠ FAIL line and the
+# mark scores covered without any mutation touching it. Three such names existed across the
+# nine harnesses on 2026-09-10 — all three added by 10g, one of them 10g's own acceptance
+# test for the `… N more` marker — and both earlier phases reported "every ⚠ mark reddened"
+# off runs that were printing these lines. HANDOVER §5.2 rule 5.
+UNMATCHABLE = []
+
+
 def marked_tests():
     """Every ⚠-marked test name, as (file, name, matchable-prefix) triples."""
     found = []
+    UNMATCHABLE.clear()
     for rel in LEDGER_FILES:
         text = pathlib.Path(rel).read_text()
         read = set()
@@ -239,6 +250,7 @@ def marked_tests():
                 continue
             prefix = (name.split("%")[0] if m.group(1) else name).strip()
             if len(prefix) < 12:
+                UNMATCHABLE.append((rel, name, prefix))
                 print(f"!!! {rel}: ⚠ test name is unmatchably short: {name!r}")
             found.append((rel, name, prefix))
         for c in CANDIDATE.finditer(_code_only(text)):
@@ -1786,8 +1798,11 @@ REGRESSIONS = [
     # ARIA prohibits on the `generic` role, plus no tab stop. Same property, same red tests.
     ("10f-PN2 the notes well is not keyboard-reachable and its name is an attribute ARIA ignores, so its scrolled-away messages cannot be read at all",
      PANEL_NOTES_SRC,
-     '      data-bound={bound}\n      role="group"\n      tabIndex={0}\n      aria-label={`${subject} messages`}\n',
-     "      data-bound={bound}\n      aria-label={`${subject} messages`}\n",
+     # ⚠ RE-AIMED by 10g/Q4, not weakened: the well gained a wrapper (so the `… N more` marker
+     # has a positioned box that is not the scroller), which indented these four lines by two.
+     # The same three attributes are deleted from the same element.
+     '        data-bound={bound}\n        role="group"\n        tabIndex={0}\n        aria-label={`${subject} messages`}\n',
+     "        data-bound={bound}\n        aria-label={`${subject} messages`}\n",
      [PANEL_NOTES_TEST]),
     ("10f-PN3 bound defaults to roomy, so a call site that forgets the prop gets the TALLER box - the unsafe direction",
      PANEL_NOTES_SRC,
@@ -1977,6 +1992,172 @@ REGRESSIONS = [
      "key={`${e.source}:${e.message}`}",
      "key={e.source}",
      [PANEL_NOTES_TEST]),
+    # ---- 10g/Q2, Q3, Q4, Q5 — the last four unbounded terms (SPEC §6.1/§6.4, ruled
+    # 2026-09-09). Each of these is a one-line revert of the 10g diff that leaves `pnpm verify`
+    # green without its guard, which is the shape 10f-A4 found six of.
+
+    # ============================================== components/alarm-banner.tsx (⚠ Q2)
+    ("10g-AB1 the banner caps its own list at five, so a twelve-alarm page counts twelve and names six",
+     ALARM_BANNER_SRC,
+     "            {rest.map((item) => (",
+     "            {rest.slice(0, 5).map((item) => (",
+     [ALARM_BANNER_TEST]),
+    # ⚠ A MOVE, not a deletion. Deleting the count compiles and reddens plenty — but it is
+    # `10a-AB1`'s subject, and it leaves the ⚠ test this backs (the count PRECEDES the well)
+    # passing, because `indexOf` returns -1 for text that is not there and -1 is less than
+    # everything. The wrong implementation someone would actually write is the count moved
+    # in with the conditions it counts.
+    ("10g-AB2 the count moves INSIDE the scrolling well, so §6.4's 'always visible' scrolls away at twelve alarms",
+     ALARM_BANNER_SRC,
+     '      <div className={styles.body}>\n        <div className={styles.head}>\n          <span className={styles.count}>\n            {count} active alarm{count === 1 ? \'\' : \'s\'}\n          </span>\n          <span className={styles.lead}>\n            <b>\n              {lead.label} {lead.value}\n            </b>\n          </span>\n          <span className={styles.since}>{lead.since}</span>\n          {lead.age === null ? null : <span className={styles.stale}>{lead.age}</span>}\n        </div>\n        {rest.length > 0 ? (\n          // ⚠ 10g/Q2 — the SCROLLING half of §6.4\'s fixed two-line banner. Named and\n          // `tabIndex={0}` for the same reason every other bounded box on this page is\n          // (10f-A6): a scroll region nobody can reach hides what it holds, and here what it\n          // holds is every alarm past the first line. The lead above is deliberately outside\n          // it, so §6.4\'s *"the count is always visible"* needs no sticky positioning.\n          <div\n            className={styles.rest}\n            role="group"\n            tabIndex={0}\n            aria-label="other alarm conditions"\n            data-role="banner-rest"\n          >\n            {rest.map((item) => (\n              // 10e §5 — `.item` is a REAL class now (10c1-A8\'s dangling `styles.item` was\n              // fixed by removing the reference; this loop restores it as a genuine rule,\n              // since the mock\'s `.item` carries its own border/background/padding — see\n              // `alarm-banner.module.css`).\n              <span key={item.id} className={styles.item}>\n                {item.label} {item.value} <i className={styles.itemSince}>{item.since}</i>\n                {item.age === null ? null : <i className={styles.stale}>{item.age}</i>}\n              </span>\n            ))}\n          </div>\n        ) : null}\n',
+     '      <div className={styles.body}>\n        <div className={styles.head}>\n          <span className={styles.lead}>\n            <b>\n              {lead.label} {lead.value}\n            </b>\n          </span>\n          <span className={styles.since}>{lead.since}</span>\n          {lead.age === null ? null : <span className={styles.stale}>{lead.age}</span>}\n        </div>\n        {rest.length > 0 ? (\n          // ⚠ 10g/Q2 — the SCROLLING half of §6.4\'s fixed two-line banner. Named and\n          // `tabIndex={0}` for the same reason every other bounded box on this page is\n          // (10f-A6): a scroll region nobody can reach hides what it holds, and here what it\n          // holds is every alarm past the first line. The lead above is deliberately outside\n          // it, so §6.4\'s *"the count is always visible"* needs no sticky positioning.\n          <div\n            className={styles.rest}\n            role="group"\n            tabIndex={0}\n            aria-label="other alarm conditions"\n            data-role="banner-rest"\n          >\n            <span className={styles.count}>\n              {count} active alarm{count === 1 ? \'\' : \'s\'}\n            </span>\n            {rest.map((item) => (\n              // 10e §5 — `.item` is a REAL class now (10c1-A8\'s dangling `styles.item` was\n              // fixed by removing the reference; this loop restores it as a genuine rule,\n              // since the mock\'s `.item` carries its own border/background/padding — see\n              // `alarm-banner.module.css`).\n              <span key={item.id} className={styles.item}>\n                {item.label} {item.value} <i className={styles.itemSince}>{item.since}</i>\n                {item.age === null ? null : <i className={styles.stale}>{item.age}</i>}\n              </span>\n            ))}\n          </div>\n        ) : null}\n',
+     [ALARM_BANNER_TEST]),
+    ("10g-AB3 the banner's scrolling well loses its role, name and tab stop — a scroll box nobody can reach",
+     ALARM_BANNER_SRC,
+     "            className={styles.rest}\n            role=\"group\"\n            tabIndex={0}\n            aria-label=\"other alarm conditions\"\n            data-role=\"banner-rest\"",
+     "            className={styles.rest}\n            data-role=\"banner-rest\"",
+     [ALARM_BANNER_TEST]),
+    ("10g-AB4 a single standing condition renders an empty scrolling well under its own lead",
+     ALARM_BANNER_SRC, "{rest.length > 0 ? (", "{true ? (", [ALARM_BANNER_TEST]),
+    ("10g-AB5 the banner announces as a status rather than an alert, so a new alarm waits its turn",
+     ALARM_BANNER_SRC,
+     'className={styles.banner} role="alert"',
+     'className={styles.banner} role="status"',
+     [ALARM_BANNER_TEST]),
+    ("10g-AB6 the banner well is bounded by max-height, so its height is the CONTENT's again below one line",
+     "components/alarm-banner.module.css",
+     "  height: 21px;\n  box-sizing: border-box;",
+     "  max-height: 21px;\n  box-sizing: border-box;",
+     [ALARM_BANNER_TEST]),
+    ("10g-AB7 both fade layers scroll with the container, so the banner claims more conditions below when there are none",
+     "components/alarm-banner.module.css",
+     "  background-image: var(--well-fade-cover), var(--well-fade-edge);\n  background-position: bottom;\n  background-size: 100% var(--well-fade-height);\n  background-repeat: no-repeat;\n  background-attachment: local, scroll;",
+     "  background-image: var(--well-fade-cover), var(--well-fade-edge);\n  background-position: bottom;\n  background-size: 100% var(--well-fade-height);\n  background-repeat: no-repeat;\n  background-attachment: scroll, scroll;",
+     [ALARM_BANNER_TEST]),
+
+    # ============================================== components/panels/panel-notes.tsx (⚠ Q4)
+    ("10g-PN1 the marker's count ignores the well's bound, so a roomy well says three lines are hidden that are not",
+     PANEL_NOTES_SRC,
+     "  Math.max(0, total - LINES_SHOWN[bound]);",
+     "  Math.max(0, total - 1);",
+     [PANEL_NOTES_TEST]),
+    ("10g-PN2 the roomy budget is four lines, the height it USED to be — so the marker undercounts by one",
+     PANEL_NOTES_SRC,
+     "{ tight: 1, roomy: 3 }",
+     "{ tight: 1, roomy: 4 }",
+     [PANEL_NOTES_TEST]),
+    ("10g-PN3 the marker is announced to assistive tech, which is being read every message anyway",
+     PANEL_NOTES_SRC,
+     '<span className={styles.more} aria-hidden="true" data-role="notes-more">',
+     '<span className={styles.more} data-role="notes-more">',
+     [PANEL_NOTES_TEST]),
+    ("10g-PN4 the marker moves INSIDE the scroll box, where it scrolls away with the text it is about",
+     PANEL_NOTES_SRC,
+     '      </div>\n      {hidden === 0 ? null : (\n        // ⚠ `aria-hidden`: nothing is hidden from assistive tech — every message is in the DOM\n        // inside the named, focusable well above. This marker is the WALL PANEL\'s affordance,\n        // where there is no pointer and no keyboard to discover the scroll with.\n        <span className={styles.more} aria-hidden="true" data-role="notes-more">{`… ${hidden} more`}</span>\n      )}\n    </div>',
+     '        {hidden === 0 ? null : (\n          <span className={styles.more} aria-hidden="true" data-role="notes-more">{`… ${hidden} more`}</span>\n        )}\n      </div>\n    </div>',
+     [PANEL_NOTES_TEST]),
+    ("10g-PN5 the marker is laid out in flow, so every overflowing well grows the panel by a line",
+     "components/panels/panel-notes.module.css",
+     ".more {\n  position: absolute;",
+     ".more {\n  position: static;",
+     [PANEL_NOTES_TEST]),
+    ("10g-PN6 both fade layers scroll with the container, so a well with nothing hidden still says there is more",
+     "components/panels/panel-notes.module.css",
+     "  background-attachment: local, scroll;",
+     "  background-attachment: local, local;",
+     [PANEL_NOTES_TEST]),
+    ("10g-PN7 the fade's cover is painted in the PANEL's ground, not the well's, so it is a bar rather than a cover",
+     "components/tokens.css",
+     "  --well-fade-cover: linear-gradient(to top, var(--surface-sunken), transparent);",
+     "  --well-fade-cover: linear-gradient(to top, var(--surface-1), transparent);",
+     [PANEL_NOTES_TEST]),
+    ("10g-PN8 the roomy well goes back to four lines, spending the margin 10g/Q3 bought back",
+     "components/panels/panel-notes.module.css",
+     ".notes[data-bound='roomy'] {\n  max-height: 46px;",
+     ".notes[data-bound='roomy'] {\n  max-height: 60px;",
+     [PANEL_NOTES_TEST]),
+    # ⚠ ADDED 2026-09-10 by 10g's RECONCILIATION (adversarial A3/R1). Every fade test in the
+    # project asserted `background-size: 100% var(--well-fade-height)` and NOT ONE asserted the
+    # token's value — so this one line deleted §6.1's ruled affordance from all FOUR wells at
+    # once with `pnpm verify` green. `10g-PN7` mutates `--well-fade-cover`, the line above it,
+    # which is why the hole looked covered.
+    ("10g-PN9 the fade's height goes to zero, so every bounded well on the page silently loses the affordance",
+     "components/tokens.css",
+     "  --well-fade-height: 9px;",
+     "  --well-fade-height: 0px;",
+     [PANEL_NOTES_TEST]),
+
+    # ============================================== components/panels/caption.tsx (⚠ Q3)
+    ("10g-CP1 the throttle line stops being a well, so a third notable bit grows both GPU cards by 27px again",
+     CAPTION_SRC,
+     "      {well === undefined ? (",
+     "      {true ? (",
+     [CAPTION_TEST, GPU_PANEL_TEST]),
+    # ⚠ The STORAGE test is 10g TEST-phase's: this mutation's NAME is about STORAGE's link
+    # line, and until that test existed the only file it could redden about the default was
+    # `caption.test.tsx`. `gpu-panel.test.tsx` renders a card with no link line at all.
+    ("10g-CP2 `well` gains a default, so STORAGE's link line becomes an unnamed box with a tab stop",
+     CAPTION_SRC,
+     "export function Caption({ label, well, children }: CaptionProps) {",
+     "export function Caption({ label, well = 'caption', children }: CaptionProps) {",
+     [CAPTION_TEST, GPU_PANEL_TEST, STORAGE_NETWORK_PANEL_TEST]),
+    ("10g-CP3 the LABEL is inside the well, so `throttle` scrolls out of view with the chips it names",
+     CAPTION_SRC,
+     '      {label === undefined ? null : <b className={styles.label}>{label}</b>}\n      {well === undefined ? (\n        children\n      ) : (\n        <span className={styles.well} role="group" tabIndex={0} aria-label={well} data-role="caption-well">\n          {children}\n        </span>\n      )}',
+     '      {well === undefined ? (\n        <>\n          {label === undefined ? null : <b className={styles.label}>{label}</b>}\n          {children}\n        </>\n      ) : (\n        <span className={styles.well} role="group" tabIndex={0} aria-label={well} data-role="caption-well">\n          {label === undefined ? null : <b className={styles.label}>{label}</b>}\n          {children}\n        </span>\n      )}',
+     [CAPTION_TEST]),
+    ("10g-CP4 the throttle well is bounded at the THREE-line height, which is the height it had before the ruling",
+     "components/panels/panel-text.module.css",
+     "  max-height: 17px;",
+     "  max-height: 44px;",
+     [CAPTION_TEST]),
+    ("10g-CP5 the throttle well stops scrolling, so its chips wrap and grow the card exactly as before",
+     "components/panels/panel-text.module.css",
+     "  position: relative;\n  overflow-y: auto;\n  max-height: 17px;",
+     "  position: relative;\n  max-height: 17px;",
+     [CAPTION_TEST]),
+    # ---- ⚠ ADDED 2026-09-10 by 10g's RECONCILIATION (adversarial A2 and A3/R3).
+    # ⚠ A2: the WELL was bounded and the CAPTION was not. `.caption` is `flex-wrap: wrap`, so
+    # with `flex-basis: auto` the well's own max-content width breaks the line and the caption
+    # is two lines tall — measured 41.2 px at 1280 and 1600 against the ruling's (and the
+    # build's) claimed 17. This is the exact declaration someone would write back.
+    ("10g-CP6 the throttle well takes its content's width as its flex basis, so the CAPTION wraps to two lines again",
+     "components/panels/panel-text.module.css",
+     "  flex: 1 1 0;",
+     "  flex: 1 1 auto;",
+     [CAPTION_TEST]),
+    # ⚠ A3/R3: `panel-notes.module.css`'s `background-position` was asserted and this copy of
+    # the same rule was not, so the fade could be moved to the well's TOP edge — marking the
+    # edge the text does not continue past — with the whole suite green.
+    ("10g-CP7 the throttle well's fade moves to its TOP edge, marking the edge the chips do NOT continue past",
+     "components/panels/panel-text.module.css",
+     "  background-position: bottom;",
+     "  background-position: top;",
+     [CAPTION_TEST]),
+
+    # ============================================== components/panels/status-row.module.css (⚠ Q4)
+    # ⚠ ADDED 2026-09-10 by 10g's RECONCILIATION (adversarial A3/R2). A `StatusRow`'s well is
+    # one of the FOUR §6.1's affordance ruling names, and all five of its fade declarations
+    # were asserted by no test in the suite and backed by no mutation in either harness. Both
+    # attachments `scroll` is the revert that reads as a working fade and claims hidden text
+    # permanently — on every row of SAFETY, COOLING, STORAGE and SERVING at once.
+    ("10g-SR1 both fade layers scroll with the container, so every row's explanation well claims hidden text permanently",
+     "components/panels/status-row.module.css",
+     "  background-attachment: local, scroll;",
+     "  background-attachment: scroll, scroll;",
+     [STATUS_ROW_TEST]),
+
+    # ============================================== components/panels/gpu-panel.tsx (⚠ Q3 wiring)
+    ("10g-GP1 the GPU card stops asking for a well, so the primitive's bound is present and unused (10e's `0X4` shape)",
+     GPU_PANEL_SRC,
+     '<Caption label="throttle" well={`GPU ${index} throttle`}>',
+     '<Caption label="throttle">',
+     [GPU_PANEL_TEST]),
+    ("10g-GP2 both cards' throttle wells are given one constant name, so two boxes announce the same three words",
+     GPU_PANEL_SRC,
+     '<Caption label="throttle" well={`GPU ${index} throttle`}>',
+     '<Caption label="throttle" well="throttle">',
+     [GPU_PANEL_TEST, DASHBOARD_SHELL_TEST]),
 ]
 
 # ---------------------------------------------------------------------------
@@ -1998,10 +2179,12 @@ def _assert_unique_ids() -> None:
     # "back each ⚠ mark with a 10c-prefixed mutation" instruction.
     # ⚠ `10e-` added by 10e (match-the-mock/density loop) — same instruction, same reasoning.
     # ⚠ `10f-` added by 10f (the owner's four rulings of 2026-09-09) — same instruction.
-    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-", "10c-", "10e-", "10f-")))
+    # ⚠ `10g-` added by 10g (the last four unbounded terms: the table views, §6.4's banner, the
+    #    throttle line, and the `… N more` affordance) — same instruction, same reasoning.
+    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-", "10c-", "10e-", "10f-", "10g-")))
     if bad_prefix:
         raise SystemExit(
-            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-/10c-/10e-/10f-): {', '.join(bad_prefix)}"
+            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-/10c-/10e-/10f-/10g-): {', '.join(bad_prefix)}"
         )
 
 
@@ -2074,6 +2257,14 @@ def main() -> int:
 
     # ------------------------------------------------------------------ the ledger
     marked = marked_tests()
+    if UNMATCHABLE:
+        print(
+            "\nUNMATCHABLE LEDGER KEYS — these ⚠ names cannot be matched against a FAIL line,\n"
+            "so the ledger's verdict on them means nothing. Move the %-placeholder later:"
+        )
+        for rel, nm, prefix in UNMATCHABLE:
+            print(f"  {rel}\n    {nm}\n    ledger key {prefix!r} ({len(prefix)} chars)")
+        return 1
     joined = "\n".join(covered)
     uncovered = [(rel, nm) for rel, nm, prefix in marked if prefix not in joined]
     print(

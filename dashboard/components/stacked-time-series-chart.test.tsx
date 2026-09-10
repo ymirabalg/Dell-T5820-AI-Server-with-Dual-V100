@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 
@@ -6,7 +9,7 @@ import type { Gap } from '@/lib/client/gaps';
 import type { SeriesPoint } from '@/lib/client/series';
 
 import type { ChartPlot } from './stacked-time-series-chart';
-import { StackedTimeSeriesChart } from './stacked-time-series-chart';
+import { StackedTimeSeriesChart, chartBoxHeight } from './stacked-time-series-chart';
 
 const DOMAIN_START = 0;
 const DOMAIN_END = 60_000;
@@ -1283,5 +1286,97 @@ describe('⚠ Q2-S2 — the scrolling table view is reachable by keyboard', () =
     expect(opening).toContain('role="group"');
     expect(opening).toContain('aria-label="GPU 1: temperature over the selected window"');
     expect(opening).toContain('tabindex="0"');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// ⚠ 10g/Q1 — the table view IS the chart's own box (SPEC §6.1, ruled 2026-09-09).
+//
+// Same ruling as the sparkline's, at this component's scale: COOLING's chart paints 174 px
+// (2 × 72 + 10 + 20) and its table view is 174 px. What is asserted here that the sparkline's
+// file cannot assert is the ONE-DERIVATION property — `chartBoxHeight` is called by both
+// branches, so the two views cannot drift apart while both look right (HANDOVER §0.8).
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ 10g/Q1 — the table view renders in the chart’s own painted box', () => {
+  const box = (html: string): string | null =>
+    /<div[^>]*data-role="table-view"[^>]*style="([^"]*)"/.exec(html)?.[1] ??
+    /<div[^>]*style="([^"]*)"[^>]*data-role="table-view"/.exec(html)?.[1] ??
+    null;
+
+  test('⚠ chartBoxHeight is the axis-plus-plots arithmetic, and COOLING’s is 174', () => {
+    // 2 × 72 + 10 (the inter-plot gap) + 20 (the shared axis) — `grid.tsx`'s own CHART_SIZE
+    // comment quotes this number, and `check-density.mjs` grades the painted svg against it.
+    expect(chartBoxHeight(2, 72)).toBe(174);
+    expect(chartBoxHeight(1, 72)).toBe(92);
+    // ⚠ Zero plots is the EMPTY `<svg>`'s height, not the axis: the chart branch paints
+    // `plotHeight` for that input, so anything else here is a table that is not its chart.
+    expect(chartBoxHeight(0, 72)).toBe(72);
+  });
+
+  test('⚠ the svg the chart paints and the box the table gets are the SAME number', () => {
+    const chart = render({ plotHeight: 72 });
+    const table = render({ plotHeight: 72, view: 'table' });
+    const svgHeight = /<svg[^>]*height="(\d+)"/.exec(chart)?.[1];
+    expect(svgHeight).toBe('174');
+    expect(box(table)).toBe(`--table-box-height:${svgHeight}px`);
+  });
+
+  test('⚠ one plot, and they still agree — the box is a function of the plots, not a constant', () => {
+    const chart = render({ plots: [gpuPlot()], plotHeight: 72 });
+    const table = render({ plots: [gpuPlot()], plotHeight: 72, view: 'table' });
+    expect(/<svg[^>]*height="(\d+)"/.exec(chart)?.[1]).toBe('92');
+    expect(box(table)).toBe('--table-box-height:92px');
+  });
+
+  test('⚠ the EMPTY table renders INSIDE the box, at the empty chart’s own height', () => {
+    const table = render({ plots: [], plotHeight: 72, view: 'table' });
+    expect(box(table)).toBe('--table-box-height:72px');
+    expect(table).toContain('no time range to plot');
+    expect(table.indexOf('data-role="table-view"')).toBeLessThan(table.indexOf('no time range'));
+  });
+
+  // ⚠ Added by 10g's TEST phase, on a MEASURED divergence, not a hypothetical one. `plots: []`
+  // above is not the empty state this component actually reaches: `chartDomainOf` returns a
+  // degenerate `0 -> 0` domain until the first accepted poll (its own doc says so), and
+  // COOLING's two plots are literals that are present from the first render. In that state the
+  // chart branch paints its `data-empty` `<svg>` at `plotHeight` while the table branch was
+  // sizing itself from `plots.length` — 72 px against 174 px, on the first frame after every
+  // reload, in the one component the ruling is measured on. The two branches now share one
+  // emptiness test and one box.
+  test('⚠ a DEGENERATE domain with plots present is the same box in both views — the reachable empty state', () => {
+    const chart = render({ plots: [gpuPlot(), fanPlot()], plotHeight: 72, domainStartMs: 0, domainEndMs: 0 });
+    const table = render({
+      plots: [gpuPlot(), fanPlot()],
+      plotHeight: 72,
+      domainStartMs: 0,
+      domainEndMs: 0,
+      view: 'table',
+    });
+    expect(chart).toContain('data-empty="true"');
+    const svgHeight = /<svg[^>]*height="(\d+)"/.exec(chart)?.[1];
+    expect(svgHeight).toBe('72');
+    expect(box(table)).toBe(`--table-box-height:${svgHeight}px`);
+    // And it says the same thing the chart says, rather than printing two empty tables under a
+    // box that claims a time range the chart refuses to draw.
+    expect(table).toContain('no time range to plot');
+    expect(table).not.toContain('<table');
+  });
+
+  test('⚠ stacked-time-series-chart.module.css bounds the table view by that property and by nothing viewport-relative', () => {
+    const css = readFileSync(
+      fileURLToPath(new URL('./stacked-time-series-chart.module.css', import.meta.url)),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const body = css.slice(css.indexOf('.tableView {'), css.indexOf('}', css.indexOf('.tableView {')));
+    // ⚠ `height`, and NOT `max-height` — the `[^-]` is load-bearing, because `/height:/` alone
+    // matches `max-height:` and a MAXIMUM is a real defect in the other direction: a one-row
+    // table would be SHORTER than the chart it replaced, which moves the page just as surely.
+    expect(body).toMatch(/(?:^|[^-])height:\s*var\(--table-box-height\)/);
+    expect(body).not.toMatch(/max-height/);
+    expect(body).toMatch(/box-sizing:\s*border-box/);
+    expect(body).toMatch(/overflow-y:\s*auto/);
+    expect(css).not.toMatch(/--table-scroll-max/);
+    expect(body).not.toMatch(/vh/);
   });
 });

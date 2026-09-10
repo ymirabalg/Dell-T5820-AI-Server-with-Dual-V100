@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 
@@ -127,5 +130,96 @@ describe('⚠ a stale condition names the age of the reading behind it', () => {
       <AlarmBanner lead={item()} rest={[item({ id: 'b', label: 'GPU 1 temperature' })]} />,
     );
     expect(html).not.toContain('last read');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// ⚠ 10g/Q2 — §6.4's banner is a FIXED TWO-LINE SCROLLING BOX (ruled 2026-09-09).
+//
+// Measured before: 65.7 px at two alarms AND at six, 92.5 at twelve, 173.1 / 146.2 / 119.4 at
+// twenty-one — it grows with its TEXT, not its count, and every §6.1 budget was drawn against
+// it as a constant. The fix is one bounded, named, reachable well round `.rest`; the LIST is
+// untouched, because a banner that renders fewer conditions than it counts is the lying banner
+// 10a-F14 already removed from this component once.
+//
+// The HEIGHT is a browser measurement (`measure-breakpoints.mjs` measurement 12, at 2 / 6 / 12
+// / 21). What this file owns is the half that decides whether that measurement is honest:
+// every condition still in the DOM, and the count still on the pinned line.
+// ---------------------------------------------------------------------------------------
+
+describe('⚠ 10g/Q2 — the banner scrolls, and drops NOTHING to do it', () => {
+  const itemsOf = (n: number): AlarmBannerItem[] =>
+    Array.from({ length: n }, (_, i) =>
+      item({ id: `k:${i}`, label: `condition ${i}`, value: `${i} u` }),
+    );
+
+  test.each([2, 6, 12, 21])(
+    '⚠ every condition is in the DOM and the count names all of them, at %i conditions',
+    (n) => {
+      const all = itemsOf(n);
+      const html = renderToStaticMarkup(<AlarmBanner lead={all[0]!} rest={all.slice(1)} />);
+      for (const c of all) expect(html).toContain(c.label);
+      expect(html).toContain(`${n} active alarms`);
+      // ⚠ And one rendered ITEM per non-lead condition, counted rather than sampled: every
+      // item renders exactly one `<i>` (its elapsed form, `age` being null in this fixture),
+      // so a cap that dropped the tail is visible here even if the labels it dropped happened
+      // to appear elsewhere in the markup.
+      expect((html.match(/<i /g) ?? []).length).toBe(n - 1);
+      expect((html.match(/data-role="banner-rest"/g) ?? []).length).toBe(1);
+    },
+  );
+
+  test('⚠ the COUNT is outside the scrolling region — §6.4’s "always visible"', () => {
+    const all = itemsOf(21);
+    const html = renderToStaticMarkup(<AlarmBanner lead={all[0]!} rest={all.slice(1)} />);
+    // The count, the lead and its elapsed form all precede the well in document order, so no
+    // amount of scrolling inside it can take them off screen.
+    expect(html.indexOf('21 active alarms')).toBeLessThan(html.indexOf('data-role="banner-rest"'));
+    expect(html.indexOf('for 2 d 06:00')).toBeLessThan(html.indexOf('data-role="banner-rest"'));
+  });
+
+  test('⚠ the well is NAMED and keyboard-reachable — all three attributes on one tag', () => {
+    const all = itemsOf(3);
+    const html = renderToStaticMarkup(<AlarmBanner lead={all[0]!} rest={all.slice(1)} />);
+    const tag = /<div[^>]*data-role="banner-rest"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(tag).toContain('role="group"');
+    expect(tag).toContain('aria-label="other alarm conditions"');
+    expect(tag).toContain('tabindex="0"');
+  });
+
+  test('⚠ ONE standing condition renders no well at all — an empty scroll box is not a banner', () => {
+    const html = renderToStaticMarkup(<AlarmBanner lead={item()} rest={[]} />);
+    expect(html).not.toContain('data-role="banner-rest"');
+    expect(html).toContain('1 active alarm');
+  });
+
+  test('⚠ role="alert" is unchanged — the ruling bounds the box, not the announcement', () => {
+    const all = itemsOf(12);
+    const html = renderToStaticMarkup(<AlarmBanner lead={all[0]!} rest={all.slice(1)} />);
+    expect(html).toContain('role="alert"');
+  });
+
+  test('⚠ the stylesheet is where the bound lives, and `height` is deliberate, not `max-height`', () => {
+    const css = readFileSync(
+      fileURLToPath(new URL('./alarm-banner.module.css', import.meta.url)),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const body = css.slice(css.indexOf('.rest {'), css.indexOf('}', css.indexOf('.rest {')));
+    // ⚠ `height`, not `max-height`: at `max-height` a two-alarm banner measures the chip line's
+    // own 20.8 px and a twenty-one-alarm one the full 21, so "identical at 2 / 6 / 12 / 21"
+    // would fail by 0.2 px on a rule that is working. 21 is the whole pixel above 20.8.
+    expect(body).toMatch(/(?:^|[^-])height:\s*21px/);
+    expect(body).not.toMatch(/max-height/);
+    expect(body).toMatch(/overflow-y:\s*auto/);
+    expect(body).toMatch(/position:\s*relative/);
+    expect(body).toMatch(/box-sizing:\s*border-box/);
+    // ⚠ The 7 px margin is GONE: it separated the head from an unbounded block, and its removal
+    // is the 6.9 px that takes the all-sources-explained page from 1 px over to fitting.
+    expect(body).not.toMatch(/margin-top/);
+    // ⚠ 10g/Q4 — the continuation fade, and its cover must be this well's OWN ground or it
+    // paints a bar instead of vanishing.
+    expect(body).toMatch(/background-attachment:\s*local,\s*scroll/);
+    expect(body).toMatch(/background-color:\s*var\(--surface-sunken\)/);
+    expect(body).toMatch(/background-image:\s*var\(--well-fade-cover\),\s*var\(--well-fade-edge\)/);
   });
 });

@@ -398,6 +398,12 @@ async function recordFit(page, record, label) {
         overflowPx: overflow.scrollHeight - overflow.clientHeight,
         contentBottom,
         spare: contentBottom === null ? null : overflow.clientHeight - contentBottom,
+        // ⚠ 10g — the sticky band, printed with the spare. It is the term §6.4's banner moves,
+        // and it is NOT a slot: 10g's re-measurement of measurement 10 came back 7 px kinder
+        // than 10f's with every one of the nine slots identical to the pixel, and the only
+        // place the 7 px could be was here (a 65.7 px banner became 58.8). A page total whose
+        // terms are all published except one is a page total nobody can reconcile.
+        bandHeight: overflow.grid === null ? null : overflow.grid.y,
       },
     );
   }
@@ -527,8 +533,131 @@ const fixtureBoxDegraded = () => {
   };
 };
 
+/**
+ * ⚠ 10g/Q3 — MEASUREMENT 11'S FIXTURE: every source explained AND every reading present.
+ *
+ * This is NOT the all-collectors-failed page measurements 9 and 10 grade — a collector that
+ * fails BLANKS its readings, which makes its panel shorter. This one keeps every reading and
+ * adds every explanation, which is the arithmetic worst case: 10f's reconciliation measured it
+ * **1 px OVER at 1600 x 1024** (spare 34.6 / -1.0 / 55.0) with §6.4's ordinary two-alarm
+ * banner pinned, and that 1 px is what `10f-Q3`'s ruling was written to close. It was measured
+ * from a scratch script that was never committed; it is a graded measurement now, so the next
+ * loop re-measures it rather than re-deriving the fixture.
+ *
+ * All eighteen of §3.7's sources, each carrying the real 150-character DKMS message, plus the
+ * two GPU temperatures held in the alarm band past §6.4's 10 s debounce (which is what pins
+ * the banner — the 86/84 below, not a fabricated banner).
+ */
+const EVERY_SOURCE = [
+  'nvidia-smi',
+  'coretemp',
+  'proc-stat',
+  'proc-loadavg',
+  'proc-cpuinfo',
+  'proc-meminfo',
+  'hostname',
+  'proc-uptime',
+  'proc-net-dev',
+  'net-operstate',
+  'dell-smm',
+  'dbus',
+  'llama-env',
+  'llama-health',
+  'llama-models',
+  'statvfs',
+  'ufw',
+  'dkms',
+];
+
+const fixtureAllExplained = () => {
+  const box = fixtureBox();
+  return {
+    ...box,
+    gpus: [
+      { ...box.gpus[0], tempC: 86 },
+      { ...box.gpus[1], tempC: 84 },
+    ],
+    errors: [
+      ...EVERY_SOURCE.map((source) => ({ source, message: DKMS_MESSAGE })),
+      // ⚠ The two INSTANCE-TAGGED entries 10f's A3 fixture carried, and they are not
+      // decoration: §4's `TelemetryError.instance` is what puts an explanation on a SERVING
+      // ROW rather than in the panel's own block (10b-S-G), and two row wells are +40 px on
+      // row 4 — the term that took that measurement's SERVING to 166.8 and made it, not the
+      // session event log, the row's governor. Without them this fixture is 37 px kinder than
+      // the one it is meant to reproduce.
+      { source: 'llama-health', instance: 0, message: DKMS_MESSAGE },
+      { source: 'llama-health', instance: 1, message: DKMS_MESSAGE },
+    ],
+  };
+};
+
+/**
+ * ⚠ 10g/Q2 — MEASUREMENT 12'S FIXTURES: 2, 6, 12 and 21 alarm-level conditions.
+ *
+ * §6.4's banner was measured growing with its TEXT — 65.7 px at two alarms AND at six, 92.5 at
+ * twelve, 173.1 / 146.2 / 119.4 at twenty-one — while every §6.1 budget treated it as a
+ * constant. The ruling makes it a fixed two-line scrolling box, and the acceptance is EQUALITY
+ * of the band height across those four counts with every condition still in the DOM.
+ *
+ * Each stage is a SUPERSET of the one before, and they are applied to a live page without a
+ * reload: a condition that has already confirmed stays confirmed, so the four stages cost four
+ * debounce waits rather than four page loads. The counts are exact and are asserted from the
+ * banner's own count line, not assumed — `lib/client/observations.ts`'s `conditionsFrom` is
+ * what turns these readings into conditions, and a fixture that produced 13 where this claims
+ * 12 would otherwise be graded as though it had produced 12.
+ *
+ *  2 = gpu_temp x2
+ *  6 = + gpu_vram x2, cpu_temp, ram (swap > 1 GiB)
+ * 12 = + disk_free x2, unit:llama-server@{0,1}.service, health x2
+ * 21 = + fan_stopped 1-4, fan5_absolute, link, ufw_enforcing, pwm5_present, dkms_for_running_kernel
+ */
+const BANNER_STAGES = [2, 6, 12, 21];
+
+const fixtureAlarms = (count) => {
+  const box = fixtureBox();
+  const hot = (gpu, over = {}) => ({ ...gpu, ...over });
+  const out = {
+    ...box,
+    gpus: [hot(box.gpus[0], { tempC: 86 }), hot(box.gpus[1], { tempC: 84 })],
+  };
+  if (count >= 6) {
+    out.gpus = out.gpus.map((g) => ({ ...g, memUsedMiB: 32_200 }));
+    out.host = { ...out.host, cpuTempC: 92, swapUsedGiB: 2 };
+  }
+  if (count >= 12) {
+    out.storage = {
+      ...out.storage,
+      root: { usedGiB: 230, totalGiB: 233.1 },
+      home: { usedGiB: 900, totalGiB: 915.8 },
+    };
+    out.serving = out.serving.map((i) => ({ ...i, unitState: 'failed', health: 'unreachable' }));
+  }
+  if (count >= 21) {
+    out.cooling = {
+      ...out.cooling,
+      fan1Rpm: 0,
+      fan2Rpm: 0,
+      fan3Rpm: 0,
+      fan4Rpm: 0,
+      // ⚠ `fan5_absolute` alarms on the 0; `ch5Mode: null` keeps `fan5_engaged` out of the
+      // count (§6.3's engaged band applies ONLY while engaged), so 21 really is 21.
+      fan5Rpm: 0,
+      ch5Mode: null,
+      ch5Pwm: null,
+    };
+    out.storage = { ...out.storage, net: { ...out.storage.net, link: 'down' } };
+    out.safety = {
+      ...out.safety,
+      ufwEnforcing: false,
+      pwm5Present: false,
+      dkmsForRunningKernel: false,
+    };
+  }
+  return out;
+};
+
 /** Which body the route handler serves. Read on every poll, so it can be switched mid-run. */
-const fabrication = { mode: 'gpus-only' };
+const fabrication = { mode: 'gpus-only', alarms: 2 };
 
 async function installGpuFabrication(page) {
   await page.route('**/api/telemetry**', async (route) => {
@@ -544,10 +673,17 @@ async function installGpuFabrication(page) {
       await route.fulfill({ response });
       return;
     }
+    const now = body.ts ?? new Date().toISOString();
     const replaced =
       fabrication.mode === 'box-degraded'
-        ? { ...fixtureBoxDegraded(), ts: body.ts ?? new Date().toISOString() }
-        : { ...body, gpus: [fabricatedCard(0), fabricatedCard(1)] };
+        ? { ...fixtureBoxDegraded(), ts: now }
+        : fabrication.mode === 'box'
+          ? { ...fixtureBox(), ts: now }
+          : fabrication.mode === 'all-explained'
+            ? { ...fixtureAllExplained(), ts: now }
+            : fabrication.mode === 'alarms'
+              ? { ...fixtureAlarms(fabrication.alarms), ts: now }
+              : { ...body, gpus: [fabricatedCard(0), fabricatedCard(1)] };
     await route.fulfill({
       response,
       contentType: 'application/json',
@@ -611,6 +747,277 @@ async function measureBoxDegraded(page, record) {
     present,
   );
   await recordFit(page, record, '10');
+}
+
+/**
+ * Measurement 11 — §6.1's promise on the arithmetic worst case (10g/Q3).
+ *
+ * ⚠ Its own precondition first, like measurement 10's: the fixture is graded as a healthy page
+ * if it fails to take, and this is the page the whole of 10g/Q3 is about. Three things are
+ * asserted — the DKMS text really is under CPU (a source `panelsForSource` maps there) AND
+ * under SAFETY, and §6.4's banner really is pinned with the count it should have. The banner
+ * matters because the page is measured WITH it: a run in which the debounce had not elapsed
+ * would measure a page 59 px shorter and call it a pass.
+ */
+async function measureAllExplained(page, record) {
+  await page.setViewportSize(NO_SCROLL_VIEWPORTS[0]);
+  await page.waitForTimeout(200);
+  const present = await page.evaluate((dkms) => {
+    const flat = (s) => s.replace(/\s+/g, ' ');
+    const textOf = (slot) =>
+      flat(document.querySelector(`[data-slot="${slot}"]`)?.textContent ?? '');
+    const band = [...document.body.children].find((el) => getComputedStyle(el).position === 'sticky');
+    const banner = band?.children[1] ?? null;
+    const bannerText = banner ? flat(banner.textContent ?? '') : '';
+    return {
+      dkmsUnderCpu: textOf('cpu').includes(flat(dkms)),
+      dkmsUnderSafety: textOf('safety').includes(flat(dkms)),
+      bannerPinned: bannerText.includes('2 active alarms'),
+      bannerHeight: banner ? Math.round(banner.getBoundingClientRect().height * 10) / 10 : null,
+      bannerSample: bannerText.slice(0, 120),
+    };
+  }, DKMS_MESSAGE);
+  record(
+    '11. the all-sources-explained fixture TOOK — every source is explained, every reading present, and the two-alarm banner is pinned',
+    present.dkmsUnderCpu && present.dkmsUnderSafety && present.bannerPinned ? 'pass' : 'fail',
+    present,
+  );
+  await recordFit(page, record, '11');
+}
+
+/**
+ * Measurement 12 — §6.4's banner is a FIXED height whatever the count (10g/Q2).
+ *
+ * The stages are applied without a reload (see {@link fixtureAlarms}), each held past the 10 s
+ * debounce. Two things are recorded per stage and both are preconditions of the third: the
+ * count the banner itself prints (so a fixture that produced a different number of conditions
+ * is caught rather than averaged in) and every condition's label still being in the DOM.
+ *
+ * ⚠ The equality check is per VIEWPORT, not across them: the banner's width differs at 1280 /
+ * 1600 / 1920, and it is the count it must be independent of.
+ */
+async function measureBannerHeights(page, record) {
+  const measured = {};
+  for (const stage of BANNER_STAGES) {
+    fabrication.alarms = stage;
+    // ⚠ WAIT FOR THE COUNT, do not sleep a guessed interval. §6.4 confirms a band on ten
+    // seconds of wall time the client was SAMPLING, and the first poll carrying a new reading
+    // arrives up to a cadence late — so a fixed 13 s wait reached 12 of the 21 and the run
+    // measured a page it then described as twenty-one alarms. Measured, first try.
+    await page
+      .waitForFunction(
+        (want) => {
+          const band = [...document.body.children].find((el) => getComputedStyle(el).position === 'sticky');
+          const text = (band?.children[1]?.textContent ?? '').replace(/\s+/g, ' ');
+          return Number(/(\d+) active alarm/.exec(text)?.[1] ?? -1) === want;
+        },
+        stage,
+        { timeout: 45_000, polling: 500 },
+      )
+      .catch(() => {
+        console.warn(`⚠ the ${stage}-alarm stage did not confirm within 45 s — measurement 12 will report it.`);
+      });
+    for (const vp of NO_SCROLL_VIEWPORTS) {
+      await page.setViewportSize(vp);
+      await page.waitForTimeout(250);
+      const seen = await page.evaluate(() => {
+        const band = [...document.body.children].find((el) => getComputedStyle(el).position === 'sticky');
+        const banner = band?.children[1] ?? null;
+        const rest = banner?.querySelector('[data-role="banner-rest"]') ?? null;
+        const text = (banner?.textContent ?? '').replace(/\s+/g, ' ');
+        const count = /(\d+) active alarm/.exec(text)?.[1] ?? null;
+        return {
+          height: banner ? Math.round(banner.getBoundingClientRect().height * 10) / 10 : null,
+          count: count === null ? null : Number(count),
+          // Every condition past the lead is one `.item`; they are in the DOM whether or not
+          // they are inside the visible line, which is the half of the ruling that says
+          // "nothing is dropped".
+          itemsInDom: rest ? rest.children.length : 0,
+          restClientHeight: rest ? rest.clientHeight : null,
+          restScrollHeight: rest ? rest.scrollHeight : null,
+          // ⚠ Added by 10g's TEST phase, because everything above this line passes on a
+          // `display: none` well — measured: `.rest { display: none }` kept all four counts,
+          // all four item totals and the height EQUALITY, and the whole run still reported
+          // 29/29 while every condition past the lead was invisible. A count of children is
+          // not evidence that a reader can see or reach them. These four are:
+          //   `itemsWithText`  — an item that renders empty is dropped in every sense but the
+          //                      DOM's, so the text is counted, not the element;
+          //   `lastItemText`   — the TAIL is what a bounded box loses first;
+          //   `lastItemBottom` — its bottom edge inside the scroller's own content box, so
+          //                      "reachable by scrolling" is a number rather than a hope;
+          //   `restVisible`    — the well really occupies its one line.
+          itemsWithText: rest
+            ? [...rest.children].filter((c) => (c.textContent ?? '').trim().length > 0).length
+            : 0,
+          lastItemText: rest?.lastElementChild
+            ? (rest.lastElementChild.textContent ?? '').replace(/\s+/g, ' ').trim()
+            : '',
+          lastItemBottom: rest?.lastElementChild
+            ? Math.round(rest.lastElementChild.offsetTop + rest.lastElementChild.offsetHeight)
+            : null,
+          restVisible: rest ? getComputedStyle(rest).display !== 'none' && rest.clientHeight > 0 : false,
+        };
+      });
+      measured[`${stage}@${vp.width}`] = seen;
+    }
+  }
+  // Preconditions: the fixtures produced the counts they claim, and nothing was dropped.
+  const counts = BANNER_STAGES.map((stage) => measured[`${stage}@1280`]?.count ?? null);
+  record(
+    `12. the banner fixtures TOOK — ${BANNER_STAGES.join(' / ')} conditions really stand`,
+    counts.every((c, i) => c === BANNER_STAGES[i]) ? 'pass' : 'fail',
+    { wanted: BANNER_STAGES, got: counts, measured },
+  );
+  const dropped = BANNER_STAGES.filter((stage) => {
+    const m = measured[`${stage}@1280`];
+    // ⚠ Three conditions, not one (10g TEST phase): the right NUMBER of items, every one of
+    // them carrying TEXT, and the LAST one's text non-empty. `itemsInDom` alone was satisfied
+    // by twenty empty spans, and by twenty real ones inside a `display: none` well.
+    return (
+      (m?.itemsInDom ?? -1) !== stage - 1 ||
+      (m?.itemsWithText ?? -1) !== stage - 1 ||
+      (m?.lastItemText ?? '') === ''
+    );
+  });
+  record(
+    '12. NOTHING is dropped to bound the banner — one rendered item per condition past the lead, each with text, at every count',
+    dropped.length === 0 ? 'pass' : 'fail',
+    { dropped, measured },
+  );
+  // ⚠ And the well is a REAL one-line well whose tail can be scrolled to. This is the record
+  // that refuses the vacuous pass: a hidden, collapsed or clipped-beyond-reach well satisfies
+  // every count above it and the equality below it. Measured against `display: none`, which
+  // passed all four of the others.
+  const unreachable = BANNER_STAGES.filter((stage) => {
+    const m = measured[`${stage}@1280`];
+    if (!m?.restVisible) return true;
+    if ((m.restClientHeight ?? 0) < 20) return true; // §6.4's one line, 21 px
+    // Past the first line there must be somewhere to scroll TO, and the last condition's
+    // bottom edge must be inside the scrollable content rather than past its end.
+    if (stage > 2 && (m.restScrollHeight ?? 0) <= (m.restClientHeight ?? 0)) return true;
+    return (m.lastItemBottom ?? Infinity) > (m.restScrollHeight ?? 0) + 1;
+  });
+  record(
+    '12. the conditions are SCROLLED, not hidden — the well is one visible line and its last condition is inside its scrollable content',
+    unreachable.length === 0 ? 'pass' : 'fail',
+    { unreachable, measured },
+  );
+  // The ruling itself.
+  for (const vp of NO_SCROLL_VIEWPORTS) {
+    const heights = BANNER_STAGES.map((stage) => measured[`${stage}@${vp.width}`]?.height ?? null);
+    const same = heights.every((h) => h !== null && h === heights[0]);
+    record(
+      `12. ${vp.width}x${vp.height}: §6.4's banner is ONE height at ${BANNER_STAGES.join(' / ')} conditions`,
+      same ? 'pass' : 'fail',
+      { heights, stages: BANNER_STAGES },
+    );
+  }
+}
+
+/**
+ * Measurement 13 — opening every table view changes no slot height (10g/Q1).
+ *
+ * §6.1, ruled 2026-09-09: *"a table view replaces its chart inside the chart's own box and
+ * scrolls there; opening one changes no panel's height, and the page grows by zero."* Before
+ * it, the five table views one page can have open measured **+851 / +851 / +862 px** on a
+ * healthy page, and GPU 0's alone +371.1 against 263.2 px of spare.
+ *
+ * ⚠ Driven through the REAL toggle buttons, not by setting a prop — the state is the shell's
+ * (10c-1), and a measurement that bypassed the control would not be measuring what a click
+ * does. The button count is asserted first: four controls (GPU 0, GPU 1, COOLING, and CPU's
+ * one for both its traces) over five charts, and a run that found none would report a page
+ * that "did not grow" because nothing opened.
+ */
+async function measureTableViews(page, record) {
+  const heightsAt = async () =>
+    await page.evaluate(() => {
+      const slots = Object.fromEntries(
+        [...document.querySelectorAll('[data-slot]')].map((el) => [
+          el.getAttribute('data-slot'),
+          Math.round(el.getBoundingClientRect().height * 10) / 10,
+        ]),
+      );
+      const grid = document.querySelector('[data-slot="gpu0"]')?.parentElement ?? null;
+      return {
+        slots,
+        gridHeight: grid ? Math.round(grid.getBoundingClientRect().height * 10) / 10 : null,
+        tables: document.querySelectorAll('[data-role="table-view"]').length,
+        // ⚠ VISIBLE table views, and the two numbers differ by four (10g TEST phase, measured
+        // 9 against 5). A GPU card renders BOTH its sparkline and its promoted full chart and
+        // lets the media query hide one — `measurement 7`/`8` are about exactly that — so the
+        // DOM count double-counts every promoted trace. The ruling's "five table views are
+        // reachable at once" means five a reader can see, which is this number.
+        tablesVisible: [...document.querySelectorAll('[data-role="table-view"]')].filter(
+          (el) => el.getClientRects().length > 0,
+        ).length,
+        scrollHeight: document.documentElement.scrollHeight,
+        clientHeight: document.documentElement.clientHeight,
+      };
+    });
+  // ⚠ The CHART toggles, not `button[aria-pressed]` (10g TEST phase). `header.tsx`'s pause
+  // control carries `aria-pressed` too, so the broad selector clicked PAUSE on the way into
+  // the table pass and un-paused it on the way out — the two sides of the comparison were
+  // taken with the client polling and not polling, and `controls` counted five where the
+  // precondition below means the four chart controls. `ChartViewToggle` is the only control
+  // whose accessible name is "<subject>: show as chart|table".
+  const setViews = async (view) => {
+    const wanted = view === 'table';
+    const buttons = await page.$$('button[aria-pressed][aria-label*="show as"]');
+    for (const b of buttons) {
+      if (((await b.getAttribute('aria-pressed')) === 'true') !== wanted) await b.click();
+    }
+    await page.waitForTimeout(250);
+    return buttons.length;
+  };
+
+  const closed = {};
+  const open = {};
+  let controls = 0;
+  for (const vp of NO_SCROLL_VIEWPORTS) {
+    await page.setViewportSize(vp);
+    await page.waitForTimeout(250);
+    closed[vp.width] = await heightsAt();
+    controls = await setViews('table');
+    open[vp.width] = await heightsAt();
+    await setViews('chart');
+  }
+  // ⚠ BOTH SIDES, exactly (10g TEST phase). `tablesClosed` was recorded and never graded, and
+  // that is a vacuous pass waiting to happen: measured by starting the shell in table view,
+  // this measurement compared five open tables against five open tables, reported PASS on all
+  // four of its records — and the run still said 29/29. "Closed" has to be closed.
+  record(
+    '13. the table-view fixture TOOK — four chart controls, five table views open and NONE closed',
+    controls === 4 &&
+      (open[1280]?.tablesVisible ?? 0) === 5 &&
+      (closed[1280]?.tablesVisible ?? -1) === 0
+      ? 'pass'
+      : 'fail',
+    {
+      controls,
+      tablesOpen: open[1280]?.tablesVisible ?? 0,
+      tablesClosed: closed[1280]?.tablesVisible ?? 0,
+      tableViewsInDom: open[1280]?.tables ?? 0,
+    },
+  );
+  for (const vp of NO_SCROLL_VIEWPORTS) {
+    const a = closed[vp.width];
+    const b = open[vp.width];
+    const moved = Object.keys(a?.slots ?? {}).filter(
+      (slot) => Math.abs((a.slots[slot] ?? 0) - (b.slots[slot] ?? 0)) > 0.5,
+    );
+    record(
+      `13. ${vp.width}x${vp.height}: every table view open measures the SAME page as every one closed`,
+      moved.length === 0 && Math.abs((a?.gridHeight ?? 0) - (b?.gridHeight ?? -1)) <= 0.5 ? 'pass' : 'fail',
+      {
+        moved,
+        gridClosed: a?.gridHeight ?? null,
+        gridOpen: b?.gridHeight ?? null,
+        slotsClosed: a?.slots ?? null,
+        slotsOpen: b?.slots ?? null,
+        overflowOpen: (b?.scrollHeight ?? 0) - (b?.clientHeight ?? 0),
+      },
+    );
+  }
 }
 
 async function main() {
@@ -684,11 +1091,65 @@ async function main() {
     const record10 = (name, status, detail) => results[status].push({ name, detail });
     await measureBoxDegraded(page, record10);
 
+    // ---- 10g/Q3: the ARITHMETIC worst case — every source explained, every reading present,
+    // §6.4's ordinary two-alarm banner pinned. 10f's reconciliation measured this page 1 px
+    // over at 1600x1024 from a scratch script; it is graded here so it stays measured.
+    fabrication.mode = 'all-explained';
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    await page
+      .waitForSelector('[data-slot="gpu0"] [data-role="gpu-sparkline-wrap"]', { state: 'attached', timeout: 20_000 })
+      .catch(() => {
+        console.warn('⚠ the all-explained fixture did not take — measurement 11 will report it.');
+      });
+    // §6.4's ten seconds of SAMPLING, plus a margin: the banner is part of what is measured.
+    await page.waitForTimeout(13_000);
+    await measureAllExplained(page, record10);
+
+    // ---- 10g/Q2: §6.4's banner at 2 / 6 / 12 / 21 conditions, one page load, four waits.
+    fabrication.mode = 'alarms';
+    fabrication.alarms = BANNER_STAGES[0];
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    await page
+      .waitForSelector('[data-slot="gpu0"] [data-role="gpu-sparkline-wrap"]', { state: 'attached', timeout: 20_000 })
+      .catch(() => {});
+    await measureBannerHeights(page, record10);
+
+    // ---- 10g/Q1: every table view open measures the same page as every one closed.
+    fabrication.mode = 'box';
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    await page
+      .waitForSelector('[data-slot="gpu0"] [data-role="gpu-sparkline-wrap"]', { state: 'attached', timeout: 20_000 })
+      .catch(() => {
+        console.warn('⚠ the healthy-box fixture did not take — measurement 13 will report it.');
+      });
+    await page.waitForTimeout(1500);
+    await measureTableViews(page, record10);
+
     console.log('\n=== 10a-F4 / §6.1 breakpoint measurements ===\n');
     for (const { name, detail } of results.pass) {
       console.log(`PASS     ${name}`);
       if (detail && typeof detail.spare === 'number') {
-        console.log(`         spare ${detail.spare} px (content bottom ${detail.contentBottom}, viewport ${detail.clientHeight}); slots ${JSON.stringify(detail.slotHeights)}`);
+        console.log(`         spare ${detail.spare} px (content bottom ${detail.contentBottom}, viewport ${detail.clientHeight}, band+gutter ${detail.bandHeight}); slots ${JSON.stringify(detail.slotHeights)}`);
+      }
+      // ⚠ 10g — a PASS that is a measured EQUALITY has to print the value it is equal to.
+      // "the banner is one height" and "the page did not move" are the two claims 10g is
+      // accepted on, and a bare PASS on either is a claim with no number behind it: the next
+      // loop would have to re-run the browser to learn what the height WAS.
+      if (detail && Array.isArray(detail.heights)) {
+        console.log(`         heights ${JSON.stringify(detail.heights)} px at ${JSON.stringify(detail.stages)} conditions`);
+      }
+      if (detail && typeof detail.gridOpen === 'number') {
+        console.log(`         grid ${detail.gridClosed} px closed / ${detail.gridOpen} px open; slots open ${JSON.stringify(detail.slotsOpen)}`);
+      }
+      // ⚠ Same rule, applied to the record that refuses the vacuous pass (10g TEST phase): the
+      // well's own geometry at each count, at the design width. "Scrolled, not hidden" is a
+      // claim about three numbers, so it prints them.
+      if (detail && Array.isArray(detail.unreachable) && detail.measured) {
+        const shape = BANNER_STAGES.map((s) => {
+          const m = detail.measured[`${s}@1280`] ?? {};
+          return `${s}: client ${m.restClientHeight} / scroll ${m.restScrollHeight} / last item bottom ${m.lastItemBottom}`;
+        });
+        console.log(`         .rest at 1280 — ${shape.join(' · ')}`);
       }
     }
     for (const { name, detail } of results.blocked) {

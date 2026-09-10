@@ -147,10 +147,12 @@
  *   own name once more is the accepted, documented shape for a keyboard-scrollable table (the
  *   WCAG "scrollable data table" pattern), not an oversight -- it is not a SECOND, DIFFERENT
  *   name competing with the first.
- * - **`max-height` reuses `--table-scroll-max`** (`tokens.css`), the exact same viewport-relative
- *   stopgap as the full chart's, rather than a second independently-guessed number for a
- *   smaller box. See that file's comment for why it is a stopgap and not the grid's real
- *   answer (recorded for step 10 in `s2-table-scroll.md`).
+ * - **The box is the CHART'S OWN, and `--table-scroll-max` is RETIRED** (10g/Q1, `SPEC.md`
+ *   §6.1 ruled 2026-09-09). This bullet used to describe a `max-height: 40vh` stopgap shared
+ *   with the full chart's table view; five table views are reachable on one page, so that
+ *   bound was 200vh against a 100vh promise. `.tableView` now carries
+ *   `height: var(--table-box-height)`, set inline from the SAME `height` prop the `<svg>`
+ *   below is drawn at (`tableBoxStyle`), so toggling the view moves nothing.
  * - **A sticky header**, `position: sticky` on `thead th`, `border-collapse: separate` for the
  *   same WebKit reliability reason as the full chart's -- see that component's identical note.
  * - **None of this is observable from `renderToStaticMarkup`.** The scrolling and sticking are
@@ -159,6 +161,7 @@
  */
 
 import { Fragment } from 'react';
+import type { CSSProperties } from 'react';
 
 import { EM_DASH } from '@/lib/format';
 
@@ -502,6 +505,19 @@ const tableRowsFor = (
   return rows;
 };
 
+/**
+ * ⚠ 10g/Q1 — the box the table view renders in, as a style object.
+ *
+ * `SPEC.md` §6.1, ruled 2026-09-09: *"a table view replaces its chart inside the chart's own
+ * box and scrolls there"*. `height` is the SAME prop the `<svg>` below is drawn at, so the two
+ * views of this trend are exactly the same size and toggling between them moves nothing on the
+ * page. Written as a custom property rather than an inline `height` so the stylesheet still
+ * carries the `height:` declaration `components/styles.test.ts`'s bounded-box rule reads — a
+ * scrolling box whose bound lives only in a JSX attribute is a bound no CSS guard can see.
+ */
+const tableBoxStyle = (height: number): CSSProperties =>
+  ({ '--table-box-height': `${height}px` }) as CSSProperties;
+
 /** §6.2's table view. 10c-3/F14b: now WITH a gap row — see the module doc's correction. */
 function SparklineTableView({
   points,
@@ -509,51 +525,61 @@ function SparklineTableView({
   formatValue,
   formatTime,
   gaps = [],
-}: Pick<SparklineProps, 'points' | 'ariaLabel' | 'formatValue' | 'formatTime' | 'gaps'>) {
-  if (points.length === 0) {
-    return (
-      <p className={styles.tableEmpty}>{`${ariaLabel} — no readings in the selected window`}</p>
-    );
-  }
-  const rows = tableRowsFor(points, gaps);
+  height = 24,
+}: Pick<SparklineProps, 'points' | 'ariaLabel' | 'formatValue' | 'formatTime' | 'gaps' | 'height'>) {
+  const rows = points.length === 0 ? [] : tableRowsFor(points, gaps);
   return (
     // Q2-S2: this div is the scroll container AND the keyboard tab stop (see the module doc's
     // Q2-S2 section) — `role="group"`/`aria-label` name it, `tabIndex={0}` makes it reachable
     // without a mouse. The inner `<table>`'s own `<caption>` (below) still carries its own
     // name; that is not a duplicate introduced by this div, it is the documented shape for a
     // keyboard-scrollable table.
-    <div className={styles.tableView} role="group" aria-label={ariaLabel} tabIndex={0} data-role="table-view">
-      <table className={styles.table}>
-        <caption className="sr-only">{ariaLabel}</caption>
-        <thead>
-          <tr>
-            <th scope="col">time</th>
-            <th scope="col">value</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) =>
-            row.kind === 'gap' ? (
-              <tr key={row.key} className={styles.gapRow} data-role="gap-row">
-                <td colSpan={2}>
-                  {`gap (${row.reason}) — ${formatTime(row.fromMs)} to `}
-                  {row.toMs === null ? 'ongoing' : formatTime(row.toMs)}
-                </td>
-              </tr>
-            ) : (
-              <tr key={row.point.tMs}>
-                {/* ⚠ A row HEADER, not a data cell — see the identical note in
-                    `stacked-time-series-chart.tsx` (Q2 reconciliation, F4). */}
-                <th scope="row">{formatTime(row.point.tMs)}</th>
-                {/* ⚠ `Number.isFinite` matches this file's OWN chart-path guard in `runsOf`: a
-                    non-finite reading is a break in the polyline, so it must not be a printed
-                    `NaN` in the table beside it (Q2 reconciliation, F6). */}
-                <td>{row.point.v !== null && Number.isFinite(row.point.v) ? formatValue(row.point.v) : EM_DASH}</td>
-              </tr>
-            ),
-          )}
-        </tbody>
-      </table>
+    // ⚠ 10g/Q1: the EMPTY case renders inside this same box rather than as a bare `<p>` beside
+    // it. An empty series still paints an `<svg>` of exactly `height` in chart view, so a
+    // shorter empty table would be the one state in which toggling the view moved the page.
+    <div
+      className={styles.tableView}
+      style={tableBoxStyle(height)}
+      role="group"
+      aria-label={ariaLabel}
+      tabIndex={0}
+      data-role="table-view"
+    >
+      {points.length === 0 ? (
+        <p className={styles.tableEmpty}>{`${ariaLabel} — no readings in the selected window`}</p>
+      ) : (
+        <table className={styles.table}>
+          <caption className="sr-only">{ariaLabel}</caption>
+          <thead>
+            <tr>
+              <th scope="col">time</th>
+              <th scope="col">value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) =>
+              row.kind === 'gap' ? (
+                <tr key={row.key} className={styles.gapRow} data-role="gap-row">
+                  <td colSpan={2}>
+                    {`gap (${row.reason}) — ${formatTime(row.fromMs)} to `}
+                    {row.toMs === null ? 'ongoing' : formatTime(row.toMs)}
+                  </td>
+                </tr>
+              ) : (
+                <tr key={row.point.tMs}>
+                  {/* ⚠ A row HEADER, not a data cell — see the identical note in
+                      `stacked-time-series-chart.tsx` (Q2 reconciliation, F4). */}
+                  <th scope="row">{formatTime(row.point.tMs)}</th>
+                  {/* ⚠ `Number.isFinite` matches this file's OWN chart-path guard in `runsOf`: a
+                      non-finite reading is a break in the polyline, so it must not be a printed
+                      `NaN` in the table beside it (Q2 reconciliation, F6). */}
+                  <td>{row.point.v !== null && Number.isFinite(row.point.v) ? formatValue(row.point.v) : EM_DASH}</td>
+                </tr>
+              ),
+            )}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -580,6 +606,8 @@ export function Sparkline({
         formatValue={formatValue}
         formatTime={formatTime}
         gaps={gaps}
+        // ⚠ 10g/Q1 — the chart's own painted height, so the table is the same box.
+        height={height}
       />
     );
   }

@@ -260,7 +260,12 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
             ]}
           />
           {decode !== null && decode.notable ? (
-            <Caption label="throttle">
+            /* ⚠ 10g/Q3 — a ONE-LINE WELL (SPEC §6.1, ruled 2026-09-09). A third notable bit
+               used to take this caption to three lines and 44 px, on the row that sets the
+               page's first term; the chips now wrap and scroll inside a fixed 17 px box.
+               The name carries the card's index because `PanelShell` gives its contents no
+               accessible context and two cards are on the page (10f-A6). */
+            <Caption label="throttle" well={`GPU ${index} throttle`}>
               {/* ⚠ 10f/Q3, owner's ruling 2026-09-09 (§6.2): the routine `0x4 sw power cap` is
                   listed beside a notable bit as a NEUTRAL, UNBANDED code chip — no colour, no
                   glyph — and only the notable bits carry their severity band. It used to paint

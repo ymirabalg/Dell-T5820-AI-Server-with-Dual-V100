@@ -17,15 +17,22 @@
    - `box-sizing: border-box` is what makes the max-height the TOTAL box, so the padding below
      is inside the budget rather than added to it.
 
-   The two heights are per-panel: `tight` is one 14 px message line inside 2+2 px of padding.
-   ⚠ `roomy` is 60 px, which is THREE message lines and part of a fourth, not four — measured
-   by 10f's test phase, 2026-09-09: a message line is 13.77 px and this rule's own `gap` is
-   3 px, so four messages need 4 + 4x13.77 + 3x3 = 68.1. The build's `60 = 4 + 4 x 14` dropped
-   the gap term. 60 is kept rather than raised to 68 because STORAGE has only 15.3 px of slack
-   under SAFETY before it sets row 3 (10f-build.md §1.3) — the +8 would spend 8 of it and take
-   STORAGE to 240.1 against SAFETY's 239.4. The bound is what matters and 60 is the bound;
-   only the sentence describing it was wrong. Which panel takes which, and why, is in
-   `panel-notes.tsx`'s module doc and
+   The two heights are per-panel: `tight` is one 14 px message line inside 2+2 px of padding,
+   and `roomy` is **46 px** — its own rule below carries the arithmetic and is the only place
+   that number is stated.
+
+   ⚠ **CORRECTED 2026-09-10 by 10g's reconciliation (adversarial A9).** This paragraph used to
+   argue at length that `roomy` "is 60 px … 60 is kept rather than raised to 68 … the bound is
+   what matters and 60 is the bound", forty lines above a rule that has read `max-height: 46px`
+   since 10g built the owner's 2026-09-09 ruling. The file stated both numbers and
+   `panel-notes.tsx` stated only the right one, so the two documents describing one constant
+   disagreed. Kept, because the reasoning it contained is still true of the DERIVATION and is
+   why 46 is not 51: a message line measures 13.77 px and this rule's own `gap` is 3 px, so N
+   separate messages need 4 + N x 13.77 + (N-1) x 3 — three of them need 51.1, not 46. 46 is
+   the ruling's number and it shows three lines of ONE wrapped message; the `… N more` marker's
+   roomy budget is three ENTRIES, which is the ruling's own count and is why the two can
+   disagree on a wrapped message (recorded as `10g-build.md` §6 silence 1). Which panel takes
+   which, and why, is in `panel-notes.tsx`'s module doc and
    `pipeline/steps/10-panels-assembly/10f-build.md` §2. */
 .notes {
   display: flex;
@@ -38,12 +45,60 @@
   max-height: 18px;
   border-radius: 2px;
   background: var(--surface-sunken);
+  /* ⚠ 10g/Q4/Q5 — the continuation fade. Two layers: a cover in the well's own ground
+     attached to the CONTENT, over a fade attached to the CONTAINER, so it shows exactly when
+     something is hidden below the fold and vanishes at the end of the scroll. The whole
+     mechanism, and why it is a background rather than a text `mask-image`, is in
+     `tokens.css`. `background-position`/`-size`/`-repeat` are given once and apply to both
+     layers; only the attachment differs, which is the entire trick. */
+  background-image: var(--well-fade-cover), var(--well-fade-edge);
+  background-position: bottom;
+  background-size: 100% var(--well-fade-height);
+  background-repeat: no-repeat;
+  background-attachment: local, scroll;
 }
 
 /* COOLING, MEMORY and STORAGE: their growth is absorbed by the CPU+SAFETY column that sets
-   rows 2-3, so four lines here cost the page nothing. */
+   rows 2-3, so a taller well here costs the page nothing.
+
+   ⚠ 10g/Q3 — 60 -> **46 px**, owner's ruling 2026-09-09 (SPEC §6.1: *"to buy the margin back,
+   a `roomy` notes well is three lines (46 px), not four (60 px)"*). 46 = 4 px of padding plus
+   three 14 px lines. ⚠ Stated exactly, because the same gap term was dropped once already
+   (the 10f build's `60 = 4 + 4 x 14`): a message line is **13.77 px** and this rule's own
+   `gap` is 3 px, so 46 px shows three lines of ONE wrapped message (4 + 3 x 13.77 = 45.3) and
+   two whole messages plus 88 % of a third when the well holds three separate ones. The
+   `… N more` marker's roomy budget is **three entries**, which is the ruling's own count. */
 .notes[data-bound='roomy'] {
-  max-height: 60px;
+  max-height: 46px;
+}
+
+/* ⚠ 10g/Q4 — the wrapper exists ONLY so the marker below has a positioned box that is not the
+   scroller itself. An absolutely-positioned child of a scroll container scrolls WITH the
+   content and would be gone the moment the well was scrolled a line; anchored here it is
+   pinned to the well's bottom edge, and — being out of flow — it adds exactly 0 px to the
+   panel, which is what "the heights stay as budgeted" requires. */
+.well {
+  position: relative;
+  min-width: 0;
+}
+
+/* ⚠ 10g/Q4 — `… N more`, SPEC §6.1's *"a count, never a sentence"*. `aria-hidden` because
+   nothing is hidden from a screen reader: every message is in the DOM inside the well, which
+   is a named, focusable `role="group"`. This is a WALL-PANEL affordance — §6.1's subject is
+   "the single-screen wall panel", where there is no pointer and no keyboard — so it says in
+   ink what the fade says in tone. */
+.more {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  padding: 0 3px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.25;
+  pointer-events: none;
 }
 
 .note {
