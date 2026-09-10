@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 
-import { AlarmBanner } from './alarm-banner';
+import { AlarmBanner, BANNER_REST_SHOWN } from './alarm-banner';
 import type { AlarmBannerItem } from './alarm-banner';
 
 /**
@@ -92,9 +92,15 @@ describe('⚠ the announced count IS the number of conditions named', () => {
     const html = renderToStaticMarkup(<AlarmBanner lead={item({ id: 'lead' })} rest={rest} />);
     const total = n + 1;
     expect(html).toContain(`${total} active alarm${total === 1 ? '' : 's'}`);
-    // And every one of them is actually named — a count with a hidden list is the same lie
-    // from the other direction.
-    for (const r of rest) expect(html).toContain(r.label);
+    // ⚠ And every one of them is ACCOUNTED FOR — a count with a hidden list is the same lie
+    // from the other direction. Re-aimed by 10h, not weakened: §6.4's 2026-09-10 ruling caps
+    // what the one-line well DRAWS at `BANNER_REST_SHOWN`, so past that the remainder is named
+    // by `+N more` instead of by its label. Both halves are still asserted, and the drawn ones
+    // are still checked by name.
+    for (const r of rest.slice(0, BANNER_REST_SHOWN)) expect(html).toContain(r.label);
+    const hidden = Math.max(0, n - BANNER_REST_SHOWN);
+    if (hidden === 0) expect(html).not.toContain('data-role="banner-more"');
+    else expect(html).toContain(`+${hidden} more`);
   });
 });
 
@@ -153,21 +159,54 @@ describe('⚠ 10g/Q2 — the banner scrolls, and drops NOTHING to do it', () => 
       item({ id: `k:${i}`, label: `condition ${i}`, value: `${i} u` }),
     );
 
+  // ⚠ 10h — RE-AIMED from *"every condition is in the DOM"* to the property that replaced it
+  // when §6.4 was ruled again on 2026-09-10: the banner draws what fits and COUNTS the rest.
+  // The old assertion is now false BY DESIGN (16 of 21 conditions were in the DOM and
+  // unreachable on a wall panel, which is what the owner ruled against), and the successor is
+  // the stronger of the two claims a banner can make — **nothing is unaccounted for**:
+  // `1 (lead) + drawn + hidden === the count it announces`, checked arithmetically at every
+  // count rather than by looking for labels.
   test.each([2, 6, 12, 21])(
-    '⚠ every condition is in the DOM and the count names all of them, at %i conditions',
+    '⚠ every condition is either drawn or counted by +N more, at %i conditions',
     (n) => {
       const all = itemsOf(n);
       const html = renderToStaticMarkup(<AlarmBanner lead={all[0]!} rest={all.slice(1)} />);
-      for (const c of all) expect(html).toContain(c.label);
       expect(html).toContain(`${n} active alarms`);
-      // ⚠ And one rendered ITEM per non-lead condition, counted rather than sampled: every
-      // item renders exactly one `<i>` (its elapsed form, `age` being null in this fixture),
-      // so a cap that dropped the tail is visible here even if the labels it dropped happened
+      // Every DRAWN condition is named, and the tail is not.
+      const drawn = Math.min(n - 1, BANNER_REST_SHOWN);
+      for (const c of all.slice(0, drawn + 1)) expect(html).toContain(c.label);
+      for (const c of all.slice(drawn + 1)) expect(html).not.toContain(c.label);
+      // ⚠ One rendered ITEM per DRAWN condition, counted rather than sampled: every item
+      // renders exactly one `<i>` (its elapsed form, `age` being null in this fixture), so a
+      // cap that drew more or fewer than it counts is visible here even if the labels happened
       // to appear elsewhere in the markup.
-      expect((html.match(/<i /g) ?? []).length).toBe(n - 1);
+      expect((html.match(/<i /g) ?? []).length).toBe(drawn);
       expect((html.match(/data-role="banner-rest"/g) ?? []).length).toBe(1);
+      // ⚠ THE ACCOUNTING: lead + drawn + `+N more` must reconcile with the announced count.
+      const hidden = n - 1 - drawn;
+      if (hidden === 0) expect(html).not.toContain('data-role="banner-more"');
+      else expect(html).toContain(`+${hidden} more`);
+      expect(1 + drawn + hidden).toBe(n);
     },
   );
+
+  test('⚠ the +N more count is OUTSIDE the scrolling well, so it cannot itself be scrolled out', () => {
+    const all = itemsOf(21);
+    const html = renderToStaticMarkup(<AlarmBanner lead={all[0]!} rest={all.slice(1)} />);
+    const well = /<div[^>]*data-role="banner-rest"[^>]*>([\s\S]*?)<\/div>\s*<span[^>]*data-role="banner-more"/.exec(html);
+    expect(well).not.toBeNull();
+    // And it is NOT `aria-hidden`: unlike a well's `… N more`, the conditions this counts are
+    // absent from the DOM entirely, so this marker is the only thing a screen reader has.
+    const tag = /<span[^>]*data-role="banner-more"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(tag).not.toContain('aria-hidden');
+  });
+
+  test('⚠ BANNER_REST_SHOWN is the measured design-width count, and it is three', () => {
+    // ⚠ A token's VALUE needs its own assertion (10g's lesson): every other test here reads
+    // the constant, so all of them would follow it anywhere it moved. Measured at 1280x1024:
+    // four `.rest` items are fully visible, and `+N more` takes one of those slots.
+    expect(BANNER_REST_SHOWN).toBe(3);
+  });
 
   test('⚠ the COUNT is outside the scrolling region — §6.4’s "always visible"', () => {
     const all = itemsOf(21);

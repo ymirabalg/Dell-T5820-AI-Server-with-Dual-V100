@@ -554,6 +554,47 @@ REGRESSIONS = [
      "  value: readable(v) ? fmt.format(v === 0 ? 0 : v) : EM_DASH,",
      "  value: readable(v) && v !== 0 ? fmt.format(v === 0 ? 0 : v) : EM_DASH,",
      "lib/format.test.ts"),
+    # === 10h — §3.4's `model` renders as its FILENAME (owner's ruling 2026-09-10) ==============
+    ("10h-FM1 the model renders WHOLE, so a path-valued `model` is the unbounded string §3.4 ruled out",
+     "lib/format.ts",
+     "  const last = text.slice(text.lastIndexOf('/') + 1).trim();",
+     "  const last = text.trim();",
+     "lib/format.test.ts"),
+    ("10h-FM2 a trailing slash renders BLANK instead of falling back to the whole string — §6.6 forbids an empty cell",
+     "lib/format.ts",
+     "  return last === '' ? text : last;",
+     "  return last;",
+     "lib/format.test.ts"),
+    ("10h-FM3 the filename is PRETTIFIED — the extension is stripped, which §3.4 rules out (`not a lookup, not a prettification`)",
+     "lib/format.ts",
+     "  const last = text.slice(text.lastIndexOf('/') + 1).trim();",
+     "  const last = text.slice(text.lastIndexOf('/') + 1).trim().replace(/\\.gguf$/, '');",
+     "lib/format.test.ts"),
+    # ⚠ RE-AIMED 2026-09-10 by 10h's RECONCILIATION — the line moved under it, not the property.
+    # `formatModelName` now reads `printableText(formatText(v))` (adversarial `10h-A10`: `trim()`
+    # does not strip U+200B, so the anti-blank-cell fallback rendered §6.6's blank cell). The
+    # mutation still deletes `formatText` from the chain and still says exactly what it said
+    # before; it is not narrower.
+    ("10h-FM4 the model skips formatText, so a null model renders BLANK and a whitespace-only one renders spaces — §6.6 law 1 gone",
+     "lib/format.ts",
+     "export const formatModelName = (v: string | null): string => {\n  const text = printableText(formatText(v));",
+     "export const formatModelName = (v: string | null): string => {\n  const text = v ?? '';",
+     "lib/format.test.ts"),
+    # ⚠ ADDED 2026-09-10 by 10h's RECONCILIATION (adversarial `10h-A10`). This is the revert to
+    # the shipped-and-measured defect, not a hypothetical: with it, `/models/\u200b` renders a
+    # cell of length 1 that is visually empty — §6.6's forbidden blank cell, produced by the
+    # fallback that exists to prevent it, because U+200B is `Cf` rather than whitespace and
+    # `last === ''` is therefore false.
+    ("10h-FM6 the zero-width strip is dropped, so a model of invisible characters renders §6.6's blank cell and a bidi override paints a name backwards",
+     "lib/format.ts",
+     "  const text = printableText(formatText(v));",
+     "  const text = formatText(v);",
+     "lib/format.test.ts"),
+    ("10h-FM5 a backslash is treated as a path separator, so a model id containing one is cut in the middle of its own name",
+     "lib/format.ts",
+     "  const last = text.slice(text.lastIndexOf('/') + 1).trim();",
+     "  const last = text.slice(Math.max(text.lastIndexOf('/'), text.lastIndexOf('\\\\')) + 1).trim();",
+     "lib/format.test.ts"),
     ("10e-F2 formatGiBParts rounds to 2dp (swap's precision), not formatGiB's 1dp",
      "lib/format.ts",
      "export const formatGiBParts = (v: GiB | null): FormattedParts => renderParts(v, ONE_DP, UNIT_GIB.trim());",

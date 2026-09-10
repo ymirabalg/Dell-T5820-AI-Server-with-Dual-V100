@@ -19,6 +19,43 @@ describe('§6.2 — SERVING', () => {
     expect(html).toContain('unreachable');
   });
 
+  /**
+   * ⚠⚠ 10h/§3.4 — `model` is RENDERED AS ITS FILENAME (owner's ruling, 2026-09-10), raw on the
+   * wire. `/v1/models` returns llama.cpp's `-m` argument, which is the whole weights path
+   * unless `ALIAS` is set — and `ALIAS` is optional in `serve-llm.sh set-model`. Measured cost
+   * of the path form: **+21 px per row**, on the panel that governs §6.1's row 4 as soon as a
+   * third instance exists.
+   */
+  const rowFor = (html: string, needle: string): string => {
+    const at = html.indexOf(needle);
+    expect(at).toBeGreaterThan(-1);
+    return html.slice(html.lastIndexOf('<div', at), html.indexOf('</div>', at));
+  };
+
+  test('⚠ a path-valued model renders its FILENAME, with the raw path in the row’s title', () => {
+    const snapshot: TelemetrySnapshot = {
+      ...everythingZero,
+      serving: [
+        { ...servingInstances[0]!, model: '/home/yorman/models/Qwen3.6-27B-Q4_K_M.gguf' },
+      ],
+    };
+    const html = renderToStaticMarkup(<ServingPanel state={stateWith(snapshot)} nowMs={0} panelId="serving" />);
+    const row = rowFor(html, 'llama-server@0');
+    expect(row).toContain('Qwen3.6-27B-Q4_K_M.gguf · ctx 131,072');
+    // ⚠ The DIRECTORY is gone from the visible text — the assertion that fails if the raw
+    // string is simply rendered whole (which contains the filename too).
+    expect(row).not.toContain('>/home/yorman/models/');
+    // ⚠ And nothing is LOST: the whole reading is on the row, in the attribute §3.4 names.
+    expect(row).toContain('title="/home/yorman/models/Qwen3.6-27B-Q4_K_M.gguf"');
+  });
+
+  test('⚠ an ALIAS model is unchanged, and still carries its own title — one code path, not two', () => {
+    const html = renderToStaticMarkup(<ServingPanel state={stateWith(servingPopulated)} nowMs={0} panelId="serving" />);
+    const row = rowFor(html, 'llama-server@0');
+    expect(row).toContain('qwen3.6-27b · ctx 131,072');
+    expect(row).toContain('title="qwen3.6-27b"');
+  });
+
   test('⚠ decision 13 — no token rate ever appears', () => {
     const html = renderToStaticMarkup(<ServingPanel state={stateWith(servingPopulated)} nowMs={0} panelId="serving" />);
     expect(html).not.toMatch(/t\/s|tokens\/s|tok\/s/i);

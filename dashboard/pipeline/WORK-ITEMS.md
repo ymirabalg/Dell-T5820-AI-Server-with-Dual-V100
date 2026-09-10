@@ -788,3 +788,12 @@ step 11, so step 2's ledger runs again. Both go into the follow-up loop **10f** 
 **Ruled 2026-09-09 after 10f (the four rows above): all four go into the follow-up loop **10g**.**
 
 **Ruled 2026-09-10 after 10g (the three rows above): all three go into **10h**, which is the loop that closes §6.1 for good.**
+
+| # | § | What changed — ruled 2026-09-10 after 10h |
+|---|---|---|
+| **10h-clip** | §6.1 | ⚠⚠ **"The page fits" is necessary and NOT sufficient.** The caps turned a visible failure into an invisible one — a wrong share pair passed every test while clipping a GPU panel, and the reported spare *improved*. Acceptance gains a second half: **no panel body hides a reading** on any page the design is meant to hold |
+| **10h-headroom** | §6.1 | The four shares **sum to exactly 1**; the 0.98 headroom ruled the same day was **measured and withdrawn** — it bought 12–14 px of page spare by hiding 2–4 px of readings in 4–5 panels at the design-target viewports |
+| **10h-Q1** | §6.1 / §2.5 | The promise is **conditioned on browser defaults** (font size, 100 % zoom) — an operating requirement for step 12's deploy notes. A 16 px minimum-font-size setting alone puts the page 2–3 px over at 1600 |
+| **10h-hostname** | §6.2 | The hostname is **truncated at 320 px**, whole string in `title` — same rule as `model`, same reason |
+
+**Ruled 2026-09-10 after 10h: the four rows above. §6.1 is closed; step 11 (packaging) is next, and it carries the browser-defaults requirement into the deploy notes.**

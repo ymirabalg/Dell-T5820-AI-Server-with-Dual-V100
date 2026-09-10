@@ -312,6 +312,44 @@ describe('⚠ 10e §2.7 — secondaryLabel, inline and endPrefix (SERVING-only, 
     expect(nullInline).toBe(omitted);
   });
 
+  /**
+   * ⚠⚠ 10h/§3.4 — the whole reading behind a shortened `inline`, ruled 2026-09-10: `model`
+   * renders as its filename *"with the whole string reachable in the row's `title`"*.
+   */
+  test('⚠ inlineTitle puts the raw reading on the inline span, and nowhere else', () => {
+    const html = renderToStaticMarkup(
+      <StatusRow
+        panel="serving"
+        label="llama-server@0"
+        inline="Qwen3.6-27B-Q4_K_M.gguf · ctx 131,072"
+        inlineTitle="/home/yorman/models/Qwen3.6-27B-Q4_K_M.gguf"
+        value="active"
+        severity="normal"
+      />,
+    );
+    // ⚠ On the INLINE span specifically — a `title` on the row would name the whole row after
+    // one of its readings, and a screen reader would announce the path in place of everything
+    // else the row says.
+    const tag = /<span[^>]*_inline_[^>]*>/.exec(html)?.[0] ?? '';
+    expect(tag).toContain('title="/home/yorman/models/Qwen3.6-27B-Q4_K_M.gguf"');
+    expect((html.match(/title=/g) ?? []).length).toBe(1);
+    // The visible text is still the shortened form.
+    expect(html).toContain('Qwen3.6-27B-Q4_K_M.gguf · ctx 131,072');
+  });
+
+  test('⚠ a row with no inlineTitle renders NO title attribute at all', () => {
+    // Fixture on the other side of the boundary: an optional prop is an untested one
+    // (HANDOVER §0.8), and `title=""`/`title="undefined"` are both real ways to get this wrong.
+    const html = renderToStaticMarkup(
+      <StatusRow panel="serving" label="llama-server@0" inline="qwen3.6-27b · ctx 131,072" value="active" severity="normal" />,
+    );
+    expect(html).not.toContain('title=');
+    const nullTitle = renderToStaticMarkup(
+      <StatusRow panel="serving" label="llama-server@0" inline="qwen3.6-27b · ctx 131,072" inlineTitle={null} value="active" severity="normal" />,
+    );
+    expect(nullTitle).toBe(html);
+  });
+
   // ⚠ STRENGTHENED BY 10e's TEST PHASE, 2026-09-09. The body asserted only
   // `indexOf('health ok') < indexOf('active')`, which an implementation emitting `endPrefix`
   // at the START of the row also satisfies — so the name's "inside .end" was unproven, and

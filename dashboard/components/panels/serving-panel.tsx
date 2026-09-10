@@ -50,7 +50,7 @@ import type { DisplayedCondition } from '@/lib/conditions';
 import { conditionId } from '@/lib/conditions';
 import { errorsForPanel } from '@/lib/client/observations';
 import { latestSample } from '@/lib/client/runtime';
-import { formatPort, formatText, formatTokens } from '@/lib/format';
+import { formatModelName, formatPort, formatText, formatTokens } from '@/lib/format';
 import { severityHealth, severityUnitState, worstSeverity } from '@/lib/severity';
 import type { ServingInstance, TelemetryError, TelemetrySnapshot } from '@/lib/types';
 import { servingUnitName } from '@/lib/units';
@@ -94,7 +94,11 @@ const instanceRow = (
       key={instance.instance}
       label={`llama-server@${instance.instance}`}
       secondaryLabel={`:${formatPort(instance.port)}`}
-      inline={`${formatText(instance.model)} · ctx ${formatTokens(instance.ctx)}`}
+      // ⚠ 10h/§3.4 — the model renders as its FILENAME (ruled 2026-09-10), with the raw value
+      // in the row's `title`. Measured cost of the path form: +21 px per row, on the panel
+      // that sets §6.1's row 4 whenever a third instance exists.
+      inline={`${formatModelName(instance.model)} · ctx ${formatTokens(instance.ctx)}`}
+      inlineTitle={instance.model}
       endPrefix={`health ${formatText(instance.health)}`}
       value={formatText(instance.unitState)}
       severity={severity}

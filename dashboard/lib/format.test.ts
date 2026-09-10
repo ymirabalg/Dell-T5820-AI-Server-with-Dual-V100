@@ -18,6 +18,7 @@ import {
   formatCelsiusParts,
   formatCh5Pwm,
   formatCpuModel,
+  formatModelName,
   formatGiB,
   formatGiBParts,
   formatLoadAverage,
@@ -218,6 +219,15 @@ const ROWS: readonly [string, () => string, string, () => string, string][] = [
     () => formatCpuModel(null),
     EM_DASH,
     () => formatCpuModel('0'),
+    '0',
+  ],
+  // ⚠ 10h — §3.4's `model`, which is now SHORTENED for display and so has to be shown obeying
+  // §6.6's two laws exactly as every other formatter does. `'0'` is the pathological alias.
+  [
+    'serving model',
+    () => formatModelName(null),
+    EM_DASH,
+    () => formatModelName('0'),
     '0',
   ],
 ];
@@ -1118,5 +1128,108 @@ describe('⚠ 10e/O14 — formatGiBParts agrees with formatGiB (RAM/disk 1dp) on
 
   test('⚠ null keeps the real unit GiB, not dropped like formatGiB(null)', () => {
     expect(formatGiBParts(null)).toEqual({ value: EM_DASH, unit: 'GiB' });
+  });
+});
+
+/**
+ * ⚠⚠ 10h — §3.4's `model` is RENDERED AS ITS FILENAME (owner's ruling, 2026-09-10).
+ *
+ * `/v1/models` returns llama.cpp's `-m` argument, which is the full weights PATH unless
+ * `ALIAS` is set — and `ALIAS` is optional in `serve-llm.sh set-model`. Measured, the path form
+ * costs **+21 px per SERVING row** and **+17.9 px per GPU card**, and it was the last unbounded
+ * string on the page. The wire still carries it raw (§3.1); this is the rendering, and the two
+ * call sites keep the whole string in a `title`.
+ */
+describe('⚠ 10h/§3.4 — formatModelName renders a model path as its filename', () => {
+  test('⚠ the ruling’s own example — a real weights path renders its final segment', () => {
+    expect(formatModelName('/home/yorman/models/Qwen3.6-27B-Q4_K_M.gguf')).toBe(
+      'Qwen3.6-27B-Q4_K_M.gguf',
+    );
+  });
+
+  test('⚠ an ALIAS is already filename-shaped, so it renders unchanged', () => {
+    // *"A path's identity is its filename, and an alias is already a filename-shaped word, so
+    // the two forms render alike"* — which is why there is no "does this look like a path"
+    // branch: the last segment of a string with no separator is the string.
+    expect(formatModelName('qwen3.6-27b')).toBe('qwen3.6-27b');
+    expect(formatModelName('gemma-4-12B-it-Q8_0.gguf')).toBe('gemma-4-12B-it-Q8_0.gguf');
+  });
+
+  test('⚠ nothing is INVENTED — no extension is stripped, no case changed, no word looked up', () => {
+    // The neighbouring formatter (`formatCpuModel`) rewrites its input; this one only chooses
+    // where to cut. `10g-A1b`: *"it is not a lookup, not a prettification, and nothing is
+    // invented"*.
+    expect(formatModelName('/models/UNSLOTH/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf')).toBe(
+      'Qwen3.5-35B-A3B-UD-Q4_K_M.gguf',
+    );
+  });
+
+  test('⚠ a trailing slash falls back to the WHOLE string, never to an empty cell', () => {
+    // The same conservatism `formatCpuModel` has: "too long" is a better failure than a blank
+    // cell, which §6.6 forbids as firmly as it forbids `N/A`.
+    expect(formatModelName('/home/yorman/models/')).toBe('/home/yorman/models/');
+    expect(formatModelName('/')).toBe('/');
+  });
+
+  test('⚠ null and blank both render the em dash — §6.6 law 1, inherited from formatText', () => {
+    expect(formatModelName(null)).toBe(EM_DASH);
+    expect(formatModelName('   ')).toBe(EM_DASH);
+  });
+
+  test('⚠ surrounding whitespace is trimmed on both sides of the cut', () => {
+    expect(formatModelName('  /models/a.gguf  ')).toBe('a.gguf');
+    expect(formatModelName('/models/ a.gguf ')).toBe('a.gguf');
+  });
+
+  /**
+   * ⚠⚠ 10h RECONCILE (`10h-A10`) — the anti-blank-cell fallback, defeated by a character
+   * `trim()` does not consider whitespace.
+   *
+   * `trim()` strips Unicode `White_Space`; **U+200B ZERO WIDTH SPACE is `Cf`**. So
+   * `/models/\u200b` cut to a `last` of length 1 that is not `''`, the whole-string fallback
+   * never fired, and the cell §6.6 forbids — visually empty — was rendered by the very guard
+   * written to prevent it. Measured through the real function before the fix.
+   *
+   * The same class carries U+202E RIGHT-TO-LEFT OVERRIDE, which survived into the cell and made
+   * `\u202egguf.exe` paint as `exe.gguf` — a reading that misreports itself. One strip of
+   * `\p{Cf}` closes both, and the RAW string is still whole in the `title` at both call sites,
+   * which is what §3.4 requires of the reading.
+   */
+  test('⚠ a zero-width character is not a reading — the blank cell §6.6 forbids cannot be spelled', () => {
+    // The whole string is not printable: the em dash, exactly as for `null` and `'   '`.
+    expect(formatModelName('\u200b')).toBe(EM_DASH);
+    expect(formatModelName('\u200b\u200b  ')).toBe(EM_DASH);
+    // A final segment that is not printable falls back to the whole string, as a trailing
+    // slash does — never to a cell of invisible characters.
+    expect(formatModelName('/models/\u200b')).toBe('/models/');
+    // A bidi override is stripped rather than painted, so the cell reads the name it holds.
+    expect(formatModelName('/models/\u202egguf.exe')).toBe('gguf.exe');
+  });
+
+  /**
+   * ⚠ 10h TEST — the CONSEQUENCE of "there is no *does this look like a path* branch", written
+   * down because it is a real §3.4 input and not a contrived one: llama.cpp's `-hf` takes a
+   * Hugging Face repo id (`unsloth/Qwen3.6-27B-GGUF`), and `ALIAS` in `serve-llm.sh set-model`
+   * is a free string, so either can arrive as `data[0].id`. It is cut at the slash like a path,
+   * and the ORG is dropped from the visible cell.
+   *
+   * That follows from the ruling as written (*"the last segment of a string with no separator
+   * is the string"*, and this one has a separator) and it is defensible — the repo's own name
+   * is what identifies the weights, and the whole string stays in the `title` at both call
+   * sites. It is recorded rather than guarded: the owner may want an org-bearing id left whole,
+   * and that would be a change to §3.4 rather than a bug in this function.
+   *
+   * Not ⚠: it records what the rule DOES at a boundary the spec does not name, and the rule
+   * itself is already backed by `10h-FM1`…`FM5`.
+   */
+  test('a Hugging Face repo id is cut at the slash too, so the org is dropped from the cell', () => {
+    expect(formatModelName('unsloth/Qwen3.6-27B-GGUF')).toBe('Qwen3.6-27B-GGUF');
+    expect(formatModelName('ggml-org/gemma-4-12B-it-GGUF')).toBe('gemma-4-12B-it-GGUF');
+  });
+
+  test('⚠ a Windows-style backslash is NOT a separator — the box is Linux and paths are POSIX', () => {
+    // Recorded rather than guessed: §3.4's source is `/etc/llama-server/<i>.env` on Ubuntu, so
+    // a backslash in a model id is part of the name, not a directory break.
+    expect(formatModelName('models\\a.gguf')).toBe('models\\a.gguf');
   });
 });

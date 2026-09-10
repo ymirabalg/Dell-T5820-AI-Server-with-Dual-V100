@@ -90,4 +90,37 @@ describe('⚠ 10e-A2 — a single long value WRAPS rather than overflowing the c
     // Not vacuous: `.strip`'s own between-items wrapping is still there and is a different rule.
     expect(css).toMatch(/flex-wrap:\s*wrap/);
   });
+
+  /**
+   * ⚠⚠ 10h/§3.4 — the raw reading behind a shortened `v`.
+   *
+   * `model` renders as its filename from 2026-09-10 (`lib/format.ts`'s `formatModelName`), and
+   * the ruling requires the whole string to stay reachable. This item is the GPU card's half of
+   * that: `served by instance N`.
+   */
+  test('⚠ an item’s title carries the whole reading, and an item without one gets no attribute', () => {
+    const html = renderToStaticMarkup(
+      <Strip
+        items={[
+          { k: 'util', v: '97.0 %' },
+          {
+            k: 'served by instance 0',
+            v: 'Qwen3.6-27B-Q4_K_M.gguf',
+            title: '/home/yorman/models/Qwen3.6-27B-Q4_K_M.gguf',
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain('title="/home/yorman/models/Qwen3.6-27B-Q4_K_M.gguf"');
+    // ⚠ Exactly one — a `title` defaulted from `v` would repeat the visible text on every other
+    // item, which is noise rather than a reading.
+    expect((html.match(/title=/g) ?? []).length).toBe(1);
+    // And the visible text is still the shortened one, not the title.
+    expect(html).toContain('>Qwen3.6-27B-Q4_K_M.gguf<');
+  });
+
+  test('⚠ a null title renders NO attribute — `title=""` is a tooltip that says nothing', () => {
+    const html = renderToStaticMarkup(<Strip items={[{ k: 'util', v: '97.0 %', title: null }]} />);
+    expect(html).not.toContain('title=');
+  });
 });

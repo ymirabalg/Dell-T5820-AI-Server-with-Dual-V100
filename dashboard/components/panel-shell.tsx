@@ -53,6 +53,25 @@
  * **0px of body height**: the control lives in the 25.8px head row alongside the title and
  * chip rather than as its own line in the body, which is the whole point of moving it here
  * from a body-row button.
+ *
+ * ### ⚠⚠ 10h — the HEAD is pinned and the BODY is the scroller (SPEC §6.1, ruled 2026-09-10)
+ *
+ * *"Every panel has a maximum height derived from its grid row, and its body scrolls inside
+ * that height when the content exceeds it … the head of a panel never scrolls away: title,
+ * subtitle and chip stay pinned."* The cap itself is `grid.module.css`'s, per row; what this
+ * file owns is the shape that makes it survivable — `.head` is `flex: 0 0 auto` and lives
+ * OUTSIDE the scrolling box entirely, `.body` is the scroller. Both rules carry their full
+ * reasoning in `panel-shell.module.css`.
+ *
+ * ⚠ **The body is a named, focusable `role="group"`**, like every other bounded box on this
+ * page (`PanelNotes`, `StatusRow`'s wells, the throttle line, §6.4's banner well). Without it
+ * a panel whose only clipped content is plain text — SAFETY's rows, a `Strip`, a chart — would
+ * be unreachable by keyboard, which is a hole this change would have opened rather than found.
+ * The name is `` `${title} readings` ``: `PanelShell` renders a `<section>` with no accessible
+ * name of its own, so a well's own name is the whole of what a screen reader announces
+ * (10f-A6, measured on seven wells that all announced the same three words), and every panel's
+ * title is unique on the page. `readings` is a region name, not a message — the same shape as
+ * 10f's `` `${subject} messages` `` and 10g's `other alarm conditions`.
  */
 
 import type { Severity } from '@/lib/types';
@@ -88,7 +107,15 @@ export function PanelShell({ title, subtitle, chip, headControl, children }: Pan
         {headControl}
         {chip === undefined ? null : <Chip severity={chip} />}
       </header>
-      <div className={styles.body}>{children}</div>
+      <div
+        className={styles.body}
+        data-role="panel-body"
+        role="group"
+        tabIndex={0}
+        aria-label={`${title} readings`}
+      >
+        {children}
+      </div>
     </section>
   );
 }

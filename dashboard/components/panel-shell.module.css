@@ -40,12 +40,36 @@
     var(--surface-1);
 }
 
+/* ⚠⚠ 10h — THE HEAD NEVER SCROLLS AWAY (SPEC §6.1, ruled 2026-09-10: *"the head of a panel
+   never scrolls away: title, subtitle and chip stay pinned; only the body scrolls. A reader
+   must always be able to see which panel is which and what its severity is."*).
+
+   `flex: 0 0 auto` in the panel's own column, NOT `position: sticky` inside the scroller —
+   the same choice, for the same reason, that `alarm-banner.module.css` makes for §6.4's count:
+   a sticky head needs an opaque ground of its own to stop content scrolling visibly under it,
+   and this panel's ground is `--surface-1` **plus**, at alarm severity, a gradient wash from
+   its top edge. A head that is not in the scroller at all needs no ground and cannot be
+   scrolled past. It also keeps the head's bottom rule where it is: a `sticky` head would carry
+   the rule down over the body as it scrolled.
+
+   ⚠ `0 0` and not `0 1`, and ⚠⚠ **the reason this comment used to give is MEASURED FALSE**
+   (`10h-A10`'s sibling finding, `10h-A9`): it claimed that with the default `flex-shrink: 1` a
+   panel squeezed to its cap would take the head's 6 px of padding-bottom first. It would not — a
+   flex item's automatic minimum size (`min-height: auto`) already refuses to shrink the head below
+   its own content, padding included. Measured at 1600x1024 with a 3000 px stuffer in a capped
+   panel: slot 199.78, head 25.81, body 150, IDENTICAL with `0 1 auto`.
+   So this declaration is INSURANCE whose absence is unobservable on any page this project renders,
+   and it is kept for two reasons rather than deleted: removing it would be a behaviour change no
+   test here could see, and it states the intent (`the head is not a shrink target`) at the one
+   place a future `min-height: 0` on `.head` would otherwise silently make it one. The test that
+   pins it is pinning an intent, and says so. */
 .head {
   display: flex;
   align-items: center;
   gap: 10px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-lo);
+  flex: 0 0 auto;
 }
 
 .title {
@@ -71,10 +95,86 @@
   flex: 1 1 auto;
 }
 
+/* ⚠⚠ 10h — THE BODY IS THE SCROLLER (SPEC §6.1, ruled 2026-09-10).
+ *
+ * Five declarations, each load-bearing, and the first three are the ones that make the ruling
+ * true rather than decorative:
+ *
+ * - `flex: 0 1 auto` — SHRINK ONLY. `1 1` would make every body grow to fill its panel, which
+ *   changes COOLING (the one panel that stretches to its spanned rows) on a page that already
+ *   fits. A bound must not move a panel that was never over.
+ * - `min-height: 0` — a flex item's automatic minimum size is its content, so without this the
+ *   body refuses to shrink and the panel overflows its cap instead of scrolling.
+ * - `overflow-y: auto` — the scroll itself. ⚠⚠ **`max-height: 100%` is NOT the bound, and this
+ *   comment used to imply it was** (`10h-A9`, measured): when the slot is capped, flex already
+ *   bounds this box and the declaration changes nothing; when it is not, a percentage against an
+ *   auto-height `.panel` resolves to `none`. It is inert in BOTH regimes — and it is what
+ *   satisfies `components/styles.test.ts`'s `BOUNDED` rule, whose whole point is that
+ *   `overflow-y: auto` on an unbounded box does nothing. **The real bound is one box up**: the
+ *   slot's `max-height: var(--rowN-max)` in `grid.module.css`. The declaration is kept because
+ *   deleting it would weaken that guard, and the honest gap — `BOUNDED` cannot express "bounded by
+ *   an ancestor", and this is the first box in the project whose bound is one — is recorded as
+ *   `10h-Q4` in `HANDOVER.md` §8 rather than papered over here.
+ * - `position: relative` — ⚠ **this is what makes the box actually clip** (10e-A1, measured):
+ *   every `Chip` renders a `position: absolute` `.sr-only` span, and a scroll container clips
+ *   such a descendant only when it is in that descendant's CONTAINING-BLOCK chain. A static
+ *   box is in no chain at all; `.panel`'s own `position: relative` would then be the span's
+ *   containing block and the span's overflow would propagate straight past this box.
+ *
+ * ⚠ **The continuation fade — the affordance half of the ruling** (*"a panel that is scrolling
+ * says so — the same fade and `… N more` as a well"*). The fade is the two-layer scroll-shadow
+ * every bounded well on this page carries (`tokens.css` has the mechanism), with the cover
+ * painted in `--surface-1` rather than `--surface-sunken` because this box's ground is the
+ * PANEL's. It is the half CSS can compute exactly.
+ *
+ * ⚠ **There is NO `… N more` here, and that is an answer, not an omission (10g-Q1, answered
+ * for a panel body).** The wells' count is `entries - LINES_SHOWN[bound]`, which is honest only
+ * because every entry there is at least one line of one uniform height. A panel body's children
+ * are not lines and are not comparable: COOLING's chart is 174 px and a `StatusRow` is 19 px,
+ * and both are one child. Neither the COUNT nor the CONDITION (`scrollHeight > clientHeight`)
+ * is derivable from data — `purity.test.ts` forbids the hook that could measure either — so a
+ * number here would be invented. Recorded as a spec silence in `10h-build.md` §6 rather than
+ * guessed at. */
 .body {
   display: flex;
   flex-direction: column;
   gap: 5px;
   min-width: 0;
   min-height: 0;
+  flex: 0 1 auto;
+  max-height: 100%;
+  overflow-y: auto;
+  position: relative;
+  background-image: var(--panel-fade-cover), var(--well-fade-edge);
+  background-position: bottom;
+  background-size: 100% var(--well-fade-height);
+  background-repeat: no-repeat;
+  background-attachment: local, scroll;
+}
+
+/* ⚠⚠ 10h RECONCILE (`10h-A6`) — AN INSET FOCUS RING FOR EVERYTHING INSIDE THE SCROLLER.
+ *
+ * An outline is INK overflow: it never contributes to scrollable overflow, so a child flush
+ * with this box's padding edge loses its ring entirely to `overflow-y: auto`. `tokens.css`'s
+ * app-wide ring is `outline: 2px solid #3987e5; outline-offset: 2px`, i.e. it paints 2-4px
+ * OUTSIDE the border box, and `.body` has no padding. Measured pixel-exact by 10h's
+ * adversarial: CPU's first `[tabindex="0"]` well at 1280x1024 has its right edge at 940.75 and
+ * this box's right edge at 940.75, and screenshots of the 3 x 14 px strip just outside it are
+ * byte-identical focused and unfocused — nothing is painted there. Of the 15 focusable children
+ * inside scrolling bodies on the hostile page, 10 sit at margin 0 from a clip edge.
+ *
+ * ⚠ This is a regression THIS loop introduced, on the tab stops this loop added. `.body` was
+ * `overflow: visible` before 10h, and the nine `role="group"` bodies plus the wells inside them
+ * exist so that clipped content stays reachable by keyboard — while the same change made the
+ * one affordance that says WHERE the keyboard is invisible on them.
+ *
+ * A negative offset paints the ring INSIDE the border box, which a scroll container does not
+ * clip. It is the convention this project already uses everywhere a focusable box is flush with
+ * its container: `panels/panel-text.module.css`'s `.well`, `alarm-banner.module.css`'s `.rest`
+ * and both chart stylesheets' table scrollers all carry `outline-offset: -2px`. This is a
+ * DESCENDANT rule rather than nine copies, so it covers every focusable child a later loop adds
+ * without that loop having to know the reason. Only the offset moves; the colour and width stay
+ * `tokens.css`'s, so keyboard focus is still never mistaken for a severity band. */
+.body :focus-visible {
+  outline-offset: -2px;
 }

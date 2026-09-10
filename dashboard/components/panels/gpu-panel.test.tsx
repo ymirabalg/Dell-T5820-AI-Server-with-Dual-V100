@@ -236,6 +236,40 @@ describe('⚠ the GPU↔instance join is gpu.index === serving.instance', () => 
     expect(html).not.toContain('on this card');
   });
 
+  /**
+   * ⚠⚠ 10h/§3.4 — `model` renders as its FILENAME here too (owner's ruling, 2026-09-10). The
+   * `served by instance N` strip is the GPU card's half of the ruling, measured at **+17.9 px
+   * per card** in the path form (strip 14.8 -> 32.7) — on the row that sets §6.1's first term.
+   */
+  test('⚠ a path-valued model renders its FILENAME in the strip, with the raw path as its title', () => {
+    const snapshot: TelemetrySnapshot = {
+      ...rawGpuSnapshot(),
+      serving: [
+        {
+          ...servingInstances[0]!,
+          instance: 0,
+          model: '/home/yorman/models/Qwen3.6-27B-Q4_K_M.gguf',
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(<GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu0" />);
+    expect(html).toContain('served by instance 0');
+    expect(html).toContain('>Qwen3.6-27B-Q4_K_M.gguf<');
+    // ⚠ The directory is gone from the visible text — the assertion a raw render would fail.
+    expect(html).not.toContain('>/home/yorman/models/Qwen3.6-27B-Q4_K_M.gguf<');
+    // ⚠ And the whole reading is still on the page, in the attribute §3.4 names.
+    expect(html).toContain('title="/home/yorman/models/Qwen3.6-27B-Q4_K_M.gguf"');
+  });
+
+  test('⚠ a card with no matching instance carries NO title — there is no raw reading to keep', () => {
+    // The other side of the boundary: an optional prop is an untested one (HANDOVER §0.8), and
+    // `title="undefined"` on an em-dash cell is exactly the shape that ships unnoticed.
+    const snapshot: TelemetrySnapshot = { ...rawGpuSnapshot(), serving: [] };
+    const html = renderToStaticMarkup(<GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu0" />);
+    expect(html).toContain('served by instance 0');
+    expect(html).not.toContain('title=');
+  });
+
   test('a card with no matching instance (index 1, no serving[1]) shows an em dash, not instance 0’s model', () => {
     // ⚠ Card 1 must be IN the enumeration for this test to be about the join at all — with
     // `gpus: [card0]` the panel takes §6.5's absent-card branch instead, and this test would

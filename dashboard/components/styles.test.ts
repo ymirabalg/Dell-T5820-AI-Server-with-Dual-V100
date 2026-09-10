@@ -117,7 +117,7 @@ describe('⚠ a scroll container only clips what it is the containing block of',
     }
   });
 
-  test('the guard is not vacuous — the seven bounded panes this app really has are all found', () => {
+  test('the guard is not vacuous — the eight bounded panes this app really has are all found', () => {
     const scrolling = cssFiles.filter((f) =>
       ruleBodiesOf(declarationsOf(readFileSync(join(stylesRoot, f), 'utf8'))).some((b) =>
         SCROLLS.test(b),
@@ -130,9 +130,15 @@ describe('⚠ a scroll container only clips what it is the containing block of',
     // §6.4's fixed two-line banner (Q2) and `panels/panel-text.module.css`'s `.well` is the
     // GPU throttle line (Q3). Seven bounded panes now; the test name says five and is
     // rewritten with them rather than left naming a count that has moved twice.
+    // ⚠⚠ 10h adds the EIGHTH, and it is the one the whole item is about:
+    // `panel-shell.module.css`'s `.body`. §6.1's 2026-09-10 ruling makes every panel body the
+    // scroller inside its row's cap, so this rule and the BOUNDED one below now cover the
+    // mechanism that holds the no-scroll promise up, not just the wells inside it. The list
+    // GREW for the third time; nothing has ever left it.
     expect(scrolling.sort()).toEqual(
       [
         'alarm-banner.module.css',
+        'panel-shell.module.css',
         'panels/panel-notes.module.css',
         'panels/panel-text.module.css',
         'panels/session-event-log-panel.module.css',

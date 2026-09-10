@@ -284,6 +284,10 @@ PALETTE_SRC = "components/palette.ts"
 CHIP_SRC = "components/chip.tsx"
 METER_SRC = "components/meter.tsx"
 PANEL_SHELL_SRC = "components/panel-shell.tsx"
+# ⚠ 10h — the panel BODY is a scroller now (SPEC §6.1, ruled 2026-09-10), and its bound, its
+# clipping and its affordance all live in CSS the render tests structurally cannot see.
+PANEL_SHELL_CSS_SRC = "components/panel-shell.module.css"
+TOKENS_SRC = "components/tokens.css"
 SPARKLINE_SRC = "components/sparkline.tsx"
 CHART_SRC = "components/stacked-time-series-chart.tsx"
 HERO_SRC = "components/hero.tsx"
@@ -1415,10 +1419,13 @@ REGRESSIONS = [
      [HERO]),
 
     # ============================================== components/strip.tsx (10e, new)
+    # ⚠ RE-AIMED by 10h, not weakened: the `<dd>` gained a `title` attribute (§3.4's ruling of
+    # 2026-09-10 keeps the raw model path there while `v` is shortened), so it is a multi-line
+    # element now and the old one-line anchor no longer exists. Same element, same property.
     ("10e-ST1 Strip invents an already-explained-em-dash exception for itself, blanking it",
      STRIP_SRC,
-     "<dd className={styles.v}>{item.v}</dd>",
-     "<dd className={styles.v}>{item.v === '—' ? '' : item.v}</dd>",
+     "            {item.v}\n          </dd>",
+     "            {item.v === '—' ? '' : item.v}\n          </dd>",
      [STRIP]),
     ("10e-ST3 Strip's value goes back to `white-space: nowrap`, so one long model path overflows the GPU column instead of wrapping (10e-A2)",
      "components/strip.module.css",
@@ -1537,6 +1544,82 @@ REGRESSIONS = [
      "  const emptyBox = plots.length === 0 || domainEndMs <= domainStartMs;",
      "  const emptyBox = plots.length === 0;",
      [CHART]),
+
+    # === 10h — §6.1's grid bound, the half this harness owns: the head is pinned and the BODY
+    #     is the scroller (owner's ruling 2026-09-10). Nine of these are one-line reverts that
+    #     leave `renderToStaticMarkup` byte-identical, which is exactly why they are here.
+    ("10h-PS1 the head moves INSIDE the scrolling body, so a scrolled panel loses the title, subtitle and chip that say which panel it is",
+     PANEL_SHELL_SRC,
+     [("      <header className={styles.head}>", "      <div\n        className={styles.body}\n        data-role=\"panel-body\"\n        role=\"group\"\n        tabIndex={0}\n        aria-label={`${title} readings`}\n      >\n      <header className={styles.head}>"),
+      ("      </header>\n      <div\n        className={styles.body}\n        data-role=\"panel-body\"\n        role=\"group\"\n        tabIndex={0}\n        aria-label={`${title} readings`}\n      >\n        {children}\n      </div>", "      </header>\n        {children}\n      </div>")],
+     [PANEL_SHELL]),
+    ("10h-PS2 the panel body is an unnamed, unreachable scroll box — a keyboard user cannot reach what a capped panel hides",
+     PANEL_SHELL_SRC,
+     "        data-role=\"panel-body\"\n        role=\"group\"\n        tabIndex={0}\n        aria-label={`${title} readings`}\n",
+     "        data-role=\"panel-body\"\n",
+     [PANEL_SHELL]),
+    ("10h-PS3 the panel body stops scrolling, so a panel capped by its grid row CLIPS its readings instead",
+     PANEL_SHELL_CSS_SRC,
+     "  overflow-y: auto;\n  position: relative;\n  background-image: var(--panel-fade-cover), var(--well-fade-edge);",
+     "  position: relative;\n  background-image: var(--panel-fade-cover), var(--well-fade-edge);",
+     [PANEL_SHELL, STYLES]),
+    ("10h-PS4 the body keeps its automatic minimum size, so it refuses to shrink and the panel overflows its cap rather than scrolling",
+     PANEL_SHELL_CSS_SRC,
+     "  min-width: 0;\n  min-height: 0;\n  flex: 0 1 auto;",
+     "  min-width: 0;\n  flex: 0 1 auto;",
+     [PANEL_SHELL]),
+    ("10h-PS5 the body is position:static, so every Chip's absolutely-positioned .sr-only span escapes the scroller (10e-A1's measured 5189px page)",
+     PANEL_SHELL_CSS_SRC,
+     "  overflow-y: auto;\n  position: relative;\n",
+     "  overflow-y: auto;\n",
+     [PANEL_SHELL, STYLES]),
+    ("10h-PS6 the body GROWS to fill its panel, so COOLING — the one panel that stretches to its spanned rows — moves on a page that already fits",
+     PANEL_SHELL_CSS_SRC,
+     "  flex: 0 1 auto;\n  max-height: 100%;",
+     "  flex: 1 1 auto;\n  max-height: 100%;",
+     [PANEL_SHELL]),
+    ("10h-PS7 the head can be shrunk to buy the body room, so a capped panel eats its own rule and then its own line",
+     PANEL_SHELL_CSS_SRC,
+     "  border-bottom: 1px solid var(--border-lo);\n  flex: 0 0 auto;",
+     "  border-bottom: 1px solid var(--border-lo);\n  flex: 0 1 auto;",
+     [PANEL_SHELL]),
+    ("10h-PS8 the body's scrolling box loses its bound, which is the revert `components/styles.test.ts` exists to catch",
+     PANEL_SHELL_CSS_SRC,
+     "  flex: 0 1 auto;\n  max-height: 100%;\n",
+     "  flex: 0 1 auto;\n",
+     [PANEL_SHELL, STYLES]),
+    ("10h-PS9 the body's fade is painted in a WELL's ground, so every panel wears a permanent dark bar instead of a signal that it is scrolling",
+     PANEL_SHELL_CSS_SRC,
+     "  background-image: var(--panel-fade-cover), var(--well-fade-edge);",
+     "  background-image: var(--well-fade-cover), var(--well-fade-edge);",
+     [PANEL_SHELL]),
+    ("10h-PS10 --panel-fade-cover is pointed at the sunken well ground — one token, and every panel body's affordance is wrong at once",
+     TOKENS_SRC,
+     "  --panel-fade-cover: linear-gradient(to top, var(--surface-1), transparent);",
+     "  --panel-fade-cover: linear-gradient(to top, var(--surface-sunken), transparent);",
+     [PANEL_SHELL]),
+    # ⚠ ADDED 2026-09-10 by 10h's RECONCILIATION (adversarial `10h-A6`). `.body` was
+    # `overflow: visible` before this loop; making it a scroller CLIPS the app-wide focus ring,
+    # which `tokens.css` paints 2-4px OUTSIDE the border box. Measured pixel-exact: the strip
+    # just outside CPU's first focusable well is byte-identical focused and unfocused, on 10 of
+    # the 15 focusable children inside scrolling bodies. `2px` is not an arbitrary wrong value —
+    # it is the value this rule INHERITS when it is deleted, which is why the guard reads the
+    # sign rather than the presence of an offset.
+    ("10h-PS11 the focus ring inside a scrolling body goes back to the app-wide OUTSET offset, where the scroller clips it away entirely",
+     PANEL_SHELL_CSS_SRC,
+     "  outline-offset: -2px;",
+     "  outline-offset: 2px;",
+     [PANEL_SHELL]),
+    ("10h-ST2 an item with no title renders an EMPTY one, so every strip cell offers a tooltip that says nothing",
+     STRIP_SRC,
+     "          <dd className={styles.v} title={item.title ?? undefined}>",
+     "          <dd className={styles.v} title={item.title ?? ''}>",
+     [STRIP]),
+    ("10h-ST1 a strip item's title is never threaded, so §3.4's shortened model has nowhere to keep the whole path",
+     STRIP_SRC,
+     "          <dd className={styles.v} title={item.title ?? undefined}>",
+     "          <dd className={styles.v}>",
+     [STRIP]),
 ]
 
 # ---------------------------------------------------------------------------

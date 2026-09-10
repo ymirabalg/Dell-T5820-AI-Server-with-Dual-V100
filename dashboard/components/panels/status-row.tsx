@@ -117,6 +117,16 @@ export interface StatusRowProps {
    *  but never forced onto its own line — the mock's plain `.note`, distinct from `note`/
    *  `detail` below, which ARE forced full-width. */
   readonly inline?: string | null;
+  /**
+   * ⚠ 10h — the WHOLE string behind a shortened `inline`, as the element's `title`.
+   *
+   * §3.4's ruling of 2026-09-10 shortens `model` to its filename on screen and says the full
+   * value stays *"reachable in the row's `title`"*. This is that attribute, and it is separate
+   * from `inline` rather than derived from it because only the caller knows whether what it
+   * shortened HAS a longer form: passing `inline` twice would put a `title` on every row that
+   * merely repeats what is already rendered.
+   */
+  readonly inlineTitle?: string | null;
   /** 10e §2.7 — plain muted text inside `.end`, ahead of the value/pill (SERVING's `health
    *  ok`, ahead of the unit-state pill). */
   readonly endPrefix?: string;
@@ -143,6 +153,7 @@ export function StatusRow({
   severity,
   secondaryLabel,
   inline,
+  inlineTitle,
   endPrefix,
   note,
   noteTone = 'muted',
@@ -162,7 +173,11 @@ export function StatusRow({
       {secondaryLabel === undefined ? null : (
         <span className={styles.secondaryLabel}>{secondaryLabel}</span>
       )}
-      {!shown(inline) ? null : <span className={styles.inline}>{inline}</span>}
+      {!shown(inline) ? null : (
+        <span className={styles.inline} title={inlineTitle ?? undefined}>
+          {inline}
+        </span>
+      )}
       <span className={styles.end}>
         {endPrefix === undefined ? null : <span className={styles.endPrefix}>{endPrefix}</span>}
         {severity === undefined ? (

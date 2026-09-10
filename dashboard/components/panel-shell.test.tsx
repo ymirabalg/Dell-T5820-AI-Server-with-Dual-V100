@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 
@@ -158,5 +161,126 @@ describe('⚠ 10e §2.0 — headControl renders in the head, costing nothing in 
     );
     expect(withControl).not.toBe(without);
     expect(without).not.toContain('<i>x</i>');
+  });
+});
+
+/**
+ * ⚠⚠ 10h — §6.1's 2026-09-10 ruling, the half this component owns: *"every panel has a maximum
+ * height derived from its grid row, and its BODY scrolls inside that height … the head of a
+ * panel never scrolls away: title, subtitle and chip stay pinned."*
+ *
+ * The cap itself is `grid.module.css`'s (per row, `grid.test.tsx` asserts it). What is asserted
+ * here is the shape that makes a capped panel survivable, in the two places it lives: the DOM
+ * (the head is not inside the scroller, and the scroller is named and reachable) and the CSS
+ * text (the five declarations that make the scroll real, none of which any render test can
+ * see — deleting `overflow-y: auto` or `min-height: 0` leaves markup that is byte-identical).
+ */
+describe('⚠ 10h — the head is pinned and the body is the scroller', () => {
+  const css = readFileSync(
+    fileURLToPath(new URL('./panel-shell.module.css', import.meta.url)),
+    'utf8',
+  ).replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const ruleBody = (selector: string): string => {
+    const at = css.indexOf(selector);
+    expect(at).toBeGreaterThan(-1);
+    return css.slice(css.indexOf('{', at) + 1, css.indexOf('}', at));
+  };
+
+  test('⚠ the head is a SIBLING of the scrolling body, never inside it', () => {
+    const html = renderToStaticMarkup(
+      <PanelShell title="cpu" subtitle="Xeon W-2135" chip="watch">
+        <p>a reading</p>
+      </PanelShell>,
+    );
+    const head = /<header[\s\S]*?<\/header>/.exec(html)?.[0] ?? '';
+    // Everything §6.1 requires to stay pinned is in the head, and the head closes before the
+    // body opens — so no scroll position inside the body can take any of it off screen.
+    expect(head).toContain('cpu');
+    expect(head).toContain('Xeon W-2135');
+    expect(head).toContain('watch');
+    expect(head).not.toContain('data-role="panel-body"');
+    expect(html.indexOf('</header>')).toBeLessThan(html.indexOf('data-role="panel-body"'));
+  });
+
+  test('⚠ the body is a NAMED, keyboard-reachable group — all four attributes on one tag', () => {
+    const html = renderToStaticMarkup(
+      <PanelShell title="storage & network" subtitle="—" chip={null}>
+        <p>a reading</p>
+      </PanelShell>,
+    );
+    const tag = /<div[^>]*data-role="panel-body"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(tag).toContain('role="group"');
+    expect(tag).toContain('tabindex="0"');
+    // ⚠ The name carries the PANEL's title, so nine bodies never announce the same words
+    // (10f-A6 measured seven wells that did).
+    expect(tag).toContain('aria-label="storage &amp; network readings"');
+  });
+
+  test('⚠ the body’s five scroll declarations — the reverts no render test can see', () => {
+    const body = ruleBody('.body {');
+    // Shrink ONLY: `flex: 1 1 auto` would make every body fill its panel and move COOLING,
+    // which stretches to its two spanned rows, on a page that already fits.
+    expect(body).toMatch(/flex:\s*0\s+1\s+auto/);
+    // A flex item's automatic minimum size is its content; without this the body refuses to
+    // shrink and the panel overflows its cap instead of scrolling inside it.
+    expect(body).toMatch(/min-height:\s*0/);
+    expect(body).toMatch(/overflow-y:\s*auto/);
+    // ⚠ A scroll container clips an absolutely-positioned descendant only when it is in that
+    // descendant's containing-block chain (10e-A1, measured) — and every `Chip` renders one.
+    expect(body).toMatch(/position:\s*relative/);
+    // The bound `components/styles.test.ts` requires of any scrolling box.
+    expect(body).toMatch(/max-height:\s*100%/);
+  });
+
+  test('⚠ the head cannot be shrunk to buy the body room', () => {
+    // ⚠ 10h RECONCILE (`10h-A9`) — this comment used to say a shrinkable head would lose its 6px
+    // padding-bottom first. Measured, it would not: a flex item's automatic minimum size already
+    // refuses to shrink the head below its content (slot 199.78 / head 25.81 / body 150, identical
+    // with `0 1 auto`). What this pins is therefore an INTENT — the head is not a shrink target —
+    // at the one declaration a future `min-height: 0` on `.head` would silently make it one.
+    // Named honestly rather than renamed: the assertion is right, only its old reason was wrong.
+    expect(ruleBody('.head {')).toMatch(/flex:\s*0\s+0\s+auto/);
+  });
+
+  test('⚠ the body carries the continuation fade, in the PANEL’s ground', () => {
+    const body = ruleBody('.body {');
+    // The same two-layer scroll-shadow every bounded well carries (`tokens.css`), except that
+    // the cover must be painted in THIS box's ground — `--surface-1`, not `--surface-sunken` —
+    // or it paints a permanent bar instead of vanishing when nothing is hidden.
+    expect(body).toMatch(/background-image:\s*var\(--panel-fade-cover\),\s*var\(--well-fade-edge\)/);
+    expect(body).toMatch(/background-attachment:\s*local,\s*scroll/);
+    expect(body).toMatch(/background-position:\s*bottom/);
+    expect(body).toMatch(/background-size:\s*100%\s*var\(--well-fade-height\)/);
+    expect(body).toMatch(/background-repeat:\s*no-repeat/);
+  });
+
+  /**
+   * ⚠⚠ 10h RECONCILE (`10h-A6`) — the focus ring inside the scroller, which this loop clipped.
+   *
+   * An outline is ink overflow and never contributes to scrollable overflow, so `overflow-y:
+   * auto` on a box with no padding erases the ring of any child flush with its padding edge.
+   * `tokens.css` paints the app-wide ring 2-4px OUTSIDE the border box (`outline-offset: 2px`);
+   * measured, the strip just outside CPU's first focusable well is byte-identical focused and
+   * unfocused, and 10 of the 15 focusable children inside scrolling bodies sit at margin 0 from
+   * a clip edge. Those tab stops were added by 10f/10g/10h so that clipped content stays
+   * reachable — losing the indicator on them is this change's own accessibility regression.
+   *
+   * ⚠ NEGATIVE, and asserted as such rather than as "some offset": `outline-offset: 2px` is
+   * exactly the value that fails here, and it is also the value this rule inherits if it is
+   * deleted, so a guard reading only "an offset is declared" would pass on the defect.
+   */
+  test('⚠ a focus ring inside the scrolling body is INSET, or overflow clips it away', () => {
+    expect(ruleBody('.body :focus-visible {')).toMatch(/outline-offset:\s*-[0-9]/);
+  });
+
+  test('⚠ --panel-fade-cover is the panel ground, and that VALUE is the whole mechanism', () => {
+    // ⚠ 10g's lesson, applied one token later: every assertion above reads the `var()`, so all
+    // of them follow this token anywhere it goes. Pointed at `--surface-sunken` it would paint
+    // a dark bar across the bottom of every panel; set to `none` it deletes the affordance from
+    // all nine at once, with the whole suite green.
+    const tokens = readFileSync(fileURLToPath(new URL('./tokens.css', import.meta.url)), 'utf8');
+    expect(tokens).toMatch(
+      /--panel-fade-cover:\s*linear-gradient\(to top, var\(--surface-1\), transparent\);/,
+    );
   });
 });

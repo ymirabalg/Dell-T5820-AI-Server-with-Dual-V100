@@ -137,6 +137,73 @@
   --well-fade-height: 9px;
   --well-fade-cover: linear-gradient(to top, var(--surface-sunken), transparent);
   --well-fade-edge: linear-gradient(to top, rgba(152, 165, 180, 0.22), transparent);
+
+  /* ⚠ 10h — the SAME cover layer for a box whose ground is the PANEL's, not a sunken well's.
+     The mechanism above only cancels when the cover is painted in the box's own exact ground,
+     and a panel body sits on `--surface-1`. One token rather than a second copy of the
+     gradient, so the two fades cannot drift apart. */
+  --panel-fade-cover: linear-gradient(to top, var(--surface-1), transparent);
+
+  /* ⚠⚠ 10h — THE GRID'S OWN HEIGHT BUDGET (SPEC §6.1, ruled 2026-09-10: "every panel has a
+     maximum height derived from its grid row, and its body scrolls inside that height when the
+     content exceeds it").
+
+     Four loops bounded one TERM each — the notes wells, the throttle line, the table views,
+     §6.4's banner — and each time a new unbounded term appeared: measured on the
+     all-sources-explained page, which had 6 px of spare at 1600x1024, a notable throttle mask
+     (-16), §6.3's four alarm bits (-40), a third `llama-server` instance §3.4 requires to work
+     (-42) or a path-valued `model` (-19 at 1280) each broke the fold on its own. Bounding
+     terms one at a time is not convergent, so the GRID is bounded instead and the page fits
+     for any telemetry whatsoever.
+
+     The arithmetic, every term measured in real headless Chrome on this tree:
+
+       --band-reserve   102px  the sticky band at its TALLEST: the 43 px header plus §6.4's
+                               banner, which is a FIXED 58.8 px at any alarm count since 10g
+                               (measured 43 without a banner and 101.8 with one, at all three
+                               viewports). The MAXIMUM is reserved unconditionally, because
+                               §6.1's promise is unconditional on the banner: a page with no
+                               banner simply keeps 59 px it is never asked to spend.
+       --grid-pad-v      21px  `.grid`'s own `padding: 9px 12px 12px` — 9 top + 12 bottom.
+       --grid-row-gaps   27px  three 9 px row gaps between §6.1's four rows.
+
+     so `--rows-available` is what the four rows may sum to (874.2 px at the tightest viewport
+     §6.1 names, 1024 tall), and each row's share is a fraction of it. The four fractions are
+     DERIVED, not chosen:
+
+       cap(row) = healthy(row) + surplus x growth(row) / total growth
+
+     where `healthy` is this tree's own measurement at 1600x1024 — GPU **176**, CPU **240.1**,
+     SAFETY **159.4**, LOG **129.8**, summing to 705.3 — `surplus` is what is left of the
+     budget (874.2 - 705.3 = **168.9**), and `growth` is the degraded growth each row is
+     MEASURED to need, from `10f-build.md` §1.4's published budget: GPU notes **+23**, CPU
+     **+23**, SAFETY's four explanations **+80**, SERVING **+37** (163 in total). That gives
+     199.8 / 263.9 / 242.3 / 168.1 px, i.e. the fractions below.
+
+     Two properties fall out, and both are asserted in `grid.test.tsx`: they sum to exactly 1,
+     which is what makes the page fit BY CONSTRUCTION rather than by fixture; and every one of
+     them is comfortably above its row's healthy height, which is what stops a bound from
+     shrinking a panel that already fitted.
+
+     ⚠ NOT tuned to a fixture — but measured against every fixture this project grades, and
+     they all still fit with nothing clipped: the all-sources-explained page (measurement 11)
+     comes closest, at 0.8-3.3 px of margin per row. Rounding these to whole percents was tried
+     first and cost CPU and SERVING ~1 px of clipping on that page for no gain.
+
+     ⚠ These are MAXIMA. Every healthy panel is far below its own — the whole point of
+     acceptance-checking `check-density.mjs` as well as the fit, since a bound that shrank a
+     panel that already fitted would be a regression dressed as a fix. */
+  --band-reserve: 102px;
+  --grid-pad-v: 21px;
+  --grid-row-gaps: 27px;
+  --rows-available: calc(100vh - var(--band-reserve) - var(--grid-pad-v) - var(--grid-row-gaps));
+  --row1-max: calc(var(--rows-available) * 0.2286);
+  --row2-max: calc(var(--rows-available) * 0.3019);
+  --row3-max: calc(var(--rows-available) * 0.2772);
+  --row4-max: calc(var(--rows-available) * 0.1923);
+  /* COOLING spans rows 2-3, so its own bound is those two rows plus the gap between them —
+     the same sum `check-density.mjs` already grades its stretched slot against. */
+  --row23-max: calc(var(--row2-max) + 9px + var(--row3-max));
 }
 
 /* 10e §1.1 — the base that a third of the density fix is. The built stylesheets used to size

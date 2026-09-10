@@ -681,8 +681,16 @@ describe('⚠ the identity fields come from the snapshot, not from a placeholder
     // Deliberately NOT `ai-server`: the fixture's own value is `ai-server`, so asserting that
     // would pass against a hard-coded string — the exact inert shape this project has found in
     // every step. A distinctive value is what makes the assertion mean anything.
+    //
+    // ⚠⚠ 10h RECONCILE — and a document-wide `toContain('probe-host-42')` was no longer enough,
+    // because THIS LOOP made it inert. The header now also carries the raw hostname in a `title`
+    // (§6.1's band has to be bounded, so the visible string is truncated), so the reading is in
+    // the markup even when the VISIBLE hostname is a hard-coded literal: `10a-DS16` reddened only
+    // its sibling, and the red-test ledger is what found it. Both halves are asserted here, in
+    // one element — what is DRAWN and what is KEPT — which is the shape HANDOVER §0.4 has been
+    // asking for since 10b.
     const html = render(stateOf({ ring: ringWithSample({ hostname: 'probe-host-42' }) }));
-    expect(html).toContain('probe-host-42');
+    expect(html).toMatch(/<span[^>]*title="probe-host-42"[^>]*>probe-host-42<\/span>/);
   });
 
   test('⚠ a null hostname renders the em dash, not a blank or a fallback name (invariant 1)', () => {

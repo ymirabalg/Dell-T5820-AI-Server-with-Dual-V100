@@ -211,6 +211,11 @@ export function DashboardShell() {
       <div className={styles.stickyBand}>
         <Header
           hostname={formatText(snapshot?.hostname ?? null)}
+          // ⚠ 10h — the RAW reading, kept whole in the item's `title` because the header
+          // TRUNCATES the visible hostname to bound §6.1's `--band-reserve` (owner's ruling
+          // 2026-09-10; a 79-character FQDN took the band 101.8 → 130.7 px and the page over).
+          // `null` here renders no attribute at all, which is the shape §3.4's `model` uses.
+          hostnameTitle={snapshot?.hostname ?? null}
           uptime={formatUptime(snapshot?.host.uptimeSec ?? null)}
           severity={state.severity}
           mode={state.mode}

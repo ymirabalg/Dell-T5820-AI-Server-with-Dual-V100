@@ -24,6 +24,22 @@
  * hooks specifically (`components/purity.test.ts`'s own doc: matched by the shape React
  * mandates for a hook call, not by "any imported function").
  *
+ * ### ⚠⚠ 10h — the hostname is TRUNCATED, and that is §6.1's arithmetic, not a style choice
+ *
+ * `--band-reserve: 102px` (`tokens.css`) is a CONSTANT the row arithmetic subtracts from `100vh`
+ * before dividing what is left among §6.1's four rows, so the page fits **only while the real
+ * sticky band is inside that reserve**. This header is `flex-wrap: wrap` and carried the one
+ * free-form, unbounded string in the band: measured, a 79-character FQDN wrapped it, took the
+ * band from **101.8 to 130.7 px** and put the page 1 px over at 1280×1024 with every row cap
+ * holding and every slot height unchanged.
+ *
+ * The owner ruled it on 2026-09-10 — *"one line, ellipsis, full string in the `title`; the same
+ * rule as `model`"*. The truncation itself is `header.module.css`'s `max-width` (which is what
+ * stops the wrap; `min-width: 0` cannot, and that stylesheet says why), and the whole reading is
+ * kept in **`hostnameTitle`** — a separate prop rather than a `title={hostname}`, because
+ * `hostname` is already `formatText`'d and its `—` is a rendering, not a reading to hover. That
+ * also keeps this component's own rule intact: it still never imports `lib/format.ts`.
+ *
  * ### 10e §4 — glyph-only buttons, and two renamed things
  *
  * The five buttons/selects lose their visible words (`⟳ refresh` → `⟳`, `❙❙ pause` → `❙❙` /
@@ -55,6 +71,15 @@ const windowLabel = (minutes: WindowMinutes): string => (minutes >= 60 ? `${minu
 export interface HeaderProps {
   /** `formatText(snapshot.hostname)` — `—` when unread. */
   readonly hostname: string;
+  /**
+   * ⚠ 10h — the RAW `snapshot.hostname`, kept whole in the rendered item's `title` because
+   * `header.module.css` truncates the visible string to bound §6.1's `--band-reserve`. Same
+   * shape as §3.4's `model` rendering (`StatusRow.inlineTitle`, `StripItem.title`): the
+   * shortened form is on screen, the whole reading is one hover away, and **`null` renders no
+   * attribute at all** rather than `title=""`, which is the way an optional prop like this
+   * ships unnoticed.
+   */
+  readonly hostnameTitle: string | null;
   /** `formatUptime(snapshot.host.uptimeSec)`. */
   readonly uptime: string;
   /** §9's dot colour. `null` when nothing has confirmed a band yet (before the first poll's
@@ -91,6 +116,7 @@ export interface HeaderProps {
 
 export function Header({
   hostname,
+  hostnameTitle,
   uptime,
   severity,
   mode,
@@ -115,7 +141,9 @@ export function Header({
   return (
     <header className={styles.header}>
       <div className={styles.identity}>
-        <span className={styles.hostname}>{hostname}</span>
+        <span className={styles.hostname} title={hostnameTitle ?? undefined}>
+          {hostname}
+        </span>
         <span className={styles.uptime}>{uptime}</span>
       </div>
 

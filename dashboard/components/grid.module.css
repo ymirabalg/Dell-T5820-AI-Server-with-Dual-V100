@@ -142,6 +142,60 @@
   display: flex;
 }
 
+/* ⚠⚠ 10h — EVERY PANEL IS BOUNDED BY ITS GRID ROW (SPEC §6.1, ruled 2026-09-10).
+ *
+ * The bound is on the SLOT, not on the panel: a slot is a `display: flex` box holding exactly
+ * one panel at `flex: 1 1 auto; min-height: 0` (the rules below this comment), so a
+ * `max-height` here makes the slot `min(its panel's intrinsic height, the cap)` and the panel
+ * — `align-items: stretch` by default in a row-direction flex container — takes exactly that
+ * height. `panel-shell.module.css` then pins the head and scrolls the body inside it.
+ *
+ * ⚠ **The bound is PER PANEL, computed from its ROW's share** — never one global number —
+ * because §6.1's rows 2 and 3 size INDEPENDENTLY (`row2 = max(CPU, MEMORY)`,
+ * `row3 = max(SAFETY, STORAGE)`, 10f-build §1.3, verified in the browser against the column
+ * model that gives MEMORY and STORAGE 94 px of slack they do not have). The four shares and
+ * their arithmetic are in `tokens.css`; they sum to exactly 100 % of the height the viewport
+ * has left after the tallest possible sticky band, so
+ *
+ *     band 102 + grid padding 21 + row gaps 27 + sum(rows) <= 100vh
+ *
+ * holds by construction, for any telemetry.
+ *
+ * ⚠ **COOLING is bounded at rows 2 + gap + 3**, which is the cell it actually occupies: its
+ * `align-self: stretch` is unchanged, and a spanning item's contribution to track sizing
+ * respects its own `max-height`, so a COOLING taller than its cap can no longer push rows 2-3
+ * past their combined budget.
+ *
+ * ⚠ **Only where §6.1's promise applies.** *"The 'no scroll' promise holds at >=1280px wide
+ * and >=1024px tall. Below either bound, legibility wins, so a 1280x800 display does scroll."*
+ * So the caps live behind BOTH conditions: on a short or narrow screen the panels keep their
+ * intrinsic heights and the page scrolls, which is what the spec asks for. This is also why
+ * the `100vh` arithmetic in `tokens.css` is only ever used where it was measured.
+ *
+ * ⚠ `align-items: start` and COOLING's `align-self: stretch` are UNTOUCHED (the ruling names
+ * both): a short panel is still its own intrinsic height, never stretched to its row. */
+@media (min-width: 1280px) and (min-height: 1024px) {
+  .gpu0,
+  .gpu1 {
+    max-height: var(--row1-max);
+  }
+  .cpu,
+  .memory {
+    max-height: var(--row2-max);
+  }
+  .safety,
+  .storage {
+    max-height: var(--row3-max);
+  }
+  .serving,
+  .log {
+    max-height: var(--row4-max);
+  }
+  .cooling {
+    max-height: var(--row23-max);
+  }
+}
+
 .gpu0 > *,
 .gpu1 > *,
 .cpu > *,

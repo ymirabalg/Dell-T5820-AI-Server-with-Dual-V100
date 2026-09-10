@@ -496,6 +496,58 @@ export const formatText = (v: string | null): string => {
 };
 
 /**
+ * §3.4's `model`, **rendered as its filename** — owner's ruling 2026-09-10 (10g-A1b).
+ *
+ * `/v1/models` returns `data[0].id`, which is llama.cpp's `-m` argument: **the full weights
+ * path** unless `ALIAS` is set in that instance's env file, and `ALIAS` is optional in
+ * `serve-llm.sh set-model`. Measured, a path-valued `model` costs **+21 px per SERVING row**
+ * and **+17.9 px per GPU card** through the `served by instance N` strip, and it was the last
+ * unbounded string on the page.
+ *
+ * The wire carries it RAW, as §3.1 requires of every reading; this is the rendering, and the
+ * caller keeps the whole string in the row's `title`. *"A path's identity is its filename, and
+ * an alias is already a filename-shaped word, so the two forms render alike"* — which is why
+ * there is no branch on "does it look like a path": the last segment of a string with no `/`
+ * is the string.
+ *
+ * ⚠ **This is the ONE place a reading is shortened for layout.** It is not a lookup, not a
+ * prettification, and nothing is invented — compare §6.2's raw driver name, which stays whole
+ * because it is not a path. And it falls back to the whole trimmed string rather than to an
+ * empty cell, the same conservatism {@link formatCpuModel} has: a trailing slash
+ * (`/models/qwen/`) has no final segment, and *"too long"* is a better failure than `—`.
+ */
+/**
+ * ⚠ 10h RECONCILE (`10h-A10`) — the same "never a blank cell" law as {@link formatText}, for
+ * the characters `String.prototype.trim` does not consider whitespace.
+ *
+ * `trim()` strips Unicode `White_Space` only. **U+200B ZERO WIDTH SPACE is `Cf`, not
+ * whitespace**, so `formatText('\u200b')` returns it unchanged and every `=== ''` guard built
+ * on `trim()` reads it as a reading. Measured through the real function: `/models/\u200b`
+ * rendered a cell of length 1 that is visually empty — §6.6's blank cell, produced by the very
+ * fallback that exists to prevent it, because `last === ''` was false and the whole-string
+ * branch never fired.
+ *
+ * The same class carries U+202E RIGHT-TO-LEFT OVERRIDE, which reached the screen and made
+ * `/models/\u202egguf.exe` paint as `exe.gguf` — a cell that misreports the name it is showing.
+ * Both are `\p{Cf}`, so one strip closes both, and what is left is either a reading or nothing.
+ *
+ * ⚠ Scope: this is applied by {@link formatModelName} only. {@link formatText}'s other subjects
+ * (kernel, GPU name, bus id, hostname) are §3.1 readings whose contract is "trimmed, whole",
+ * and widening a rendering rule to them is a §6.6 change rather than a bug fix. Recorded.
+ */
+const printableText = (text: string): string => {
+  const stripped = text.replace(/\p{Cf}/gu, '').trim();
+  return stripped === '' ? EM_DASH : stripped;
+};
+
+export const formatModelName = (v: string | null): string => {
+  const text = printableText(formatText(v));
+  if (text === EM_DASH) return EM_DASH;
+  const last = text.slice(text.lastIndexOf('/') + 1).trim();
+  return last === '' ? text : last;
+};
+
+/**
  * `/proc/cpuinfo`'s `model name`, trimmed for display: §3.2 shows
  * `Intel(R) Xeon(R) W-2135 CPU @ 3.70GHz` as **`Xeon W-2135`**.
  *

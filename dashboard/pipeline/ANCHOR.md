@@ -31,7 +31,23 @@ adversarial and review phases and fixed before they became wrong code. Several w
 
 ### 2.0 ⚠ The one-paragraph version
 
-> ⚠⚠ **CORRECTED AND EXTENDED 2026-09-10 by 10g's reconciliation, and read this paragraph first.**
+> ⚠⚠ **CORRECTED AGAIN 2026-09-10 by 10h's reconciliation — the three lines below about which
+> loop is uncommitted stopped being true when 10g was committed. 10e, 10f and 10g are ALL
+> committed (`8ad8b9c`, `5769522`, `29e2240`); the dirty tree is now 10h**, the loop that bounds
+> the grid. 10h's own state: §6.1's page-fit promise holds on every graded fixture INCLUDING a
+> hostile one (spare 28 / 4 / 36 px), **and** — new in 10h's reconciliation — no panel body hides
+> a reading on the healthy, real-box-degraded, all-collectors-failed or all-sources-explained
+> pages, which is the half of the acceptance the caps made necessary and nothing graded until
+> now. `measure-breakpoints.mjs` **59/59 exit 0**, `pnpm verify` **101 files / 3061 tests exit
+> 0**, nine harnesses **1180 mutations, all exit 0**. ⚠ Two things are DEFERRED to the owner and
+> named in `steps/10-panels-assembly/10h-reconciliation.md` §6: the band is bounded against
+> telemetry but not against a browser's minimum-font-size setting (`10h-Q1`), and the owner's
+> "shares sum to 0.98" headroom ruling was measured both ways and **hides readings on two graded
+> pages**, so 1.0 was kept and the headroom recommended out of `--band-reserve` instead
+> (`10h-Q3`, §3 there).
+>
+> ⚠⚠ **CORRECTED AND EXTENDED 2026-09-10 by 10g's reconciliation** — kept for its reasoning; its
+> "10g is the uncommitted work" is superseded by the paragraph above.
 > 10e and 10f are **committed** (`8ad8b9c`, `5769522`); **10g** is the uncommitted work. §6.1's
 > promise is measured TRUE on every fixture this project grades — healthy (263/228/284 px spare),
 > all-collectors-failed (140/104/160), the real box's DKMS failure (164/129/185) and the
@@ -63,13 +79,23 @@ then step 11.**
 
 ```
 main                 3f06e98   [origin/main]                 backend, pushed. Untouched since
-dashboard-frontend   5769522   [origin/dashboard-frontend]   10f is the last commit (10e is 8ad8b9c)
+dashboard-frontend   29e2240                                 10g is the last commit (10f 5769522, 10e 8ad8b9c)
 ```
 
-⚠ **CORRECTED 2026-09-10 by 10g's reconciliation — the two lines above said `5d9b00e` and "10e AND
-10f", both of which stopped being true when 10e and 10f were committed on 2026-09-09.**
+⚠ **CORRECTED 2026-09-10 by 10h's reconciliation — the branch line said `5769522` / "10f is the
+last commit", which stopped being true when 10g was committed at `29e2240`.** This is the THIRD
+time this block has been stale in the same direction (`5d9b00e` → `5769522` → `29e2240`); the rule
+that keeps catching it is ANCHOR §2.8's *"check `git log` before re-owning an item"*.
 
-⚠ **The tree is DIRTY and that is 10g**, uncommitted on `5769522`: `SPEC.md`'s three 2026-09-10
+⚠ **The tree is DIRTY and that is 10h**, uncommitted on `29e2240`: the 10h build/test/adversarial/
+reconcile work under `components/`, `lib/format.ts`, `app/dashboard-shell.tsx`, three harnesses,
+`measure-breakpoints.mjs`, and the untracked phase notes and handoffs. Nothing under `proxy.ts`,
+`next.config.mjs`, `lib/` (other than `lib/format.ts`) or `app/` (other than the header's one new
+prop) is touched, there is no `.env`, and `next-env.d.ts` is byte-identical. **`SPEC.md` and
+`MOCK.html` are untouched by 10h** — its two rulings were already written into them by the parent.
+
+⚠ **Superseded, kept for the record — what 10g's reconciliation wrote here**, uncommitted on
+`5769522`: `SPEC.md`'s three 2026-09-10
 rulings and `WORK-ITEMS.md`'s three rows (the parent's), the 10g build/test/adversarial/reconcile
 work under `components/`, the two touched harnesses plus the shared ledger block in all NINE, the
 two measurement scripts, and the untracked phase notes and handoffs. `git status` is ~35 entries.
@@ -90,14 +116,20 @@ this**; a stranded harness mutation looks exactly like an intended edit.
 | 10c-1 | `a0c2c0e` | panels wired — the first composed render; a fixture that could not tell two GPUs apart |
 | 10c-2 | `6c2e64a` | five guards; one of them punished the fix |
 | 10c-3 | `7de7dd3` | sizing/paint; **§6.1 measured false** — step 10 closed-with-a-known-failure |
-| 10e | ⚠ **uncommitted** | the density build; **§6.1 measured TRUE on the healthy page**; F1's shipped fix measured worthless and re-fixed |
+| 10e | `8ad8b9c` | the density build; **§6.1 measured TRUE on the healthy page**; F1's shipped fix measured worthless and re-fixed |
 | 10f | `5769522` | the owner's four rulings: bounded `errors[]` wells (**§6.1 now measured TRUE on a DEGRADED page**), the neutral `0x4` chip, `Row` deleted, step 2's ledger re-aimed and running |
-| 10g | ⚠ **uncommitted** | the owner's four rulings of 2026-09-09: the table view inside the chart's own box, §6.4's fixed-height banner, the throttle line as a one-line well + `roomy` 46 px, and the fade / `… N more` affordance. **Its adversarial then measured §6.1 breakable on hostile telemetry**, which is what the owner ruled on the day after (§2.0) |
+| 10g | `29e2240` | the owner's four rulings of 2026-09-09: the table view inside the chart's own box, §6.4's fixed-height banner, the throttle line as a one-line well + `roomy` 46 px, and the fade / `… N more` affordance. **Its adversarial then measured §6.1 breakable on hostile telemetry**, which is what the owner ruled on the day after (§2.0) |
+| 10h | ⚠ **uncommitted** | the owner's ruling of 2026-09-10: **the GRID itself is bounded** — every panel capped by its row's share, head pinned, body scrolling; §6.4's `+N more` banner; §3.4's `model` as a filename; and, from its reconciliation, §3.2's `hostname` truncated and the acceptance's missing half — **a record that FAILS when a panel body hides a reading**. ⚠ The owner's "shares sum to 0.98" headroom ruling was measured both ways and NOT shipped: it hides readings on two graded pages (`10h-reconciliation.md` §3) |
 
 Suite at `7de7dd3`: **99 files · 2793 tests · exit 0**; nine harnesses, ~947 mutations, every ledger clean.
 Suite at `5769522` (10f): **101 files · 2967 tests · exit 0**; nine harnesses, **1093** mutations,
 all nine exit 0 — including step 2's, whose three orphaned anchors 10f re-aimed.
-⚠ Suite on today's dirty tree (10g): **101 files · 3010 tests · exit 0**; nine harnesses,
+Suite at `29e2240` (10g): **101 files · 3010 tests · exit 0**; nine harnesses, **1130** mutations,
+all nine exit 0.
+⚠ Suite on today's dirty tree (10h): **101 files · 3061 tests · exit 0**; nine harnesses,
+**1180** mutations, **all nine exit 0**; `measure-breakpoints.mjs` **59/59 exit 0** and
+`check-density.mjs` ALL PASS. The 10g figures below are kept because they are what `29e2240`
+carries: **101 files · 3010 tests · exit 0**; nine harnesses,
 **1130** mutations, **all nine exit 0** — zero anchors moved or ambiguous, zero `DID NOT BITE`,
 zero unmatchable ledger keys (that last one is now a FAILURE rather than a warning, 10g-A7).
 Browser: `measure-breakpoints.mjs` **30/30 exit 0**, `check-density.mjs` **ALL PASS**. Numbers go

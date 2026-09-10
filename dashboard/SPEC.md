@@ -962,6 +962,29 @@ This is 10d's deferred "stage 2 — bound the grid", now taken. Consequences to 
   instances and path-valued models must fit at 1280×1024, 1600×1024 and 1920×1080. ⚠ **Every
   browser fixture in this project hard-codes `throttleReasons: '0x…04'`, which is not notable**,
   so the throttle line has never appeared on a measured page. The fixtures are part of the work.
+- ⚠⚠ **"The page fits" is necessary and NOT sufficient — added 2026-09-10 after the bound was
+  built.** The caps turn a *visible* failure into an *invisible* one: too much content no longer
+  scrolls the page, it scrolls a panel body and hides a reading behind a fade. Measured, a
+  deliberately wrong pair of row shares passed every test while clipping a GPU panel from 199 to
+  192 px, **and the reported page spare improved** from 6 to 12 px because of it. **So acceptance
+  has two halves, and the second is: no panel body hides a reading on any page the design is meant
+  to hold** — healthy, real-box-degraded, all-collectors-failed and all-sources-explained. Only the
+  deliberately hostile page may clip, and it is named. A hidden reading is §6.6's founding failure
+  one layer up: this document spends a hundred rules making sure an absent reading never renders as
+  data, and a bound that hides a present one is the same lie by other means.
+- **The four row shares sum to exactly 1, and reserving headroom inside them was tried and
+  REJECTED — ruled 2026-09-10.** Shrinking them to 0.98 buys 12–14 px of page spare at 1024 tall
+  and pays for it by hiding 2–4 px of readings in four or five panels on two pages that showed
+  everything, with the whole cost landing on the 1280 and 1600 design targets. Measured both ways.
+  The margin that remains is arithmetic residue, and the no-clipping half of the acceptance above
+  is what protects it — not slack.
+- ⚠ **The promise assumes the browser's own defaults, and that is an OPERATING REQUIREMENT — ruled
+  2026-09-10 (10h-Q1).** The band is bounded against telemetry but not against the environment: a
+  browser minimum-font-size of 16 px, with no telemetry involved at all, takes the band to 105.6 px
+  against its 102 px reserve, puts the page 2–3 px over at 1600×1024 and hides 27 px of SAFETY at
+  1280. **§6.1's promise is conditioned on default font size and 100 % zoom**, and §2.5's deploy
+  notes must say so, because the wall panel's browser is ours to configure. Ten measurement records
+  fail if it is not honoured, so the condition is checkable rather than a hope.
 
 ⚠ **A well whose content overflows says so — ruled 2026-09-09 (10f-Q4/Q5).** The wall panel
 has no pointer, so a bounded well draws a **bottom fade and a small `… N more` marker** whenever
@@ -982,6 +1005,14 @@ height per panel is a builder decision measured against §2.11's budgets; accept
 fixture as well as the healthy one**.
 
 ### 6.2 Panels
+
+⚠ **The hostname is TRUNCATED at 320 px — ruled 2026-09-10 (10h).** §3.2's `hostname` is
+unbounded, `.header` wraps, and `--band-reserve` is a measured constant, so a 79-character
+fully-qualified name took the band from 101.8 to 130.7 px and put the page over at 1280×1024 with
+every row cap still holding. It renders on one line with an ellipsis and the **whole string in the
+`title`** — the same rule as §3.4's `model`, and for the same reason: a bound the page depends on
+cannot rest on a string the box chooses. 320 px fits 53 characters, so any realistic hostname is
+whole (this box's is `ai-server`, nine).
 
 **Header** — hostname, **`uptimeSec` beside it** in §3.2's four forms, an aggregate status
 dot, the snapshot timestamp and the age of the last successful snapshot, then four controls:

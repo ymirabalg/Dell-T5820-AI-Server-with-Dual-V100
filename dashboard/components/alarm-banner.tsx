@@ -31,16 +31,32 @@
  * the lead with the count is always visible, and conditions beyond the second line scroll
  * within the banner. Nothing is dropped; the page grows by zero past six alarms."*
  *
- * The component's own contract is UNCHANGED and that is the point: `rest` is still rendered in
- * full, one `.item` per condition, so every condition's text is in the DOM at any count and
- * `lib/client/banner.ts`'s `rest: mapped.slice(1)` still needs no cap. What changed is one
- * stylesheet rule — `.rest` is a fixed one-line scrolling well — plus the name and tab stop
- * below that make the well reachable. Capping the LIST was the alternative and was not taken:
- * a banner that renders fewer conditions than it counts is the lying banner 10a-F14 already
- * removed from this file once.
- *
  * Measured before: 65.7 px at two alarms and at six, 92.5 at twelve, 173.1 / 146.2 / 119.4 at
  * twenty-one. After: one height at every count (`10g-build.md` §3).
+ *
+ * ### ⚠⚠ 10h — the banner SHOWS WHAT FITS AND COUNTS THE REST (`SPEC.md` §6.4, 2026-09-10)
+ *
+ * 10g deliberately did NOT cap the list — *"a banner that renders fewer conditions than it
+ * counts is the lying banner 10a-F14 already removed from this component once"* — and one day
+ * later the owner ruled the other way, on a measurement that settles it: with the well fixed
+ * at one line, **16 of 21 conditions were unreachable at 1280**. `offsetHeight − clientHeight`
+ * was 0 at every count, so no scrollbar occupied layout, and §6.1's subject is *"the
+ * single-screen wall panel"*, which has no pointer and no keyboard. *"Nothing is dropped"* was
+ * true of the DOM and false of the screen.
+ *
+ * So the banner renders {@link BANNER_REST_SHOWN} conditions past the lead and a **`+N more`**
+ * for the remainder. The two properties that keep it from being 10a-F14's lying banner again:
+ *
+ * - the pinned count is still 1 + `rest.length`, DERIVED from the whole list, so it is the
+ *   number of standing conditions and never the number drawn; and
+ * - every condition is accounted for on screen — `1 + shown + hidden === count`, exactly —
+ *   rather than silently absent. What F14 removed was a count that could disagree with its own
+ *   list; what this adds is a second count that reconciles with it.
+ *
+ * Nothing is lost: every condition is still in its own panel and in the session event log,
+ * both of which the ruling names as the places it remains readable. `lib/client/banner.ts`
+ * still returns `rest` uncapped — the cap is a RENDERING decision and lives with the box whose
+ * width decides it, not in the reduction.
  */
 
 import styles from './alarm-banner.module.css';
@@ -69,9 +85,33 @@ export interface AlarmBannerProps {
   readonly rest: readonly AlarmBannerItem[];
 }
 
+/**
+ * ⚠ 10h/§6.4 — how many conditions past the lead the banner's one line RENDERS.
+ *
+ * Measured, not chosen (10g-A6, `adv-banner.mjs` B1, at 1280x1024): with `.rest` taking the
+ * banner's full width, **four items are fully visible** at 6, 12 AND 21 conditions — the rest
+ * were scrolled out of a well with no scrollbar in layout, on a wall panel with no pointer, so
+ * at 21 conditions 16 of the 20 were unreadable. The `+N more` marker takes one of those four
+ * slots, which leaves **three**.
+ *
+ * ⚠ It is a CONSTANT, and it has to be: what actually fits is a function of the rendered text
+ * width, which `components/` cannot measure (`purity.test.ts`), and this is the design width
+ * §6.1 names. At >=1600px more would fit — measured, the first hidden condition appeared at
+ * twelve rather than at six — so this is a floor there rather than the exact answer, and that
+ * is recorded as a spec silence in `10h-build.md` §6 rather than papered over with a
+ * viewport-tracking hook.
+ */
+export const BANNER_REST_SHOWN = 3;
+
 export function AlarmBanner({ lead, rest }: AlarmBannerProps) {
   if (lead === null) return null;
+  // ⚠ The count is still DERIVED from the WHOLE list (10a-F14): `rest` arrives uncapped and
+  // this is the total number of standing conditions, never the number rendered. The cap below
+  // decides only how many are DRAWN, and the remainder is stated beside them — so the banner
+  // still cannot claim a number it is not accounting for.
   const count = 1 + rest.length;
+  const shown = rest.slice(0, BANNER_REST_SHOWN);
+  const hidden = rest.length - shown.length;
 
   return (
     <div className={styles.banner} role="alert">
@@ -92,28 +132,44 @@ export function AlarmBanner({ lead, rest }: AlarmBannerProps) {
           {lead.age === null ? null : <span className={styles.stale}>{lead.age}</span>}
         </div>
         {rest.length > 0 ? (
-          // ⚠ 10g/Q2 — the SCROLLING half of §6.4's fixed two-line banner. Named and
-          // `tabIndex={0}` for the same reason every other bounded box on this page is
-          // (10f-A6): a scroll region nobody can reach hides what it holds, and here what it
-          // holds is every alarm past the first line. The lead above is deliberately outside
-          // it, so §6.4's *"the count is always visible"* needs no sticky positioning.
-          <div
-            className={styles.rest}
-            role="group"
-            tabIndex={0}
-            aria-label="other alarm conditions"
-            data-role="banner-rest"
-          >
-            {rest.map((item) => (
-              // 10e §5 — `.item` is a REAL class now (10c1-A8's dangling `styles.item` was
-              // fixed by removing the reference; this loop restores it as a genuine rule,
-              // since the mock's `.item` carries its own border/background/padding — see
-              // `alarm-banner.module.css`).
-              <span key={item.id} className={styles.item}>
-                {item.label} {item.value} <i className={styles.itemSince}>{item.since}</i>
-                {item.age === null ? null : <i className={styles.stale}>{item.age}</i>}
-              </span>
-            ))}
+          // ⚠ 10h/§6.4 — the second line is the well PLUS the `+N more` count, and the count
+          // is a SIBLING of the well rather than a child of it. Inside, it would be one more
+          // flex item competing for the same line and could itself be the item pushed out of
+          // view — a marker that says how much you cannot see, which you cannot see.
+          <div className={styles.restLine}>
+            {/* ⚠ 10g/Q2 — the SCROLLING half of §6.4's fixed two-line banner. Named and
+                `tabIndex={0}` for the same reason every other bounded box on this page is
+                (10f-A6): a scroll region nobody can reach hides what it holds. The lead above
+                is deliberately outside it, so §6.4's *"the count is always visible"* needs no
+                sticky positioning. It stays a scroller after 10h's cap: the cap is a constant
+                and a long enough label can still overflow one line, and then the fade says so
+                rather than the tail vanishing silently. */}
+            <div
+              className={styles.rest}
+              role="group"
+              tabIndex={0}
+              aria-label="other alarm conditions"
+              data-role="banner-rest"
+            >
+              {shown.map((item) => (
+                // 10e §5 — `.item` is a REAL class now (10c1-A8's dangling `styles.item` was
+                // fixed by removing the reference; this loop restores it as a genuine rule,
+                // since the mock's `.item` carries its own border/background/padding — see
+                // `alarm-banner.module.css`).
+                <span key={item.id} className={styles.item}>
+                  {item.label} {item.value} <i className={styles.itemSince}>{item.since}</i>
+                  {item.age === null ? null : <i className={styles.stale}>{item.age}</i>}
+                </span>
+              ))}
+            </div>
+            {hidden === 0 ? null : (
+              // ⚠ SPEC §6.4's `+N more`, ruled 2026-09-10. A count, never a sentence — and NOT
+              // `aria-hidden`, unlike a well's marker: these conditions really are absent from
+              // the banner's DOM, so this is the only thing that tells a screen-reader user the
+              // list it just read is partial. They remain in their own panels and in the
+              // session event log, which is why the ruling permits dropping them here at all.
+              <span className={styles.more} data-role="banner-more">{`+${hidden} more`}</span>
+            )}
           </div>
         ) : null}
       </div>

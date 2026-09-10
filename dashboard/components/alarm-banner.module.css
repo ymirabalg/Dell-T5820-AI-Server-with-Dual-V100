@@ -99,6 +99,12 @@
    all-sources-explained page from 1 px OVER at 1600x1024 to fitting — `10g-build.md` §2. */
 .rest {
   display: flex;
+  /* ⚠ `1 1 0`, not `1 1 auto` (10g-A2's lesson, one box over): a wrapping flex container
+     breaks lines on each item's HYPOTHETICAL main size, so a `flex-basis: auto` well would
+     offer its whole max-content width — hundreds of px of chips — and push `+N more` onto a
+     second line that this banner does not have. `min-width: 0` alone does not prevent that. */
+  flex: 1 1 0;
+  min-width: 0;
   flex-wrap: wrap;
   gap: 6px 8px;
   height: 21px;
@@ -109,9 +115,10 @@
   padding: 0 4px;
   /* ⚠ 10g/Q4 — the continuation fade, the same two-layer mechanism every other bounded well
      on the page carries (`tokens.css`), so "there are more conditions below" is drawn rather
-     than left to be discovered. No `… N more` marker here — §6.4 already pins the total
-     (`12 active alarms`) on the line above, and a second count beside it would be the same
-     fact twice.
+     than left to be discovered. ⚠ 10h — the `… N more` this well deliberately did NOT carry
+     is now `.more` BESIDE it: the cap means conditions past the third are absent from the DOM
+     rather than merely below the fold, and the pinned total on the line above says how many
+     conditions stand, never how many of them this line drew.
 
      ⚠ The sunken GROUND is not decoration and it is not free-hand design: the fade's cover
      layer only disappears when it is painted in the well's exact ground colour, and this
@@ -130,6 +137,28 @@
 .rest:focus-visible {
   outline: 2px solid var(--ink-primary);
   outline-offset: -2px;
+}
+
+/* ⚠ 10h — §6.4's second line: the well and the `+N more` count, side by side. The count is
+   `flex: 0 0 auto` so it is never the item that gets squeezed out, and the well takes the
+   rest — the same relationship `.head` has with `.count` on the line above. */
+.restLine {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* ⚠ 10h — `+N more`, SPEC §6.4's *"a `+N more` count for the remainder"*. It is INK, not a
+   fade: the conditions it counts are not in the DOM at all, so nothing else on the page says
+   they exist. Deliberately quiet — `--ink-muted` on the banner's own ground, no border and no
+   alarm colour — because it is an accounting note about the box, not a condition. */
+.more {
+  flex: 0 0 auto;
+  align-self: center;
+  font-size: 11px;
+  color: var(--ink-muted);
+  white-space: nowrap;
 }
 
 /* 10e §5 — a REAL rule now (10c1-A8's dangling `styles.item` is fixed by giving it one). */

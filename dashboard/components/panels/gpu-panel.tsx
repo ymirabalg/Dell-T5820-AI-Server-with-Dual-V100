@@ -69,6 +69,7 @@ import {
   formatCelsiusParts,
   formatMHz,
   formatMiBPair,
+  formatModelName,
   formatPercent,
   formatText,
   formatWatts,
@@ -256,7 +257,14 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
             items={[
               { k: 'util', v: formatPercent(gpu?.utilPct ?? null) },
               { k: 'SM clk', v: formatMHz(gpu?.smClockMHz ?? null) },
-              { k: `served by instance ${index}`, v: formatText(instance?.model ?? null) },
+              // ⚠ 10h/§3.4 — the model renders as its FILENAME (ruled 2026-09-10), raw on the
+              // wire and whole in the item's `title`. Measured cost of the path form here:
+              // +17.9 px per GPU card, on the row that sets §6.1's first term.
+              {
+                k: `served by instance ${index}`,
+                v: formatModelName(instance?.model ?? null),
+                title: instance?.model ?? null,
+              },
             ]}
           />
           {decode !== null && decode.notable ? (

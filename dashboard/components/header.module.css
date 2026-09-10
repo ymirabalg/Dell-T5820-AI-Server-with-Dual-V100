@@ -35,6 +35,36 @@
   flex-wrap: wrap;
 }
 
+/* ⚠⚠ 10h RECONCILE — §3.2's `hostname` IS TRUNCATED, and this is the band's own bound
+   (owner's ruling 2026-09-10: *"truncate the hostname — one line, ellipsis, full string in the
+   `title` — the same rule as `model`"*).
+
+   Why it is load-bearing rather than cosmetic. §6.1's arithmetic subtracts a CONSTANT
+   `--band-reserve: 102px` from `100vh` and gives what is left to the four rows; the page then
+   fits by construction *only while the real band is inside that reserve*. `.header` is
+   `flex-wrap: wrap`, and this span carried the one free-form, unbounded string in it. Measured
+   by 10h's TEST phase on the hostile page at 1280×1024: `ai-server` and a 53-character FQDN
+   both leave the band at **101.8 of 102**; a 79-character FQDN wraps the header, takes the band
+   to **130.7**, and the page goes 1 px OVER with every row cap holding and every slot height
+   unchanged. The overflow was entirely in the term the caps subtract.
+
+   ⚠ `max-width` is what does the work, not `overflow`/`text-overflow`. A wrapping flex
+   container breaks its lines on each item's HYPOTHETICAL main size, so a `min-width: 0` that
+   only lets an item shrink *within* a line cannot stop the wrap — the item is already on a line
+   of its own by then. A `max-width` clamps the hypothetical size itself, which is the only
+   thing that keeps `.identity` from pushing the status pill, the clock and the controls onto a
+   second row. (This span is a flex item, so it is blockified and the three declarations apply;
+   on a bare inline box `max-width` and `overflow` would both be ignored.)
+
+   ⚠ 320px is ~35 characters at this 15px mono face. The two MEASURED points that bracket the
+   wrap threshold at 1280 wide are 53 characters (fits, band 101.8) and 79 (wraps, band 130.7) —
+   roughly 480px and 710px of rendered text — so the threshold is somewhere between them and
+   320px is deliberately well inside it rather than at it. That margin is the point: what is
+   left for this item is a function of the OTHER header items' rendered widths, which are
+   locale- and font-dependent, and a bound set exactly at a measured threshold fails on the
+   first machine whose clock string is wider. Raising it is a legibility/robustness trade the
+   owner can make with those two numbers in hand. `header.tsx` keeps the whole string in the
+   item's `title`, which is §3.4's own rule for the other reading this project shortens. */
 .hostname {
   font-size: 15px;
   font-weight: 600;
@@ -42,6 +72,9 @@
   color: var(--ink-primary);
   white-space: nowrap;
   font-family: var(--font-mono);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .uptime {

@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -21,6 +25,7 @@ import type { HeaderProps } from './header';
 
 const BASE: HeaderProps = {
   hostname: 'ai-server',
+  hostnameTitle: 'ai-server',
   uptime: 'up 2 d 02:01',
   severity: 'normal',
   mode: 'live',
@@ -43,6 +48,65 @@ describe('§6.2 — the header list is EXHAUSTIVE', () => {
     const html = renderToStaticMarkup(<Header {...BASE} />);
     expect(html).toContain('ai-server');
     expect(html).toContain('up 2 d 02:01');
+  });
+
+  /**
+   * ⚠⚠ 10h RECONCILE — §3.2's `hostname` is TRUNCATED for layout (owner's ruling 2026-09-10),
+   * which makes the `title` the only place the whole reading survives. It is the same rule
+   * §3.4 already applies to `model`, and it is here for a measured reason, not a stylistic
+   * one: `header.module.css` caps this span at 320px because `--band-reserve: 102px` is a
+   * CONSTANT the row arithmetic subtracts, and a 79-character FQDN wrapped the header, took
+   * the band to 130.7 px and put §6.1's page 1 px over with every row cap holding.
+   *
+   * Both sides are fixtured, because an optional prop is an untested one until they are
+   * (HANDOVER §0.8): a reading present keeps its `title`, and a reading ABSENT renders no
+   * attribute at all — `title=""` and `title="undefined"` are the two ways this ships
+   * unnoticed, and `formatText`'s em dash is a rendering, never a reading to hover.
+   */
+  // The span holding a given hostname string, so both assertions below are about THAT element
+  // rather than about the whole header — which also carries five `title`-bearing controls.
+  const hostnameSpan = (html: string, text: string): string => {
+    const found = [...html.matchAll(new RegExp(`<span[^>]*>${text}</span>`, 'g'))].map((m) => m[0]);
+    expect(found).toHaveLength(1);
+    return found[0] ?? '';
+  };
+
+  test('⚠ the truncated hostname keeps its whole reading in a title — §3.4’s rule, applied to §3.2', () => {
+    const fqdn = 'ai-server.rack14.row-c.datacenter-east.corp.internal.example-holdings-group.com';
+    const html = renderToStaticMarkup(<Header {...BASE} hostname={fqdn} hostnameTitle={fqdn} />);
+    expect(hostnameSpan(html, fqdn)).toContain(`title="${fqdn}"`);
+  });
+
+  test('⚠ a header with no hostname READING renders no title attribute at all, not an empty one', () => {
+    const html = renderToStaticMarkup(<Header {...BASE} hostname="—" hostnameTitle={null} />);
+    expect(hostnameSpan(html, '—')).not.toContain('title');
+  });
+
+  /**
+   * ⚠⚠ 10h RECONCILE — the truncation itself, which is CSS and therefore invisible to every
+   * assertion above: a `title` on a span that still renders its whole string bounds nothing.
+   * All three declarations are load-bearing and the FIRST one is the bound —
+   *
+   * - `max-width` is what stops the wrap. A wrapping flex container breaks lines on each item's
+   *   HYPOTHETICAL main size, so `min-width: 0` (which only lets an item shrink inside a line
+   *   it has already been given) cannot prevent it; only clamping the hypothetical size can.
+   * - `overflow: hidden` is what makes `text-overflow` apply at all, and
+   * - `text-overflow: ellipsis` is the affordance — without it the string is cut mid-glyph with
+   *   nothing saying so, which is the same failure §6.1 rules against for a scrolling well.
+   *
+   * Declarations only, never the raw file: the rule is QUOTED in this stylesheet's own module
+   * doc, and reading the raw text is how `10h-GR10` came to not bite.
+   */
+  test('⚠ the hostname is BOUNDED in CSS — a title on an unbounded span still wraps the band', () => {
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'header.module.css'),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const rule = /\.hostname\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/max-width:\s*[0-9]/);
+    expect(rule).toMatch(/overflow:\s*hidden/);
+    expect(rule).toMatch(/text-overflow:\s*ellipsis/);
+    expect(rule).toMatch(/white-space:\s*nowrap/);
   });
 
   test('⚠ every cadence option renders — 1/2/5/10/30 s', () => {

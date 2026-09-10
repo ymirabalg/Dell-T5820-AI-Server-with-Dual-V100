@@ -11,6 +11,12 @@
  * an absolute `.gguf` path whenever `serve-llm.sh set-model` was given no alias (10e-A2, and
  * F5 one primitive over). This is the only way this primitive grows, and it costs nothing when
  * everything fits on one line at the design width.
+ *
+ * ⚠ **10h — that path no longer reaches this primitive whole.** §3.4's ruling of 2026-09-10
+ * renders `model` as its FILENAME (`lib/format.ts`'s `formatModelName`), so `gpu-panel.tsx`
+ * passes the last segment as `v` and the raw string as {@link StripItem.title}. The wrapping
+ * above stays exactly as it is: it is what happens to any long reading, and a long GPU name or
+ * bus id can still reach it.
  */
 
 import styles from './strip.module.css';
@@ -19,6 +25,15 @@ import './tokens.css';
 export interface StripItem {
   readonly k: string;
   readonly v: string;
+  /**
+   * ⚠ 10h — the WHOLE reading behind a `v` the caller shortened, as the `<dd>`'s `title`.
+   *
+   * §3.4's ruling of 2026-09-10 renders `model` as its filename and keeps the raw value
+   * *"reachable in the row's `title`"*; the GPU card's `served by instance N` is the other
+   * place that reading appears. Optional and never derived from `v`: a `title` that repeats
+   * the visible text is noise on every one of the other strip items.
+   */
+  readonly title?: string | null;
 }
 
 export interface StripProps {
@@ -31,7 +46,9 @@ export function Strip({ items }: StripProps) {
       {items.map((item) => (
         <div key={item.k} className={styles.item}>
           <dt className={styles.k}>{item.k}</dt>
-          <dd className={styles.v}>{item.v}</dd>
+          <dd className={styles.v} title={item.title ?? undefined}>
+            {item.v}
+          </dd>
         </div>
       ))}
     </dl>

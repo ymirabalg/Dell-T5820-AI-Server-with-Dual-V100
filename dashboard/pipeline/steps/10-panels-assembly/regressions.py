@@ -411,10 +411,13 @@ REGRESSIONS = [
      '<span aria-hidden="true" className={styles.separator} />\n\n        <button\n          type="button"\n          className={styles.logout}',
      '<button\n          type="button"\n          className={styles.logout}',
      [HEADER_TEST]),
+    # ⚠ RE-AIMED 2026-09-10 by 10h's RECONCILIATION — the ELEMENT moved (it gained the `title`
+    # that keeps §3.2's whole reading now that the header truncates it), the property did not.
+    # Same span, same regression, same red test.
     ("10a-H10 the header re-grows an IP address next to the hostname — the exact regression the spec names",
      HEADER_SRC,
-     "<span className={styles.hostname}>{hostname}</span>",
-     "<span className={styles.hostname}>{hostname} · 192.168.4.71</span>",
+     "        <span className={styles.hostname} title={hostnameTitle ?? undefined}>\n          {hostname}\n        </span>",
+     "        <span className={styles.hostname} title={hostnameTitle ?? undefined}>\n          {hostname} · 192.168.4.71\n        </span>",
      [HEADER_TEST]),
     ("10a-H11 the header re-grows a kernel release next to the uptime — the exact regression the spec names",
      HEADER_SRC,
@@ -719,6 +722,15 @@ REGRESSIONS = [
      DASHBOARD_SHELL_SRC,
      "          hostname={formatText(snapshot?.hostname ?? null)}",
      "          hostname={'ai-server'}",
+     [DASHBOARD_SHELL_TEST]),
+    # ⚠ ADDED 2026-09-10 by 10h's RECONCILIATION. `hostnameTitle` is the half of the owner's
+    # truncation ruling that keeps the reading — the visible string is bounded at 320px, so a
+    # shell that stops threading the raw one puts §3.2's reading off the page entirely. The
+    # optional prop needs both sides mutated, not just wired (HANDOVER §0.8).
+    ("10h-DS1 the shell stops threading the RAW hostname, so the truncated header keeps nothing and §3.2's reading is off the page",
+     DASHBOARD_SHELL_SRC,
+     "          hostnameTitle={snapshot?.hostname ?? null}",
+     "          hostnameTitle={null}",
      [DASHBOARD_SHELL_TEST]),
     ("10a-PG2 the entry point server-renders a fact of its own, breaking HANDOVER rule 16 (F18)",
      PAGE_SRC,
@@ -1524,10 +1536,12 @@ REGRESSIONS = [
     # altogether, which is a different (and real) defect. HANDOVER §0.4: read what a mutation
     # REPLACES before crediting it with a property. The ⚠ test it reddens carried the same
     # wrong words and was renamed with it.
+    # ⚠ RE-AIMED by 10h, not weakened: the inline span became multi-line when it gained the
+    # `title` §3.4's 2026-09-10 ruling keeps the raw model path in. Same element, same property.
     ("10e-SR2 inline is silently dropped, so SERVING's model · ctx never renders",
      STATUS_ROW_SRC,
-     "{!shown(inline) ? null : <span className={styles.inline}>{inline}</span>}",
-     "{null}",
+     "      {!shown(inline) ? null : (\n        <span className={styles.inline} title={inlineTitle ?? undefined}>\n          {inline}\n        </span>\n      )}",
+     "      {null}",
      [STATUS_ROW_TEST]),
     # ⚠ 10e-test added SR4/SR5, 2026-09-09. `Row` got both directions of the pill branch
     # (`10e-R1`/`10e-R2` in step 9's harness) and `StatusRow` — the component that renders
@@ -1569,10 +1583,13 @@ REGRESSIONS = [
      "aria-label={isTable ? 'chart' : 'table'}",
      [CHART_VIEW_TOGGLE_TEST]),
 
+    # ⚠ RE-AIMED by 10h, not weakened: the model half of this line is `formatModelName` now
+    # (§3.4's ruling of 2026-09-10). The property — an unread `ctx` must render the em dash and
+    # never a plausible default — is untouched, and so is the mutation that breaks it.
     ("10e-SV1 an unread ctx substitutes a plausible-looking default instead of the em dash",
      SERVING_PANEL_SRC,
-     "inline={`${formatText(instance.model)} · ctx ${formatTokens(instance.ctx)}`}",
-     "inline={`${formatText(instance.model)} · ctx ${formatTokens(instance.ctx) === '—' ? '131,072' : formatTokens(instance.ctx)}`}",
+     "inline={`${formatModelName(instance.model)} · ctx ${formatTokens(instance.ctx)}`}",
+     "inline={`${formatModelName(instance.model)} · ctx ${formatTokens(instance.ctx) === '—' ? '131,072' : formatTokens(instance.ctx)}`}",
      [SERVING_PANEL_TEST]),
 
     ("10e-HD1 the refresh button loses its accessible name, leaving a glyph nothing announces",
@@ -1997,10 +2014,17 @@ REGRESSIONS = [
     # green without its guard, which is the shape 10f-A4 found six of.
 
     # ============================================== components/alarm-banner.tsx (⚠ Q2)
-    ("10g-AB1 the banner caps its own list at five, so a twelve-alarm page counts twelve and names six",
+    # ⚠ RE-AIMED by 10h, and the reason is a RULING, not a convenience. This defended "the
+    # banner never caps its own list" — which §6.4's ruling of 2026-09-10 reversed one day after
+    # 10g built it: the banner now draws `BANNER_REST_SHOWN` conditions and counts the rest,
+    # because 16 of 21 were measured unreachable on a wall panel. The successor property is the
+    # one a capped banner can still be held to, and it is what this now breaks: a SECOND,
+    # silent cap past the declared one, so `+N more` under-counts what is missing and the
+    # accounting `1 + drawn + N === count` stops reconciling.
+    ("10g-AB1 the banner caps its drawn list a second time, so `+N more` under-counts what is missing",
      ALARM_BANNER_SRC,
-     "            {rest.map((item) => (",
-     "            {rest.slice(0, 5).map((item) => (",
+     "              {shown.map((item) => (",
+     "              {shown.slice(0, 2).map((item) => (",
      [ALARM_BANNER_TEST]),
     # ⚠ A MOVE, not a deletion. Deleting the count compiles and reddens plenty — but it is
     # `10a-AB1`'s subject, and it leaves the ⚠ test this backs (the count PRECEDES the well)
@@ -2009,13 +2033,16 @@ REGRESSIONS = [
     # in with the conditions it counts.
     ("10g-AB2 the count moves INSIDE the scrolling well, so §6.4's 'always visible' scrolls away at twelve alarms",
      ALARM_BANNER_SRC,
-     '      <div className={styles.body}>\n        <div className={styles.head}>\n          <span className={styles.count}>\n            {count} active alarm{count === 1 ? \'\' : \'s\'}\n          </span>\n          <span className={styles.lead}>\n            <b>\n              {lead.label} {lead.value}\n            </b>\n          </span>\n          <span className={styles.since}>{lead.since}</span>\n          {lead.age === null ? null : <span className={styles.stale}>{lead.age}</span>}\n        </div>\n        {rest.length > 0 ? (\n          // ⚠ 10g/Q2 — the SCROLLING half of §6.4\'s fixed two-line banner. Named and\n          // `tabIndex={0}` for the same reason every other bounded box on this page is\n          // (10f-A6): a scroll region nobody can reach hides what it holds, and here what it\n          // holds is every alarm past the first line. The lead above is deliberately outside\n          // it, so §6.4\'s *"the count is always visible"* needs no sticky positioning.\n          <div\n            className={styles.rest}\n            role="group"\n            tabIndex={0}\n            aria-label="other alarm conditions"\n            data-role="banner-rest"\n          >\n            {rest.map((item) => (\n              // 10e §5 — `.item` is a REAL class now (10c1-A8\'s dangling `styles.item` was\n              // fixed by removing the reference; this loop restores it as a genuine rule,\n              // since the mock\'s `.item` carries its own border/background/padding — see\n              // `alarm-banner.module.css`).\n              <span key={item.id} className={styles.item}>\n                {item.label} {item.value} <i className={styles.itemSince}>{item.since}</i>\n                {item.age === null ? null : <i className={styles.stale}>{item.age}</i>}\n              </span>\n            ))}\n          </div>\n        ) : null}\n',
-     '      <div className={styles.body}>\n        <div className={styles.head}>\n          <span className={styles.lead}>\n            <b>\n              {lead.label} {lead.value}\n            </b>\n          </span>\n          <span className={styles.since}>{lead.since}</span>\n          {lead.age === null ? null : <span className={styles.stale}>{lead.age}</span>}\n        </div>\n        {rest.length > 0 ? (\n          // ⚠ 10g/Q2 — the SCROLLING half of §6.4\'s fixed two-line banner. Named and\n          // `tabIndex={0}` for the same reason every other bounded box on this page is\n          // (10f-A6): a scroll region nobody can reach hides what it holds, and here what it\n          // holds is every alarm past the first line. The lead above is deliberately outside\n          // it, so §6.4\'s *"the count is always visible"* needs no sticky positioning.\n          <div\n            className={styles.rest}\n            role="group"\n            tabIndex={0}\n            aria-label="other alarm conditions"\n            data-role="banner-rest"\n          >\n            <span className={styles.count}>\n              {count} active alarm{count === 1 ? \'\' : \'s\'}\n            </span>\n            {rest.map((item) => (\n              // 10e §5 — `.item` is a REAL class now (10c1-A8\'s dangling `styles.item` was\n              // fixed by removing the reference; this loop restores it as a genuine rule,\n              // since the mock\'s `.item` carries its own border/background/padding — see\n              // `alarm-banner.module.css`).\n              <span key={item.id} className={styles.item}>\n                {item.label} {item.value} <i className={styles.itemSince}>{item.since}</i>\n                {item.age === null ? null : <i className={styles.stale}>{item.age}</i>}\n              </span>\n            ))}\n          </div>\n        ) : null}\n',
+     [("          <span className={styles.count}>\n            {count} active alarm{count === 1 ? '' : 's'}\n          </span>\n", ""),
+      ("              {shown.map((item) => (",
+       "              <span className={styles.count}>\n                {count} active alarm{count === 1 ? '' : 's'}\n              </span>\n              {shown.map((item) => (")],
      [ALARM_BANNER_TEST]),
+    # ⚠ RE-AIMED by 10h: the well is nested one level deeper inside `.restLine` (§6.4's `+N
+    # more` is its sibling), so every attribute moved two spaces. Same attributes, same element.
     ("10g-AB3 the banner's scrolling well loses its role, name and tab stop — a scroll box nobody can reach",
      ALARM_BANNER_SRC,
-     "            className={styles.rest}\n            role=\"group\"\n            tabIndex={0}\n            aria-label=\"other alarm conditions\"\n            data-role=\"banner-rest\"",
-     "            className={styles.rest}\n            data-role=\"banner-rest\"",
+     "              className={styles.rest}\n              role=\"group\"\n              tabIndex={0}\n              aria-label=\"other alarm conditions\"\n              data-role=\"banner-rest\"",
+     "              className={styles.rest}\n              data-role=\"banner-rest\"",
      [ALARM_BANNER_TEST]),
     ("10g-AB4 a single standing condition renders an empty scrolling well under its own lead",
      ALARM_BANNER_SRC, "{rest.length > 0 ? (", "{true ? (", [ALARM_BANNER_TEST]),
@@ -2158,6 +2185,177 @@ REGRESSIONS = [
      '<Caption label="throttle" well={`GPU ${index} throttle`}>',
      '<Caption label="throttle" well="throttle">',
      [GPU_PANEL_TEST, DASHBOARD_SHELL_TEST]),
+
+    # ==================================================================================== 10h
+    # §6.1's GRID IS BOUNDED (owner's ruling 2026-09-10), §6.4's banner shows what fits plus
+    # `+N more`, and §3.4's `model` renders as its filename. Every CSS entry below is a
+    # one-line revert that leaves every render test green and the page unbounded again.
+    ("10h-GR1 row 1's cap is removed, so a GPU card with a notable throttle mask grows the page again (-16 px at 1600 on one bit, -40 on four)",
+     GRID_CSS_SRC,
+     "    max-height: var(--row1-max);",
+     "    max-height: none;",
+     [GRID_TEST]),
+    ("10h-GR2 rows 2 and 3 lose their caps, so CPU's four explanations and SAFETY's four rows are unbounded again",
+     GRID_CSS_SRC,
+     [("    max-height: var(--row2-max);", "    max-height: none;"),
+      ("    max-height: var(--row3-max);", "    max-height: none;")],
+     [GRID_TEST]),
+    ("10h-GR3 row 4's cap is removed, so §3.4's third llama-server instance breaks the fold (+48 px on SERVING, measured)",
+     GRID_CSS_SRC,
+     "    max-height: var(--row4-max);",
+     "    max-height: none;",
+     [GRID_TEST]),
+    ("10h-GR4 COOLING keeps no bound of its own, so a spanning panel pushes rows 2-3 past their combined budget",
+     GRID_CSS_SRC,
+     "  .cooling {\n    max-height: var(--row23-max);\n  }",
+     "  .cooling {\n    max-height: none;\n  }",
+     [GRID_TEST]),
+    ("10h-GR5 the caps apply at every HEIGHT, so a 1280x800 display is clipped where §6.1 says legibility wins and the page should scroll",
+     GRID_CSS_SRC,
+     "@media (min-width: 1280px) and (min-height: 1024px) {",
+     "@media (min-width: 1280px) {",
+     [GRID_TEST]),
+    ("10h-GR6 COOLING's span forgets the 9 px row gap between the two rows it covers",
+     "components/tokens.css",
+     "  --row23-max: calc(var(--row2-max) + 9px + var(--row3-max));",
+     "  --row23-max: calc(var(--row2-max) + var(--row3-max));",
+     [GRID_TEST]),
+    ("10h-GR7 the band reserve is the header alone, so a page with §6.4's banner pinned overflows by the banner's own height",
+     "components/tokens.css",
+     "  --band-reserve: 102px;",
+     "  --band-reserve: 43px;",
+     [GRID_TEST]),
+    ("10h-GR8 row 2's share is 'tidied' to a round number, and CPU — the row that governs rows 2-3 — loses 24 px it was measured to need",
+     "components/tokens.css",
+     "  --row2-max: calc(var(--rows-available) * 0.3019);",
+     "  --row2-max: calc(var(--rows-available) * 0.25);",
+     [GRID_TEST]),
+    ("10h-GR9 the four shares no longer sum to 1, so the page fits by luck rather than by construction",
+     "components/tokens.css",
+     "  --row4-max: calc(var(--rows-available) * 0.1923);",
+     "  --row4-max: calc(var(--rows-available) * 0.3);",
+     [GRID_TEST]),
+    ("10h-GR10 a short panel is STRETCHED to its row again, so MEMORY grows to CPU's height and STORAGE to SAFETY's — 10e's measured density regression",
+     GRID_CSS_SRC,
+     "  align-items: start;",
+     "  align-items: stretch;",
+     [GRID_TEST]),
+    # ⚠ 10h TEST — `tokens.css` RE-TYPES two numbers that live in `grid.module.css`
+    # (`--grid-pad-v` is its `padding: 9px 12px 12px`, `--grid-row-gaps` is three of its
+    # `gap: 9px`), and nothing tied the copy to the original. This is the pre-10e value coming
+    # back: `--rows-available` then over-states the room by 9 px, the four shares still sum to
+    # 1, and §6.1's promise is quietly false at the viewport it is graded at.
+    ("10h-GR11 the grid's row gap goes back to its pre-10e 12px, leaving tokens.css's --grid-row-gaps 9 px stale and --rows-available that much too generous",
+     GRID_CSS_SRC,
+     "  gap: 9px;",
+     "  gap: 12px;",
+     [GRID_TEST]),
+    # ⚠ ADDED 2026-09-10 by 10h's RECONCILIATION — the three guard defects the adversarial
+    # measured, each of which left `pnpm exec vitest run` at 101 files / 3056 tests / 0 failed
+    # while putting the graded page 5, 21 and 37 px wrong. Every one of them is a ONE-LINE edit
+    # of the kind an ordinary layout change makes, and the shape is the same each time: a text
+    # assertion cannot see a LATER override, and `exec`/`slice` take the first match.
+    ("10h-GR12 the row gap is overridden inside the >=1280 query, where a first-match read of `.grid` cannot see it — the page goes 5 px over at 1600 (10h-A1)",
+     GRID_CSS_SRC,
+     "@media (min-width: 1280px) {\n  .grid {\n    grid-template-columns: repeat(4, minmax(0, 1fr));",
+     "@media (min-width: 1280px) {\n  .grid {\n    gap: 12px;\n    grid-template-columns: repeat(4, minmax(0, 1fr));",
+     [GRID_TEST]),
+    ("10h-GR13 the band reserve is RE-DECLARED five lines below the pinned one, where the last declaration wins and a `toMatch` cannot see it — 21 px over at 1600 (10h-A2)",
+     "components/tokens.css",
+     "  --band-reserve: 102px;",
+     "  --band-reserve: 102px;\n  --band-reserve: 43px;",
+     [GRID_TEST]),
+    ("10h-GR14 COOLING's cap falls OUT of the caps query by one brace, so a 1280x800 display clips 37 px where §6.1 says legibility wins (10h-A8)",
+     GRID_CSS_SRC,
+     "  .serving,\n  .log {\n    max-height: var(--row4-max);\n  }\n  .cooling {\n    max-height: var(--row23-max);\n  }\n}",
+     "  .serving,\n  .log {\n    max-height: var(--row4-max);\n  }\n}\n.cooling {\n  max-height: var(--row23-max);\n}",
+     [GRID_TEST]),
+    # ⚠ ADDED 2026-09-10 by 10h's RECONCILIATION — the owner's hostname ruling. `--band-reserve`
+    # is a CONSTANT the row arithmetic subtracts, and §3.2's `hostname` was the one free-form
+    # string inside the band: measured, a 79-character FQDN wraps `.header`, takes the band
+    # 101.8 -> 130.7 px and puts §6.1's page over with every row cap holding.
+    ("10h-HD1 the hostname loses its bound, so a long FQDN wraps the header and the band grows past the reserve the four row caps are computed against",
+     "components/header.module.css",
+     "  max-width: 320px;",
+     "  max-width: none;",
+     [HEADER_TEST]),
+    ("10h-HD2 the hostname is truncated with no ellipsis, so a name is cut mid-glyph with nothing saying it was",
+     "components/header.module.css",
+     "  text-overflow: ellipsis;",
+     "  text-overflow: clip;",
+     [HEADER_TEST]),
+    ("10h-HD3 the truncated hostname keeps NOTHING — the whole reading is off the page, which is the half of §3.4's rule that makes shortening legitimate",
+     HEADER_SRC,
+     '<span className={styles.hostname} title={hostnameTitle ?? undefined}>',
+     '<span className={styles.hostname}>',
+     [HEADER_TEST]),
+    ("10h-HD4 a header with no hostname reading renders an EMPTY title, so an em dash offers a tooltip that says nothing",
+     HEADER_SRC,
+     '<span className={styles.hostname} title={hostnameTitle ?? undefined}>',
+     "<span className={styles.hostname} title={hostnameTitle ?? ''}>",
+     [HEADER_TEST]),
+    ("10h-AB1 the banner draws six conditions where four fit, so the last of them sits below the fold it was ruled out of",
+     ALARM_BANNER_SRC,
+     "export const BANNER_REST_SHOWN = 3;",
+     "export const BANNER_REST_SHOWN = 6;",
+     [ALARM_BANNER_TEST]),
+    ("10h-AB2 the `+N more` count is dropped, so the banner silently draws fewer conditions than it announces — 10a-F14's lying banner, from the other side",
+     ALARM_BANNER_SRC,
+     '              <span className={styles.more} data-role="banner-more">{`+${hidden} more`}</span>',
+     '              <span className={styles.more} data-role="banner-more" />',
+     [ALARM_BANNER_TEST]),
+    ("10h-AB3 the remainder is computed against the drawn list rather than the whole one, so `+N more` is always zero",
+     ALARM_BANNER_SRC,
+     "  const hidden = rest.length - shown.length;",
+     "  const hidden = shown.length - shown.length;",
+     [ALARM_BANNER_TEST]),
+    ("10h-AB4 the pinned count becomes the number DRAWN, not the number standing — the banner stops counting what it hides",
+     ALARM_BANNER_SRC,
+     "  const count = 1 + rest.length;",
+     "  const count = 1 + Math.min(rest.length, BANNER_REST_SHOWN);",
+     [ALARM_BANNER_TEST, DASHBOARD_SHELL_TEST]),
+    ("10h-AB5 the `+N more` count moves INSIDE the scrolling well, where it is one more item competing for the line it describes",
+     ALARM_BANNER_SRC,
+     [("              ))}\n            </div>\n            {hidden === 0 ? null : (",
+       "              ))}\n            {hidden === 0 ? null : ("),
+      ("              <span className={styles.more} data-role=\"banner-more\">{`+${hidden} more`}</span>\n            )}\n          </div>",
+       "              <span className={styles.more} data-role=\"banner-more\">{`+${hidden} more`}</span>\n            )}\n            </div>\n          </div>")],
+     [ALARM_BANNER_TEST]),
+    ("10h-SR1 a row's inlineTitle is never threaded, so §3.4's shortened model has nowhere to keep the whole path",
+     STATUS_ROW_SRC,
+     "        <span className={styles.inline} title={inlineTitle ?? undefined}>",
+     "        <span className={styles.inline}>",
+     [STATUS_ROW_TEST]),
+    ("10h-SR2 a row with no raw reading behind its inline text renders an EMPTY title — a tooltip that says nothing, on every SERVING row",
+     STATUS_ROW_SRC,
+     "        <span className={styles.inline} title={inlineTitle ?? undefined}>",
+     "        <span className={styles.inline} title={inlineTitle ?? ''}>",
+     [STATUS_ROW_TEST]),
+    ("10h-SV1 SERVING renders the model RAW, so a path-valued model is +21 px per row again",
+     SERVING_PANEL_SRC,
+     "      inline={`${formatModelName(instance.model)} · ctx ${formatTokens(instance.ctx)}`}",
+     "      inline={`${formatText(instance.model)} · ctx ${formatTokens(instance.ctx)}`}",
+     [SERVING_PANEL_TEST]),
+    ("10h-SV2 SERVING shortens the model and keeps NOTHING — the raw reading is off the page entirely",
+     SERVING_PANEL_SRC,
+     "      inlineTitle={instance.model}\n",
+     "",
+     [SERVING_PANEL_TEST]),
+    ("10h-GP1 the GPU card renders the model RAW in its strip, so a path is +17.9 px on the row that sets §6.1's first term",
+     GPU_PANEL_SRC,
+     "                v: formatModelName(instance?.model ?? null),",
+     "                v: formatText(instance?.model ?? null),",
+     [GPU_PANEL_TEST]),
+    ("10h-GP2 the GPU card shortens the model and keeps NOTHING — the raw reading is off the page entirely",
+     GPU_PANEL_SRC,
+     "                title: instance?.model ?? null,",
+     "                title: null,",
+     [GPU_PANEL_TEST]),
+    ("10h-GP3 a card with no matching instance is given an EMPTY title, so an em-dash cell offers a tooltip that says nothing",
+     GPU_PANEL_SRC,
+     "                title: instance?.model ?? null,",
+     "                title: instance?.model ?? '',",
+     [GPU_PANEL_TEST]),
 ]
 
 # ---------------------------------------------------------------------------
@@ -2181,10 +2379,12 @@ def _assert_unique_ids() -> None:
     # ⚠ `10f-` added by 10f (the owner's four rulings of 2026-09-09) — same instruction.
     # ⚠ `10g-` added by 10g (the last four unbounded terms: the table views, §6.4's banner, the
     #    throttle line, and the `… N more` affordance) — same instruction, same reasoning.
-    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-", "10c-", "10e-", "10f-", "10g-")))
+    # ⚠ `10h-` added by 10h (the loop that bounds the GRID itself, §6.1's 2026-09-10 ruling,
+    #    plus §6.4's `+N more` and §3.4's filename rendering) — same instruction, same reasoning.
+    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-", "10c-", "10e-", "10f-", "10g-", "10h-")))
     if bad_prefix:
         raise SystemExit(
-            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-/10c-/10e-/10f-/10g-): {', '.join(bad_prefix)}"
+            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-/10c-/10e-/10f-/10g-/10h-): {', '.join(bad_prefix)}"
         )
 
 
