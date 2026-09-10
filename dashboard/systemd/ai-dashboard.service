@@ -1,0 +1,137 @@
+# ai-dashboard.service — SPEC.md §2.5, INSTALL-SPEC.md §7.
+#
+# Installed to /etc/systemd/system/ai-dashboard.service by `dashboard.sh unit`, which
+# copies THIS file rather than generating one. One producer: the `docker run` line below is
+# the only copy of the container's flags anywhere in this project, so nothing can drift
+# from it.
+#
+# ⚠ Nothing that serves or cools may gain a `Wants=` or `After=` naming this unit (§2.3).
+# If the dashboard fails, nothing else notices — that is the whole design.
+
+[Unit]
+Description=ai-server dashboard (SPEC.md §2.5)
+# ⚠ NOT the env file. `Documentation=` is what `systemctl status` invites you to open, and
+# /etc/ai-dashboard.env is 0600 because it carries a password hash and a session secret —
+# the one file on this box nobody should be pointed at. The flags below, and the reason for
+# each of them, are in THIS file; INSTALL-SPEC §7 is the specification behind it.
+Documentation=file:/etc/systemd/system/ai-dashboard.service
+Wants=docker.service
+
+# ⚠ TRAP 2, and this repo has already paid for it in full. NEVER `After=multi-user.target`.
+# This unit is `WantedBy=multi-user.target`, so ordering it after that target is a CYCLE,
+# and systemd breaks a cycle by SILENTLY DELETING a start job — which is how both
+# llama-server instances failed to come up on the 2026-08-28 boot with no failed unit and
+# no error anywhere except one journal line. `systemctl restart` can never reproduce it;
+# it exists only while the target is doing the starting. `dashboard.sh check` runs
+# `journalctl -b | grep "ordering cycle"` for exactly this.
+After=docker.service sysinit.target
+
+# ⚠ TRAP 1. StartLimitIntervalSec and StartLimitBurst belong in [Unit], NOT [Service].
+# systemd moved them in v229 and IGNORES them in [Service], falling back to a 10 s window
+# that RestartSec=10 can never fill — so a broken instance retries for ever with nothing
+# saying so. Writing them here is not evidence they took: `dashboard.sh unit` asks
+# `systemctl show ai-dashboard -p StartLimitIntervalUSec` afterwards, and `check` repeats it.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+
+# ⚠ O22 — one process, one cache. A second instance means a second 2 s telemetry cache, a
+# doubled nvidia-smi fork rate, `DELETE /api/session` silently failing for requests that
+# land on the other process, and §5's GLOBAL rate limit becoming N× looser. Nothing in the
+# test suite can see any of it. Three things make a second instance impossible here, and
+# they fail in different directions on purpose:
+#   · `--name ai-dashboard`  — Docker refuses a second container with the same name;
+#   · `--network host` on a fixed port — a second listener cannot bind 8090 (EADDRINUSE);
+#   · this ExecStartPre — a STALE container cannot block a restart either.
+# `dashboard.sh check` then asks docker how many are actually running, because writing the
+# config is not evidence it took.
+ExecStartPre=-/usr/bin/docker rm -f ai-dashboard
+
+# ⚠ THE GPU FALLBACK (INSTALL-SPEC §11.1). `--gpus all` on a box whose toolkit or driver is
+# broken makes `docker run` FAIL, and the unit then never starts — the WHOLE dashboard down,
+# including the eight panels that need no GPU. The collector half already handles a missing
+# card correctly (an errors[] entry and the GPU panels' no-readings state, §3.1 invariant 5),
+# so the ruling is: try the GPU, and start without it rather than not at all.
+#
+# Four things about this shape, each of which is a way to get it wrong:
+#
+#  1. ⚠ ONE ExecStart=. systemd accepts several only for Type=oneshot; on this Type=simple
+#     unit a second one makes the file FAIL TO LOAD ("Service has more than one ExecStart=
+#     setting"). That is not a fallback, it is a unit that will not start at all.
+#  2. ⚠ `$GPU_FLAGS`, NEVER `${GPU_FLAGS}`. systemd splits the unbraced form on whitespace
+#     and passes the braced form as a SINGLE argv — and `--gpus all` as one argument is
+#     rejected by docker. The two spellings look identical in review.
+#  3. ⚠ The probe does NOT run this repository's own image. `docker run --rm --gpus all
+#     ai-dashboard:latest true` would be a second container of this app: `check`'s O22 row
+#     matches by repository AND by `--filter ancestor=`, so a check racing a start would
+#     report a false second instance. `nvidia-container-cli info` asks the toolkit and the
+#     driver — the two coupled things — and starts nothing.
+#  4. ⚠ `EnvironmentFile=-` swallows its own absence: a missing file yields an empty
+#     GPU_FLAGS, i.e. THE FALLBACK, silently. That is tolerable only because the mode is
+#     reported: `check` reads .HostConfig.DeviceRequests off the running container and
+#     re-probes, so "fallback while the toolkit works — restart to recover" is a FAILING row
+#     rather than a permanent quiet degradation. Never infer the mode from this file's text,
+#     which always says $GPU_FLAGS, nor from `gpus: null` in the telemetry, which is also
+#     what a box with no compute card reports — and this box documents having none.
+ExecStartPre=/bin/sh -c 'if nvidia-container-cli info >/dev/null 2>&1; then echo GPU_FLAGS=--gpus all; else echo GPU_FLAGS=; fi >/run/ai-dashboard-gpu.env'
+EnvironmentFile=-/run/ai-dashboard-gpu.env
+
+# ⚠ Every flag is SPEC.md §2.5 / §2.2. Do not add one without reading INSTALL-SPEC §7's
+# table — three of these are load-bearing in a way that is invisible if you get them wrong:
+#
+#   --network host   NOT -p 8090:8090. Publishing inserts rules into DOCKER/FORWARD, which
+#                    are evaluated BEFORE ufw's INPUT — the port becomes reachable from
+#                    anywhere routable whatever ufw says. On a box whose firewall was found
+#                    silently not enforcing once, a second firewall-invisible listener is
+#                    not acceptable. Host networking also gives /proc/net/dev for eno1.
+#   --read-only      no next/image, no runtime cache, nothing writable but the tmpfs.
+#   --pid host       /proc/stat, /proc/meminfo, /proc/loadavg, /proc/net/dev (§2.2).
+#   $GPU_FLAGS       ⚠ `--gpus all`, or NOTHING — see the probe above. Needs
+#                    nvidia-container-toolkit ON THE HOST; if the toolkit or the driver
+#                    breaks, `docker run --gpus all` FAILS and the whole dashboard would be
+#                    down, including the eight panels that need no GPU, exactly when an
+#                    operator most wants to look at it. INSTALL-SPEC §11.1 rules that it
+#                    FALLS BACK instead. `check` prints the toolkit and driver versions side
+#                    by side because they are coupled (§7 risk 2), and reports which mode is
+#                    actually in force.
+#   UV_THREADPOOL_SIZE=16  libuv's default of 4 is below collectHost's nine concurrent
+#                    reads on a healthy poll. Margin behind §4's outstanding-call rule,
+#                    never a substitute for it.
+#   --env-file       ⚠ read ONCE, at container creation. A STANDING change needs
+#                    `dashboard.sh restart`, not a poll. Docker's grammar keeps quotes and
+#                    expands nothing — see O21 and `dashboard.sh check`.
+#   no --restart     systemd owns restarts. A Docker restart policy would fight it and
+#                    restart outside its control.
+ExecStart=/usr/bin/docker run --rm --name ai-dashboard \
+    --network host \
+    --pid host \
+    --read-only --tmpfs /tmp \
+    --user 10001:10001 \
+    $GPU_FLAGS \
+    -e NVIDIA_DRIVER_CAPABILITIES=utility \
+    -e UV_THREADPOOL_SIZE=16 \
+    --env-file /etc/ai-dashboard.env \
+    --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
+    -v /sys:/sys:ro \
+    -v /:/host/root:ro \
+    -v /home:/host/home:ro \
+    -v /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro \
+    -v /etc/llama-server:/etc/llama-server:ro \
+    -v /etc/ufw/ufw.conf:/etc/ufw/ufw.conf:ro \
+    -v /lib/modules:/lib/modules:ro \
+    -v /etc/hostname:/etc/hostname:ro \
+    ai-dashboard:latest
+
+# The repo convention: anything that changes state cleans up on every exit path, and the
+# unit repeats the cleanup to cover SIGKILL. `docker run --rm` does not remove a container
+# whose CLIENT was killed, and a stale `ai-dashboard` would then be the second instance
+# ExecStartPre exists to prevent.
+ExecStopPost=-/usr/bin/docker rm -f ai-dashboard
+
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

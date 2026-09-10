@@ -1,0 +1,78 @@
+# What `docker build` must NOT carry into the image.  INSTALL-SPEC.md §4 and §11.2.
+#
+# Two separate jobs, and only one of them is about size:
+#
+#  1. ⚠ **`*.test.ts` / `*.test.tsx` must not enter the context.** Route tests are
+#     colocated with routes (the Next convention) and nothing imports them, so they are
+#     never traced into `.next/standalone` — but `next build` type-checks everything
+#     `tsconfig.json`'s `include` matches, and every one of those files imports `vitest`.
+#     Excluding them means the type-check inside the image covers exactly the code that
+#     ships. (INSTALL-SPEC §4: "Excluding them settles both.")
+#  2. ⚠ **Nothing that carries a credential may be in a build context**, ever. A context is
+#     uploaded to the daemon and every ADD/COPY layer is readable in the finished image.
+#     `.env*` is listed here as well as in the repo's .gitignore for that reason.
+#
+# Everything else here is either regenerated inside the image (`node_modules`, `.next`) or
+# is host-side material the container has no use for (`dashboard.sh`, `scripts/`,
+# `systemd/`, `pipeline/`).
+#
+# ⚠ Docker matches these against paths relative to the context root, with Go's
+# `filepath.Match` semantics — so a bare `node_modules` matches ONLY the root one. The
+# `**/` twins below are not decoration.
+
+# ---------------------------------------------------------------- generated, never shipped
+node_modules
+**/node_modules
+.next
+out
+coverage
+*.tsbuildinfo
+**/*.tsbuildinfo
+.git
+.gitignore
+
+# ------------------------------------------------------------------------- credentials
+# There should never be one of these here. If there ever is, it stops at this line.
+#
+# ⚠ The `**/` twins are MORE necessary here than anywhere else in this file, and until
+# 2026-09-10 this was the one section that did not have them (11-A15): the note at the top
+# explains that a bare `node_modules` matches only the root one, twins every generated
+# pattern and every test pattern, and then left the section it calls "the one that must never
+# be violated" root-only. `app/.env.local`, `lib/.env` and `components/deploy.apikey` would
+# have gone to the daemon and into the build cache on the box. Nothing like that exists
+# today, which is exactly when to write the twin.
+.env
+**/.env
+.env.*
+**/.env.*
+*.apikey
+**/*.apikey
+
+# ------------------------------------------------------------------------------- tests
+# See note 1 above. `test-support.ts`, `fixtures.ts` and `fake-env.ts` are deliberately NOT
+# excluded: they are ordinary modules, they import no test runner, and a `.dockerignore`
+# that guessed at "looks like test code" would break the build for a real import.
+**/*.test.ts
+**/*.test.tsx
+**/*.test-d.ts
+**/*.probe.ts
+vitest.config.mts
+vitest.probe.mts
+
+# --------------------------------------------------------- host-side, not container-side
+# ⚠ `scripts/hash-password.py` is excluded from the IMAGE and required on the HOST
+# (INSTALL-SPEC §11.3). Nothing inside the container ever hashes a password; the producer
+# runs on the box, under `dashboard.sh set-password`, and reaches the box by rsync.
+scripts
+dashboard.sh
+systemd
+Dockerfile
+.dockerignore
+
+# ------------------------------------------------------------- documents and the pipeline
+pipeline
+SPEC.md
+MOCK.html
+README.md
+AGENTS.md
+CLAUDE.md

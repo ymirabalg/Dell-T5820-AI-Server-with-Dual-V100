@@ -422,6 +422,28 @@ step 12.
 
 ---
 
+## 11.1 ⚠ Owner rulings, 2026-09-10 — these AMEND the sections above
+
+**`--gpus all` FALLS BACK; it no longer takes the dashboard down.** §7's `docker run` line passes
+`--gpus all` unconditionally, so a broken NVIDIA Container Toolkit or driver makes `docker run`
+fail and the unit never starts — **the whole dashboard, including the eight panels that need no
+GPU, is down exactly when an operator most wants to look at it.** The collector half already
+handles this correctly: a missing `nvidia-smi` files an `errors[]` entry and the GPU panels render
+their no-readings state (§3.1, invariant 5). Ruled: **try `--gpus all`; if the runtime refuses,
+start without it.** The GPU panels then show what they already show for an unreadable card, and
+`check` must report which mode is in force so the degraded start is visible rather than silent.
+Implement it where the unit starts the container, not by editing the collector.
+
+**O20's verification is the CROSS-CHECK, not the image.** §9 asks that the hash format be verified
+*"by running it through the image"*. All three routes are closed: the bundled chunks cannot be
+required, an unparseable hash and a wrong password are **both** a clean 401 by design (§5 logs
+nothing about authentication), and the box has no Node. Ruled: the substitute stands — sourcing
+`dashboard.sh` under its library hook and asserting its verdicts equal `parseScryptHash`'s over a
+fixture table tests the same property with a real instrument. ⚠ **The test phase then found the
+hole that matters more:** the table measured the *validators* and nothing measured the `check`
+**rows that call them**, so eight edits disconnected all four obligations while every test stayed
+green. A cross-check is only worth the call site it is wired into; assert both.
+
 ## 12. Open questions for review
 
 Recorded rather than guessed (invariant 7).

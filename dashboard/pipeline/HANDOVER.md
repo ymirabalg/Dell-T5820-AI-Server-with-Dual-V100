@@ -1,6 +1,12 @@
-# Handover — after 10h. **§6.1's promise holds for any telemetry, at every viewport, on every graded fixture — AND, new in this loop, nothing is hidden to buy that fit on any page the design is supposed to hold whole. The two things still open are named, measured, and the owner's.**
+# Handover — after step 11. **The deployment artefacts exist and are measured AT THEIR CALL SITES: 49 of 63 one-line edits used to disconnect a guard with the whole suite green, and the count is now 0 of 48. `--gpus all` falls back rather than taking the dashboard down, and `check` reports which mode is in force. Step 10's §6.1 answer is kept in full at §0.0.1.**
 
-**Rewritten 2026-09-10 by 10h's reconciliation** (the owner's ruling of 2026-09-10 — the grid
+**Rewritten 2026-09-10 by step 11's reconciliation**, on top of 10h's. §0.0 and §0.13 are step
+11's; §0.0.1 and §0.1-§0.12 are step 10's, unchanged and still the inheritance for anything that
+touches `lib/`, `app/` or `components/`. **Step 11 touched none of those** — it wrote
+`dashboard.sh`, `Dockerfile`, `.dockerignore`, `systemd/ai-dashboard.service`, `README.md` and
+`packaging.test.ts`, and nothing else.
+
+**Previously rewritten 2026-09-10 by 10h's reconciliation** (the owner's ruling of 2026-09-10 — the grid
 itself is bounded — plus §6.4's `+N more`, §3.4's `model` as a filename, and the same day's two
 follow-on rulings on the hostname and on headroom), on top of 10g's. Steps 1–8 are closed,
 **step 9** is closed, **Q1** and **Q2** are closed, and every loop of **step 10** — 10a, 10b,
@@ -11,7 +17,60 @@ and read it as fact.
 
 ---
 
-## 0.0 ⚠⚠ READ THIS FIRST — 10h closed pending parent review. **§6.1 NOW HOLDS, and here is exactly what it costs in hidden readings.**
+## 0.0 ⚠⚠ READ THIS FIRST — **step 11 is closed pending parent review. The deployment artefacts exist, and the thing that was wrong with them was not any one guard: it was that 49 of 63 one-line edits could disconnect a guard with the whole suite green. That is fixed at the cause, and the count is 0 of 48.**
+
+**Step 11 wrote four files and nothing else**: `dashboard.sh` (2099 lines), `Dockerfile`,
+`.dockerignore`, `systemd/ai-dashboard.service`, plus `README.md` and `packaging.test.ts`. They are
+the only files in this repository that **nothing else in the suite can see**, and three of them
+encode rules whose every failure mode is silent.
+
+| the question | the answer |
+|---|---|
+| **Is the deployment path measured?** | **Yes, and for the first time it is measured at the CALL SITES.** `pnpm verify` **exit 0 — 102 files, 3121 tests**; `python3 pipeline/steps/11-packaging/regressions.py` **exit 0 — 130 mutations, all bit, 60 of 60 ⚠ tests reddened**; `shellcheck dashboard.sh` clean |
+| **⚠⚠ What was wrong?** | **49 of 63 one-line edits to those four files kept the whole suite green** (adversarial, 2026-09-10) — every `check` row the test phase had not wired, all seven preflight refusals, `restart`'s container-id proof, `install`'s own failure gate, and `check_one_process` **deleted from `cmd_check` outright**. Two structural causes: nothing asserted **which functions `cmd_check` calls**, and nothing asserted **that a guard REFUSES** — only that it could be called |
+| **Is it fixed?** | **Yes, at the cause rather than at the 49 instances, and the count is the evidence: 48 of 48 enumerated survivors now FAIL the suite.** A call-graph assertion over `cmd_check` (source-text *and* behavioural) and a three-part guard-refusal table (38 `check`-row cases, 12 preflight cases, 14 subcommand cases), each with its bad input and its good one |
+| **Does `check` now detect a reboot survivor?** | **Yes — `systemctl show -p UnitFileState`, which did not exist anywhere.** PLAN row 12's acceptance criterion is literally *"survives a reboot"* and it had **no detector**: `check_unit` read `StartLimitIntervalUSec` and `ActiveState`, both of which reflect the unit FILE after a `daemon-reload` |
+| **`--gpus all`?** | **Falls back, per INSTALL-SPEC §11.1 — built in this loop.** One `ExecStart`, `$GPU_FLAGS` **unbraced**, an `ExecStartPre` probe that asks `nvidia-container-cli info` and never starts a container of this repository, and a **three-state** `check` row that reads `docker inspect .HostConfig.DeviceRequests` off the container and **re-probes** — so *fallback while the toolkit now works* is a failing, actionable row and a fallback cannot outlive its cause |
+| **What is still open?** | Three owner questions (`11-Q1` `Restart=on-failure`, `11-Q2` both secrets in the container's environment, `11-Q3` the flag-by-flag container-vs-unit diff) and the seven box-side verifications below. §8 |
+
+### ⚠⚠ What step 12 must verify ON THE BOX, and cannot verify anywhere else
+
+**There is no Docker and no systemd on this Mac.** Nothing in step 11 has been run against a
+built image, a running container or a real boot; everything about them is read from the code and
+from documented Docker/systemd behaviour, and `steps/11-packaging/reconciliation.md` §5 says which
+is which. Seven things are step 12's, in the order they bite:
+
+1. ⚠ **`install` now REFUSES on ai-server until `sudo ufw enable` has been run.** That is
+   deliberate (`11-A9`): `cmd_firewall` already refused on a non-enforcing ufw, but at step 6 of
+   8 — after docker was installed and **restarted**, the image built, the password written and the
+   unit **enabled**, so the deployment would first have come up at the next reboot, unattended,
+   with no rule, while the operator's last signal was a failure. The refusal is now at step 0.
+   ⚠ **Enabling ufw is what took this box off the network on 2026-09-04.** Run
+   `sudo ufw show added` first, from a session you keep open and do not close, and confirm a
+   port-22 rule before `ufw enable`.
+2. **`docker build` actually succeeds**, and `pnpm install --frozen-lockfile` resolves the
+   linux/x64 `sharp` variant. Never run here.
+3. **The GPU probe's ordering.** `ExecStartPre` writes `/run/ai-dashboard-gpu.env` and
+   `EnvironmentFile=-` reads it. The belief is that systemd loads environment files in the forked
+   child, per executed command, so the same start sees it — ⚠ **recalled, not verified**: no
+   systemd here, and it was not confirmed against a document or a running instance. The design is
+   safe either way — if systemd instead reads once at unit start, the first boot falls back and
+   `check` says *"FALLBACK … but nvidia-container-cli answers NOW … Fix: restart"* — but step 12
+   should observe which happens: `docker inspect ai-dashboard --format
+   '{{json .HostConfig.DeviceRequests}}'` on the first start after a boot.
+4. **`journalctl -b --system | grep "ordering cycle"` AS ROOT**, after a real boot. `check`'s row
+   now has three answers rather than two, and only a boot produces the interesting one.
+5. **`systemctl show ai-dashboard -p UnitFileState`** after that boot — the new detector for
+   PLAN row 12.
+6. **The running container against the unit's `docker run` line** — the deferred half of `11-A4`:
+   `docker inspect ai-dashboard --format '{{json .Config}}{{json .HostConfig}}'`. `check` compares
+   the image id and the GPU device request; nothing compares the mounts or the log options.
+7. **`--read-only` at runtime**: whether Next 16's standalone server tries to create `.next/cache`
+   with only `/tmp` as a tmpfs. Unknown here, one look there.
+
+---
+
+## 0.0.1 — step 10's closing state, kept in full. **§6.1 HOLDS, and here is exactly what it costs in hidden readings.**
 
 **The answer to "does §6.1 hold", in one table, all of it measured by 10h's reconciliation on the
 tree it left.**
@@ -1021,6 +1080,125 @@ information is the **slot's height against its own computed `max-height`** — w
 graded pages' tightest numbers (2.9 / 1.0 / 13.8 · 35.3 / 23.7 / 36.6 · 1.3 / **0.7** / 12.1) came
 out, and how the 0.98 experiment was predicted before it was run.
 
+## 0.13 ⚠ NEW — what step 11 found, and the six rules to carry out of it
+
+Everything here is measured, on the four packaging artefacts, by step 11's build, test,
+adversarial and reconcile phases. Full account:
+`steps/11-packaging/build.md`, `test.md`, `adversarial.md`, `reconciliation.md`.
+
+### ⚠⚠ THE RULE — a cross-check is only worth the call site it is wired into, and a guard is only worth an assertion that it REFUSES
+
+This is one sentence with two halves and the project has now paid for both, one layer apart.
+
+**The first half, found by the test phase.** `dashboard.sh` spells three canonical rules a second
+time in bash (the scrypt encoding, Docker's `--env-file` grammar, §6.4's `STANDING` vocabulary),
+and `packaging.test.ts` holds each **validator** equal to its TypeScript by measurement. That
+instrument is real and it works. But **nothing measured the row that CALLS the validator** — and a
+row is exactly where wiring comes undone. Eight one-line edits, all four obligations disconnected,
+24 tests green.
+
+**The second half, found by the adversarial one layer out.** After five rows were wired: **63
+one-line edits, 49 kept the whole suite green.** Every other `check` row, all seven preflight
+refusals, `restart`'s container-id proof, `install`'s own failure gate — and `check_one_process`
+replaced by `true`, which deletes the entire O22 section from `check` with 31 tests green.
+
+**The fix is not 49 patches. It is two mechanisms**, and they are the shape to copy:
+
+| mechanism | what it asserts | what it makes impossible |
+|---|---|---|
+| a **call-graph assertion** over the orchestrating function | the calls in its body equal a named list, in order, with nothing else — AND, behaviourally, stubbing all rows silent gives one exit code while each row alone raising a failure gives another | a row deleted, replaced by `true`, reordered, or called with its verdict discarded; and a NEW row cannot be added without appearing in the list, which is the only moment anyone asks whether it has a test |
+| a **guard-refusal table** — "this guard refuses on ITS bad input and permits on good" | one row per guard, both directions, with the expected verdict AND a substring the message must contain | a guard turned into a warning; a guard that fires for the wrong reason (the preflight table flips **one** input at a time and requires **exactly one** refusal) |
+
+**Measured before and after, by the reconciliation, on the same 48 enumerated edits: 49 survived
+→ 0 survived.**
+
+### ⚠ A guard you cannot exercise is a guard nothing measures — and three of them were unexercisable BY CONSTRUCTION
+
+Not "untested". **Impossible to test**, and the reason is worth knowing before writing the next
+shell script:
+
+- `(( EUID == 0 ))` — **bash's `EUID` is readonly**, so no test can make a non-root process take
+  the root branch. Every root guard in the script was unreachable. Fixed by one function,
+  `is_root()`, used in all four places.
+- `[[ -t 0 ]]` — a test has no tty, so everything *behind* the terminal check was unreachable,
+  including the belt-and-braces re-check of the password hasher's own output. Fixed by
+  `have_terminal()`.
+- `install -m 0600 -o root -g root` — **fails outright for a non-root caller**, so the mode of the
+  file carrying the password hash could not be asserted anywhere off the box. Split into
+  `install -m 0600` plus a `chown` **conditional on being root**: identical on the box, and
+  assertable everywhere else.
+
+The general form: **when a guard's condition is a property of the process rather than of the
+input, put it behind a function.** It costs one line and it is the difference between a guard and
+a comment.
+
+### ⚠ "Could not read it" is not "it is not there" — and the wrong one of those is an alarming, specific, WRONG diagnosis
+
+`check` reported `✗ PASSWORD_HASH is absent — every login is denied, silently`,
+`✗ SESSION_SECRET is absent` and `✗ STANDING is absent` on a **correct** deployment, whenever it
+was run without `sudo` — because `env_get`/`env_has` returned 1 both for "no such key" and for
+"cannot open the file". Three FAILED rows and exit **1**, on a healthy box, whose most likely next
+action is `sudo ./dashboard.sh set-password` — overwriting a working password.
+
+The script already had the right answer and could not reach it: **exit 2 means "a row could not be
+evaluated"**, and its own header says that is *almost always "re-run it with sudo"*. Any row that
+can be reached without the privilege its evidence needs must ask **first** whether it can look, and
+file *unknown* rather than *failed*. A row nobody could evaluate is not a row that passed — and it
+is not a row that FAILED either.
+
+The same shape, one function over: an ordering-cycle detector that read "no output from
+`journalctl -b`" as "no cycle", when a user outside `adm` gets only their own journal and still
+exits 0. Three states, not two.
+
+### ⚠ "Already present" is not "already correct" — the one place a script may not say it is the deploy path
+
+`build` skipped a rebuild when the image tag already existed and printed a **green tick**. With no
+`--tag` the tag is `notag-<UTC date>`, so **every second build of one day collided**: `:latest`
+stayed where it was, the next `restart` proved a restart had happened (the container id really did
+change), and `check` passed every row **on the old code**. This repo's most-repeated failure mode —
+a success report over a no-op — reached through the deploy path itself.
+
+Two things came out of it. A tag that names a **day** cannot identify a tree, so that case now
+rebuilds; and **`check` compares the RUNNING container's image id with `:latest`'s** — `status`
+could not, because `docker ps --format '{{.Image}}'` prints the *reference*, not the id behind it.
+
+⚠ **The two catch different things, and saying so is part of the rule.** The comparison catches a
+rebuild that was never *restarted into*; it cannot catch a *skipped* build, because a skip leaves
+`:latest` where it was and the container matches it exactly. A skip has to be fixed where it is
+taken. Re-using an explicit `--tag` after an edit still ships the old image — now with a warning
+and the image's build time, and `--force` is the answer.
+
+### ⚠ A fallback that is not reported becomes permanent
+
+INSTALL-SPEC §11.1 rules that `--gpus all` must fall back rather than take the dashboard down. The
+trap is not in the falling back — it is that **a container is created once and lives until
+something restarts it**, so a fallback taken during a driver upgrade survives the fix
+*indefinitely*, and `EnvironmentFile=-` swallows its own absence, so the degraded mode is also the
+silent default the first time the probe's output goes missing.
+
+The row that pays for that has to distinguish **three** states, not two: GPU mode; fallback while
+the toolkit is still broken (the honest degraded mode — and on this box, which documents having no
+compute card, the *normal* one); and **fallback while the toolkit now works**, which is the only
+actionable one and the one a two-state row loses. It must read the mode from the **container**
+(`docker inspect .HostConfig.DeviceRequests`), never from the unit text — which always says
+`$GPU_FLAGS` — and never from `gpus: null` in the telemetry, which is what a broken toolkit *and a
+box with no card* both produce.
+
+### ⚠ A refusal that fires on a correct configuration teaches an operator to ignore the one that matters
+
+Two instances in one file, in opposite directions.
+
+- `ufw_rule_for_port` read the "To" column as `$1`, which is right for the rule this box has and
+  wrong for a **destination-qualified** rule (`ufw allow from LAN to <ip> port 22`) and for a
+  **blanket** one. Either would have made the port-22 HARD REFUSAL fire on a genuinely
+  well-firewalled machine. ⚠ **Stated accurately: this box's own rule form WAS matched**, so it was
+  latent here rather than live — the adversarial's headline overstated it and the reconciliation
+  narrowed it with the refuting line.
+- The same condition was judged twice, 380 lines apart, and the two disagreed: `preflight`
+  **warned** that ufw was not enforcing and `cmd_firewall` **refused** on it — at step 6 of 8, with
+  docker restarted, the image built, the password written and the unit enabled. A refusal belongs
+  where it costs nothing, which is before anything has been done.
+
 ## 1. How to run anything
 
 `pnpm` is installed through corepack into a directory that is **not** on this machine's
@@ -1097,7 +1275,7 @@ Step 7 shipped a test that **failed 1 run in 16** and could not be reproduced by
 wrote it. See §5.4. When a change touches anything that consumes entropy or a clock, run
 `pnpm verify` in a loop — step 7's reconciliation ran it **20 times**, step 8's **10**.
 
-### The deliberate-regression harnesses — run all **NINE** after any change in `lib/`, `app/` or `components/`
+### The deliberate-regression harnesses — **TEN**. Run the nine after any change in `lib/`, `app/` or `components/`; run the tenth after any change to the four packaging artefacts
 
 ⚠ **Counts below re-derived 2026-09-08 by 10b-S-G's reconciliation**, by importing each
 `regressions.py` and reading `len(REGRESSIONS)` — not copied forward. Step 10's covers 10a's
@@ -1114,11 +1292,23 @@ python3 pipeline/steps/07-auth-login/regressions.py                         # 12
 python3 pipeline/steps/08-client-runtime/regressions.py                     # 174 mutations + ledger
 python3 pipeline/steps/09-ui-primitives/regressions.py                      # 153 mutations + ledger
 python3 pipeline/steps/10-panels-assembly/regressions.py                    # 299 mutations + ledger
+python3 pipeline/steps/11-packaging/regressions.py                         # 130 mutations + ledger
 ```
+
+⚠ **The tenth is the only harness that reads `dashboard.sh`, `Dockerfile`, `.dockerignore` or
+`systemd/ai-dashboard.service`**, and `packaging.test.ts` is the only test file that reads them —
+verified by grep, not assumed, so that file's verdict IS `pnpm verify`'s verdict for those four
+artefacts. Ledger ownership follows the FILE (§5.2 rule 6): `packaging.test.ts` is in this
+harness's `LEDGER_FILES` and in no other. ⚠ **Nothing under `lib/`, `app/` or `components/` was
+touched by step 11**, which is why its reconciliation did not re-run the other nine — `git status`
+is the evidence, and it is in `steps/11-packaging/reconciliation.md` §8.
 
 ⚠ **Counts re-derived 2026-09-10 by 10h's reconciliation**, by importing each `regressions.py` —
 never by `grep -c`, which the id-prefix guard's own literal inflates by one. **1180 across the
-nine, 1180 unique, zero cross-harness collisions.**
+nine, 1180 unique, zero cross-harness collisions.** ⚠ **Step 11's harness adds 130 with the
+`11-` prefix — 1310 across the ten** (52 written by step 11's build and test phases, **+78 by its
+reconciliation**, which is the adversarial's own sweep re-aimed at the reconciled tree so that the
+measurement of the hole is the harness that keeps it shut).
 
 ⚠ **10h's RECONCILIATION RAN ALL NINE, serially, in ONE detached call, and this is the current
 state** (2026-09-10). Re-derived from that run's own `Red-test ledger` / `All N regressions
@@ -1697,6 +1887,13 @@ O6–O9, O15–O18 are closed (steps 3–6).
 
 ### 4.1 ⚠ The three step-11 obligations that fail **silently**, stated in full
 
+⚠ **All four (O20, O21, O22, D8) are now BUILT and measured — step 11, 2026-09-10.** Keep reading
+this section: it is why they exist and what each costs, and none of that changed. What changed is
+that `dashboard.sh check` detects each of them on the box, `packaging.test.ts` holds the bash judge
+equal to the TypeScript over a fixture table, **and — new in the reconciliation — the ROWS that
+call those judges are themselves measured refusing.** §0.13's rule is the one to carry: a
+cross-check is only worth the call site it is wired into.
+
 **O20 — the hash format.** The server verifies with **scrypt**, in exactly this encoding:
 
 ```
@@ -2213,17 +2410,30 @@ top of `lib/guardrails.test.ts` — not by a text assertion.
 
 ---
 
-## 8. Spec gaps and open owner questions — ⚠ 10h's SIX NEW, added 2026-09-10; 10g's three ruled-and-assigned are now BUILT and its four are still open; 10f's six, five RULED AND BUILT; 10e's thirteen, five RULED AND BUILT
+## 8. Spec gaps and open owner questions — ⚠ **step 11's THREE NEW, added 2026-09-10** (all three are INSTALL-SPEC changes); 10h's six; 10g's three ruled-and-assigned are now BUILT and its four are still open; 10f's six, five RULED AND BUILT; 10e's thirteen, five RULED AND BUILT
 
 ⚠ This table has now been **stale five times** (92 % before step 5, 100 % before step 6, again
 before step 7, again in step 8, and again in Q2). **Every time, in the safe direction: entries
 carried as open that the spec had already answered.** Re-check every row against the spec text
 before trusting it. Invariant 7 stands: if the spec is silent, **report it — do not assume**.
 
-**Open, with owners — twenty-seven rows: 10g's four (below), 10f's one still-open (`10f-Q6`;
+**Open, with owners — THIRTY rows: step 11's three (`11-Q1`…`11-Q3`, below), 10h's six, 10g's four, 10f's one still-open (`10f-Q6`;
 `10f-Q1`…`Q5` were ruled by the owner and BUILT by 10g), 10e's eight still-open ones (`10e-Q4`…`Q11`
 — `10e-Q1`/`Q3`/`Q12`/`Q13` were built by 10f and `10e-Q2` by 10g), Q2's two, 10a's four, 10b's
 three still-open ones, and 10b-S-G's four. S11/G5's rendering residue is CLOSED.**
+
+### ⚠ NEW — step 11's three, 2026-09-10. **Questions, not proposals** — each names what the code does today.
+
+Raised by step 11's adversarial and reconcile phases; the full statements, with what was measured
+and what was only reasoned, are in `steps/11-packaging/reconciliation.md` §1. **Nothing below was
+chosen** (invariant 7), and each is a change to `INSTALL-SPEC.md`, which the reconcile phase may
+not edit.
+
+| # | Gap | What stands today | Owner |
+|---|---|---|---|
+| **11-Q1** | **`Restart=on-failure` makes recovery depend on the container's exit code.** `docker run` exits with the container's status, and Next's standalone server handles `SIGTERM` and exits **0** — so `docker stop ai-dashboard`, the thing an operator reaches for, leaves the unit `inactive (dead)` with `Result=success` and **systemd does not restart it**. The wall panel goes blank and stays blank. (`docker rm -f` SIGKILLs, gives 137, and does restart.) A wall-panel service whose whole point is being up is a `Restart=always` shape. Reasoned from documented behaviour, **not run** — there is no systemd here | `Restart=on-failure`, which is INSTALL-SPEC §7's own choice, and §2.5's *"a dashboard that cannot read a sensor must stay up and say so — restarting it would destroy the browser's whole session buffer to fix nothing"* is the reasoning behind it. The mitigation that exists: `check`'s `ActiveState` row FAILS on `inactive`, and that row is now measured | **owner** |
+| **11-Q2** | **Both secrets end up in the container's environment.** `--env-file` is read by the client, as root, on the host — which is why 0600 root:root is right and the container never sees the *file*. But the values then live in the container's environment, where `docker inspect` shows them in plaintext to every member of the `docker` group and `/proc/1/environ` shows them to root. This repo's own rule is the counter-example: *`--api-key-file`, never `--api-key`* (`serve-llm.sh`) | INSTALL-SPEC §7's design, unchanged. Changing it means the app reading a mounted 0600 file instead of `process.env`, which is a §5.1 change as well as a §7 one | **owner** |
+| **11-Q3** | **Nothing compares the RUNNING container with the unit's `docker run` line.** `cmd_unit` installs a changed file, `daemon-reload`s and reports `✓ installed` / `✓ enabled`; `systemctl start` on an already-active unit returns 0 and does nothing; so a changed mount, a changed `--env-file` or a changed log option is *installed and not in force*, and every row is green. Step 11 closed the two that cost something — the **image id** and the **GPU device request** — and added the two missing warnings (`unit` and `configure` now both say the container keeps what it was created with). The general comparison is not built: it needs Docker to write against and a stable normalisation of every flag | Two targeted rows plus two warnings. `docker inspect ai-dashboard --format '{{json .Config}}{{json .HostConfig}}'` versus the unit is the evidence that exists and is unused | **owner**, and step 12 in the meantime |
 
 ### ⚠ NEW — 10h's six, 2026-09-10. **Questions, not proposals** — each names what the code does today.
 
