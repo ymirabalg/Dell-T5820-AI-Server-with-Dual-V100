@@ -21,7 +21,29 @@ steps removing.
 
 ## 2. NOT verified — do not read the above as more than it says
 
-### 2.1 ⚠ The reboot, which is the only real test of trap 3
+### 2.1 ✅ CLOSED — the reboot passed, 2026-09-11 22:13 UTC
+
+**PLAN row 12's *"survives a reboot"* is VERIFIED.** The owner rebooted; the parent checked the
+new boot directly. `journalctl -b | grep "ordering cycle"` found **nothing**, and every unit came
+back **by itself**, in the right order, within seven seconds of userspace:
+
+| | timestamp | Δ from boot |
+|---|---|---|
+| userspace | 22:13:37 | — |
+| `gpu-fan-control` | 22:13:38 | +1 s |
+| `llama-server@0` / `@1` | 22:13:43 | +6 s |
+| `ai-dashboard` | 22:13:44 | +7 s |
+
+All four `enabled` and `active`. `fan5_input` present, so the DKMS module followed kernel
+7.0.0-31 across the reboot. Port 8090 listening; from the Mac, `/login` **200** and
+`/api/telemetry` **401**; both inference endpoints **200** on `/health`.
+
+That is the failure this repo has actually been bitten by — an ordering cycle deleting
+`llama-server`'s start jobs with no failed unit and no error anywhere except one journal line —
+and adding a unit that orders itself after `gpu-fan-control` is exactly the change that triggered
+it before. It did not recur. The original text follows, for the reasoning.
+
+### 2.1.1 (historical) The reboot, which is the only real test of trap 3
 
 `journalctl -b` was clean, **but this boot predates the install**: the box has been up since before
 `ai-dashboard` existed, so the current journal could not contain a cycle involving it either way.
@@ -75,6 +97,8 @@ alone puts the page 2–3 px over at 1600×1024.
 
 ## 3. The one-line summary
 
-**The dashboard is deployed, reachable, gated, enabled, running, and has not disturbed inference.
-Its firewall rule, its container's environment and its survival of a reboot are not yet verified**,
-and one of the three was nearly reported as verified by a check that could not see.
+**The dashboard is deployed, reachable, gated, enabled, running, has not disturbed inference, and
+SURVIVES A REBOOT with no ordering cycle.** What remains unverified needs one root run of
+`dashboard.sh check`: the ufw rule actually governing 8090, both secrets absent from the
+container's environment, the GPU mode, the one-process assertion and the drift comparison. One of
+those was nearly reported as verified by a check that could not see (§2.2).
