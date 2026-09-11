@@ -63,7 +63,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,6 +71,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
 
 import { readAuthConfig, MIN_SESSION_SECRET_CHARS } from '@/lib/auth/config';
+import { MAX_LINE_BYTES, parseSecretEnvFile, refusalReport, secretValueError } from '@/lib/auth/secret-file';
 import { standingIdsFrom } from '@/lib/conditions';
 import { KEY_BYTES, SALT_BYTES, parseScryptHash } from '@/lib/auth/scrypt';
 
@@ -314,18 +315,536 @@ describe('⚠ O21 — dashboard.sh refuses a value Docker would keep verbatim', 
   });
 
   /**
-   * ⚠ The measurement that says why this check has to exist at all: the server CANNOT see
-   * the defect. A quoted 32-character secret is a 34-character secret to Docker, it clears
-   * `readAuthConfig`'s floor, and it works — until the next person writes the file without
-   * the quotes and every open session dies.
+   * ⚠ The measurement that says why this check has to exist at all: `readAuthConfig` CANNOT
+   * see the defect. A quoted 32-character secret is a 34-character secret to Docker, it
+   * clears the floor, and it works — until the next person writes the file without the quotes
+   * and every open session dies.
+   *
+   * ⚠ **Half of that changed on 2026-09-11 and the other half did not.** The SERVER now
+   * refuses it, at startup, by name (`parseSecretEnvFile`, SPEC §5.1's ruling) — so this is no
+   * longer the only place it is caught. `readAuthConfig` still cannot see it, and that is why
+   * the ruling moved the parse rather than tightening this function.
    */
-  test('⚠ a quoted secret passes readAuthConfig and is caught only here', () => {
+  test('⚠ a quoted secret passes readAuthConfig, and is caught by the script AND the reader', () => {
     const quoted = `"${'a'.repeat(MIN_SESSION_SECRET_CHARS)}"`;
     expect(readAuthConfig({ PASSWORD_HASH: 'x', SESSION_SECRET: quoted })).not.toBeNull();
     expect(quoted.length).toBe(MIN_SESSION_SECRET_CHARS + 2);
 
     const [message] = validate('env_value_error', [quoted]);
     expect(message).toContain('does not strip quotes');
+
+    // …and the server's own reader, which is what turns it from a silent failure into a
+    // startup refusal.
+    const file = new TextEncoder().encode(`PASSWORD_HASH=x\nSESSION_SECRET=${quoted}\n`);
+    expect(parseSecretEnvFile(file).ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// ⚠⚠ 11-Q2 — the SECRET rule, spelled once in bash and once in TypeScript
+// ---------------------------------------------------------------------------------------
+
+describe('⚠⚠ secret_value_error and secretValueError are the SAME rule, message for message', () => {
+  /**
+   * ⚠ SPEC.md §5.1's ruling of 2026-09-11 moved the parse of `/etc/ai-dashboard.env` into the
+   * server. That makes `dashboard.sh` — which WRITES the file — and `lib/auth/secret-file.ts`
+   * — which REFUSES TO START on it — two implementations of one grammar, the shape on
+   * HANDOVER's do-not-copy list. The same answer as `scripts/hash-password.py`'s: keep them
+   * equal by MEASUREMENT, running the real bash against the real TypeScript.
+   *
+   * ⚠ Verdicts alone would not be enough. A value refused for the wrong REASON sends an
+   * operator to the wrong line — 11-A18g is exactly that defect — so the messages are
+   * compared too, which also pins the ORDER the rules fire in.
+   */
+  const NAMED: readonly string[] = [
+    '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    'scrypt.15.8.1.AAAAAAAAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    '',
+    '"quoted"',
+    "'quoted'",
+    'has$dollar',
+    'has`backtick`',
+    ' leading',
+    'trailing ',
+    '\tleading-tab',
+    'trailing-tab\t',
+    'two\nlines',
+    'carriage\rreturn',
+    'back\\slash',
+    'hash#mark',
+    'interior space',
+    'non\u00a0breaking',
+    'zero\u200bwidth',
+    'em\u2003space',
+    'accented-\u00e9',
+    'tilde~and-bang!',
+    'every+printable/char=is:fine;[]{}()<>|&*?^@%-_.,',
+  ];
+
+  /**
+   * ⚠⚠ GENERATED, not listed — and the reason is a measurement, taken 2026-09-11.
+   *
+   * The 22 values above were the whole corpus, and **two one-line edits to `secretValueError`
+   * kept the entire suite green while the two implementations disagreed**:
+   *
+   *   1. `cp > 0x7e` → `cp > 0x7f`, so TypeScript accepts DEL and `!-~` under `LC_ALL=C` still
+   *      refuses it. No listed value carried a 0x7f.
+   *   2. swapping the backslash rule and the `#` rule, so a value carrying BOTH gets a
+   *      different *message* from each side. No listed value carried both — and the header of
+   *      `secretValueError` says in so many words that "the order of the tests below is part of
+   *      the contract".
+   *
+   * So the corpus is built instead: **every ASCII code point** in the middle of a value (which
+   * pins the boundaries of the printable range from both sides), and **every ordered pair of
+   * the ten characters that have a rule**, which is what pins the order the rules fire in. That
+   * is 227 values on top of the 22, in one bash process.
+   *
+   * ⚠ NUL is the one byte not here, and it cannot be: `execve` takes NUL-terminated arguments,
+   * so no value containing one can reach `secret_value_error` at all — and a bash variable
+   * cannot hold one either. The two do diverge on it (TypeScript refuses, bash cannot see it),
+   * which is why the FILE-level rule in `check_env_file` had to grow a byte check of its own
+   * rather than relying on this table.
+   */
+  const SPECIAL = ['"', "'", '$', '`', '\\', '#', ' ', '\t', '\n', '\r'] as const;
+  const values: readonly string[] = [
+    ...NAMED,
+    // Every ASCII code point except NUL, in the middle of an otherwise clean value.
+    ...Array.from({ length: 0x7f }, (_, i) => `aa${String.fromCodePoint(i + 1)}aa`),
+    // Every ordered pair of the ten characters with a rule — the order IS the contract.
+    ...SPECIAL.flatMap((x) => SPECIAL.map((y) => `a${x}b${y}c`)),
+  ];
+
+  test('⚠ every value gets the same verdict AND the same message from both implementations', () => {
+    const fromBash = validate('secret_value_error', values);
+    const fromTypeScript = values.map((v) => secretValueError(v));
+    // ⚠ Reported as a list of DISAGREEMENTS rather than as two 249-element arrays, so a
+    // failure names the value and both messages instead of printing a diff nobody can read.
+    const disagreements = values
+      .map((value, i) => ({ value: JSON.stringify(value), bash: fromBash[i], ts: fromTypeScript[i] }))
+      .filter((row) => row.bash !== row.ts);
+    expect(disagreements).toEqual([]);
+    // The search is not vacuous: it has to have asked about more than the named values.
+    expect(values.length).toBeGreaterThan(240);
+    expect(fromTypeScript.filter((m) => m === null).length).toBeGreaterThan(80);
+  });
+
+  /**
+   * ⚠ The direction that matters on a deploy: `configure` must not be able to WRITE a value
+   * the server will then refuse to start on.
+   *
+   * ⚠ TWO halves, because either alone would name a property it does not check — the shape
+   * this project has shipped in every single step. The first is that the writer's rule is no
+   * looser than the reader's parser; the second is that `env_set` — the one function that
+   * writes this file — actually ASKS the writer's rule for the two secret keys. A table that
+   * agrees with a function nothing calls is worth nothing (HANDOVER §0.13).
+   */
+  test('⚠ env_set asks the strict rule, and everything that rule permits the reader parses', () => {
+    expect(functionBody('env_set')).toContain('secret_value_error "$value"');
+
+    const verdicts = validate('secret_value_error', values);
+    const writable = values.filter((_v, i) => verdicts[i] === null);
+    for (const value of writable) {
+      const file = new TextEncoder().encode(
+        `PASSWORD_HASH=${value}\nSESSION_SECRET=0123456789abcdef0123456789abcdef\n`,
+      );
+      expect(parseSecretEnvFile(file).ok, value).toBe(true);
+    }
+    expect(writable.length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// ⚠⚠ 11-Q2 — and the FILE grammar, which is the half that was not being compared
+// ---------------------------------------------------------------------------------------
+
+/**
+ * Run the three `check` rows that read the credentials file, against a file given as BYTES,
+ * with the mode row satisfied so only the content rows can fail.
+ *
+ * ⚠ Bytes rather than a string because one of the shapes below is a NUL, which is the whole
+ * point: `read` drops it, so the rows above could not see it at all.
+ */
+const checkFileRows = (bytes: Uint8Array): { refuses: boolean; out: string } => {
+  const dir = mkdtempSync(join(tmpdir(), 'dashboard-sh-'));
+  try {
+    const file = join(dir, 'ai-dashboard.env');
+    writeFileSync(file, bytes);
+    const result = sourced(
+      [
+        'env_file_stat() { printf "%s" "640 0:10001"; }',
+        'container_gid() { printf "%s" "10001"; }',
+        'CHECK_FAIL=0',
+        'CHECK_UNKNOWN=0',
+        'check_env_file || true',
+        'check_password_hash || true',
+        'check_session_secret || true',
+        'printf "\\nFAILED=%s\\n" "$CHECK_FAIL"',
+      ],
+      { ENV_FILE: file },
+    );
+    const matched = /FAILED=(\d+)/.exec(result.out);
+    expect(matched, result.out).not.toBeNull();
+    return { refuses: Number((matched as RegExpExecArray)[1]) > 0, out: result.out };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+/**
+ * The same three rows over MANY files, in **one** bash process — {@link validate}'s shape,
+ * applied to files instead of to values.
+ *
+ * ⚠⚠ **This exists because a hand-written table cannot falsify its own property, and the
+ * table one screen down was the second instance of that in two loops.** The test phase fixed
+ * `secret-file.test.ts` by generating 986 shapes, wrote the sentence, and closed the
+ * check-vs-server hole in this file with **21 literal rows** — whose constant first line was
+ * never perturbed and which never put anything in a comment or in a non-secret value, the two
+ * regions `check` does not look at. A generated sweep found **11 files of 45** where every
+ * `check` row was green and `lib/auth/secret-file.ts` refuses to start (11b-A1/11b-A2,
+ * 2026-09-11). One `bash` per file would be ~300 processes; one process is seconds.
+ *
+ * Returns, per file, whether `check` failed a row.
+ */
+const checkFileVerdicts = (files: readonly Uint8Array[]): boolean[] => {
+  const dir = mkdtempSync(join(tmpdir(), 'dashboard-sh-corpus-'));
+  try {
+    files.forEach((bytes, i) => {
+      writeFileSync(join(dir, `f${i}`), bytes);
+    });
+    const result = sourced(
+      [
+        'env_file_stat() { printf "%s" "640 0:10001"; }',
+        'container_gid() { printf "%s" "10001"; }',
+        'dir="$1"; n="$2"; i=0',
+        'while (( i < n )); do',
+        '  ENV_FILE="$dir/f$i"',
+        '  CHECK_FAIL=0; CHECK_UNKNOWN=0',
+        '  { check_env_file; check_password_hash; check_session_secret; } >/dev/null 2>&1 || true',
+        '  printf "%s\\t%s\\n" "$i" "$CHECK_FAIL"',
+        '  i=$(( i + 1 ))',
+        'done',
+      ],
+      {},
+      [dir, String(files.length)],
+    );
+    const lines = result.out.split('\n').filter((l) => /^\d+\t\d+$/.test(l));
+    expect(lines, result.out).toHaveLength(files.length);
+    return lines.map((line) => Number(line.split('\t')[1]) > 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+describe('⚠⚠ check and the SERVER reach the same verdict on the same file, not just on a value', () => {
+  /**
+   * ⚠ The hole this closes, and it is the same hole one level up from the one the previous
+   * loop found. `secret_value_error` and `secretValueError` are held equal message for message
+   * — but that is the per-VALUE rule, and the file has a grammar of its own: which lines are
+   * skipped, whether a key may appear twice, how long a line may be, what a byte bash cannot
+   * hold does. **None of that was compared.** Measured 2026-09-11 over twenty hand-edited
+   * files: five disagreed, three of them the dangerous way round —
+   *
+   * | file | `check` said | the container did |
+   * |---|---|---|
+   * | a duplicate `SESSION_SECRET`, both spellings valid | every row green | REFUSED TO START |
+   * | a duplicate `STANDING` | every row green | REFUSED TO START |
+   * | a NUL inside the secret | "64 characters, and printable-ASCII" (bash dropped the NUL) | REFUSED TO START |
+   * | an INDENTED comment | line 1 has no '=' | started, correctly |
+   * | a whitespace-only line | line 4 has no '=' | started, correctly |
+   *
+   * A `check` that ticks a file the container will not boot on is the silent failure this
+   * whole ruling exists to remove, wearing `check`'s own name; a `check` that fails on a file
+   * the container is happy with teaches an operator to ignore the row that matters. Both
+   * directions are asserted, over the files an operator's editor actually produces.
+   */
+  const HASH = realHash();
+  const HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+  const GOOD_FILE = `# /etc/ai-dashboard.env\nPASSWORD_HASH=${HASH}\nSESSION_SECRET=${HEX}\nSTANDING=\n`;
+  const enc = (text: string): Uint8Array => new TextEncoder().encode(text);
+
+  const FILES: readonly { what: string; bytes: Uint8Array }[] = [
+    { what: 'what configure writes', bytes: enc(GOOD_FILE) },
+    { what: '⚠ an INDENTED comment — Docker skips it and so must both of ours', bytes: enc(`  # indented\n${GOOD_FILE}`) },
+    { what: '⚠ a whitespace-only line', bytes: enc(`${GOOD_FILE}   \t \n`) },
+    { what: '⚠ a DUPLICATE SESSION_SECRET, both spellings valid', bytes: enc(`${GOOD_FILE}SESSION_SECRET=${HEX}\n`) },
+    { what: '⚠ a DUPLICATE STANDING, which Docker resolves silently with the last', bytes: enc(`${GOOD_FILE}STANDING=gpu_temp\n`) },
+    { what: '⚠ a NUL byte inside the secret, which bash cannot hold', bytes: new Uint8Array([...enc(`PASSWORD_HASH=${HASH}\nSESSION_SECRET=${HEX.slice(0, 32)}`), 0, ...enc(`${HEX.slice(33)}\nSTANDING=\n`)]) },
+    { what: '⚠ a line past Docker’s own 64 KiB scanner bound', bytes: enc(`PASSWORD_HASH=${HASH}\nSESSION_SECRET=${'a'.repeat(70000)}\nSTANDING=\n`) },
+    { what: 'a 60 KiB line, under the bound', bytes: enc(`PASSWORD_HASH=${HASH}\nSESSION_SECRET=${'a'.repeat(60000)}\nSTANDING=\n`) },
+    { what: 'a quoted secret — O21 itself', bytes: enc(`PASSWORD_HASH=${HASH}\nSESSION_SECRET="${HEX}"\nSTANDING=\n`) },
+    { what: 'a trailing space', bytes: enc(`PASSWORD_HASH=${HASH}\nSESSION_SECRET=${HEX} \nSTANDING=\n`) },
+    { what: 'an interior non-breaking space', bytes: enc(`PASSWORD_HASH=${HASH}\nSESSION_SECRET=${HEX.slice(0, 32)} ${HEX.slice(33)}\nSTANDING=\n`) },
+    { what: 'CRLF line endings', bytes: enc(GOOD_FILE.replace(/\n/g, '\r\n')) },
+    { what: 'a BOM', bytes: enc(`\ufeff${GOOD_FILE}`) },
+    { what: 'a bare line with no =', bytes: enc(`${GOOD_FILE}${HEX}\n`) },
+    { what: 'an indented assignment, which carries a key and a value', bytes: enc(`${GOOD_FILE}  EXTRA=1\n`) },
+    { what: 'export KEY=, which Docker refuses for the space in the key', bytes: enc(`PASSWORD_HASH=${HASH}\nexport SESSION_SECRET=${HEX}\nSTANDING=\n`) },
+    { what: 'an empty PASSWORD_HASH', bytes: enc(`PASSWORD_HASH=\nSESSION_SECRET=${HEX}\nSTANDING=\n`) },
+    { what: 'a SESSION_SECRET one character under the floor', bytes: enc(`PASSWORD_HASH=${HASH}\nSESSION_SECRET=${'a'.repeat(MIN_SESSION_SECRET_CHARS - 1)}\nSTANDING=\n`) },
+    { what: 'a SESSION_SECRET of exactly the floor', bytes: enc(`PASSWORD_HASH=${HASH}\nSESSION_SECRET=${'a'.repeat(MIN_SESSION_SECRET_CHARS)}\nSTANDING=\n`) },
+    { what: 'no trailing newline', bytes: enc(`PASSWORD_HASH=${HASH}\nSESSION_SECRET=${HEX}`) },
+    { what: 'an = inside the secret, which Docker keeps and both take', bytes: enc(`PASSWORD_HASH=${HASH}\nSESSION_SECRET=${HEX.slice(0, 32)}=${HEX.slice(33)}\nSTANDING=\n`) },
+  ];
+
+  test('⚠⚠ every file gets the same verdict from the row an operator runs and from the server', () => {
+    const verdicts = checkFileVerdicts(FILES.map((f) => f.bytes));
+    const actual = FILES.map((f, i) => ({
+      what: f.what,
+      check: verdicts[i] === true ? 'refuses' : 'starts',
+      server: parseSecretEnvFile(f.bytes).ok ? 'starts' : 'refuses',
+    }));
+    expect(actual.map((r) => ({ what: r.what, agree: r.check === r.server }))).toEqual(
+      FILES.map((f) => ({ what: f.what, agree: true })),
+    );
+    // ⚠ Not vacuous in either direction: some of these files must start and some must not.
+    expect(actual.filter((r) => r.check === 'starts').length).toBeGreaterThanOrEqual(6);
+    expect(actual.filter((r) => r.check === 'refuses').length).toBeGreaterThanOrEqual(10);
+  });
+
+  /**
+   * ⚠⚠ **GENERATED, not listed — and this is the SECOND time one loop has had to learn it.**
+   *
+   * The table above is 21 rows, and every one of them varies a **secret line** or appends
+   * **one** extra line. The constant first line `# /etc/ai-dashboard.env` is never perturbed;
+   * nothing is ever put in a comment, on a blank line, or in a non-secret value. Those are
+   * exactly the regions `check` did not look at, and a generated sweep of 45 files found
+   * **11** where every `check` row was green and `lib/auth/secret-file.ts` refuses to start
+   * (11b-A1, 2026-09-11) — a green pre-restart check, then `exit 1` five times and a unit in
+   * `failed` long after whoever ran `check` has gone. Three causes, all of them whole-FILE
+   * rules the reader has and the row did not: a `\r` anywhere, a BOM anywhere, and the 64 KiB
+   * line bound, which was applied **after** the comment/blank skip so a large comment was
+   * never measured.
+   *
+   * So the corpus is **built**: every payload in every position a payload can occupy.
+   */
+  const PAYLOADS: readonly { what: string; text: string }[] = [
+    { what: 'a CR', text: '\r' },
+    { what: 'a BOM', text: '\ufeff' },
+    { what: 'a NUL', text: '\u0000' },
+    { what: 'a non-breaking space', text: '\u00a0' },
+    { what: 'a zero-width space', text: '\u200b' },
+    { what: 'a double quote', text: '"' },
+    { what: 'a single quote', text: "'" },
+    { what: 'a $', text: '$' },
+    { what: 'a backtick', text: '`' },
+    { what: 'a backslash', text: '\\' },
+    { what: 'a #', text: '#' },
+    { what: 'a space', text: ' ' },
+    { what: 'a tab', text: '\t' },
+    { what: 'a DEL', text: '\u007f' },
+    { what: 'a C0 control', text: '\u0001' },
+    { what: 'an =', text: '=' },
+    { what: 'a plain letter (the control)', text: 'x' },
+    { what: 'a 70000-byte run', text: 'a'.repeat(70000) },
+    { what: 'a 40000-character multibyte run', text: 'é'.repeat(40000) },
+  ];
+
+  /**
+   * ⚠ Every position EXCEPT the interior of `PASSWORD_HASH`, and the exclusion is not
+   * squeamishness: `check_password_hash` judges the **scrypt encoding**, which the server
+   * cannot judge at all (§5's 401 is indistinguishable from a wrong password), so `check` is
+   * deliberately stricter there and that region is measured by the O20 table instead.
+   * Everywhere else the two are supposed to agree about the GRAMMAR.
+   */
+  const at = (hay: string, needle: string, repl: string): string => {
+    const i = hay.indexOf(needle);
+    // ⚠ A throw, not an `expect`: this runs while the corpus is being BUILT, which is
+    // collection time, where a failed assertion is not attributed to any test.
+    if (i < 0) throw new Error(`the corpus generator looked for a substring the good file does not carry`);
+    // ⚠ Not `String.replace`: a `$` in the REPLACEMENT is `$&`/`$'`/`` $` `` to it, so three
+    // of the payloads above would have been silently rewritten into something else.
+    return hay.slice(0, i) + repl + hay.slice(i + needle.length);
+  };
+  const POSITIONS: readonly { what: string; build: (p: string) => string }[] = [
+    { what: 'inside a comment', build: (p) => `# note ${p} here\n${GOOD_FILE}` },
+    { what: 'at the END of a comment', build: (p) => `# note${p}\n${GOOD_FILE}` },
+    { what: 'inside an INDENTED comment', build: (p) => `   # note ${p}\n${GOOD_FILE}` },
+    { what: 'alone on a line', build: (p) => `${GOOD_FILE}${p}\n` },
+    { what: 'on an otherwise blank line', build: (p) => `${GOOD_FILE}  ${p}  \n` },
+    { what: 'inside SESSION_SECRET', build: (p) => at(GOOD_FILE, HEX, `${HEX.slice(0, 32)}${p}${HEX.slice(32)}`) },
+    { what: 'at the END of SESSION_SECRET', build: (p) => at(GOOD_FILE, `${HEX}\n`, `${HEX}${p}\n`) },
+    { what: 'inside STANDING', build: (p) => at(GOOD_FILE, 'STANDING=', `STANDING=gpu_temp${p}`) },
+    { what: "inside a NON-secret key's value", build: (p) => `${GOOD_FILE}EXTRA=aa${p}bb\n` },
+    { what: 'inside a KEY', build: (p) => `${GOOD_FILE}EX${p}TRA=1\n` },
+    { what: 'at the HEAD of a line', build: (p) => `${GOOD_FILE}${p}EXTRA=1\n` },
+    { what: 'on line 1, before everything', build: (p) => `${p}${GOOD_FILE}` },
+    { what: 'on a trailing line with NO newline', build: (p) => `${GOOD_FILE}${p}` },
+  ];
+
+  /** The bound, on both sides of it, in each of the three regions that carry a line. */
+  const line = (n: number): string => 'a'.repeat(n);
+  const STRUCTURAL: readonly { what: string; bytes: Uint8Array }[] = [
+    { what: 'an empty file', bytes: enc('') },
+    { what: 'comments only', bytes: enc('# nothing here\n# nor here\n') },
+    { what: 'a comment line one byte UNDER the bound', bytes: enc(`# ${line(65533)}\n${GOOD_FILE}`) },
+    { what: 'a comment line exactly AT the bound', bytes: enc(`# ${line(65534)}\n${GOOD_FILE}`) },
+    { what: 'a comment line one byte OVER the bound', bytes: enc(`# ${line(65535)}\n${GOOD_FILE}`) },
+    { what: 'a blank line exactly AT the bound', bytes: enc(`${' '.repeat(65536)}\n${GOOD_FILE}`) },
+    { what: 'a blank line one byte UNDER the bound', bytes: enc(`${' '.repeat(65535)}\n${GOOD_FILE}`) },
+    { what: 'a STANDING line exactly AT the bound', bytes: enc(at(GOOD_FILE, 'STANDING=', `STANDING=${line(65527)}`)) },
+    { what: 'a final line AT the bound with no newline', bytes: enc(`${GOOD_FILE}# ${line(65534)}`) },
+    { what: 'a duplicate PASSWORD_HASH', bytes: enc(`${GOOD_FILE}PASSWORD_HASH=${HASH}\n`) },
+    { what: 'a duplicate comment key spelling', bytes: enc(`${GOOD_FILE}EXTRA=1\nEXTRA=2\n`) },
+    { what: 'a key with a leading digit', bytes: enc(`${GOOD_FILE}1BAD=x\n`) },
+    { what: 'a key with a space', bytes: enc(`${GOOD_FILE}A B=x\n`) },
+    { what: 'an EMPTY key', bytes: enc(`${GOOD_FILE}=x\n`) },
+    { what: 'an indented EMPTY key', bytes: enc(`${GOOD_FILE}   =x\n`) },
+    { what: 'a lone # line', bytes: enc(`#\n${GOOD_FILE}`) },
+    { what: 'a CRLF file', bytes: enc(GOOD_FILE.replace(/\n/g, '\r\n')) },
+    { what: 'a lone CR at the very end', bytes: enc(`${GOOD_FILE}\r`) },
+    { what: 'SESSION_SECRET absent entirely', bytes: enc(`# c\nPASSWORD_HASH=${HASH}\nSTANDING=\n`) },
+    { what: 'PASSWORD_HASH absent entirely', bytes: enc(`# c\nSESSION_SECRET=${HEX}\nSTANDING=\n`) },
+    { what: 'both absent, a comment only', bytes: enc('# c\nSTANDING=\n') },
+    { what: 'an empty SESSION_SECRET', bytes: enc(at(GOOD_FILE, `SESSION_SECRET=${HEX}`, 'SESSION_SECRET=')) },
+    { what: 'export SESSION_SECRET=', bytes: enc(at(GOOD_FILE, 'SESSION_SECRET=', 'export SESSION_SECRET=')) },
+    { what: 'a bare line carrying the secret’s tail', bytes: enc(`${GOOD_FILE}${HEX}\n`) },
+    { what: 'a wrapped tail that puts a fragment in KEY position', bytes: enc(`${GOOD_FILE}${HEX.slice(0, 20)}=${HEX.slice(20)}\n`) },
+    // ⚠ Bytes, not text: an invalid UTF-8 sequence cannot be written as a JavaScript string,
+    // and it is the one shape whose whole point is that it never becomes one.
+    { what: 'a lone 0x80 in a comment', bytes: new Uint8Array([...enc('# n'), 0x80, ...enc('\n'), ...enc(GOOD_FILE)]) },
+    { what: 'a truncated 2-byte sequence in a non-secret value', bytes: new Uint8Array([...enc(`${GOOD_FILE}EXTRA=a`), 0xc3, ...enc('\n')]) },
+    { what: 'an overlong encoding of "/" in a comment', bytes: new Uint8Array([...enc('# '), 0xc0, 0xaf, ...enc('\n'), ...enc(GOOD_FILE)]) },
+    { what: 'a lone 0xff on its own line', bytes: new Uint8Array([...enc(GOOD_FILE), 0xff, ...enc('\n')]) },
+  ];
+
+  const GENERATED: readonly { what: string; bytes: Uint8Array }[] = [
+    ...POSITIONS.flatMap((pos) =>
+      PAYLOADS.map((p) => ({ what: `${p.what} ${pos.what}`, bytes: enc(pos.build(p.text)) })),
+    ),
+    ...STRUCTURAL,
+  ];
+
+  /**
+   * ⚠⚠ **The property, as an IMPLICATION rather than as a list** — the same shape
+   * `secret-file.test.ts` states for "stricter than Docker, never looser", and for the same
+   * reason: a two-way equality cannot be generated, because `check` is stricter on purpose in
+   * places (a quoted `STANDING` is refused by `check` and accepted by the reader, and it must
+   * be — systemd's `EnvironmentFile` strips quotes where Docker keeps them). The direction
+   * that costs an operator anything is the other one:
+   *
+   * > **if every `check` row is green, the container starts.**
+   *
+   * A violation is a file an operator is told is fine and a unit that then sits in `failed`.
+   */
+  test('⚠⚠ no generated file gets a green check and a container that refuses to start', () => {
+    const verdicts = checkFileVerdicts(GENERATED.map((f) => f.bytes));
+    const greenButRefused = GENERATED.filter(
+      (f, i) => verdicts[i] === false && !parseSecretEnvFile(f.bytes).ok,
+    ).map((f) => f.what);
+    expect(greenButRefused).toEqual([]);
+
+    // ⚠ Not vacuous, in three ways: the sweep has to be large, it has to contain files that
+    // pass, and it has to contain files the server refuses — otherwise "no green-and-refused"
+    // is satisfied by a corpus nothing could have failed.
+    expect(GENERATED.length).toBeGreaterThan(240);
+    expect(verdicts.filter((v) => v === false).length).toBeGreaterThan(30);
+    expect(GENERATED.filter((f) => !parseSecretEnvFile(f.bytes).ok).length).toBeGreaterThan(150);
+    // ⚠ An explicit timeout, because this is the one test in the file that is allowed to be
+    // slow: ~15 s for 276 files, each of which runs three real `check` rows in bash. Vitest's
+    // default is 5 s, and a corpus that grows past it would fail as a TIMEOUT — a red test
+    // whose message says nothing about the property, which is the worst kind of red.
+  }, 180_000);
+
+  test('⚠ the 64 KiB line bound is ONE number, spelled in both places and asserted equal', () => {
+    const fromScript = /^MAX_ENV_LINE_BYTES=(\d+)$/m.exec(DASHBOARD_SH);
+    expect(fromScript, 'MAX_ENV_LINE_BYTES is not defined in dashboard.sh').not.toBeNull();
+    expect(Number((fromScript as RegExpExecArray)[1])).toBe(MAX_LINE_BYTES);
+    // …and it is the bound Docker's own package comment names, not a number we picked.
+    expect(MAX_LINE_BYTES).toBe(64 * 1024);
+  });
+
+  test('⚠ a bad KEY is printed only when printing it cannot be printing a credential', () => {
+    // ⚠ 11-A6's rule applied to the other half of the line. An editor's hard wrap can leave a
+    // fragment of a VALUE in key position — the value only has to contain one `=` for that —
+    // and this row printed `'${key}'` whatever it was. `namedKey` in lib/auth/secret-file.ts
+    // bounds it at 32 printable-ASCII characters; so does this now, and the two agree.
+    const short = checkFileRows(enc(`${GOOD_FILE}1BAD=x\n`));
+    expect(short.out).toContain("'1BAD' is not a usable environment-variable name");
+
+    const long = `${'Zq'.repeat(79)}-x`; // 160 characters, and not a usable name
+    const wrapped = checkFileRows(enc(`${GOOD_FILE}${long}=tail\n`));
+    expect(wrapped.out).toContain('160-character key (not printed)');
+    expect(wrapped.out).not.toContain(long);
+    expect(wrapped.out).not.toContain(long.slice(0, 20));
+
+    // …and a key that is short but not printable is not printed either.
+    const invisible = checkFileRows(enc(`${GOOD_FILE}A B=x\n`));
+    expect(invisible.out).toContain('(not printed)');
+  });
+
+  /**
+   * ⚠⚠ **Both sides of the bound, and the bound moved on 2026-09-11 (11b-A12).** It used to be
+   * 32 — which *is* `MIN_SESSION_SECRET_CHARS`, so a `SESSION_SECRET` written at exactly the
+   * minimum length could reach the terminal **whole** from key position, under a rule whose own
+   * header says *"not the value, not the line, not a prefix of either, and not a character of
+   * either"*. It is now one character under the floor, derived from it in both spellings rather
+   * than retyped, so a printed key can never be a whole secret of this build's.
+   */
+  test('⚠⚠ a printed key is always SHORTER than the shortest secret, in both spellings', () => {
+    // ⚠ A trailing `-` makes the key unusable without changing its length, so both cases reach
+    // the same row for the same reason and only the LENGTH is under test.
+    const badKey = (n: number): string => `K${'a'.repeat(n - 2)}-`;
+    const under = badKey(MIN_SESSION_SECRET_CHARS - 1);
+    const atFloor = badKey(MIN_SESSION_SECRET_CHARS);
+    expect(under).toHaveLength(MIN_SESSION_SECRET_CHARS - 1);
+    expect(atFloor).toHaveLength(MIN_SESSION_SECRET_CHARS);
+
+    const bashUnder = checkFileRows(enc(`${GOOD_FILE}${under}=x\n`));
+    const bashAt = checkFileRows(enc(`${GOOD_FILE}${atFloor}=x\n`));
+    expect(bashUnder.out).toContain(under);
+    expect(bashAt.out).not.toContain(atFloor);
+    expect(bashAt.out).toContain(`${MIN_SESSION_SECRET_CHARS}-character key (not printed)`);
+
+    // …and the reader says the same about the same two keys, which is what makes it one rule.
+    const report = (key: string): string => {
+      const verdict = parseSecretEnvFile(enc(`${GOOD_FILE}${key}=x\n`));
+      expect(verdict.ok).toBe(false);
+      return verdict.ok ? '' : refusalReport('/etc/ai-dashboard.env', verdict.refusals);
+    };
+    expect(report(under)).toContain(under);
+    expect(report(atFloor)).not.toContain(atFloor);
+    expect(report(atFloor)).toContain(`${MIN_SESSION_SECRET_CHARS}-character key (not printed)`);
+  });
+
+  /**
+   * ⚠⚠ 11b-A5 and 11b-A11, in the one function that separates "absent" from "unreadable".
+   *
+   * `env_readable` was `[[ -r "$ENV_FILE" ]]`, which is **true for a readable directory** — so
+   * every row that asks it first went on to read a path it could not read, and the row that is
+   * supposed to say *what is wrong with the file* said the file was fine. And the message it
+   * printed named `root:root 0600` as *"a correct deployment"*, which since the ruling of
+   * 2026-09-11 is the ONE mode that produces the silent 401 the ruling exists to remove.
+   *
+   * ⚠ Driven against the REAL `env_readable`, not the guard table's stub of it — a stub of the
+   * function under test certifies nothing about it.
+   */
+  test('⚠⚠ a path that is not a regular file is its own diagnosis, not "it needs root"', () => {
+    const rowsOn = (envFile: string): string =>
+      sourced(
+        ['CHECK_FAIL=0', 'CHECK_UNKNOWN=0', 'check_password_hash || true',
+         'printf "\\nFAILED=%s UNKNOWN=%s\\n" "$CHECK_FAIL" "$CHECK_UNKNOWN"'],
+        { ENV_FILE: envFile },
+      ).out;
+
+    const onDirectory = rowsOn(tmpdir());
+    expect(onDirectory).toContain('is not a regular file');
+    expect(onDirectory).toContain("NOT 'it is absent'");
+    expect(onDirectory).toContain('FAILED=0 UNKNOWN=1');
+
+    // …and the other cause still says the other thing, with the mode the ruling actually wants.
+    const onUnreadable = rowsOn(join(tmpdir(), 'no-such-dashboard-dir', 'ai-dashboard.env'));
+    expect(onUnreadable).toContain('needs root');
+    expect(onUnreadable).toContain("root:<the container's gid> 0640");
+    expect(onUnreadable).not.toContain('root:root 0600');
+  });
+
+  test('⚠ the NUL row says WHY no other row could have seen it', () => {
+    const withNul = new Uint8Array([...enc(`PASSWORD_HASH=${HASH}\nSESSION_SECRET=${HEX}`), 0, ...enc('\nSTANDING=\n')]);
+    const { out } = checkFileRows(withNul);
+    expect(out).toContain('contains a NUL byte');
+    expect(out).toContain('bash drops it silently');
+    // And the secret is not in the message — the value is what makes the line malformed.
+    expect(out).not.toContain(HEX);
   });
 });
 
@@ -488,9 +1007,17 @@ describe('⚠ check asks its validators, and fails the row when they refuse', ()
     const short = checkRow('check_session_secret', 'SESSION_SECRET=tooshort\n');
     expect(short.failed).toBeGreaterThan(0);
 
+    // ⚠ Since SPEC §5.1's ruling of 2026-09-11 the row asks `secret_value_error`, which is
+    // the SERVER's own rule. A value that passes Docker's grammar and not the server's — an
+    // interior non-breaking space — is now a FAILING row rather than a container that exits
+    // at startup after the operator has gone.
+    const nbsp = checkRow('check_session_secret', `SESSION_SECRET=${HEX64.slice(0, 32)}\u00a0${HEX64.slice(33)}\n`);
+    expect(nbsp.failed).toBeGreaterThan(0);
+    expect(nbsp.out).toContain('outside printable ASCII');
+
     const clean = checkRow('check_session_secret', `SESSION_SECRET=${HEX64}\n`);
     expect(clean.failed).toBe(0);
-    expect(clean.out).toContain('64 characters, unquoted, single-line');
+    expect(clean.out).toContain('64 characters, and printable-ASCII, unquoted and single-line');
   });
 
   // ⚠ No escaped apostrophe in a ⚠ name: the ledger reads the name out of the SOURCE and
@@ -503,6 +1030,22 @@ describe('⚠ check asks its validators, and fails the row when they refuse', ()
     );
     expect(argon.failed).toBeGreaterThan(0);
     expect(argon.out).toContain('argon2id');
+
+    // ⚠ The row asks TWO validators since 2026-09-11 and they catch different things: a
+    // QUOTED hash is a perfectly good scrypt encoding to `scrypt_hash_error` and a file the
+    // server refuses to start on. O20 wearing O21's clothes.
+    const quoted = checkRow('check_password_hash', `PASSWORD_HASH="${realHash()}"\n`);
+    expect(quoted.failed).toBeGreaterThan(0);
+    expect(quoted.out).toContain('REFUSES this at startup');
+
+    // ⚠ A hash the server cannot PARSE but that the value rule has no objection to — no
+    // quote, no `$`, nothing outside printable ASCII. It is the only case that reaches the
+    // second `scrypt_hash_error` call, and until it existed `11-R2` (that call replaced by
+    // `true`) DID NOT BITE: the argon2id case above was answered by the FIRST call, which
+    // this loop added for the message's sake. Measured, not reasoned — the harness said so.
+    const malformed = checkRow('check_password_hash', 'PASSWORD_HASH=scrypt.15.8.1.tooshort.tooshort\n');
+    expect(malformed.failed).toBeGreaterThan(0);
+    expect(malformed.out).toContain('parseScryptHash returns null');
 
     const good = checkRow('check_password_hash', `PASSWORD_HASH=${realHash()}\n`);
     expect(good.failed).toBe(0);
@@ -630,6 +1173,7 @@ const CHECK_ROWS = [
   'check_unit',
   'check_one_process',
   'check_container',
+  'check_drift',
   'check_firewall',
   'check_gate',
   'check_neighbours',
@@ -658,7 +1202,7 @@ const cmdCheckWithRows = (overrides: Readonly<Record<string, string>> = {}): num
 };
 
 describe('⚠⚠ cmd_check calls every row it is supposed to, and a failed row reaches the exit code', () => {
-  test('⚠ the body of cmd_check calls exactly the eleven rows, in order and with nothing else', () => {
+  test('⚠ the body of cmd_check calls exactly the twelve rows, in order and with nothing else', () => {
     // ⚠ A SOURCE-TEXT half as well as the behavioural one below, because they are blind to
     // different things. `check_one_process` was replaceable by `  true` — the whole O22
     // section deleted from `check` — with 31 tests green. Reading the body means a row
@@ -706,6 +1250,17 @@ const BOX_STUBS = [
   'emit() { if [[ -n "$1" ]]; then printf "%s\\n" "$1"; fi; }',
   'D_NAMED="${D_NAMED-}"; D_BYID="${D_BYID-}"; D_PS="${D_PS-}"; D_TOP="${D_TOP-}"',
   'D_RUNNING="${D_RUNNING-}"; D_LATEST="${D_LATEST-}"; D_DEVREQ="${D_DEVREQ-}"',
+  // ⚠ 11-Q3's rows. Each is a DIFFERENT `docker inspect --format`, and the patterns are
+  // ordered most-specific-first: `{{.HostConfig.RestartPolicy.Name}}` also contains `.Name`,
+  // so a `inspect*.Name*` arm placed above it would answer for the wrong question — which is
+  // a stub bug that would have made the restart-policy row untestable while it looked green.
+  'D_NAME="${D_NAME-/ai-dashboard}"; D_NET="${D_NET-host}"; D_RESTART="${D_RESTART-no}"',
+  'D_PORTS="${D_PORTS-}"; D_BINDS="${D_BINDS-}"; D_ENV="${D_ENV-}"; D_IMAGE_ENV="${D_IMAGE_ENV-}"',
+  // ⚠ 11b-A8's rows — the eight flags the first six comparisons left out. `--read-only` is
+  // a §2.5 hard requirement one of the test phase's nine stranded mutations had deleted
+  // from the unit, and `--user` is the number the credentials file's mode row hangs on.
+  'D_RO="${D_RO-true}"; D_USER="${D_USER-10001:10001}"; D_PID="${D_PID-host}"',
+  'D_TMPFS="${D_TMPFS-/tmp}"; D_AUTORM="${D_AUTORM-true}"; D_LOGDRV="${D_LOGDRV-json-file}"',
   'have() { case "$1" in docker|ss|curl|ufw|python3) return 0 ;; *) return 1 ;; esac; }',
   'docker_ok() { return 0; }',
   'docker() {',
@@ -714,8 +1269,29 @@ const BOX_STUBS = [
   '    ps*ancestor=*)           emit "$D_BYID" ;;',
   '    "ps --format"*)          emit "$D_PS" ;;',
   '    top*)                    emit "$D_TOP" ;;',
+  // ⚠ Each of these can FAIL, deliberately. Until 2026-09-11 only the Env one could, on the
+  // reasoning that "every other row compares two values, so a failed read makes them differ".
+  // MEASURED false for two of them: the unit carries no --restart and publishes no port, so
+  // those expectations are the EMPTY STRING and an unreadable `docker inspect` produced the
+  // empty string too — "" against "" printed a TICK. A stub that cannot fail is a stub that
+  // certifies nothing about the row that reads it.
+  '    "image inspect"*Config.Env*) [[ "${IMAGE_ENV_READ-ok}" == ok ]] || return 1; emit "$D_IMAGE_ENV" ;;',
   '    "image inspect"*)        emit "$D_LATEST" ;;',
   '    inspect*DeviceRequests*) emit "$D_DEVREQ" ;;',
+  '    inspect*RestartPolicy*) [[ "${RESTART_READ-ok}" == ok ]] || return 1;  emit "$D_RESTART" ;;',
+  '    inspect*NetworkMode*) [[ "${NET_READ-ok}" == ok ]] || return 1;    emit "$D_NET" ;;',
+  '    inspect*PortBindings*) [[ "${PORTS_READ-ok}" == ok ]] || return 1;   emit "$D_PORTS" ;;',
+  '    inspect*Binds*) [[ "${BINDS_READ-ok}" == ok ]] || return 1;          emit "$D_BINDS" ;;',
+  // ⚠ This one can FAIL, deliberately: absence is the leak row's pass condition, so a
+  // `docker inspect` nobody could read must not look like a container with clean Env.
+  '    inspect*Config.Env*)     [[ "${ENV_READ-ok}" == ok ]] || return 1; emit "$D_ENV" ;;',
+  '    inspect*ReadonlyRootfs*) [[ "${RO_READ-ok}" == ok ]] || return 1;     emit "$D_RO" ;;',
+  '    inspect*Config.User*)    [[ "${USER_READ-ok}" == ok ]] || return 1;   emit "$D_USER" ;;',
+  '    inspect*PidMode*)        [[ "${PID_READ-ok}" == ok ]] || return 1;    emit "$D_PID" ;;',
+  '    inspect*Tmpfs*)          [[ "${TMPFS_READ-ok}" == ok ]] || return 1;  emit "$D_TMPFS" ;;',
+  '    inspect*AutoRemove*)     [[ "${AUTORM_READ-ok}" == ok ]] || return 1; emit "$D_AUTORM" ;;',
+  '    inspect*LogConfig.Type*) [[ "${LOGDRV_READ-ok}" == ok ]] || return 1; emit "$D_LOGDRV" ;;',
+  '    "inspect ai-dashboard --format {{.Name}}") [[ "${NAME_READ-ok}" == ok ]] || return 1; emit "$D_NAME" ;;',
   '    inspect*)                emit "$D_RUNNING" ;;',
   '    *) return 1 ;;',
   '  esac',
@@ -729,7 +1305,11 @@ const BOX_STUBS = [
   'report_ordering_cycles() { return "${CYCLE_RC-0}"; }',
   'ufw_enforcing() { [[ "${UFW_ON-yes}" == yes ]]; }',
   'ufw_rule_for_port() { if [[ "$1" == 22 ]]; then emit "${R22-22/tcp ALLOW x}"; else emit "${R8090-8090/tcp ALLOW x}"; fi; }',
-  'env_file_stat() { printf "%s" "${FILE_STAT-600 root:root}"; }',
+  // ⚠ 0640 root:<the container's gid>, since SPEC §5.1's ruling of 2026-09-11 mounts the file
+  // into a container that runs as `--user 10001:10001` — `root:root 0600` is unreadable to
+  // it, and the dashboard would deny every login with nothing logged. NUMERIC ids, because no
+  // account on the box has gid 10001 and `%G` would answer from /etc/group.
+  'env_file_stat() { printf "%s" "${FILE_STAT-640 0:10001}"; }',
   'env_readable() { [[ "${READABLE-yes}" == yes ]]; }',
 ] as const;
 
@@ -781,6 +1361,51 @@ const guardRow = (
 
 const HEX64_SECRET = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
+/**
+ * The repository's own unit, pointed at as if it were the installed one.
+ *
+ * ⚠ `check_drift` derives every expectation from `ExecStart=` in `$UNIT_PATH` — the INSTALLED
+ * unit, which is what systemd actually runs — so these cases must drive it against a real
+ * one. Using this repo's copy also means a flag added to the unit and not to the container is
+ * a row that fails here, rather than a list in this file that someone forgot to update.
+ */
+const REAL_UNIT = join(projectRoot, 'systemd/ai-dashboard.service');
+
+/**
+ * The repository's unit with ONE flag changed in its `docker run` line — which is what a
+ * hand-edited installed unit, or a checkout at a different commit from the one that installed
+ * it, actually looks like (11b-A6). `--user` is the flag deliberately: it is the number the
+ * credentials file's mode row derives its expectation from.
+ */
+const DRIFTED_UNIT = ((): string => {
+  const dir = mkdtempSync(join(tmpdir(), 'dashboard-unit-'));
+  const path = join(dir, 'ai-dashboard.service');
+  writeFileSync(path, read('systemd/ai-dashboard.service').replace('--user 10001:10001', '--user 10002:10002'));
+  return path;
+})();
+
+/**
+ * The nine `-v` binds the unit asks for, as `docker inspect .HostConfig.Binds` returns them.
+ *
+ * ⚠ Deliberately in a DIFFERENT order from the unit, because `check_drift` sorts both sides:
+ * a comparison that depended on docker preserving the order of the flags would be a row that
+ * fails on a correct box for a reason nobody could act on.
+ */
+const HEALTHY_BINDS = [
+  '/sys:/sys:ro',
+  '/etc/ai-dashboard.env:/etc/ai-dashboard.env:ro',
+  '/:/host/root:ro',
+  '/home:/host/home:ro',
+  '/run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro',
+  '/etc/llama-server:/etc/llama-server:ro',
+  '/etc/ufw/ufw.conf:/etc/ufw/ufw.conf:ro',
+  '/lib/modules:/lib/modules:ro',
+  '/etc/hostname:/etc/hostname:ro',
+].join('\n');
+
+/** The image's own `ENV`, which the container carries whatever the unit passes. */
+const IMAGE_ENV = 'PATH=/usr/local/bin\nNODE_ENV=production\nHOSTNAME=0.0.0.0\nPORT=8090';
+
 /** A box on which every row this table drives is healthy. */
 const HEALTHY = {
   D_NAMED: 'abc123',
@@ -793,6 +1418,21 @@ const HEALTHY = {
   LISTENERS: 'LISTEN 0 511 *:8090 *:*',
   HTTP_CODE: '401',
   GPU_PROBE: 'ok',
+  // 11-Q3 — a container created from exactly the unit's own flags.
+  D_NAME: '/ai-dashboard',
+  D_NET: 'host',
+  D_RESTART: 'no',
+  D_PORTS: '',
+  D_BINDS: HEALTHY_BINDS,
+  D_ENV: `${IMAGE_ENV}\nNVIDIA_DRIVER_CAPABILITIES=utility\nUV_THREADPOOL_SIZE=16`,
+  D_RO: 'true',
+  D_USER: '10001:10001',
+  D_PID: 'host',
+  D_TMPFS: '/tmp',
+  D_AUTORM: 'true',
+  D_LOGDRV: 'json-file',
+  D_IMAGE_ENV: IMAGE_ENV,
+  FILE_STAT: '640 0:10001',
 } as const;
 
 interface GuardCase {
@@ -818,11 +1458,23 @@ describe('⚠⚠ every check row REFUSES on its own bad input and PERMITS on a h
   const cases: readonly GuardCase[] = [
     // ---- the env file --------------------------------------------------------------
     { guard: 'mode/owner', row: 'check_env_file', what: 'a world-readable credentials file',
-      verdict: 'fail', env: { FILE_STAT: '644 alice:staff' }, says: 'expected root:root 600' },
-    { guard: 'mode/owner', row: 'check_env_file', what: 'root:root 0600', verdict: 'pass',
-      envFile: `SESSION_SECRET=${HEX64_SECRET}\n` },
+      verdict: 'fail', env: { FILE_STAT: '644 0:0' }, says: 'expected 0:10001 640' },
+    { guard: 'mode/owner', row: 'check_env_file', what: 'the 0600 root:root the container cannot read',
+      verdict: 'fail', env: { FILE_STAT: '600 0:0' }, says: 'would deny every login' },
+    { guard: 'mode/owner', row: 'check_env_file', what: 'root:10001 0640, which the mount needs',
+      verdict: 'pass', envFile: `SESSION_SECRET=${HEX64_SECRET}\n` },
     { guard: 'unreadable', row: 'check_env_file', what: 'a file this user cannot read',
       verdict: 'unknown', env: { READABLE: 'no' }, says: 're-run with sudo' },
+    // ---- ⚠⚠ 11b-A5 — the shape `docker run -v` CREATES when the source is missing --------
+    // With `env_readable` as `[[ -r ]]` a readable DIRECTORY passed it, the NUL row's inline
+    // arithmetic became `(( != 0 ))` — a bash SYNTAX ERROR nothing judged — the `while read`
+    // redirection failed unjudged, and the row then printed *"every line is a single-line,
+    // unquoted KEY=VALUE"* about a path it had not read one byte of. The test phase's own §5.1
+    // sweep examined this row and pronounced it **Sound**.
+    { guard: '⚠ a DIRECTORY', row: 'check_env_file',
+      what: 'the shape docker creates at the host path when a bind-mount source is missing',
+      verdict: 'fail', env: { ENV_FILE: tmpdir() }, says: 'is a DIRECTORY' },
+
     { guard: 'key name', row: 'check_env_file', what: 'a key name Docker cannot use',
       verdict: 'fail', envFile: '1BAD=x\n', says: 'not a usable environment-variable name' },
     { guard: "line with no '='", row: 'check_env_file', what: 'a bare line Docker takes from the host',
@@ -858,7 +1510,20 @@ describe('⚠⚠ every check row REFUSES on its own bad input and PERMITS on a h
     { guard: 'ordering cycle', row: 'check_unit', what: 'a journal this account cannot read',
       verdict: 'unknown', env: { CYCLE_RC: '2' }, says: 'was not ruled out' },
     { guard: 'the unit', row: 'check_unit', what: 'a unit that is installed, enabled and active',
-      verdict: 'pass' },
+      verdict: 'pass', env: { UNIT_PATH: REAL_UNIT }, says: "the installed unit's docker run line is" },
+    // ---- ⚠⚠ 11b-A6 — the installed unit against the repo's, which NOTHING compared ------
+    // `container_user` derives the credentials file's mode from a unit and `check_drift`
+    // derives every container expectation from a unit; while those could be different files,
+    // one `check` run could tick both while judging two different deployments. And the two
+    // drift rows whose labels state an absolute — "systemd owns restarts", "§2.1: NONE" —
+    // take their expectation from the installed unit, so one that GAINED `--restart always`
+    // or `-p 8090:8090` made both sides agree and both rows tick.
+    { guard: '⚠ installed unit vs the repo', row: 'check_unit',
+      what: 'an installed unit whose docker run line is not the reviewed one',
+      verdict: 'fail', env: { UNIT_PATH: DRIFTED_UNIT }, says: 'is NOT' },
+    { guard: '⚠ installed unit unreadable', row: 'check_unit',
+      what: 'a unit with no ExecStart to compare — NOT "they are the same"',
+      verdict: 'unknown', says: "NOT 'they are the same'" },
     // ---- O22 --------------------------------------------------------------------------
     { guard: 'O22 count', row: 'check_one_process', what: 'two containers of that name',
       verdict: 'fail', env: { D_NAMED: 'abc\ndef' }, says: 'expected 1' },
@@ -886,6 +1551,105 @@ describe('⚠⚠ every check row REFUSES on its own bad input and PERMITS on a h
       verdict: 'pass', env: { D_DEVREQ: 'null', GPU_PROBE: 'broken' }, says: 'FALLBACK, and the probe agrees' },
     { guard: 'GPU mode', row: 'check_container', what: 'the GPU device request in force',
       verdict: 'pass', says: 'nvidia device request' },
+    // ---- 11-Q3, the container against the unit --------------------------------------
+    { guard: 'drift', row: 'check_drift', what: 'a container created from exactly the unit’s flags',
+      verdict: 'pass', env: { UNIT_PATH: REAL_UNIT }, says: 'neither secret is in docker inspect' },
+    { guard: '⚠ the secrets are in Env', row: 'check_drift',
+      what: 'PASSWORD_HASH and SESSION_SECRET back in the container’s environment',
+      verdict: 'fail',
+      env: { UNIT_PATH: REAL_UNIT, D_ENV: `${IMAGE_ENV}\nNVIDIA_DRIVER_CAPABILITIES=utility\nUV_THREADPOOL_SIZE=16\nPASSWORD_HASH=scrypt.15.8.1.aa.bb\nSESSION_SECRET=${HEX64_SECRET}` },
+      says: 'every member of the docker group' },
+    { guard: 'drift: mounts', row: 'check_drift', what: 'a container started by hand with one mount',
+      verdict: 'fail', env: { UNIT_PATH: REAL_UNIT, D_BINDS: '/sys:/sys:ro' },
+      says: 'the mounts, source:target:ro and all DRIFTED' },
+    { guard: 'drift: mounts :ro', row: 'check_drift', what: 'a mount that lost its :ro — invariant 2',
+      verdict: 'fail',
+      env: { UNIT_PATH: REAL_UNIT, D_BINDS: HEALTHY_BINDS.replace('/sys:/sys:ro', '/sys:/sys') },
+      says: 'DRIFTED' },
+    { guard: 'drift: ports', row: 'check_drift', what: 'a published port, which bypasses ufw entirely',
+      verdict: 'fail', env: { UNIT_PATH: REAL_UNIT, D_PORTS: '8090/tcp' },
+      says: 'published ports' },
+    { guard: 'drift: name', row: 'check_drift', what: 'a second container under another name',
+      verdict: 'fail', env: { UNIT_PATH: REAL_UNIT, D_NAME: '/ai-dashboard-2' },
+      says: '--name DRIFTED' },
+    { guard: 'drift: network', row: 'check_drift', what: 'bridge networking instead of host',
+      verdict: 'fail', env: { UNIT_PATH: REAL_UNIT, D_NET: 'bridge' }, says: '--network DRIFTED' },
+    { guard: 'drift: restart policy', row: 'check_drift',
+      what: 'a Docker restart policy fighting systemd for the container',
+      verdict: 'fail', env: { UNIT_PATH: REAL_UNIT, D_RESTART: 'always' },
+      says: 'the Docker restart policy' },
+    { guard: 'drift: env keys', row: 'check_drift', what: 'UV_THREADPOOL_SIZE never reaching the container',
+      verdict: 'fail',
+      env: { UNIT_PATH: REAL_UNIT, D_ENV: `${IMAGE_ENV}\nNVIDIA_DRIVER_CAPABILITIES=utility` },
+      says: 'the environment keys the unit assigns' },
+    { guard: 'drift: -e STANDING', row: 'check_drift',
+      what: 'STANDING unset by the operator — a PASS-THROUGH is optional and must NOT drift',
+      verdict: 'pass', env: { UNIT_PATH: REAL_UNIT } },
+    { guard: 'drift: -e STANDING', row: 'check_drift', what: 'STANDING set by the operator',
+      verdict: 'pass',
+      env: { UNIT_PATH: REAL_UNIT, D_ENV: `${IMAGE_ENV}\nNVIDIA_DRIVER_CAPABILITIES=utility\nUV_THREADPOOL_SIZE=16\nSTANDING=gpu_temp` } },
+    { guard: '⚠ Env unreadable', row: 'check_drift',
+      what: 'a docker inspect nobody could read — NOT "the secrets are absent"',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, ENV_READ: 'fail' },
+      says: "NOT 'they are absent'" },
+    // ⚠⚠ The SAME defect as the row above, in the rows the build believed were the safe kind.
+    // Two of these expectations are the EMPTY STRING by design — the unit carries no
+    // `--restart` and publishes no port — so an unreadable read compared "" with "" and
+    // printed a TICK. Measured 2026-09-11 by making the inspect call fail outright. One case
+    // per read, including the three that DO fail closed, so a future edit cannot quietly turn
+    // one of them into the other kind.
+    { guard: '⚠ ports unreadable', row: 'check_drift',
+      what: 'an unreadable PortBindings — an EMPTY expectation, so "" == "" used to TICK',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, PORTS_READ: 'fail' },
+      says: "NOT 'it matches the unit'" },
+    { guard: '⚠ restart policy unreadable', row: 'check_drift',
+      what: 'an unreadable RestartPolicy — the other EMPTY expectation',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, RESTART_READ: 'fail' },
+      says: "NOT 'it matches the unit'" },
+    { guard: '⚠ mounts unreadable', row: 'check_drift', what: 'an unreadable Binds',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, BINDS_READ: 'fail' },
+      says: 'the mounts:' },
+    { guard: '⚠ name unreadable', row: 'check_drift', what: 'an unreadable .Name',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, NAME_READ: 'fail' }, says: '--name:' },
+    { guard: '⚠ network unreadable', row: 'check_drift', what: 'an unreadable NetworkMode',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, NET_READ: 'fail' }, says: '--network:' },
+    { guard: '⚠ the image’s own ENV unreadable', row: 'check_drift',
+      what: 'the subtracted set unreadable — NOT "they match" and NOT "they drifted"',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, IMAGE_ENV_READ: 'fail' },
+      says: "the IMAGE's own ENV" },
+    // ---- ⚠⚠ 11b-A8 — the eight flags the six rows above left out, each with its own bad
+    // input AND its own failed read. `--read-only` and `--user` are the two that matter most:
+    // a container started by hand without either passed every drift row, and `--user` is the
+    // number the credentials file's mode row derives its expectation from.
+    { guard: 'drift: --read-only', row: 'check_drift', what: 'a WRITABLE root filesystem — §2.5 forbids it',
+      verdict: 'fail', env: { UNIT_PATH: REAL_UNIT, D_RO: 'false' }, says: '--read-only' },
+    { guard: 'drift: --user', row: 'check_drift', what: 'a container running as root, which reads a 0600 file the row calls wrong',
+      verdict: 'fail', env: { UNIT_PATH: REAL_UNIT, D_USER: '' }, says: '--user' },
+    { guard: 'drift: --pid', row: 'check_drift', what: 'a private pid namespace — §2.2 needs /proc',
+      verdict: 'fail', env: { UNIT_PATH: REAL_UNIT, D_PID: '' }, says: '--pid' },
+    { guard: 'drift: --tmpfs', row: 'check_drift', what: 'no tmpfs under a read-only root',
+      verdict: 'fail', env: { UNIT_PATH: REAL_UNIT, D_TMPFS: '' }, says: '--tmpfs' },
+    { guard: 'drift: --rm', row: 'check_drift', what: 'a container that survives its own exit',
+      verdict: 'fail', env: { UNIT_PATH: REAL_UNIT, D_AUTORM: 'false' }, says: '--rm' },
+    { guard: 'drift: --log-driver', row: 'check_drift', what: 'a different log driver',
+      verdict: 'fail', env: { UNIT_PATH: REAL_UNIT, D_LOGDRV: 'local' }, says: '--log-driver' },
+    { guard: '⚠ --read-only unreadable', row: 'check_drift', what: 'an unreadable ReadonlyRootfs',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, RO_READ: 'fail' }, says: '--read-only:' },
+    { guard: '⚠ --user unreadable', row: 'check_drift', what: 'an unreadable .Config.User',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, USER_READ: 'fail' }, says: '--user:' },
+    { guard: '⚠ --pid unreadable', row: 'check_drift', what: 'an unreadable PidMode',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, PID_READ: 'fail' }, says: '--pid:' },
+    { guard: '⚠ --tmpfs unreadable', row: 'check_drift', what: 'an unreadable Tmpfs — another EMPTY-looking read',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, TMPFS_READ: 'fail' }, says: '--tmpfs:' },
+    { guard: '⚠ --rm unreadable', row: 'check_drift', what: 'an unreadable AutoRemove',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, AUTORM_READ: 'fail' }, says: '--rm:' },
+    { guard: '⚠ --log-driver unreadable', row: 'check_drift', what: 'an unreadable LogConfig.Type',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, LOGDRV_READ: 'fail' }, says: '--log-driver:' },
+    { guard: 'drift: no unit', row: 'check_drift', what: 'a unit file with no ExecStart to derive from',
+      verdict: 'unknown', says: 'DERIVED from that line' },
+    { guard: 'drift: nothing running', row: 'check_drift', what: 'no container at all',
+      verdict: 'unknown', env: { UNIT_PATH: REAL_UNIT, D_NAMED: '' }, says: 'nothing to compare' },
+
     // ---- ufw ----------------------------------------------------------------------------
     { guard: 'ufw enforcing', row: 'check_firewall', what: 'a firewall that reads ENABLED=no',
       verdict: 'fail', env: { UFW_ON: 'no' }, says: 'ufw reads ENABLED=no' },
@@ -1289,6 +2053,113 @@ describe('⚠⚠ the subcommand guards refuse, and each of them is one line from
     }
   });
 
+  /**
+   * ⚠⚠ **"Already present" is not "already correct", and this is the deploy path** (HANDOVER
+   * §0.13). Measured 2026-09-11 (11b-A7): an upgrading box carries the pre-ruling
+   * `0600 root:root`, every value in the file is already there, so `cmd_configure` printed
+   * three green *"already present"* lines, **never called `env_set`**, and left the file at a
+   * mode the container cannot read. The mode was repaired only as a SIDE EFFECT of writing a
+   * value, and there was no value to write. `check`'s failing mode row names `configure` in its
+   * `Fix:` line, and `configure` was measured not to fix it.
+   */
+  /**
+   * ⚠⚠ 11b-A6. `container_user` read `$SRC/systemd/ai-dashboard.service` **unconditionally**
+   * while every expectation in `check_drift` reads `$UNIT_PATH` — so in one `check` run the
+   * file-mode row judged the credentials file against the **repo's** gid and the drift rows
+   * judged the container against the **installed** unit. Measured to disagree with an installed
+   * unit carrying `--user 10002:10002`: the derived gid stayed 10001, and `check` then said
+   * *"is root:10001 0640 — mounted, and readable by the container only"* about a file the
+   * container cannot open, which is the same clean unlogged 401 O20 is about. `env_set`'s
+   * `chown` uses the same number, so `configure` wrote the wrong group too.
+   */
+  // ⚠ DOUBLE-quoted deliberately: the red-test ledger reads the test's name out of the source
+  // literal, and an ESCAPED apostrophe (`repo\'s`) makes that literal `repo\'s` while vitest
+  // reports `repo's` — so the name never matched, and the ledger reported this ⚠ test as inert
+  // while the harness log showed it going red under `11b-U1`. Measured 2026-09-11.
+  test("⚠⚠ the container gid comes from the unit systemd RUNS, not from the repo's copy", () => {
+    const gidWith = (unitPath: string): string =>
+      sourced(['container_gid'], { UNIT_PATH: unitPath }).out.trim();
+
+    expect(gidWith(REAL_UNIT)).toBe('10001');
+    expect(gidWith(DRIFTED_UNIT)).toBe('10002');
+    // …and with no installed unit at all — the ordinary state before `dashboard.sh unit` —
+    // the repo's copy is the fallback rather than a failure, because `configure` legitimately
+    // runs first.
+    expect(gidWith(join(tmpdir(), 'no-such-ai-dashboard.service'))).toBe('10001');
+  });
+
+  test('⚠⚠ configure REPAIRS the mode of a file it has nothing to write to', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dashboard-sh-'));
+    try {
+      const file = join(dir, 'ai-dashboard.env');
+      writeFileSync(file, `PASSWORD_HASH=x\nSESSION_SECRET=${HEX64_SECRET}\nSTANDING=\n`);
+      chmodSync(file, 0o600);
+      const result = sourced(
+        ['preflight() { :; }', 'unit_installed() { return 1; }', 'cmd_configure'],
+        { ENV_FILE: file, BACKUP_DIR: dir },
+      );
+      expect(result.status).toBe(0);
+      // Every value is already present, so nothing is written — and the mode still moves.
+      expect(result.out).toContain('SESSION_SECRET already present');
+      expect(result.out).toContain('STANDING already present');
+      expect(statSync(file).mode & 0o777).toBe(0o640);
+      expect(result.out).toContain('it was uid:gid');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('⚠ configure --dry-run announces the mode it would change, and changes none', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dashboard-sh-'));
+    try {
+      const file = join(dir, 'ai-dashboard.env');
+      writeFileSync(file, `PASSWORD_HASH=x\nSESSION_SECRET=${HEX64_SECRET}\nSTANDING=\n`);
+      chmodSync(file, 0o600);
+      const result = runScript(['configure', '--dry-run'], { ENV_FILE: file, BACKUP_DIR: dir });
+      expect(result.out).toContain('would chmod 0640 and chown root:10001');
+      expect(statSync(file).mode & 0o777).toBe(0o600);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * ⚠⚠ 11b-A4. `env_set` finishes with `mv -f "$TMP" "$ENV_FILE"` — correct, because `install`
+   * COPIES ONTO the destination and an interrupt in that window leaves a truncated credentials
+   * file (11-A17) — but `$ENV_FILE` is a **bind-mount source**, and Docker binds the *inode*.
+   * After the rename the container's `/etc/ai-dashboard.env` is the OLD inode for the life of
+   * that container, `check` reads the NEW one, and every row is green while the container
+   * denies the new password. Two callers printed a warning and `env_set` — the one function
+   * that writes this file — printed nothing, so any third writer got silence.
+   */
+  test('⚠⚠ env_set itself warns that a running container cannot see the file it just wrote', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dashboard-sh-'));
+    try {
+      const file = join(dir, 'ai-dashboard.env');
+      writeFileSync(file, 'STANDING=\n');
+      const run = (running: boolean): ScriptRun =>
+        sourced(
+          [
+            'unit_installed() { return 0; }',
+            `container_ids() { printf '%s' ${running ? "'abc123'" : "''"}; }`,
+            'env_set STANDING gpu_temp',
+          ],
+          { ENV_FILE: file, BACKUP_DIR: dir },
+        );
+
+      const withContainer = run(true);
+      expect(withContainer.status).toBe(0);
+      expect(withContainer.out).toContain('A bind mount pins the INODE');
+      expect(withContainer.out).toContain('dashboard.sh restart');
+
+      // ⚠ And NOT on a box with no container running: a warning that fires on a correct
+      // configuration teaches an operator to ignore the one that matters.
+      expect(run(false).out).not.toContain('A bind mount pins the INODE');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('⚠ set-password REFUSES a hash its own producer wrote but this build cannot parse', () => {
     // ⚠ Belt and braces over `scripts/hash-password.py`, because the failure it guards is
     // silent: an unparseable PASSWORD_HASH is a clean empty 401 on every attempt with
@@ -1338,16 +2209,29 @@ describe('⚠⚠ the subcommand guards refuse, and each of them is one line from
       expect(result.out).toContain(`would copy ${file} -> ${dir}/ai-dashboard.env.bak.`);
       expect(result.out).toContain('(mode 0600)');
       expect(result.out).toContain('would write PASSWORD_HASH=<the hash, not printed>');
+      // ⚠⚠ THE MODE, and it said `(0600 root:root)` until 2026-09-11 (11b-A11) — the mode the
+      // ruling REPLACED, and the one that produces the silent 401 the ruling exists to remove.
+      // `env_set`'s two dry-run arms were updated; this one returns before `env_set`, so it was
+      // missed. INSTALL-SPEC §1 asks a dry run to be a complete account of what the real run
+      // does, and on the loop's most contested item it was an account of the opposite.
+      expect(result.out).toContain('(0640 root:10001)');
+      expect(result.out).not.toContain('0600 root:root');
       expect(readFileSync(file, 'utf8')).toBe('PASSWORD_HASH=x\n');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  test('⚠ the credentials file and every backup of it are 0600, and the rewrite is atomic', () => {
+  test('⚠ the credentials file is 0640 for the mount, every backup is 0600, and the rewrite is atomic', () => {
     // ⚠ `-m 0600` -> `-m 0644` on either writer was green: the mode of the file carrying the
     // password hash was unmeasurable off the box, because `install -o root` fails for a
     // non-root caller and no test could reach the real write path (X37, X38).
+    //
+    // ⚠⚠ 0640 on the LIVE file since SPEC §5.1's ruling of 2026-09-11, and 0600 on the
+    // backups — the difference is deliberate and is the whole of what the ruling costs. The
+    // live file is BIND-MOUNTED into a container running as `--user 10001:10001`, which
+    // cannot read `root:root 0600`; nothing mounts a backup, so nothing loosens one. The gid
+    // is read out of the unit's own `--user` rather than retyped.
     const dir = mkdtempSync(join(tmpdir(), 'dashboard-sh-'));
     try {
       const file = join(dir, 'ai-dashboard.env');
@@ -1361,7 +2245,7 @@ describe('⚠⚠ the subcommand guards refuse, and each of them is one line from
         { ENV_FILE: file, BACKUP_DIR: dir },
       );
       expect(result.status).toBe(0);
-      expect(result.out).toContain('MODE=600');
+      expect(result.out).toContain('MODE=640');
       expect(result.out).toContain('BACKUP=600');
       expect(readFileSync(file, 'utf8')).toContain(`SESSION_SECRET=${HEX64_SECRET}`);
       // ⚠ …and nothing is left behind. The rewrite builds a dot-file in the DESTINATION's
@@ -1670,7 +2554,12 @@ describe('⚠ ai-dashboard.service', () => {
       '$GPU_FLAGS',
       '-e NVIDIA_DRIVER_CAPABILITIES=utility',
       '-e UV_THREADPOOL_SIZE=16',
-      '--env-file /etc/ai-dashboard.env',
+      // ⚠⚠ SPEC §5.1's ruling of 2026-09-11 (11-Q2). `--env-file /etc/ai-dashboard.env` was
+      // HERE and is gone: it copied PASSWORD_HASH and SESSION_SECRET into the container's
+      // environment, where `docker inspect` shows them to every member of the docker group.
+      // STANDING stays an environment variable in the PASS-THROUGH spelling — no `=`, so its
+      // value comes from the unit's own environment and never from this line.
+      '-e STANDING',
       '--log-driver json-file',
       '--log-opt max-size=10m',
       '--log-opt max-file=3',
@@ -1685,8 +2574,15 @@ describe('⚠ ai-dashboard.service', () => {
     const argv = cmd.split(' ');
     const valueOf = (flag: string): string | undefined => argv[argv.indexOf(flag) + 1];
     expect(valueOf('--name')).toBe('ai-dashboard');
-    expect(valueOf('--env-file')).toBe('/etc/ai-dashboard.env');
     expect(argv[argv.length - 1]).toBe('ai-dashboard:latest');
+    // ⚠ And the secrets are NOT here in any spelling. `--env-file` is the one that shipped;
+    // `-e PASSWORD_HASH=…` is the one someone reaches for when they undo the ruling by hand.
+    expect(cmd).not.toContain('--env-file');
+    expect(cmd).not.toContain('PASSWORD_HASH');
+    expect(cmd).not.toContain('SESSION_SECRET');
+    // The pass-through spelling, exactly: `-e STANDING=` would be a value baked into the unit.
+    expect(valueOf('-e STANDING'.split(' ')[0] as string)).toBe('NVIDIA_DRIVER_CAPABILITIES=utility');
+    expect(argv.filter((a) => a === 'STANDING')).toEqual(['STANDING']);
     // …and the name in ExecStart is the one every other line uses, including the script's.
     for (const line of ['ExecStartPre=-/usr/bin/docker rm -f ai-dashboard',
                         'ExecStopPost=-/usr/bin/docker rm -f ai-dashboard']) {
@@ -1696,7 +2592,12 @@ describe('⚠ ai-dashboard.service', () => {
     // ⚠ systemd owns restarts. A Docker restart policy would fight it and restart outside
     // its control — and §2.5 forbids a HEALTHCHECK that restarts for the same reason.
     expect(cmd).not.toContain('--restart');
-    expect(unitCode()).toContain('Restart=on-failure');
+    // ⚠⚠ ALWAYS, not on-failure — INSTALL-SPEC §11.2's ruling of 2026-09-11 (11-Q1). `docker
+    // run` exits with the CONTAINER's status and Next's standalone server handles SIGTERM and
+    // exits 0, so a `docker stop` left the unit `inactive (dead)` with `Result=success` and
+    // systemd did not bring the monitor back.
+    expect(unitCode()).toContain('Restart=always');
+    expect(unitCode()).not.toContain('Restart=on-failure');
     expect(unitCode()).toContain('RestartSec=10');
     // A stale container cannot block a restart, and cannot become a second instance.
     expect(unitCode()).toContain('ExecStartPre=-/usr/bin/docker rm -f ai-dashboard');
@@ -1708,6 +2609,10 @@ describe('⚠ ai-dashboard.service', () => {
     // measures the container's own overlay — a plausible-looking number about the wrong
     // filesystem. The first deploy found exactly that (FIRST-DEPLOY §4).
     for (const mount of [
+      // ⚠ The credentials, MOUNTED rather than exported — SPEC §5.1's ruling of 2026-09-11.
+      // Read-only, at the same path inside the container, which is the path
+      // `lib/auth/secret-file.ts` reads.
+      '-v /etc/ai-dashboard.env:/etc/ai-dashboard.env:ro',
       '-v /sys:/sys:ro',
       '-v /:/host/root:ro',
       '-v /home:/host/home:ro',
@@ -1721,8 +2626,105 @@ describe('⚠ ai-dashboard.service', () => {
     }
     // Invariant 2: nothing writes to the server. Every mount is :ro, and there are no others.
     const mounts = cmd.match(/-v \S+/g) ?? [];
-    expect(mounts).toHaveLength(8);
-    expect(mounts.filter((m) => m.endsWith(':ro'))).toHaveLength(8);
+    expect(mounts).toHaveLength(9);
+    expect(mounts.filter((m) => m.endsWith(':ro'))).toHaveLength(9);
+  });
+});
+
+describe('⚠⚠ the three rulings of 2026-09-11 — mounted secrets, Restart=always, drift', () => {
+  test('⚠ the credentials reach the container as a read-only MOUNT and in no other way', () => {
+    // SPEC §5.1 (11-Q2). `--env-file` copied both secrets into the container's environment,
+    // where `docker inspect` shows them to every member of the docker group and
+    // /proc/1/environ shows them to root. The same trade `serve-llm.sh` already refuses with
+    // `--api-key-file, never --api-key`.
+    const cmd = execStart();
+    expect(cmd).toContain('-v /etc/ai-dashboard.env:/etc/ai-dashboard.env:ro');
+    expect(cmd).not.toContain('--env-file');
+    // …and the server reads it at the path it is mounted at, from one spelling.
+    expect(read('lib/auth/secret-file.ts')).toContain(
+      "export const SECRET_ENV_FILE = '/etc/ai-dashboard.env'",
+    );
+    // ⚠ The mount is READ-ONLY. A writable mount would let a compromised container rewrite
+    // the hash it authenticates against, and invariant 2 says nothing writes to the server.
+    const bind = (cmd.match(/-v \/etc\/ai-dashboard\.env:\S+/) ?? [''])[0];
+    expect(bind.endsWith(':ro')).toBe(true);
+  });
+
+  test('⚠ a second ExecStartPre lifts STANDING out of the file, and lifts nothing else', () => {
+    // ⚠ §6.4's list is configuration rather than a secret and stays an environment variable,
+    // so it has to get out of the credentials file somehow. `grep` emits at most that one
+    // line: the hash and the secret never enter this unit's environment, which is what keeps
+    // them out of `docker inspect` and out of the docker client's /proc/<pid>/environ.
+    const pre = unitCode()
+      .split('\n')
+      .filter((l) => l.startsWith('ExecStartPre='));
+    const standing = pre.filter((l) => l.includes('STANDING'));
+    expect(standing).toHaveLength(1);
+    expect(standing[0]).toContain('grep -E "^STANDING="');
+    // ⚠ Docker's own rule for a repeated key, kept so that lifting the value out cannot
+    // change which one wins — `env_get` grew a `tail -1` for the same fact.
+    expect(standing[0]).toContain('tail -n 1');
+    // ⚠ grep exits 1 on no match, and an operator with nothing standing is the ordinary case.
+    expect(standing[0]).toContain('|| true');
+    expect(unitCode()).toContain('EnvironmentFile=-/run/ai-dashboard-standing.env');
+    // Nothing in this unit may read the two secrets out of the file.
+    expect(unitCode()).not.toContain('PASSWORD_HASH');
+    expect(unitCode()).not.toContain('SESSION_SECRET');
+  });
+
+  test('⚠ Restart=always is bounded by StartLimit, and neither cleanup can feed the loop', () => {
+    // INSTALL-SPEC §11.2 (11-Q1): `docker stop` exits 0, so `on-failure` left the monitor
+    // down until a human noticed. ⚠ The thing to check about `always` is that it cannot spin:
+    expect(unitCode()).toContain('Restart=always');
+    expect(sectionOf('StartLimitIntervalSec')).toBe('Unit');
+    expect(sectionOf('StartLimitBurst')).toBe('Unit');
+    // Both cleanups are `-` prefixed, so neither a failing `docker rm` on the way in nor one
+    // on the way out can fail a start — the loop has no engine of its own.
+    for (const l of ['ExecStartPre=-/usr/bin/docker rm -f ai-dashboard',
+                     'ExecStopPost=-/usr/bin/docker rm -f ai-dashboard']) {
+      expect(unitCode()).toContain(l);
+    }
+    // ⚠ And there is still no Docker restart policy: two restart owners is the thing
+    // `Restart=` may not become.
+    expect(execStart()).not.toContain('--restart');
+  });
+
+  test('⚠ check_drift derives every expectation from the unit file and retypes no flag', () => {
+    // ⚠ INSTALL-SPEC §11.2 (11-Q3) asks for exactly this: "Derive the expectation from the
+    // unit file itself rather than retyping the flags — two producers of one list is the
+    // shape this project has been bitten by repeatedly." A hand-written list here would go
+    // stale on the next unit edit, which is the moment the row exists for.
+    const body = functionBody('check_drift');
+    expect(body).toContain('unit_exec_start "$UNIT_PATH"');
+    for (const call of ['unit_flag_value "$cmd" --name', 'unit_flag_value "$cmd" --network',
+                        'unit_flag_values "$cmd" -v --volume', 'unit_flag_values "$cmd" -p --publish']) {
+      expect(body).toContain(call);
+    }
+    // Nothing the unit says is repeated here — not a mount, not the network mode, not a port.
+    for (const retyped of ['/sys:/sys:ro', '/host/root', 'ai-dashboard:latest', '8090']) {
+      expect(body, retyped).not.toContain(retyped);
+    }
+    // ⚠ …and the one flag deliberately NOT compared is the GPU one, which has its own
+    // three-state row: a fallback start is legitimate, and reporting it as drift would be a
+    // refusal firing on a correct configuration.
+    expect(body).not.toContain('--gpus');
+  });
+
+  test('⚠ nothing in the auth path reads the two secrets from process.env any more', () => {
+    // ⚠ The call-site assertion, in the direction that matters: a composition root put back
+    // on `process.env` would undo the whole ruling and every test above would still pass,
+    // because each of them measures one artefact rather than the wiring between them.
+    for (const file of ['lib/auth/authorize.ts', 'lib/auth/handler.ts', 'proxy.ts']) {
+      const code = read(file)
+        .split('\n')
+        .filter((l) => !l.trim().startsWith('*') && !l.trim().startsWith('//'))
+        .join('\n');
+      expect(code, file).toContain('credentialEnvironment()');
+      expect(code, file).not.toContain('env: process.env');
+      expect(code, file).not.toContain('readAuthConfig(process.env)');
+    }
+    // …and the one module that DOES read process.env still does: STANDING is configuration.
+    expect(read('lib/telemetry/source.ts')).toContain('env = process.env');
   });
 });
 

@@ -11,8 +11,10 @@
 [Unit]
 Description=ai-server dashboard (SPEC.md §2.5)
 # ⚠ NOT the env file. `Documentation=` is what `systemctl status` invites you to open, and
-# /etc/ai-dashboard.env is 0600 because it carries a password hash and a session secret —
-# the one file on this box nobody should be pointed at. The flags below, and the reason for
+# /etc/ai-dashboard.env is 0640 root:10001 because it carries a password hash and a session
+# secret, and since 2026-09-11 it is MOUNTED into the container rather than copied into its
+# environment (SPEC.md §5.1) — the one file on this box nobody should be pointed at.
+# The flags below, and the reason for
 # each of them, are in THIS file; INSTALL-SPEC §7 is the specification behind it.
 Documentation=file:/etc/systemd/system/ai-dashboard.service
 Wants=docker.service
@@ -78,6 +80,25 @@ ExecStartPre=-/usr/bin/docker rm -f ai-dashboard
 ExecStartPre=/bin/sh -c 'if nvidia-container-cli info >/dev/null 2>&1; then echo GPU_FLAGS=--gpus all; else echo GPU_FLAGS=; fi >/run/ai-dashboard-gpu.env'
 EnvironmentFile=-/run/ai-dashboard-gpu.env
 
+# ⚠ STANDING, and ONLY STANDING, lifted out of the credentials file (SPEC.md §5.1's ruling of
+# 2026-09-11). Since that ruling the two SECRETS are no longer passed as environment
+# variables at all — the file is bind-mounted and the server parses it — but §6.4's STANDING
+# list stays one, because it is configuration rather than a secret and `lib/telemetry/source.ts`
+# reads it from the environment.
+#
+#  · `grep` emits at most the one line. The password hash and the session secret never enter
+#    this file, this unit's environment, or `docker inspect`.
+#  · `tail -n 1` is Docker's own rule for a repeated key, kept so that lifting the value out
+#    cannot change which one wins.
+#  · `|| true` because grep exits 1 on no match, which under systemd's default would FAIL the
+#    unit for the entirely normal case of an operator who has set nothing standing.
+#  · ⚠ systemd's EnvironmentFile grammar is not Docker's — it STRIPS quotes where Docker keeps
+#    them. `dashboard.sh check` already refuses a quoted value on any line of the credentials
+#    file, so the two cannot disagree on a file that passes `check`; it is written down here
+#    because the divergence is invisible and the check is what closes it.
+ExecStartPre=/bin/sh -c 'grep -E "^STANDING=" /etc/ai-dashboard.env | tail -n 1 >/run/ai-dashboard-standing.env || true'
+EnvironmentFile=-/run/ai-dashboard-standing.env
+
 # ⚠ Every flag is SPEC.md §2.5 / §2.2. Do not add one without reading INSTALL-SPEC §7's
 # table — three of these are load-bearing in a way that is invisible if you get them wrong:
 #
@@ -99,9 +120,29 @@ EnvironmentFile=-/run/ai-dashboard-gpu.env
 #   UV_THREADPOOL_SIZE=16  libuv's default of 4 is below collectHost's nine concurrent
 #                    reads on a healthy poll. Margin behind §4's outstanding-call rule,
 #                    never a substitute for it.
-#   --env-file       ⚠ read ONCE, at container creation. A STANDING change needs
-#                    `dashboard.sh restart`, not a poll. Docker's grammar keeps quotes and
-#                    expands nothing — see O21 and `dashboard.sh check`.
+#   -e STANDING      ⚠ the PASS-THROUGH spelling: no `=`, so docker takes the value from THIS
+#                    unit's environment, which the ExecStartPre above filled from the
+#                    credentials file. An operator who has set nothing leaves the variable
+#                    unset and docker then sets nothing, which `readStandingList` reads as the
+#                    empty list. A STANDING change still needs `dashboard.sh restart`, not a
+#                    poll (§4).
+#   -v /etc/ai-dashboard.env
+#                    ⚠⚠ THE CREDENTIALS, MOUNTED — SPEC.md §5.1's ruling of 2026-09-11
+#                    (11-Q2). This line REPLACED `--env-file /etc/ai-dashboard.env`, which
+#                    copied PASSWORD_HASH and SESSION_SECRET into the container's environment
+#                    where `docker inspect` shows them to every member of the `docker` group
+#                    and /proc/1/environ shows them to root. The same trade this repo already
+#                    refuses one directory up: serve-llm.sh uses `--api-key-file`, never
+#                    `--api-key`, so a key never appears in `ps`. The server reads the file
+#                    itself, ONCE, at startup (`instrumentation.ts` → lib/auth/secret-file.ts)
+#                    and REFUSES to start on a quoted, padded, multi-line, CRLF or BOM-bearing
+#                    value, naming the key and the reason and never the value. `check` asserts
+#                    from the other side that neither key is in `docker inspect`'s Env.
+#                    ⚠ The file must be readable by uid 10001: `configure` writes it
+#                    root:10001 0640, the same shape as /etc/llama-server.apikey's root:yorman
+#                    0640, and `check` asserts that too. 0600 root:root — which SPEC §5 still
+#                    says — is unreadable to a container that runs as 10001, and the ruling
+#                    that mounts the file is what changed it.
 #   no --restart     systemd owns restarts. A Docker restart policy would fight it and
 #                    restart outside its control.
 ExecStart=/usr/bin/docker run --rm --name ai-dashboard \
@@ -112,8 +153,9 @@ ExecStart=/usr/bin/docker run --rm --name ai-dashboard \
     $GPU_FLAGS \
     -e NVIDIA_DRIVER_CAPABILITIES=utility \
     -e UV_THREADPOOL_SIZE=16 \
-    --env-file /etc/ai-dashboard.env \
+    -e STANDING \
     --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
+    -v /etc/ai-dashboard.env:/etc/ai-dashboard.env:ro \
     -v /sys:/sys:ro \
     -v /:/host/root:ro \
     -v /home:/host/home:ro \
@@ -130,7 +172,26 @@ ExecStart=/usr/bin/docker run --rm --name ai-dashboard \
 # ExecStartPre exists to prevent.
 ExecStopPost=-/usr/bin/docker rm -f ai-dashboard
 
-Restart=on-failure
+# ⚠ ALWAYS, not on-failure — INSTALL-SPEC §11.2's ruling of 2026-09-11 (11-Q1). `docker run`
+# exits with the CONTAINER's status and Next's standalone server handles SIGTERM and exits 0,
+# so `docker stop ai-dashboard` — or anything else that stops the container out from under
+# systemd — left the unit `inactive (dead)` with `Result=success` and systemd did NOT bring it
+# back. The dashboard is a MONITOR: it comes back from any exit. `systemctl stop
+# ai-dashboard` remains the deliberate way down, and it still is, because systemd does not
+# restart a unit it stopped itself.
+#
+# ⚠ Why this cannot become a restart loop, checked rather than assumed:
+#   · StartLimitBurst=5 within StartLimitIntervalSec=300, in [Unit] where systemd reads them,
+#     bounds it at five attempts per five minutes — then the unit sits in `failed`, which
+#     `dashboard.sh check`'s ActiveState row reports. `Restart=always` changes WHICH exits are
+#     retried, never how many times.
+#   · ExecStartPre=-/usr/bin/docker rm -f and ExecStopPost=-/usr/bin/docker rm -f are both
+#     `-` prefixed, so neither can fail a start or a stop, and neither starts anything: they
+#     cannot feed the loop. The one they clear — a stale container holding the name — is the
+#     condition that would otherwise make every retry fail identically.
+#   · A credentials file the server refuses (SPEC §5.1) exits 1 five times and then stops,
+#     rather than restarting for ever with nothing saying so.
+Restart=always
 RestartSec=10
 
 [Install]

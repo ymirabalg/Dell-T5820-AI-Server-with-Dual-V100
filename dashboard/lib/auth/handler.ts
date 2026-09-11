@@ -95,6 +95,7 @@ import type { RateLimiter, RateVerdict } from './rate-limit';
 import { productionRevocations } from './revocations';
 import type { Revocations } from './revocations';
 import { verifyPassword } from './scrypt';
+import { credentialEnvironment } from './secrets';
 import { mintSession } from './session';
 
 /**
@@ -131,7 +132,7 @@ const NO_STORE = 'no-store';
 
 /** What the two handlers need. Replaced wholesale in tests. */
 export interface SessionHandlerDeps {
-  /** Where `PASSWORD_HASH` and `SESSION_SECRET` come from. */
+  /** Where `PASSWORD_HASH` and `SESSION_SECRET` come from. Production: the mounted file. */
   readonly env: Environment;
   /** §5.2's 5-per-minute limiter. */
   readonly limiter: RateLimiter;
@@ -148,9 +149,16 @@ export interface SessionHandlerDeps {
   readonly verify: (password: string, encodedHash: string) => Promise<boolean>;
 }
 
-/** The process-wide wiring. */
+/**
+ * The process-wide wiring.
+ *
+ * ⚠ `env` is a getter over the **mounted file** rather than `process.env` — SPEC.md §5.1's
+ * ruling of 2026-09-11, and `lib/auth/authorize.ts` carries the full reasoning for the shape.
+ */
 export const productionSessionDeps: SessionHandlerDeps = {
-  env: process.env,
+  get env(): Environment {
+    return credentialEnvironment();
+  },
   limiter: productionRateLimiter,
   revocations: productionRevocations,
   monotonicMs: () => performance.now(),

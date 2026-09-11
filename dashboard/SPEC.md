@@ -716,9 +716,18 @@ Login and logout. See §5.
 Deliberately minimal — one shared password, matching how this box is actually used.
 
 - Password supplied at deploy time as a **scrypt or argon2id hash** in an env file
-  (`/etc/ai-dashboard.env`, `root:root` 0600, bind-mounted read-only). Never a plaintext
-  password in the unit file, never in `docker run` arguments — the same reasoning behind
+  (`/etc/ai-dashboard.env`, **`root:<container gid>` 0640**, bind-mounted read-only). Never a
+  plaintext password in the unit file, never in `docker run` arguments — the same reasoning behind
   `--api-key-file` rather than `--api-key`, since arguments are visible in `ps`.
+
+  ⚠ **The mode is 0640, not the 0600 this line used to say — corrected 2026-09-11, and it follows
+  from §5.1's own ruling.** Once the server reads the file itself rather than receiving the values
+  from Docker, the *container* must read it, and the container runs unprivileged (`--user`). A
+  `root:root` 0600 file is unreadable to it, and there is no third option that keeps both that mode
+  and a non-root container. **The repo already solved this exact problem the same way**: root
+  `CLAUDE.md` records `/etc/llama-server.apikey` as `root:yorman` 0640 *"so the unprivileged service
+  can read it and no other account can"*. Group is the unit's own `--user` gid; the `/root` backups
+  stay 0600, since nothing unprivileged reads those.
 - `POST /api/session` verifies, sets an **httpOnly, SameSite=Strict, 30-day** session
   cookie signed with a server secret from the same env file.
 - **Rate-limit login globally — deliberately NOT per IP.** §2.5 runs the container with
@@ -793,6 +802,45 @@ Deliberately minimal — one shared password, matching how this box is actually 
   log out every open session. Same principle as `install` never repointing a live
   `llama-server` model.
 - Env file keys: `PASSWORD_HASH`, `SESSION_SECRET`, `STANDING` (see §6.4).
+
+⚠⚠ **The two SECRETS are read from the MOUNTED FILE by the server, not passed as environment
+variables — ruled 2026-09-11 (11-Q2).** `--env-file` copies every value into the container's
+environment, where `docker inspect` and `/proc/1/environ` expose both of them to anything that can
+reach the Docker socket. This repo already refuses that trade elsewhere for the same threat:
+`serve-llm.sh` uses `--api-key-file`, never `--api-key`, so a key never appears in `ps`. Ruled:
+**mount `/etc/ai-dashboard.env` read-only into the container and have the server read
+`PASSWORD_HASH` and `SESSION_SECRET` from it at startup.** Neither appears in the container's
+environment. `STANDING` may stay an environment variable — it is configuration, not a secret.
+
+⚠ **"At startup" means ONE READ FOR THE PROCESS, and a refusal that always reaches stderr —
+sharpened 2026-09-11 (11b-Q2/Q4) after the first implementation of this ruling was measured to
+reintroduce the very failure it removes.** The reader is bundled into more than one place by the
+build, so "the startup copy validated it" is not by itself a guarantee about the copies the request
+paths hold: measured, an in-place edit after boot made those copies memoise an **empty**
+configuration, and every login then returned 401 **with nothing logged** while the process stayed
+up, so no restart policy fired. That is §5's own silent-401 failure, re-entered through its cure.
+The rule is therefore:
+
+- **One read for the process.** Every path resolves the same read; an edit after boot changes
+  nothing until a restart, exactly as §4 already says of `STANDING`.
+- **It never degrades silently.** If a read is refused, the server **says so on stderr once**, and
+  the message is about *the file* — which key, which reason, never the value — not about
+  authentication, which §5 still logs nothing about.
+- **401, never 500, still holds.** The request path reports; it does not throw.
+
+⚠ **A bind-mounted file is pinned by inode for the life of the container**, so `set-password`'s
+rewrite does not reach a running one — which is why §4's restart rule is not merely a convention
+here. `check` must compare the running container against the file on disk rather than assume they
+agree.
+
+**This moves the parse from Docker into us, and that is a GAIN, not a cost.** O21's hazard was
+that Docker's grammar keeps quotes, so `SESSION_SECRET="…32…"` passes the length floor, works
+today, and kills every session the moment the file is rewritten unquoted — a silent failure. Our
+own reader **refuses** a quoted, whitespace-padded or multi-line value at startup and says which
+key and why. The silent failure becomes a loud one. ⚠ `lib/auth/config.ts` states *"a third parser
+is not written"*; this ruling writes one deliberately, and it must be **stricter than Docker's,
+never looser** — the same rule D8's judge is held to, and the one that has now been falsified
+twice by measurement.
 
 ### 5.2 The login screen
 

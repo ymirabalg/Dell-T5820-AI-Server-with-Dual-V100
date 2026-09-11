@@ -618,8 +618,26 @@ describe('the whole chain, with the real KDF and the real verifier', () => {
 });
 
 describe('the production wiring', () => {
-  test('reads process.env, the process limiter and the process revocation store', () => {
-    expect(productionSessionDeps.env).toBe(process.env);
+  /**
+   * ⚠ The same ruling as `authorize.test.ts`'s, on the other composition root — and both are
+   * needed, because `POST /api/session` reads `PASSWORD_HASH` while the gate reads
+   * `SESSION_SECRET`, so one of them left on `process.env` would leak a different secret.
+   */
+  test('⚠ the login handler takes its credentials from the mounted file, never from process.env', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(productionSessionDeps, 'env');
+    expect(typeof descriptor?.get).toBe('function');
+    expect(descriptor?.value).toBeUndefined();
+    expect(productionSessionDeps.env).not.toBe(process.env);
+
+    const planted = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    const before = process.env['SESSION_SECRET'];
+    try {
+      process.env['SESSION_SECRET'] = planted;
+      expect(productionSessionDeps.env['SESSION_SECRET']).not.toBe(planted);
+    } finally {
+      if (before === undefined) delete process.env['SESSION_SECRET'];
+      else process.env['SESSION_SECRET'] = before;
+    }
     expect(typeof productionSessionDeps.limiter.attempt).toBe('function');
     expect(typeof productionSessionDeps.revocations.revoke).toBe('function');
   });

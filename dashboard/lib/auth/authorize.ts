@@ -45,13 +45,18 @@
 import { readAuthConfig } from './config';
 import type { Environment } from './config';
 import { productionRevocations } from './revocations';
+import { credentialEnvironment } from './secrets';
 import type { Revocations } from './revocations';
 import { verifiedSessionOf } from './session';
 import type { Session } from './session';
 
 /** What a verdict needs. Replaced wholesale in tests. */
 export interface AuthorizeDeps {
-  /** Where `PASSWORD_HASH` and `SESSION_SECRET` come from. Production: `process.env`. */
+  /**
+   * Where `PASSWORD_HASH` and `SESSION_SECRET` come from. Production: the **mounted file**,
+   * never `process.env` — SPEC.md §5.1's ruling of 2026-09-11. The seam is unchanged; only
+   * the `Environment` behind it moved.
+   */
   readonly env: Environment;
   /** The process's revocation store. */
   readonly revocations: Revocations;
@@ -59,9 +64,24 @@ export interface AuthorizeDeps {
   readonly nowMs: () => number;
 }
 
-/** The process's own wiring. */
+/**
+ * The process's own wiring.
+ *
+ * ⚠ **`env` is a GETTER, and that is load-bearing twice over.** It defers the read past
+ * module load, so importing this module cannot throw and cannot depend on a file existing;
+ * and it delegates to {@link credentialEnvironment}, whose memo means the file is read **once
+ * for the process** however many times this property is touched. A captured `env:
+ * credentialEnvironment()` here would read the file at import time — in a test, in a build,
+ * and in whatever order the module graph happened to settle.
+ *
+ * ⚠ It does not throw. `lib/auth/secrets.ts` says why: the loud half of the ruling is
+ * `instrumentation.ts`'s startup refusal; this half must stay total, because §5 makes a
+ * check that cannot reach a verdict a **401, never a 500**.
+ */
 export const productionAuthorizeDeps: AuthorizeDeps = {
-  env: process.env,
+  get env(): Environment {
+    return credentialEnvironment();
+  },
   revocations: productionRevocations,
   nowMs: () => Date.now(),
 };

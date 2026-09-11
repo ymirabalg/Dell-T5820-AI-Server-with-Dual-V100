@@ -270,6 +270,20 @@ decimal_in_range() {
 # lib/auth/config.ts. `readAuthConfig` returns null below it and EVERY session is refused.
 MIN_SECRET_CHARS=32
 
+# The longest line /etc/ai-dashboard.env may carry, in BYTES.
+#
+# ⚠ Docker's `--env-file` reads with a default `bufio.Scanner`, and `pkg/kvfile`'s own package
+# comment says so: "Maximum line-length is limited to [bufio.MaxScanTokenSize]" — 64 KiB. Past
+# it the scanner stops and `docker run --env-file` refuses the WHOLE file. Spelled here so the
+# row an operator runs says the same thing `lib/auth/secret-file.ts` will; the two numbers are
+# asserted equal in packaging.test.ts rather than trusted to stay equal.
+MAX_ENV_LINE_BYTES=65536
+
+# The pattern whose removal from the END of a line leaves that line's LEADING run of blanks.
+# Used unquoted, as a pattern: `${line%%$ENV_INDENT_RUN}` is the indent, and removing that as a
+# prefix is the O(n) way to strip it. See check_env_file for what the loop it replaced cost.
+ENV_INDENT_RUN=$'[! \t]*'
+
 # Print why $1 is not a usable value in Docker's --env-file grammar, and return 1.
 #
 # ⚠ O21. `--env-file` splits on the FIRST `=`, takes the rest of the line VERBATIM, expands
@@ -297,6 +311,44 @@ env_value_error() {
     ' '*|$'\t'*) echo "has leading whitespace, which Docker keeps"; return 1 ;;
     *' '|*$'\t') echo "has trailing whitespace, which Docker keeps"; return 1 ;;
   esac
+  return 0
+}
+
+# Print why $1 is not a usable SECRET, and return 1. Stricter than env_value_error.
+#
+# ⚠⚠ SPEC.md §5.1's ruling of 2026-09-11 (11-Q2). The two secrets are no longer passed to the
+# container as environment variables: /etc/ai-dashboard.env is MOUNTED and the server parses
+# it (lib/auth/secret-file.ts). That reader is held to one rule — STRICTER than Docker's
+# grammar, never looser — and this function is the same rule spelled a second time, so that
+# `configure` cannot WRITE a file the server would then refuse to start on.
+#
+# ⚠ The two are asserted EQUAL MESSAGE FOR MESSAGE over a fixture table in packaging.test.ts,
+# which runs this function for real and compares it with `secretValueError`. Two
+# implementations of one format is the shape on HANDOVER's do-not-copy list; this repo already
+# pays for the one it has (scripts/hash-password.py) with a cross-check rather than with
+# discipline, and this is the second. ⚠ THE ORDER MATTERS: the message is part of the
+# contract, and every rule below is a special case of the last one with a better message.
+#
+# ⚠ It is applied to the two SECRETS ONLY. STANDING is §6.4's, it legitimately carries commas
+# and colons, and judging it belongs to standing_entry_error — a rule that refused a '#' in
+# STANDING would be a refusal that fires on a correct configuration.
+secret_value_error() {
+  local v="$1" why
+  [[ -n "$v" ]] || { echo "is empty"; return 1; }
+  if ! why="$(env_value_error "$v")"; then echo "$why"; return 1; fi
+  case "$v" in
+    *\\*)  echo "contains a backslash, which systemd and a sourcing shell both read as an escape"; return 1 ;;
+    *'#'*)  echo "contains a '#', which several .env readers take as a comment and Docker does not"; return 1 ;;
+  esac
+  # ⚠ LAST, and it is a BYTE RANGE rather than a whitespace class. LC_ALL=C is set at the top
+  # of this file, so `!-~` is exactly 0x21-0x7E on every machine — which catches the twelve
+  # Unicode spaces `.trim()` removes AND U+200B, which it does not (HANDOVER §0.12: U+200B is
+  # Cf, not whitespace). The class is named and the character never is: one code point of a
+  # secret is still one code point of a secret.
+  if [[ "$v" == *[!\!-\~]* ]]; then
+    echo "contains a character outside printable ASCII (a space, a tab, a non-breaking space, a zero-width character or any non-ASCII character — not printed)"
+    return 1
+  fi
   return 0
 }
 
@@ -460,7 +512,63 @@ standing_entry_error() {
 # which overwrites a working password. Every row that can be reached without root asks this
 # first, and files `row_unknown` instead. A separate function so a test can drive both sides
 # without being run as root.
-env_readable() { [[ -r "$ENV_FILE" ]]; }
+#
+# ⚠⚠ AND A REGULAR FILE, since 2026-09-11 (11b-A5). `[[ -r ]]` is TRUE for a readable
+# DIRECTORY, and a directory is exactly what `docker run -v /etc/ai-dashboard.env:…` creates
+# at the host path when it does not exist — so an operator who runs `unit` and `start` before
+# `configure` has one. With only `-r`, `check_env_file` printed a bash arithmetic syntax
+# error, two unjudged read errors and then a GREEN TICK saying every line was a well-formed
+# KEY=VALUE, on a file it had not read one byte of. `-f` is also what keeps `env_get`'s `sed`
+# and the reader's `readFileSync` off a FIFO, which blocks for ever (11b-A13).
+env_readable() { [[ -f "$ENV_FILE" && -r "$ENV_FILE" ]]; }
+
+# Is every byte sequence in $1 valid UTF-8? Returns 1 if any is not.
+#
+# ⚠⚠ The FOURTH whole-file rule the reader has and `check` did not, and the one a generated
+# corpus found rather than a list: `lib/auth/secret-file.ts` decodes with
+# `TextDecoder('utf-8', { fatal: true })` and REFUSES TO START on an invalid sequence, and
+# Docker's `parseKeyValueFile` calls `utf8.Valid` per line and refuses too. A latin-1 comment
+# pasted into the file was a green `check` and a container that would not boot.
+#
+# ⚠ Exactly Go's and TextDecoder's rule, not "has a high byte": an overlong encoding, a
+# surrogate (U+D800–DFFF), anything past U+10FFFF and a truncated sequence are each INVALID,
+# and each is a sequence a permissive decoder would silently turn into U+FFFD. Measured
+# against `TextDecoder` over thirteen edge cases on this Mac and against gawk on ai-server
+# (2026-09-11): identical verdicts on every one.
+#
+# ⚠ `awk` rather than `iconv`: macOS's iconv ACCEPTS `\xf5…` and `\xf4\x90…`, both of which
+# encode past U+10FFFF and both of which the reader refuses, so an iconv-based row would have
+# been looser than the server on the machine this suite runs on.
+file_is_utf8() {
+  local f="$1"
+  # Pure ASCII is valid by construction and is the ordinary case; the scan below is paid for
+  # only by a file that carries a high byte at all.
+  grep -q $'[\x80-\xff]' "$f" || return 0
+  awk '
+    BEGIN { for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i; bad = 0 }
+    {
+      n = length($0); i = 1
+      while (i <= n) {
+        c = ord[substr($0, i, 1)]
+        if (c < 128) { i++; continue }
+        if (c >= 194 && c <= 223)                                  { need = 1; lo = 128; hi = 191 }
+        else if (c == 224)                                         { need = 2; lo = 160; hi = 191 }
+        else if (c == 237)                                         { need = 2; lo = 128; hi = 159 }
+        else if ((c >= 225 && c <= 236) || (c >= 238 && c <= 239)) { need = 2; lo = 128; hi = 191 }
+        else if (c == 240)                                         { need = 3; lo = 144; hi = 191 }
+        else if (c >= 241 && c <= 243)                             { need = 3; lo = 128; hi = 191 }
+        else if (c == 244)                                         { need = 3; lo = 128; hi = 143 }
+        else { bad = 1; exit }
+        if (i + need > n) { bad = 1; exit }
+        t = ord[substr($0, i + 1, 1)]
+        if (t < lo || t > hi) { bad = 1; exit }
+        for (k = 2; k <= need; k++) { t = ord[substr($0, i + k, 1)]; if (t < 128 || t > 191) { bad = 1; exit } }
+        i += need + 1
+      }
+    }
+    END { exit (bad ? 1 : 0) }
+  ' "$f"
+}
 
 env_get() {
   env_readable || return 1
@@ -476,6 +584,50 @@ env_has() {
   [[ -n "$hit" ]]
 }
 
+# The uid:gid the container runs as, READ OUT OF THE UNIT rather than retyped here.
+#
+# ⚠⚠ Since SPEC.md §5.1's ruling of 2026-09-11 the credentials file is BIND-MOUNTED into the
+# container instead of being copied into its environment — and a container that runs as
+# `--user 10001:10001` cannot read a `root:root 0600` file. So the file is written
+# `root:<gid> 0640`, exactly the shape root CLAUDE.md records for /etc/llama-server.apikey
+# ("root:yorman 0640 so the unprivileged service can read it and no other account can"), and
+# the gid comes from the ONE place that decides it. Two producers of one number is the shape
+# this project has been bitten by repeatedly; `load_condition_rules` reads §6.4's vocabulary
+# out of lib/conditions.ts for the same reason.
+#
+# ⚠ RECORDED, not improvised: SPEC §5 and INSTALL-SPEC §6 still SAY `root:root 0600`. That
+# mode cannot coexist with the ruling that mounts the file, and 11b-build.md §"spec silences"
+# asks the owner for the amendment. Written down here so the next reader sees the conflict
+# rather than assuming this drifted.
+# ⚠⚠ THE INSTALLED UNIT FIRST, since 2026-09-11 (11b-A6). This read `$SRC/systemd/…`
+# unconditionally while EVERY expectation in `check_drift` reads `$UNIT_PATH` — so in one
+# `check` run the file-mode row judged the credentials file against the **repo's** gid and the
+# drift rows judged the container against the **installed** unit. Measured to disagree with an
+# installed unit edited to `--user 10002:10002`. The container systemd starts has the installed
+# unit's uid, so that is the number the mode of a file it must READ has to be derived from;
+# `check_unit` now also compares the two units, so a difference is reported rather than silently
+# picked between. The repo's copy is the fallback for the ordinary pre-`unit` case — `configure`
+# legitimately runs before anything is installed.
+#
+# The build's rule — *"the gid is read out of the unit's own `--user`, never retyped"* — was
+# satisfied textually and defeated in substance while there were two units and this read the one
+# systemd does not run.
+container_user() {
+  local f u
+  for f in "$UNIT_PATH" "$SRC/$UNIT_SRC_REL"; do
+    [[ -r "$f" ]] || continue
+    u="$(grep -v '^[[:space:]]*#' "$f" | sed -n 's/.*--user \([0-9][0-9]*:[0-9][0-9]*\).*/\1/p')"
+    u="${u%%$'\n'*}"
+    [[ -n "$u" ]] || continue
+    printf '%s' "$u"
+    return 0
+  done
+  die "no readable unit with a '--user <uid>:<gid>' ($UNIT_PATH, $SRC/$UNIT_SRC_REL), so the
+     mode of $ENV_FILE cannot be derived and must not be guessed"
+}
+
+container_gid() { local u; u="$(container_user)"; printf '%s' "${u#*:}"; }
+
 # ⚠ 0600 BEFORE anything is in it, and root-owned only when we are root. `install -o root`
 # fails outright for a non-root caller, which on the box is right (every writer preflights
 # for root) and off the box meant the mode of the file carrying the password hash was
@@ -487,6 +639,10 @@ install_0600() {
   if is_root; then chown root:root "$to"; fi
 }
 
+# ⚠ A BACKUP stays 0600 root:root, and that is not an inconsistency with env_set's 0640.
+# Nothing mounts /root/ai-dashboard.env.bak.*, so nothing needs to read it as uid 10001; the
+# 0640 above is the minimum that makes the MOUNTED file readable to the container and nothing
+# more. A backup carries the same offline-attackable hash and the same session-forging secret.
 backup_env() {
   local stamp dest
   [[ -f "$ENV_FILE" ]] || return 0
@@ -500,7 +656,16 @@ backup_env() {
 # env_set KEY VALUE — rewrite the file with KEY set, every other line kept verbatim.
 env_set() {
   local key="$1" value="$2" why
-  if ! why="$(env_value_error "$value")"; then
+  # ⚠ The SECRETS are judged by the stricter rule, because the server now parses this file
+  # itself and REFUSES TO START on anything secret_value_error refuses (SPEC §5.1, 11-Q2).
+  # Writing a value the server will not start on is the one failure this script must not be
+  # able to produce — it would be discovered as a container that restarts five times and
+  # stops, long after whoever typed it has gone.
+  if [[ "$key" == "PASSWORD_HASH" || "$key" == "SESSION_SECRET" ]]; then
+    if ! why="$(secret_value_error "$value")"; then
+      die "refusing to write ${key}: the value ${why}"
+    fi
+  elif ! why="$(env_value_error "$value")"; then
     die "refusing to write ${key}: the value ${why}"
   fi
   # ⚠ BEFORE the --dry-run return, not after it. `backup_env` is itself dry-aware, and
@@ -511,9 +676,9 @@ env_set() {
   backup_env
   if (( DRY )); then
     if [[ "$key" == "PASSWORD_HASH" || "$key" == "SESSION_SECRET" ]]; then
-      info "would write ${key}=<${#value} characters, not printed> to $ENV_FILE (0600 root:root)"
+      info "would write ${key}=<${#value} characters, not printed> to $ENV_FILE (0640 root:$(container_gid))"
     else
-      info "would write ${key}=${value} to $ENV_FILE (0600 root:root)"
+      info "would write ${key}=${value} to $ENV_FILE (0640 root:$(container_gid))"
     fi
     return 0
   fi
@@ -534,18 +699,69 @@ env_set() {
   else
     {
       echo "# /etc/ai-dashboard.env — SPEC.md §5.1, written by dashboard.sh."
-      echo "# Read ONCE by 'docker run --env-file', at container creation. A change here"
-      echo "# takes effect on the next 'dashboard.sh restart', never on the next poll."
+      echo "# Read ONCE, at startup: the two SECRETS by the server itself out of this file,"
+      echo "# which §7 bind-mounts read-only, and STANDING by 'docker run -e STANDING'. A"
+      echo "# change here takes effect on the next 'dashboard.sh restart', never on a poll."
       echo "# ⚠ Docker's grammar is not a shell's: it splits on the FIRST '=', takes the"
       echo "# rest of the line verbatim, expands nothing and KEEPS QUOTES. Every value is"
       echo "# single-line, unquoted, untrimmed and free of '\$'. 'dashboard.sh check' says so."
     } >"$TMP"
   fi
   printf '%s=%s\n' "$key" "$value" >>"$TMP"
-  chmod 0600 "$TMP"
-  if is_root; then chown root:root "$TMP"; fi
+  # ⚠ 0640 root:<the container's gid>, not 0600 root:root — the file is MOUNTED into a
+  # container that runs as that uid (SPEC §5.1's ruling of 2026-09-11) and 0600 root:root is
+  # unreadable to it. The mode is set on the TEMP file, before the rename, so there is no
+  # window in which the live credentials file exists with the wrong one.
+  chmod 0640 "$TMP"
+  if is_root; then chown "root:$(container_gid)" "$TMP"; fi
   mv -f "$TMP" "$ENV_FILE"
   TMP=""
+  # ⚠⚠ THE RENAME REPLACES THE INODE, and `$ENV_FILE` is a BIND-MOUNT SOURCE (11b-A4). Docker
+  # binds the *inode*: after this `mv` the host path is a new one and the container's
+  # /etc/ai-dashboard.env still refers to the old one, for the life of that container. So
+  # `check` reads the new file and every row is green while the container holds the old — and
+  # no row anywhere asks whether the file the container has open is the file on the host.
+  #
+  # ⚠ The rename itself is NOT the defect and must not be undone: `install` COPIES ONTO the
+  # destination, truncating the live credentials file, and an interrupt in that window leaves
+  # every login denied at once (11-A17). What was wrong was WHERE the warning lived: two
+  # callers printed it and `env_set` — the one function that writes this file — printed
+  # nothing, so any third writer got silence. It is here now, and it fires whenever a container
+  # is actually RUNNING rather than merely when a unit is installed.
+  if unit_installed && [[ -n "$(container_ids)" ]]; then
+    warn "the running container still has the OLD $ENV_FILE open. A bind mount pins the INODE
+     and this rewrite made a new one, so the change cannot reach it even in principle — and
+     'check' reads the new file, so every row will be green while the container denies the new
+     password. Run: sudo ./dashboard.sh restart"
+  fi
+}
+
+# Put $ENV_FILE's mode and owner where the mount needs them. Idempotent, and it SAYS which.
+#
+# ⚠⚠ 11b-A7. `configure` repaired the mode only as a SIDE EFFECT of writing a value, and on an
+# upgrading box there is nothing to write: measured against a pre-ruling `0600 root:root` file,
+# `cmd_configure` printed three green "already present" lines, never called `env_set`, and left
+# the file at 0600 — a mode the container cannot read, which is the silent-401 failure the
+# ruling of 2026-09-11 exists to remove. `install` then dies on `check`'s failing mode row, so
+# the operator is not left in silence; but that row's `Fix:` line names THIS subcommand, and
+# until now this subcommand was measured not to fix it.
+env_repair_mode() {
+  local want_gid st mode owner
+  [[ -f "$ENV_FILE" ]] || return 0
+  want_gid="$(container_gid)"
+  st="$(env_file_stat)"
+  mode="${st%% *}"; owner="${st#* }"
+  if [[ "$mode" == "640" && "$owner" == "0:${want_gid}" ]]; then
+    ok "$ENV_FILE is root:${want_gid} 0640 — the mode the mount needs"
+    return 0
+  fi
+  if (( DRY )); then
+    info "would chmod 0640 and chown root:${want_gid} $ENV_FILE (it is uid:gid ${owner:-?} mode ${mode:-?})"
+    return 0
+  fi
+  chmod 0640 "$ENV_FILE"
+  if is_root; then chown "root:${want_gid}" "$ENV_FILE"; fi
+  ok_done "$ENV_FILE is now root:${want_gid} 0640 (it was uid:gid ${owner:-?} mode ${mode:-?})"
 }
 
 # ============================================================================================
@@ -991,7 +1207,14 @@ cmd_set_password() {
     # file landing in /root, on the subcommand that rewrites that file EVERY time it is run
     # (11-A7, the 11-N3 fix reaching one of two callers). Same spelling as `env_set`'s.
     backup_env
-    info "would write PASSWORD_HASH=<the hash, not printed> to $ENV_FILE (0600 root:root)"
+    # ⚠ THE MODE, and it is `env_set`'s own spelling rather than a second one (11b-A11). This
+    # line said `(0600 root:root)` — the mode the ruling of 2026-09-11 REPLACED, and the one
+    # mode that produces the silent 401 the ruling exists to remove — on the single most
+    # contested item of the loop, on the review surface INSTALL-SPEC §1 asks to be a complete
+    # account of what the real run does. `env_set`'s two dry-run arms were updated and this one
+    # returns BEFORE `env_set`, so it was missed: the same "the fix reached one of two callers"
+    # shape as 11-A7, in the same function.
+    info "would write PASSWORD_HASH=<the hash, not printed> to $ENV_FILE (0640 root:$(container_gid))"
     return 0
   fi
 
@@ -1080,13 +1303,22 @@ cmd_configure() {
     ok_done "STANDING= written (empty: nothing is standing, which is the loud default)"
   fi
 
+  # ⚠⚠ THE MODE, repaired rather than assumed — 11b-A7. An upgrading box has this file at the
+  # pre-ruling `0600 root:root`, every value in it is already present, so every branch above is
+  # a green "already present" line and NOTHING writes. `env_set` is where the mode was fixed,
+  # and `env_set` is not reached. A container that cannot read its credentials denies every
+  # login with nothing logged, which is the failure the ruling exists to remove.
+  env_repair_mode
+
   if ! env_has PASSWORD_HASH; then
     warn "no PASSWORD_HASH yet — run: sudo ./dashboard.sh set-password"
   fi
 
-  # ⚠ Same sentence `set-password` prints, for the same reason: --env-file is read ONCE, at
-  # container creation. `configure` is the OTHER subcommand that changes what the container
-  # was created with, and it said nothing (11-A4).
+  # ⚠ Same sentence `set-password` prints, for the same reason: the container reads this file
+  # ONCE, at creation. `configure` is the OTHER subcommand that changes what the container was
+  # created with, and it said nothing (11-A4). ⚠ `env_set` now warns as well, for the writes
+  # that go through it; this one covers a run in which nothing was written and only the mode
+  # changed — which a running container cannot see either, for the same inode reason.
   if unit_installed && [[ -n "$(container_ids)" ]]; then
     warn "the container reads $ENV_FILE once, at creation — a change here takes effect on"
     warn "  'sudo ./dashboard.sh restart', never on the next poll"
@@ -1413,11 +1645,17 @@ row_ok()      { ok "$*"; }
 row_fail()    { CHECK_FAIL=$(( CHECK_FAIL + 1 ));       printf '  \033[31m✗\033[0m %s\n' "$*"; }
 row_unknown() { CHECK_UNKNOWN=$(( CHECK_UNKNOWN + 1 )); printf '  \033[33m?\033[0m %s\n' "$*"; }
 
-# mode and owner of the env file, as one line. A function so a test can put a root:root 0600
+# mode and owner of the env file, as one line. A function so a test can put a correctly-moded
 # file in front of the row on a machine where it cannot create one.
+#
+# ⚠ NUMERIC owner and group (`%u:%g`), not names. The container's gid is 10001 and no account
+# on the box has it, so `%G` prints either `10001` or whatever unrelated group happens to own
+# that number on the machine asking — and the row would then pass or fail on /etc/group rather
+# than on the file. The expectation it is compared against is derived from the unit's
+# `--user`, so both halves are numbers from one producer.
 env_file_stat() {
   printf '%s %s' "$(stat -c '%a' "$ENV_FILE" 2>/dev/null || true)" \
-                 "$(stat -c '%U:%G' "$ENV_FILE" 2>/dev/null || true)"
+                 "$(stat -c '%u:%g' "$ENV_FILE" 2>/dev/null || true)"
 }
 
 check_env_file() {
@@ -1426,13 +1664,46 @@ check_env_file() {
     row_fail "$ENV_FILE does not exist — the container has no credentials at all"
     return
   fi
-  local mode owner st
+  # ⚠⚠ 11b-A5. A DIRECTORY here is not a theoretical shape: `docker run -v <path>:…` CREATES
+  # the host path as a directory when it does not exist, so an operator who runs `unit` and
+  # `start` before `configure` has exactly this. Until 2026-09-11 the rows below then printed
+  # a bash arithmetic syntax error, two unjudged read failures and a GREEN TICK — *"every line
+  # is a single-line, unquoted KEY=VALUE"* — about a file not one byte of which had been read,
+  # because `env_readable` was `[[ -r ]]` and a readable directory passes that.
+  if [[ -d "$ENV_FILE" ]]; then
+    row_fail "$ENV_FILE is a DIRECTORY, not a file. 'docker run -v $ENV_FILE:…' creates the
+     host path as a directory when it is missing, so this is what a 'start' before a
+     'configure' leaves behind. Fix: sudo rmdir '$ENV_FILE' && sudo ./dashboard.sh configure,
+     then sudo ./dashboard.sh restart"
+    return
+  fi
+  if [[ ! -f "$ENV_FILE" ]]; then
+    row_fail "$ENV_FILE is not a regular file (a socket, a FIFO or a device node).
+     ⚠ The server reads it with readFileSync at startup: on a FIFO that BLOCKS for ever, so
+     'register()' never returns, the unit stays 'active (running)' and nothing answers on 8090"
+    return
+  fi
+  # ⚠⚠ 0640 root:<the container's gid>, NOT 0600 root:root, since SPEC.md §5.1's ruling of
+  # 2026-09-11: the file is BIND-MOUNTED into a container that runs as `--user 10001:10001`,
+  # and 0600 root:root is unreadable to it — the server would start, refuse every login and
+  # log nothing, which is the exact failure the ruling exists to remove. The expectation is
+  # DERIVED from the unit's own `--user`, never retyped, and the mode is still the minimum
+  # that works: no other account on this box is in that gid.
+  local mode owner st want_gid
+  want_gid="$(container_gid)"
   st="$(env_file_stat)"
   mode="${st%% *}"; owner="${st#* }"
-  if [[ "$mode" == "600" && "$owner" == "root:root" ]]; then
-    row_ok "$ENV_FILE is root:root 0600"
+  if [[ "$mode" == "640" && "$owner" == "0:${want_gid}" ]]; then
+    row_ok "$ENV_FILE is root:${want_gid} 0640 — mounted, and readable by the container only"
   else
-    row_fail "$ENV_FILE is ${owner:-?} ${mode:-?}, expected root:root 600 — it carries a password hash"
+    # ⚠ 11b-A7: this was the ONE failing row in this function with no `Fix:` line, on the one
+    # condition this loop introduced — and the obvious remedy was MEASURED not to work, because
+    # `configure` repaired the mode only as a side effect of writing a value and skipped every
+    # write on a file that already had one. `configure` now repairs the mode itself.
+    row_fail "$ENV_FILE is uid:gid ${owner:-?} mode ${mode:-?}, expected 0:${want_gid} 640.
+     It carries a password hash, and §7 mounts it into a container running as uid ${want_gid%%:*}:
+     0600 root:root would deny every login with nothing logged; 0644 would publish the hash.
+     Fix: sudo ./dashboard.sh configure, then sudo ./dashboard.sh restart"
   fi
   if ! env_readable; then
     row_unknown "cannot read $ENV_FILE — re-run with sudo to check its contents"
@@ -1443,10 +1714,95 @@ check_env_file() {
   # a bare `PASSWORD_HASH` with NO `=` is not a syntax error to Docker — it means "pass the
   # HOST's value of that variable through", which is almost always empty, and the container
   # then denies every login with nothing logged.
-  local line key value why bad=0 lineno=0
+  #
+  # ⚠⚠ THIS LOOP IS THE FILE GRAMMAR, and until 2026-09-11 only the per-VALUE half of it was
+  # held equal to the server's. `secret_value_error` and `secretValueError` were compared
+  # message for message while the FILE rules were not compared at all, and a differential over
+  # twenty hand-edited files found five disagreements — three of them the dangerous way round,
+  # where every row here printed a tick and `lib/auth/secret-file.ts` then refuses to start:
+  #
+  #   · a DUPLICATE key (either secret, or even STANDING) — the reader refuses, this said
+  #     nothing, and `env_get`'s `tail -1` quietly took the last;
+  #   · a NUL byte inside a value — bash cannot hold one, so `read` dropped it and this row
+  #     reported "SESSION_SECRET is 63 characters, and printable-ASCII";
+  #   · a line past Docker's own 64 KiB scanner bound.
+  #
+  # …and two the other way, where this row FAILED on a file the server starts on: an INDENTED
+  # comment and a whitespace-only line, both of which Docker skips and the reader skips with
+  # it. A refusal that fires on a correct configuration teaches an operator to ignore the one
+  # that matters, so those two are skipped here now as well.
+  local line key value why bad=0 lineno=0 stripped seen=" " total nulless
+  # ⚠⚠ THE WHOLE-FILE RULES, and until 2026-09-11 `check` had ONE of the four while
+  # `lib/auth/secret-file.ts` had all four (11b-A1). A generated corpus of 276 files found
+  # **21** on which every row here was green and the server refuses to start — every one of
+  # them a `\r`, a BOM, an over-long line or an invalid UTF-8 sequence living in a COMMENT, on
+  # a BLANK line, or in a NON-secret value, which are precisely the three regions the loop
+  # below skips or judges only with the weaker `env_value_error`. A hand-written table cannot
+  # falsify its own property: all 21 rows of the list this replaced were green while this was
+  # true.
+  #
+  # ⚠ A NUL cannot survive `read`, so it is caught by counting bytes rather than by looking.
+  # The two substitutions are captured FIRST and defaulted: when they were written inline and
+  # the read failed (an `$ENV_FILE` that is a directory) the arithmetic became `(( != 0 ))`,
+  # a bash SYNTAX ERROR whose failure nothing judged — see the `-d` row above.
+  total="$(wc -c <"$ENV_FILE" 2>/dev/null || true)"
+  nulless="$(tr -d '\0' <"$ENV_FILE" 2>/dev/null | wc -c || true)"
+  if (( ${total:-0} != ${nulless:-0} )); then
+    row_fail "$ENV_FILE contains a NUL byte. ⚠ No row below can see it — bash drops it silently,
+     so this line's length and its characters both read as though it were not there — and
+     lib/auth/secret-file.ts REFUSES TO START on it"
+    bad=1
+  fi
+  # ⚠ ANYWHERE IN THE FILE, not just in a value. `env_value_error`'s `*$'\r'*` only ever saw a
+  # `\r` that survived into a VALUE; one Windows-pasted comment line in an otherwise-LF file
+  # was green here and a refusal there.
+  if grep -q $'\r' "$ENV_FILE"; then
+    row_fail "$ENV_FILE has CRLF (or a lone CR) line endings. Docker's scanner drops a trailing
+     \\r and starts; lib/auth/secret-file.ts REFUSES TO START on one anywhere in the file —
+     including on a comment line, which no other row here looks at"
+    bad=1
+  fi
+  # ⚠ Same shape. Docker strips a BOM from line 1 and keeps going; the reader refuses one
+  # anywhere. Nothing here had a non-ASCII rule outside the two secrets, so a BOM in a comment
+  # or in any non-secret value except STANDING was green.
+  if grep -q $'\xef\xbb\xbf' "$ENV_FILE"; then
+    row_fail "$ENV_FILE carries a byte-order mark. Docker strips it from line 1 and starts;
+     lib/auth/secret-file.ts REFUSES TO START on one anywhere in the file. An editor that
+     writes one has usually done something else as well"
+    bad=1
+  fi
+  if ! file_is_utf8 "$ENV_FILE"; then
+    row_fail "$ENV_FILE is not valid UTF-8 (not printed). Docker's parseKeyValueFile calls
+     utf8.Valid per line and refuses the whole file; lib/auth/secret-file.ts decodes with
+     TextDecoder fatal and REFUSES TO START. One latin-1 comment is enough"
+    bad=1
+  fi
   while IFS= read -r line || [[ -n "$line" ]]; do
     lineno=$(( lineno + 1 ))
-    case "$line" in ''|'#'*) continue ;; esac
+    # ⚠⚠ BEFORE the skip, not after it — 11b-A1's third cause. The reader's byte scan runs over
+    # EVERY line including comments and blank ones (`secret-file.ts`, the loop above the
+    # decode), so a 70 KiB comment or a 70 KiB whitespace-only line is a file `docker run
+    # --env-file` refuses outright and this never measured. That is one of the three shapes the
+    # test phase's own §1.2 named — "a very long COMMENT line :: docker refuses" — fixed in the
+    # reader and reintroduced one table over, in the row that is supposed to mirror it.
+    if (( ${#line} >= MAX_ENV_LINE_BYTES )); then
+      row_fail "line ${lineno} is ${#line} bytes, at or past the ${MAX_ENV_LINE_BYTES}-byte limit
+     Docker's own scanner refuses the whole file on (not printed)"
+      bad=1; continue
+    fi
+    # Docker trims LEADING whitespace before deciding whether a line is blank or a comment,
+    # and so does the reader. Trimmed for the SKIP decision only: an indented assignment still
+    # falls through to the key rule below, which refuses it.
+    # ⚠ ONE expansion, not a loop. The `while [[ … ]]; do stripped="${stripped#?}"; done` form
+    # this replaces is QUADRATIC — it copies the whole line once per leading blank — so a
+    # 65 535-byte whitespace-only line (one byte under the bound above, i.e. a line `check`
+    # must still read) made this row copy four gigabytes. Measured 2026-09-11 while the
+    # generated corpus was being built: it is what made that sweep take 34 s. `${line%%[! \t]*}`
+    # is the leading run of blanks, and removing it as a prefix is O(n).
+    # shellcheck disable=SC2295  # $ENV_INDENT_RUN is a PATTERN here; quoting it would make
+    # it a literal and strip nothing.
+    stripped="${line#"${line%%$ENV_INDENT_RUN}"}"
+    case "$stripped" in ''|'#'*) continue ;; esac
     if [[ "$line" != *=* ]]; then
       # ⚠ THE LINE NUMBER AND ITS LENGTH — never the line. This printed
       # `${line%%[!A-Za-z0-9_]*}…`, the prefix up to the first character outside
@@ -1461,9 +1817,31 @@ check_env_file() {
     fi
     key="${line%%=*}"; value="${line#*=}"
     if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-      row_fail "'${key}' is not a usable environment-variable name"
+      # ⚠ The key is PRINTED only when printing it cannot be printing something else — the
+      # same bound `namedKey` applies in lib/auth/secret-file.ts, and for the same reason.
+      # A hard wrap can leave a fragment of a value in key position, and 11-A6 is what a row
+      # that prints its own subject costs.
+      #
+      # ⚠⚠ STRICTLY SHORTER than MIN_SECRET_CHARS since 2026-09-11 (11b-A12). The bound used
+      # to be 32, which IS the floor — so a `SESSION_SECRET` written at exactly the minimum
+      # length could be printed WHOLE from key position, by a rule whose own header says "not
+      # the value, not the line, not a prefix of either, and not a character of either". It is
+      # derived from the floor rather than retyped, so the two cannot drift apart.
+      if (( ${#key} < MIN_SECRET_CHARS )) && [[ "$key" != *[!\!-\~]* ]]; then
+        row_fail "'${key}' is not a usable environment-variable name"
+      else
+        row_fail "line ${lineno} carries a ${#key}-character key (not printed) that is not a usable environment-variable name"
+      fi
       bad=1; continue
     fi
+    # ⚠ Docker keeps the LAST occurrence and says nothing; the reader REFUSES TO START. A file
+    # with two spellings of one credential is a file nobody can read by eye.
+    if [[ "$seen" == *" ${key} "* ]]; then
+      row_fail "${key} appears twice — Docker silently takes the last and lib/auth/secret-file.ts
+     REFUSES TO START. Line ${lineno} is the second"
+      bad=1; continue
+    fi
+    seen+="${key} "
     if ! why="$(env_value_error "$value")"; then
       row_fail "${key} ${why}"
       bad=1
@@ -1477,21 +1855,60 @@ check_env_file() {
 # that were all getting it wrong. Returns 1 when the row must not judge.
 env_unreadable_row() {
   env_readable && return 1
+  # ⚠ Two different causes, and telling an operator the wrong one sends them to the wrong
+  # command. `env_readable` is false for a file that needs root AND for a path that is not a
+  # regular file at all — which is what a bind mount whose source was missing leaves behind.
+  if [[ -e "$ENV_FILE" && ! -f "$ENV_FILE" ]]; then
+    row_unknown "$1 cannot be read: $ENV_FILE is not a regular file. check_env_file says what
+     it is. ⚠ This is NOT 'it is absent'"
+    return 0
+  fi
+  # ⚠ The mode named here is the one SPEC.md §5 has carried since its correction of
+  # 2026-09-11: root:<the unit's --user gid> 0640. It said "root:root 0600" until 11b-A11 —
+  # which is the ONE mode that produces the silent 401 this loop's ruling exists to remove, so
+  # the row telling an operator their file cannot be read was also telling them the broken
+  # mode was the correct one.
   row_unknown "$1 cannot be read: $ENV_FILE needs root. ⚠ This is NOT 'it is absent' — a
-     correct deployment is root:root 0600 and this row said 'absent' on it, with exit 1,
-     three rows at a time. Re-run with sudo"
+     correct deployment is root:<the container's gid> 0640 and this row said 'absent' on it,
+     with exit 1, three rows at a time. Re-run with sudo"
   return 0
 }
 
 check_password_hash() {
   step "O20 — the password hash"
-  local h why
+  local h why shape
   env_unreadable_row "PASSWORD_HASH" && return
   if ! env_has PASSWORD_HASH; then
     row_fail "PASSWORD_HASH is absent — every login is denied, silently"
     return
   fi
   h="$(env_get PASSWORD_HASH || true)"
+  # ⚠ TWO judgements since SPEC §5.1's ruling of 2026-09-11, and they catch different things.
+  # `secret_value_error` asks whether the SERVER will read this line at all (a quoted hash is
+  # a perfectly good scrypt encoding and a file the container refuses to start on);
+  # `scrypt_hash_error` asks whether parseScryptHash will make a hash of it.
+  #
+  # ⚠ AND THE ORDER IS THE DIAGNOSIS. An argon2id hash — which §5 permits and this build does
+  # not implement — contains three `$`, so asking the value rule first would answer *"contains
+  # a $, which a shell that ever sourced this file would expand"* for a file that is correctly
+  # written. That is 11-A18g's defect exactly: a true sentence about the wrong thing, sending
+  # the reader to look for a quoting problem that is not there. So the argon2id case is
+  # answered first, by name.
+  if ! shape="$(scrypt_hash_error "$h")"; then
+    case "$shape" in
+      *argon2*)
+        row_fail "PASSWORD_HASH ${shape}."
+        row_fail "  parseScryptHash returns null for it, and null is a clean empty 401 on every"
+        row_fail "  attempt with NOTHING logged. Fix: sudo ./dashboard.sh set-password"
+        return ;;
+    esac
+  fi
+  if ! why="$(secret_value_error "$h")"; then
+    row_fail "PASSWORD_HASH ${why}."
+    row_fail "  lib/auth/secret-file.ts REFUSES this at startup: the container exits, systemd"
+    row_fail "  retries it five times and the unit ends in 'failed'. Fix: sudo ./dashboard.sh set-password"
+    return
+  fi
   if why="$(scrypt_hash_error "$h")"; then
     row_ok "PASSWORD_HASH parses as scrypt.<log2N>.<r>.<p>.<salt>.<key> (${h%%.*}, ${#h} chars)"
     info "⚠ check is handed a HASH. It confirms the encoding and can NEVER confirm that the"
@@ -1513,7 +1930,10 @@ check_session_secret() {
     return
   fi
   v="$(env_get SESSION_SECRET || true)"
-  if ! why="$(env_value_error "$v")"; then
+  # ⚠ secret_value_error, not env_value_error: since 2026-09-11 the SERVER parses this file
+  # and refuses to start on everything the stricter rule refuses (SPEC §5.1). A row that
+  # judged it by Docker's grammar alone would tick a file the container will not boot on.
+  if ! why="$(secret_value_error "$v")"; then
     row_fail "SESSION_SECRET ${why}."
     # ⚠ The quote explanation only where quotes are the problem. It used to print after a
     # trailing space or a backtick too, which sends the reader looking for a quote that is
@@ -1521,11 +1941,11 @@ check_session_secret() {
     case "$why" in
       *quote*)
         row_fail "  ⚠ --env-file does not strip quotes: a quoted 32-character secret PASSES the"
-        row_fail "  length floor as a DIFFERENT secret, works today, and kills every open session"
-        row_fail "  the moment anyone rewrites the file unquoted." ;;
+        row_fail "  length floor as a DIFFERENT secret. Since SPEC §5.1's ruling of 2026-09-11 the"
+        row_fail "  SERVER refuses it at startup instead of running on it." ;;
       *)
-        row_fail "  ⚠ --env-file takes the rest of the line VERBATIM and expands nothing, so"
-        row_fail "  what readAuthConfig receives is not what the file looks like it says." ;;
+        row_fail "  ⚠ lib/auth/secret-file.ts REFUSES this at startup (SPEC §5.1, 2026-09-11):"
+        row_fail "  the container exits, systemd retries five times and the unit ends in 'failed'." ;;
     esac
     return
   fi
@@ -1533,7 +1953,8 @@ check_session_secret() {
     row_fail "SESSION_SECRET is ${#v} characters, below the ${MIN_SECRET_CHARS}-character floor — every session is refused"
     return
   fi
-  row_ok "SESSION_SECRET is ${#v} characters, unquoted, single-line, no '\$'"
+  row_ok "SESSION_SECRET is ${#v} characters, and printable-ASCII, unquoted and single-line —
+     which is what lib/auth/secret-file.ts will accept at startup"
 }
 
 check_standing() {
@@ -1568,8 +1989,9 @@ check_standing() {
     row_fail "  a STANDING entry that matches nothing suppresses NOTHING: the banner stays"
     row_fail "  nailed open by a condition the operator already accepted, with no error anywhere"
   fi
-  info "⚠ --env-file is read ONCE, at container creation. A STANDING change needs"
-  info "  'sudo ./dashboard.sh restart', never a poll (§4, corrected 2026-09-07)"
+  info "⚠ STANDING is read ONCE, at container creation — the unit's ExecStartPre greps this"
+  info "  one line out of the file and passes it as 'docker run -e STANDING'. A change needs"
+  info "  'sudo ./dashboard.sh restart', never the next poll (§4, corrected 2026-09-07)"
 }
 
 # The names of OTHER containers running this app, read from `docker ps --format
@@ -1726,6 +2148,318 @@ check_container() {
   fi
 }
 
+# ============================================================================================
+#  11-Q3 — the RUNNING container against the UNIT'S OWN `docker run` line
+# ============================================================================================
+#
+# ⚠ INSTALL-SPEC §11.2's third ruling of 2026-09-11. Until now `check` read exactly one flag
+# off the container — `.HostConfig.DeviceRequests`, for the GPU mode — so a container started
+# by hand with different mounts, a different name, a published port or a Docker restart policy
+# passed every row. A container is created ONCE and keeps the flags it was created with, so
+# drift here is permanent and silent: the unit on disk says one thing and the process serving
+# the dashboard does another, for as long as nobody restarts it.
+#
+# ⚠⚠ THE EXPECTATION IS DERIVED FROM THE UNIT FILE, never retyped. Two producers of one list
+# is the shape this project has been bitten by repeatedly (§6.4's vocabulary, the hash
+# encoding, the dispatch table), and a retyped flag list would go stale exactly when the unit
+# changed — which is the moment this row exists for.
+
+# `ExecStart=`'s command line out of a unit file: continuations joined, comments ignored,
+# whitespace collapsed, the `ExecStart=` prefix removed.
+unit_exec_start() {
+  local f="${1:-$UNIT_PATH}" line out="" started=0
+  [[ -r "$f" ]] || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in '#'*) continue ;; esac
+    if (( started == 0 )); then
+      case "$line" in ExecStart=*) started=1 ;; *) continue ;; esac
+    fi
+    out+="${line%\\} "
+    case "$line" in *\\) ;; *) break ;; esac
+  done < "$f"
+  (( started )) || return 1
+  out="${out#ExecStart=}"
+  printf '%s' "$(printf '%s' "$out" | tr -s ' \t' ' ')"
+}
+
+# The token after $2 in the command line $1, or nothing. `read -ra` rather than `for x in $cmd`
+# so that no token is ever pathname-expanded — the command line contains `$GPU_FLAGS` verbatim.
+unit_flag_value() {
+  local cmd="$1" flag="$2" i
+  local -a argv
+  IFS=' ' read -ra argv <<<"$cmd"
+  for (( i = 0; i < ${#argv[@]}; i++ )); do
+    if [[ "${argv[i]}" == "$flag" ]]; then printf '%s' "${argv[i+1]-}"; return 0; fi
+  done
+  return 0
+}
+
+# Every value of a repeatable flag, one per line, sorted — so two lists compare as text.
+# Is $2 present as a BARE flag (no value) in the docker run line? Prints yes/no.
+#
+# ⚠ `unit_flag_value` cannot answer this: it prints the token AFTER the flag, which for
+# `--read-only` is `--tmpfs`. A separate function rather than a special case, because the two
+# questions have different answers for the same input.
+unit_has_flag() {
+  local cmd="$1" flag="$2" i
+  local -a argv
+  IFS=' ' read -ra argv <<<"$cmd"
+  for (( i = 0; i < ${#argv[@]}; i++ )); do
+    if [[ "${argv[i]}" == "$flag" ]]; then printf 'yes'; return 0; fi
+  done
+  printf 'no'
+}
+
+unit_flag_values() {
+  local cmd="$1" i
+  local -a argv
+  IFS=' ' read -ra argv <<<"$cmd"
+  for (( i = 0; i < ${#argv[@]}; i++ )); do
+    case "${argv[i]}" in
+      -v|--volume|-p|--publish|-e|--env|--tmpfs|--log-opt)
+        if [[ "${argv[i]}" == "${2}" || "${argv[i]}" == "${3-}" ]]; then
+          printf '%s\n' "${argv[i+1]-}"
+        fi ;;
+    esac
+  done | sort
+}
+
+# The image the unit runs: the LAST token of the command line.
+unit_image() {
+  local cmd="$1"
+  local -a argv
+  IFS=' ' read -ra argv <<<"$cmd"
+  printf '%s' "${argv[${#argv[@]}-1]-}"
+}
+
+# KEY, one per line, sorted, from a list of KEY=VALUE (or bare KEY) lines on stdin.
+# ⚠ The VALUE is dropped before anything is printed or compared. `docker inspect .Config.Env`
+# is the one place in this script that can be handed a credential by mistake, and 11-A6 is
+# what a row that prints its subject costs.
+env_keys_only() {
+  local line
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    printf '%s\n' "${line%%=*}"
+  done | sort -u
+}
+
+# One `docker inspect --format` read of the running container. Prints the field, and returns
+# 1 when docker could not answer at all.
+container_field() { docker inspect "$CONTAINER" --format "$1" 2>/dev/null; }
+
+# ⚠⚠ A drift row that could NOT be read is not a row that passed, and this is 11-A11's shape
+# for the SECOND time in this function. The leak row was found failing open while it was being
+# written; these were believed safe on the reasoning that "every other row compares two values,
+# so a failed read makes them differ". MEASURED 2026-09-11 with the inspect call failing
+# outright: FALSE for two of the six. The unit deliberately carries NO `--restart` and
+# publishes NO port, so those two expectations are the EMPTY STRING — and an unreadable
+# `docker inspect` produced the empty string too, compared "" with "" and printed a TICK. The
+# rows with a non-empty expectation do fail closed; these cannot, so the READ is judged rather
+# than the comparison, for every row, rather than for the two that happen to need it today.
+drift_unknown() {
+  row_unknown "${1}: 'docker inspect' could not answer for ${CONTAINER}, so this row was not
+     taken. ⚠ This is NOT 'it matches the unit' — two of these rows expect an EMPTY value,
+     and for them an unreadable read is indistinguishable from a correct container"
+}
+
+# One drift row: a label, what the unit says, what the container did.
+drift_row() {
+  local what="$1" want="$2" got="$3"
+  if [[ "$want" == "$got" ]]; then
+    row_ok "${what} matches the unit"
+  else
+    row_fail "${what} DRIFTED — the unit says [${want}] and the container has [${got}].
+     A container keeps the flags it was CREATED with, so this cannot fix itself.
+     Fix: sudo ./dashboard.sh restart"
+  fi
+}
+
+check_drift() {
+  step "11-Q3 — the running container vs the unit's own docker run line"
+  if ! have docker; then row_unknown "docker is not installed"; return; fi
+  if ! docker_ok; then row_unknown "cannot talk to the docker daemon (root, or the docker group)"; return; fi
+  if [[ -z "$(container_ids)" ]]; then
+    row_unknown "no container named ${CONTAINER} is running, so there is nothing to compare
+     against the unit. check_container says what that means"
+    return
+  fi
+  local cmd
+  if ! cmd="$(unit_exec_start "$UNIT_PATH")" || [[ -z "$cmd" ]]; then
+    row_unknown "could not read ExecStart= from $UNIT_PATH. ⚠ Every expectation below is
+     DERIVED from that line and is never retyped here, so without it there is no comparison
+     to make — this is NOT 'the container is fine'"
+    return
+  fi
+
+  # ---- ⚠⚠ SPEC §5.1's ruling: NEITHER SECRET IS IN THE CONTAINER'S ENVIRONMENT ---------
+  # This is the row the ruling asked for by name, and it is unconditional: "the ruling is
+  # worthless if a later edit puts them back and nothing notices." A `--env-file` restored to
+  # the unit, or an `-e PASSWORD_HASH=…` added by hand, puts both secrets where `docker
+  # inspect` shows them to every member of the docker group and /proc/1/environ shows them to
+  # root. ⚠ KEY NAMES ONLY reach this terminal, never a value.
+  #
+  # ⚠ THE ONE ROW HERE THAT COULD FAIL OPEN, and 11-A11 is the precedent: ABSENCE is this
+  # row's pass condition, so a `docker inspect` that could not be read at all would look
+  # exactly like a container with no secrets in its environment and print a tick. Every other
+  # row below compares two values and a failed read makes them differ, i.e. fails CLOSED. So
+  # this one reads the exit status and files `row_unknown` — *"could not read it" is not "it
+  # is not there"*.
+  local container_env keys key leaked="" env_read=1
+  if container_env="$(docker inspect "$CONTAINER" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null)"; then
+    env_read=0
+  fi
+  if (( env_read != 0 )); then
+    row_unknown "could not read .Config.Env off ${CONTAINER}, so the row this ruling exists
+     for — that NEITHER secret is in the container's environment — was not taken. ⚠ This is
+     NOT 'they are absent'"
+    return
+  fi
+  keys=" $(printf '%s\n' "$container_env" | env_keys_only | tr '\n' ' ')"
+  for key in PASSWORD_HASH SESSION_SECRET; do
+    [[ "$keys" == *" ${key} "* ]] && leaked+="${key} "
+  done
+  if [[ -n "$leaked" ]]; then
+    row_fail "${leaked}in the container's ENVIRONMENT — 'docker inspect' shows the value to
+     every member of the docker group and /proc/1/environ shows it to root. SPEC §5.1 (2026-09-11)
+     mounts $ENV_FILE read-only instead and the server parses it. Something put --env-file, or
+     an -e, back into the unit"
+  else
+    row_ok "neither secret is in docker inspect's Env — the file is mounted, not exported"
+  fi
+
+  # ---- the flag set, each compared against the unit's own line -------------------------
+  local want got
+  want="$(unit_flag_value "$cmd" --name)"
+  if ! got="$(container_field '{{.Name}}')"; then drift_unknown "--name"; else
+    drift_row "--name" "$want" "${got#/}"
+  fi
+
+  want="$(unit_flag_value "$cmd" --network)"
+  if ! got="$(container_field '{{.HostConfig.NetworkMode}}')"; then drift_unknown "--network"; else
+    drift_row "--network" "$want" "$got"
+  fi
+
+  # ⚠ The unit deliberately carries NO --restart: systemd owns restarts and a Docker policy
+  # would fight it, restarting the container outside systemd's control. Docker spells "none"
+  # as an empty policy name, so the derived expectation is the empty string either way.
+  # ⚠ That deliberate absence is what makes this an EMPTY expectation, and an empty
+  # expectation is what made it one of the two rows that ticked on a FAILED read until
+  # 2026-09-11. See `drift_unknown`.
+  want="$(unit_flag_value "$cmd" --restart)"
+  if ! got="$(container_field '{{.HostConfig.RestartPolicy.Name}}')"; then
+    drift_unknown "the Docker restart policy"
+  else
+    [[ "$got" == "no" ]] && got=""
+    drift_row "the Docker restart policy (systemd owns restarts)" "$want" "$got"
+  fi
+
+  # ⚠ The other one: §2.1 publishes NOTHING, so this expectation is empty too.
+  want="$(unit_flag_values "$cmd" -p --publish | tr '\n' ' ')"
+  # shellcheck disable=SC2016  # $p and $v are Go template variables, read by docker, not bash
+  if ! got="$(container_field '{{range $p, $v := .HostConfig.PortBindings}}{{println $p}}{{end}}')"; then
+    drift_unknown "published ports"
+  else
+    got="$(printf '%s\n' "$got" | sort | tr '\n' ' ')"
+    drift_row "published ports (§2.1: NONE — publishing bypasses ufw)" "$(trim "$want")" "$(trim "$got")"
+  fi
+
+  want="$(unit_flag_values "$cmd" -v --volume | tr '\n' ' ')"
+  if ! got="$(container_field '{{range .HostConfig.Binds}}{{println .}}{{end}}')"; then
+    drift_unknown "the mounts"
+  else
+    got="$(printf '%s\n' "$got" | sort | tr '\n' ' ')"
+    drift_row "the mounts, source:target:ro and all" "$(trim "$want")" "$(trim "$got")"
+  fi
+
+  # ---- ⚠⚠ THE FLAGS THE FIRST SIX ROWS LEFT OUT (11b-A8) -------------------------------
+  # 11b-build.md's own title says `check` *"now compares the whole flag set against the unit's
+  # own line"*, and it compared six of about fourteen. A container started by hand, or by a
+  # drifted installed unit, **without `--read-only` or without `--user 10001:10001` passed every
+  # row** — and `--user` is the number the credentials file's mode row hangs on (11b-A6), while
+  # `--read-only` is a §2.5 hard requirement that one of the test phase's nine stranded
+  # mutations had deleted from the unit without any row noticing.
+  want="$(unit_has_flag "$cmd" --read-only)"
+  if ! got="$(container_field '{{.HostConfig.ReadonlyRootfs}}')"; then drift_unknown "--read-only"; else
+    if [[ "$got" == "true" ]]; then got="yes"; else got="no"; fi
+    drift_row "--read-only (§2.5: nothing writable but the tmpfs)" "$want" "$got"
+  fi
+
+  want="$(unit_flag_value "$cmd" --user)"
+  if ! got="$(container_field '{{.Config.User}}')"; then drift_unknown "--user"; else
+    drift_row "--user (the uid the mode of $ENV_FILE is derived from)" "$want" "$got"
+  fi
+
+  want="$(unit_flag_value "$cmd" --pid)"
+  if ! got="$(container_field '{{.HostConfig.PidMode}}')"; then drift_unknown "--pid"; else
+    drift_row "--pid (§2.2: /proc/stat, /proc/meminfo, /proc/net/dev)" "$want" "$got"
+  fi
+
+  want="$(unit_flag_values "$cmd" --tmpfs | tr '\n' ' ')"
+  # shellcheck disable=SC2016  # $p and $v are Go template variables, read by docker, not bash
+  if ! got="$(container_field '{{range $p, $v := .HostConfig.Tmpfs}}{{println $p}}{{end}}')"; then
+    drift_unknown "--tmpfs"
+  else
+    got="$(printf '%s\n' "$got" | sort | tr '\n' ' ')"
+    drift_row "--tmpfs (the only writable path under --read-only)" "$(trim "$want")" "$(trim "$got")"
+  fi
+
+  want="$(unit_has_flag "$cmd" --rm)"
+  if ! got="$(container_field '{{.HostConfig.AutoRemove}}')"; then drift_unknown "--rm"; else
+    if [[ "$got" == "true" ]]; then got="yes"; else got="no"; fi
+    drift_row "--rm (a stale container is the second instance O22 forbids)" "$want" "$got"
+  fi
+
+  want="$(unit_flag_value "$cmd" --log-driver)"
+  if ! got="$(container_field '{{.HostConfig.LogConfig.Type}}')"; then drift_unknown "--log-driver"; else
+    drift_row "--log-driver" "$want" "$got"
+  fi
+
+  # ⚠ The env KEYS, and only the keys. The container's environment is the image's own ENV plus
+  # the unit's -e flags, so the image's is subtracted rather than being listed here — two
+  # `docker inspect` calls instead of a hand-written list that would go stale on the next
+  # Dockerfile edit. ⚠ $GPU_FLAGS is excluded from every row above for the same reason it has
+  # its own three-state row: a fallback start is LEGITIMATE, and reporting it as drift would
+  # be the refusal-that-fires-on-a-correct-configuration shape.
+  #
+  # ⚠ A PASS-THROUGH `-e KEY` (no `=`) is OPTIONAL BY CONSTRUCTION: docker sets it only if the
+  # variable is set in the client's environment, so `-e STANDING` on a box where nobody has
+  # set anything standing correctly produces a container with no STANDING at all. Requiring it
+  # would make this row fire on the most ordinary configuration there is — the shape 11-A8 and
+  # HANDOVER §0.13 both name — so pass-through keys are excluded from the comparison on both
+  # sides, and the unit text test in packaging.test.ts is what pins that `-e STANDING` is
+  # still there.
+  #
+  # ⚠ And the image read is judged too. It is SUBTRACTED from the container's environment, so
+  # a failed read leaves the image's own ENV in the comparison and reports drift on a correct
+  # box — the other half of 11-A11: a row nobody could evaluate is not a row that failed
+  # either, and a false alarm here teaches an operator to ignore the row that matters.
+  local image_env_raw image_env passthrough=" " assigned=""
+  if ! image_env_raw="$(docker image inspect "$(unit_image "$cmd")" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null)"; then
+    row_unknown "the environment keys the unit assigns: could not read the IMAGE's own ENV,
+     which this row subtracts. ⚠ This is NOT 'they match' and NOT 'they drifted'"
+    return
+  fi
+  image_env=" $(printf '%s\n' "$image_env_raw" | env_keys_only | tr '\n' ' ')"
+  while IFS= read -r key; do
+    [[ -n "$key" ]] || continue
+    case "$key" in
+      *=*) assigned+="${key%%=*}"$'\n' ;;
+      *)   passthrough+="${key} " ;;
+    esac
+  done <<<"$(unit_flag_values "$cmd" -e --env)"
+  want="$(printf '%s' "$assigned" | sort | tr '\n' ' ')"
+  got=""
+  while IFS= read -r key; do
+    [[ -n "$key" ]] || continue
+    [[ "$image_env" == *" ${key} "* ]] && continue
+    [[ "$passthrough" == *" ${key} "* ]] && continue
+    got+="${key}"$'\n'
+  done <<<"$(printf '%s\n' "$container_env" | env_keys_only)"
+  got="$(printf '%s' "$got" | sort | tr '\n' ' ')"
+  drift_row "the environment keys the unit assigns" "$(trim "$want")" "$(trim "$got")"
+}
+
 check_hasher() {
   step "The password producer (§5)"
   local f="$SRC/scripts/hash-password.py"
@@ -1772,6 +2506,38 @@ check_unit() {
     *)  row_fail "UnitFileState=${enabled} — this unit does NOT start after a reboot, and
      nothing else on this box will say so. Fix: sudo ./dashboard.sh unit" ;;
   esac
+
+  # ⚠⚠ THE INSTALLED UNIT AGAINST THE REPO'S, and until 2026-09-11 NOTHING anywhere compared
+  # them (11b-A6, 11b-A8). Two consequences, both measured by reading:
+  #
+  #   · `container_user` derives the mode of the credentials file from a unit, and `check_drift`
+  #     derives every container expectation from a unit. While those could be DIFFERENT units,
+  #     one `check` run could tick both while judging two different deployments.
+  #   · `check_drift` compares the container against the INSTALLED unit, and the two rows whose
+  #     labels state an absolute — "the Docker restart policy (systemd owns restarts)" and
+  #     "published ports (§2.1: NONE)" — take their expectation from it. So an installed unit
+  #     that GAINED `--restart always` or `-p 8090:8090` makes both sides agree and both rows
+  #     tick. Those absolutes are held against the REPO's unit by packaging.test.ts, and the
+  #     test suite does not run on the box. This row is what carries them there.
+  #
+  # ⚠ The ExecStart LINE, normalised the way `unit_exec_start` normalises it, rather than the
+  # whole file: it is the line every expectation is derived from, and a comment edit is not
+  # drift. A repo checkout at a different commit from the one that installed the unit is
+  # exactly the state this reports — which is the hazard, not a false alarm.
+  local installed_exec repo_exec
+  installed_exec="$(unit_exec_start "$UNIT_PATH" || true)"
+  repo_exec="$(unit_exec_start "$SRC/$UNIT_SRC_REL" || true)"
+  if [[ -z "$installed_exec" || -z "$repo_exec" ]]; then
+    row_unknown "could not read ExecStart= from both $UNIT_PATH and $SRC/$UNIT_SRC_REL, so the
+     installed unit was not compared with the repo's. ⚠ This is NOT 'they are the same'"
+  elif [[ "$installed_exec" == "$repo_exec" ]]; then
+    row_ok "the installed unit's docker run line is $SRC/$UNIT_SRC_REL's"
+  else
+    row_fail "$UNIT_PATH's docker run line is NOT $SRC/$UNIT_SRC_REL's. systemd runs the
+     installed one and this checkout reviews the other, so every flag 'check' derives — the
+     container's uid, the mode of $ENV_FILE, the mounts, the ports — is being read off a file
+     nobody reviewed. Fix: sudo ./dashboard.sh unit, then sudo ./dashboard.sh restart"
+  fi
 
   set +e
   report_ordering_cycles; rc=$?
@@ -1854,6 +2620,7 @@ cmd_check() {
   check_unit
   check_one_process
   check_container
+  check_drift
   check_firewall
   check_gate
   check_neighbours

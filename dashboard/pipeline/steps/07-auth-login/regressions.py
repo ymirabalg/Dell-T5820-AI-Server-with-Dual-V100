@@ -104,6 +104,10 @@ ROUTE = "app/api/session/route.test.ts"
 FORM = "app/login/login-form.test.tsx"
 PAGE = "app/login/page.test.tsx"
 PROXY = "proxy.test.ts"
+# ⚠ loop 11b, 2026-09-11 — SPEC.md §5.1's `11-Q2`.
+SECRETFILE = "lib/auth/secret-file.test.ts"
+STARTUP = "lib/auth/startup.test.ts"
+SECRETS = "lib/auth/secrets.test.ts"
 GUARD = "lib/guardrails.test.ts"
 
 # ---------------------------------------------------------------------------
@@ -133,9 +137,15 @@ GUARD = "lib/guardrails.test.ts"
 # `app/api/`). Ledger ownership follows the FILE, so those two live in step 4's harness —
 # `T56` and `T67` already redden them, and both survived the rename. `G1` and `G2` below fire
 # at them from this side, proving the *widening* rather than the rule.
+#
+# ⚠ SECRETFILE and STARTUP joined on 2026-09-11 (loop 11b, SPEC.md §5.1's `11-Q2`). They test
+# `lib/auth/secret-file.ts` and `lib/auth/startup.ts`, which are step 11's RULING built inside
+# step 7's directory — and ledger ownership follows the FILE, so they belong here and not to
+# step 11's harness. `lib/cross-harness-ledger.test.ts` fails on a ⚠-bearing test file that is
+# in no `LEDGER_FILES`, which is how this was noticed rather than assumed.
 LEDGER_FILES = [
     SCRYPT, COOKIE, CONFIG, SESSION, LIMIT, REVOKE, AUTHZ, LOGIN, VIEW, ROUTE, FORM, PAGE,
-    PROXY, PYHASH
+    PROXY, PYHASH, SECRETFILE, STARTUP, SECRETS
 ]
 
 # `test('…')`, `it('…')` and `test.each(…)('…')`, single- or double-quoted.
@@ -329,6 +339,9 @@ ROUTE_SRC = "app/api/session/route.ts"
 FORM_SRC = "app/login/login-form.tsx"
 PAGE_SRC = "app/login/page.tsx"
 PROXY_SRC = "proxy.ts"
+SECRETFILE_SRC = "lib/auth/secret-file.ts"
+STARTUP_SRC = "lib/auth/startup.ts"
+SECRETS_SRC = "lib/auth/secrets.ts"
 
 # (name, source file, old, new, check) — or (name, source file, [(old, new), …], check)
 REGRESSIONS = [
@@ -804,10 +817,12 @@ REGRESSIONS = [
      PROXY_SRC, "  if (pathname === LOGIN_PATH || pathname === SESSION_PATH) return NextResponse.next();",
      "  if (pathname === LOGIN_PATH || pathname.startsWith('/api')) return NextResponse.next();",
      [PROXY]),
+    # ⚠ RE-AIMED 2026-09-11 (loop 11b): the gate reads the MOUNTED FILE, not `process.env`
+    # — SPEC.md §5.1's `11-Q2`. The mutation is the same defect, at the same site.
     ("07-X6 an unconfigured server lets everything through instead of nothing",
      PROXY_SRC,
-     "    const credentials = readAuthConfig(process.env);\n    if (credentials !== null) {",
-     "    const credentials = readAuthConfig(process.env);\n"
+     "    const credentials = readAuthConfig(credentialEnvironment());\n    if (credentials !== null) {",
+     "    const credentials = readAuthConfig(credentialEnvironment());\n"
      "    if (credentials === null) return NextResponse.next();\n    if (credentials !== null) {",
      [PROXY]),
     ("07-X8 the gate reaches for the revocation store Next's own docs say it cannot share",
@@ -1016,7 +1031,184 @@ REGRESSIONS = [
      "export interface ScryptHash {\n  readonly params: ScryptParams;",
      "export interface ScryptHash {\n  readonly params: Partial<ScryptParams>;",
      "types"),
+    # ==================================================================================
+    # ⚠⚠ LOOP 11b, 2026-09-11 — SPEC.md §5.1's ruling: the two secrets leave the
+    #    environment and the server parses /etc/ai-dashboard.env itself.
+    # ==================================================================================
+    #
+    # The reader is held to ONE rule — stricter than Docker's --env-file grammar, never
+    # looser — and that claim has been falsified twice by measurement in this project
+    # already. Every mutation below is a way of being LOOSER, of printing a value, of
+    # reading the file more than once, or of putting the credentials back where
+    # `docker inspect` can see them.
+
+    ("11b-S1 a double-quoted secret is accepted, which is O21 exactly, one level up",
+     SECRETFILE_SRC,
+     "  if (value.includes('\"')) {\n    return 'contains a double quote. --env-file does not strip quotes: the value would include it';\n  }\n",
+     "",
+     [SECRETFILE]),
+    ("11b-S2 a $ is accepted, and a shell that ever sourced the file expands it away",
+     SECRETFILE_SRC,
+     "  if (value.includes('$')) {\n    return 'contains a $, which a shell that ever sourced this file would expand';\n  }\n",
+     "",
+     [SECRETFILE]),
+    ("11b-S3 the printable-ASCII range is dropped, so a non-breaking space inside a secret passes",
+     SECRETFILE_SRC,
+     "    if (cp < 0x21 || cp > 0x7e) {",
+     "    if (cp < 0x00) {",
+     [SECRETFILE]),
+    ("11b-S4 CRLF is tolerated because Docker tolerates it — the reader stops being stricter",
+     SECRETFILE_SRC,
+     "  if (text.includes('\\r')) {",
+     "  if (false) {",
+     [SECRETFILE]),
+    ("11b-S5 the BOM is stripped the way Docker strips it, instead of refused",
+     SECRETFILE_SRC,
+     "  if (text.includes('\\ufeff')) {",
+     "  if (false) {",
+     [SECRETFILE]),
+    ("11b-S6 a line with no '=' is skipped rather than refused, which is Docker's host-env rule",
+     SECRETFILE_SRC,
+     "    if (at < 0) {",
+     "    if (false) {",
+     [SECRETFILE]),
+    ("11b-S7 a duplicate key silently takes the last, exactly as Docker does",
+     SECRETFILE_SRC,
+     "    if (seen !== undefined) {",
+     "    if (false) {",
+     [SECRETFILE]),
+    ("11b-S8 invalid UTF-8 is decoded lossily, which makes this reader LOOSER than Docker",
+     SECRETFILE_SRC,
+     "    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);",
+     "    return new TextDecoder('utf-8', { fatal: false, ignoreBOM: true }).decode(bytes);",
+     [SECRETFILE]),
+    ("11b-S9 the bare-line refusal prints the line, and a wrapped SESSION_SECRET line IS the secret",
+     SECRETFILE_SRC,
+     "      refuse('', lineNumber, `has no '=' (${line.length} characters, not printed): Docker reads `",
+     "      refuse('', lineNumber, `has no '=' (${line}): Docker reads `",
+     [SECRETFILE]),
+    ("11b-S10 the report drops the line that says values are never printed",
+     SECRETFILE_SRC,
+     "    '  (values are never printed; fix the file and `sudo ./dashboard.sh check`)',\n",
+     "",
+     [SECRETFILE]),
+    ("11b-S11 the file is re-read on every call, so a rewrite mid-flight changes the answer",
+     SECRETFILE_SRC,
+     "    if (memo !== null) return { state: memo, fresh: false };",
+     "    if (memo !== null) memo = null;",
+     [SECRETFILE]),
+    # ⚠⚠ 11b-A3's family. `require()` was DELETED on 2026-09-11 (it had zero production
+    # callers), so the mutation that used to attack its throw is gone with it; what replaces it
+    # is the property the deletion was part of — **the request path never degrades in
+    # SILENCE** — plus the cell that makes three bundled copies of `secrets.ts` share one read.
+    ("11b-S13 an unreadable file throws at REQUEST time, turning §5's 401 into a 500",
+     SECRETFILE_SRC,
+     "      if (fresh) onDegraded(refusalReport(path, state.refusals, degradedHeadline(path)));\n"
+     "      return frozenEmpty;",
+     "      if (fresh) onDegraded(refusalReport(path, state.refusals, degradedHeadline(path)));\n"
+     "      throw new Error(refusalReport(path, state.refusals));",
+     [SECRETFILE, SECRETS]),
+    ("11b-N1 the degraded report fires only when it did NOT do the read, so the first request denies in silence",
+     SECRETFILE_SRC,
+     "      if (fresh) onDegraded(",
+     "      if (!fresh) onDegraded(",
+     [SECRETFILE, SECRETS]),
+    ("11b-N2 the request path borrows REFUSING TO START, announcing a refusal on a server that then serves",
+     SECRETFILE_SRC,
+     "      if (fresh) onDegraded(refusalReport(path, state.refusals, degradedHeadline(path)));",
+     "      if (fresh) onDegraded(refusalReport(path, state.refusals, refusalHeadline(path)));",
+     [SECRETFILE, SECRETS]),
+    ("11b-N3 the STARTUP entrance reports too, printing one refusal twice on the path that is already loud",
+     SECRETFILE_SRC,
+     "    refusal: (): string | null =>\n"
+     "      load().state.env === null ? refusalReport(path, (memo as SecretState).refusals) : null,",
+     "    refusal: (): string | null => {\n"
+     "      const { state, fresh } = load();\n"
+     "      if (state.env === null && fresh) onDegraded(refusalReport(path, state.refusals, degradedHeadline(path)));\n"
+     "      return state.env === null ? refusalReport(path, state.refusals) : null;\n"
+     "    },",
+     [SECRETFILE]),
+    ("11b-N7 the degraded report is written before the verdict, so a GOOD file logs a refusal too",
+     SECRETFILE_SRC,
+     "      const { state, fresh } = load();\n      if (state.env !== null) return state.env;",
+     "      const { state, fresh } = load();\n"
+     "      if (fresh) onDegraded(refusalReport(path, state.refusals, degradedHeadline(path)));\n"
+     "      if (state.env !== null) return state.env;",
+     [SECRETFILE, SECRETS]),
+    ("11b-N4 the credential cell goes back to a module-level binding, and three bundles get three memos",
+     SECRETS_SRC,
+     "  const holder = globalThis as CellHolder;",
+     "  const holder = {} as CellHolder;",
+     [SECRETS]),
+    ("11b-N5 the reader opens the path without asking whether it is a regular file — a FIFO blocks register() for ever",
+     SECRETS_SRC,
+     "  if (!stat.isFile()) {",
+     "  if (stat.isFile() && false) {",
+     [SECRETS]),
+    ("11b-S14 every key in the file crosses the seam, so STANDING arrives from two sources at once",
+     SECRETFILE_SRC,
+     "  for (const key of SECRET_KEYS) {",
+     "  for (const key of [...SECRET_KEYS, ...values.keys()]) {",
+     [SECRETFILE]),
+    ("11b-S15 the SESSION_SECRET floor is dropped, and a short secret makes the cookie forgeable",
+     SECRETFILE_SRC,
+     "    if (key === SESSION_SECRET_KEY && found.value.length < MIN_SESSION_SECRET_CHARS) {",
+     "    if (false) {",
+     [SECRETFILE]),
+
+    ("11b-T1 a refused credentials file only warns in production, so the container starts denying every login",
+     STARTUP_SRC,
+     "  return env.nodeEnv === 'production' ? 'exit' : 'warn';",
+     "  return 'warn';",
+     [STARTUP]),
+    ("11b-T2 next build reads the credentials file, and an exit(1) there fails the Docker build itself",
+     STARTUP_SRC,
+     "  if (env.nextPhase === BUILD_PHASE) return 'skip';",
+     "  if (false) return 'skip';",
+     [STARTUP]),
+    ("11b-T3 the refusal is printed on every startup, including the healthy one §5 requires to be silent",
+     STARTUP_SRC,
+     "  if (action === 'exit' || action === 'warn') {",
+     "  if (true) {",
+     [STARTUP]),
+    ("11b-T5 the warn arm stops saying it IS a warning, and a laptop reads REFUSING TO START on a server that then serves requests",
+     STARTUP_SRC,
+     "      action === 'warn'",
+     "      false",
+     [STARTUP]),
+    ("11b-S16 the 64 KiB line bound goes, and this reader takes a file docker run --env-file refuses outright",
+     SECRETFILE_SRC,
+     "      if (i - lineStart >= MAX_LINE_BYTES) {",
+     "      if (false) {",
+     [SECRETFILE]),
+    ("11b-T4 instrumentation.ts loses its runtime guard, and the edge bundle gets node:fs",
+     "instrumentation.ts",
+     "  if (process.env['NEXT_RUNTIME'] !== 'nodejs') return;",
+     "  if (false) return;",
+     [STARTUP]),
+
+    ("11b-W1 the gate's deps go back to process.env, where docker inspect shows both secrets",
+     AUTHZ_SRC,
+     "  get env(): Environment {\n    return credentialEnvironment();\n  },",
+     "  env: process.env,",
+     [AUTHZ]),
+    ("11b-W2 the login handler's deps go back to process.env",
+     LOGIN_SRC,
+     "  get env(): Environment {\n    return credentialEnvironment();\n  },",
+     "  env: process.env,",
+     [LOGIN]),
+    ("11b-W3 the proxy reads process.env directly, and the mount becomes decoration",
+     PROXY_SRC,
+     "    const credentials = readAuthConfig(credentialEnvironment());",
+     "    const credentials = readAuthConfig(process.env);",
+     [PROXY]),
+    ("11b-W4 credentialEnvironment IS process.env, so every root above it is wired to nothing",
+     SECRETS_SRC,
+     "export const credentialEnvironment = (): Environment => productionSecrets.environment();",
+     "export const credentialEnvironment = (): Environment => process.env;",
+     [PROXY, AUTHZ, LOGIN]),
 ]
+
 
 
 

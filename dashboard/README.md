@@ -80,7 +80,7 @@ subcommand of its own, and every subcommand takes `--dry-run`.
 | `sudo ./dashboard.sh restart` | restart, prove the container id changed, then `check` |
 | `sudo ./dashboard.sh uninstall` | unit + the `ai-dashboard` container + the ufw rule it wrote. **Keeps** `/etc/ai-dashboard.env`. ⚠ It **names, and does not remove**, any other container running an `ai-dashboard` image under a different name; and the ufw rule is matched by text, CIDR included, so an install made with `--lan-cidr` needs the same flag here |
 
-### Credentials — `/etc/ai-dashboard.env`, `root:root` 0600
+### Credentials — `/etc/ai-dashboard.env`, `root:10001` 0640, **mounted, not exported**
 
 | key | set by | notes |
 |---|---|---|
@@ -93,13 +93,44 @@ subcommand of its own, and every subcommand takes `--dry-run`.
 secret. `uninstall --purge` lists them and removes them with the file, after one typed
 `DELETE`.
 
-⚠ **Docker's `--env-file` grammar is not a shell's.** It splits on the first `=`, takes the
-rest of the line verbatim, expands nothing and **keeps quotes** — so
-`SESSION_SECRET="…"` is a secret with two quote characters baked into it. Every value is
-single-line, unquoted, untrimmed and free of `$`. `check` refuses to be quiet about it.
+⚠⚠ **The two secrets are NOT environment variables — ruled 2026-09-11** (SPEC §5.1,
+INSTALL-SPEC §11.2). `--env-file` copied `PASSWORD_HASH` and `SESSION_SECRET` into the
+container's environment, where `docker inspect` shows them to every member of the `docker`
+group and `/proc/1/environ` shows them to root. The unit now **bind-mounts this file
+read-only** and the server parses it at startup; `check` asserts from the other side that
+neither key is in `docker inspect`'s `Env`. `STANDING` stays an environment variable — it is
+configuration, not a secret — and reaches the container as `docker run -e STANDING`.
 
-⚠ **The file is read once, at container creation.** A `STANDING` change takes effect on
-`dashboard.sh restart`, never on the next poll.
+⚠ **The mode is `0640 root:<the container's gid>`, not `0600 root:root`.** A container that
+runs as `--user 10001:10001` cannot read a root-only file, and the dashboard would then deny
+every login with nothing logged. Same shape as `/etc/llama-server.apikey`'s `root:yorman
+0640`. The `/root` backups stay `0600`: nothing mounts those.
+
+⚠ **The server's reader is STRICTER than Docker's grammar, and refuses at startup.** Docker
+splits on the first `=`, takes the rest of the line verbatim, expands nothing and **keeps
+quotes** — so `SESSION_SECRET="…"` is a secret with two quote characters baked into it, which
+works today and kills every open session the moment the file is rewritten unquoted.
+`lib/auth/secret-file.ts` refuses that, and a padded, multi-line, CRLF, BOM-bearing,
+`$`-bearing, backtick-bearing, backslash-bearing or non-printable value, **naming the key and
+the reason and never the value** — the container exits, systemd retries five times and the
+unit lands in `failed`. `dashboard.sh check` applies the identical rule before writing, so
+`configure` cannot produce a file the server will not start on.
+
+⚠ **The file is read once, at startup — once for the PROCESS, not once per request.** A
+`STANDING` change, or a new password, takes effect on `dashboard.sh restart` and never on the
+next poll. That is a guarantee rather than a hope since 2026-09-11: the server's copies of the
+reader share one read through a process-wide cell, because `next build` bundles the reader into
+three server chunks and three independent memos meant that a file edited **in place** after
+startup could make the gate and the routes deny every login while the startup check had already
+passed and nothing was logged. If the file is ever refused by whichever entrance reads it first,
+the reasons reach `journalctl` — at startup as a refusal to start, and from a request path as
+*"the server is RUNNING and EVERY login … is now denied"*, once.
+
+⚠ **A running container holds the file by INODE, so `set-password` cannot reach it.** Every
+write here is a rename onto the path (which is what makes it atomic), and a bind mount pins the
+inode the container opened at creation. `check` reads the new file, so **every row is green
+while the container still has the old one** — `dashboard.sh` says so whenever a container is
+running, and `restart` is the only thing that closes the gap.
 
 ### ⚠ Things that have already gone wrong on this box
 

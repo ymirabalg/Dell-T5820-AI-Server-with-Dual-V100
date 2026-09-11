@@ -117,8 +117,13 @@ export interface TelemetrySourceOptions {
    */
   readonly hostCeilingMs?: number;
   /**
-   * Where `STANDING` comes from. Production: `process.env`, filled by Docker's `--env-file`
-   * from `/etc/ai-dashboard.env` (`lib/auth/config.ts`).
+   * Where `STANDING` comes from. Production: `process.env` — filled by `docker run -e
+   * STANDING` since SPEC §5.1's ruling of 2026-09-11, which the unit's second `ExecStartPre`
+   * greps out of `/etc/ai-dashboard.env`. It was `--env-file` until then; the two SECRETS
+   * left the environment entirely with that ruling and are read from the mounted file by
+   * `lib/auth/secret-file.ts`. ⚠ **Everything below still holds**: the value reaches a
+   * running process's environment once, at container creation, and a change to it needs a
+   * restart rather than a poll.
    *
    * ⚠ **Read ONCE, here, at construction — and that is a correction, not a shortcut.**
    * This used to be read inside every sample, on the strength of §4's sentence *"A change
@@ -129,13 +134,15 @@ export interface TelemetrySourceOptions {
    * not have changed — tested, exported machinery that could not fire, which is HANDOVER's
    * do-not-copy #9 — while the spec promised a behaviour the deployment cannot deliver.
    *
-   * Found 2026-09-07 by the steps 1–8 sweep and settled by the owner: keep `--env-file`,
-   * amend §4 to *"takes effect on the next container restart"*, and read once. **A change
-   * to `STANDING` now requires a restart, and nothing here pretends otherwise.**
+   * Found 2026-09-07 by the steps 1–8 sweep and settled by the owner: keep the environment
+   * variable, amend §4 to *"takes effect on the next container restart"*, and read once.
+   * **A change to `STANDING` now requires a restart, and nothing here pretends otherwise.**
    *
-   * If the mechanism ever becomes a bind mount, this becomes a per-sample **file** read with
-   * its own monotonic budget and a place in §4's outstanding-call rule — not a re-read of
-   * `process.env`, which would still be a snapshot.
+   * ⚠ The credentials file IS bind-mounted now (2026-09-11) and `STANDING` shares it — but
+   * this value deliberately still arrives through the environment, because §6.4 echoes it
+   * verbatim and reading it per sample would be a **file** read needing its own monotonic
+   * budget and a place in §4's outstanding-call rule. That is the change this paragraph
+   * has always described, and it is still not being made.
    */
   readonly env?: Environment;
 }

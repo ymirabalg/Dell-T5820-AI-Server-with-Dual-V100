@@ -35,6 +35,18 @@
  * and `lib/telemetry/handler.test.ts` still asserts by call count that authorisation happens
  * before the sample.
  *
+ * ### ⚠ The credentials come from the MOUNTED FILE, not from `process.env`
+ *
+ * SPEC.md §5.1's ruling of 2026-09-11 (`11-Q2`): `--env-file` put both secrets in the
+ * container's environment, where `docker inspect` shows them to the `docker` group.
+ * `credentialEnvironment()` reads `/etc/ai-dashboard.env` — once for the process, refused
+ * loudly at startup by `instrumentation.ts` if it is unusable, and **never throwing here**,
+ * because §5 requires a check that cannot reach a verdict to be a 401 rather than a 500.
+ *
+ * ⚠ The proxy runs in the **Node.js runtime** (see above), which is what makes a `node:fs`
+ * read reachable from this file at all. It is also why `lib/auth/secrets.ts` is imported
+ * rather than `lib/auth/secret-file.ts` being re-wired here: one reader, one memo, one read.
+ *
  * ### ⚠ It does not import `lib/telemetry/handler.ts`
  *
  * HANDOVER §6 item 8: that module builds the process's single `TelemetrySource` at load, and
@@ -68,6 +80,7 @@ import type { NextRequest } from 'next/server';
 import { readAuthConfig } from '@/lib/auth/config';
 import { SESSION_COOKIE, readCookie } from '@/lib/auth/cookie';
 import { EXPIRED_PARAM, LOGIN_PATH, SESSION_PATH } from '@/lib/auth/login-view';
+import { credentialEnvironment } from '@/lib/auth/secrets';
 import { verifiedSessionOf } from '@/lib/auth/session';
 
 /**
@@ -116,7 +129,7 @@ export function proxy(request: NextRequest): NextResponse {
   try {
     hadCookie = readCookie(request.headers.get('cookie'), SESSION_COOKIE) !== null;
 
-    const credentials = readAuthConfig(process.env);
+    const credentials = readAuthConfig(credentialEnvironment());
     if (credentials !== null) {
       const session = verifiedSessionOf(request, credentials.sessionSecret, Date.now());
       if (session !== null) return NextResponse.next();

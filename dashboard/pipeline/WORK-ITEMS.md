@@ -797,3 +797,43 @@ step 11, so step 2's ledger runs again. Both go into the follow-up loop **10f** 
 | **10h-hostname** | §6.2 | The hostname is **truncated at 320 px**, whole string in `title` — same rule as `model`, same reason |
 
 **Ruled 2026-09-10 after 10h: the four rows above. §6.1 is closed; step 11 (packaging) is next, and it carries the browser-defaults requirement into the deploy notes.**
+
+| # | § | Ruled 2026-09-11 after step 11 |
+|---|---|---|
+| **11-Q1** | INSTALL-SPEC §7 | `Restart=always` — a `docker stop` exits 0 and left the monitor down |
+| **11-Q2** | SPEC §5.1 / §2.5, INSTALL-SPEC §7 | ⚠⚠ **The two secrets are read from the mounted file by the server**, never passed as env vars. Writes a third parser deliberately; it must be stricter than Docker's, never looser, and refuse a quoted value loudly — turning O21 from a silent failure into a startup refusal |
+| **11-Q3** | INSTALL-SPEC §9 | `check` diffs the running container's whole flag set against the unit's `docker run` line |
+
+**All three go into loop 11b, before step 12.**
+
+**✅ BUILT by loop 11b, 2026-09-11, and reconciled the same day.** All three are implemented and
+measured. ⚠ **Two things the reconcile phase found and closed that are worth carrying forward,
+because they are the shapes rather than the instances** — the full account is
+`steps/11-packaging/11b-reconciliation.md`:
+
+- **`11-Q2`'s own guard had a silent failure.** `next build` bundles the reader into three server
+  chunks, each with its own memo, so an **in-place** edit after startup made every login a 401 with
+  nothing logged and no exit. Closed two ways: one read shared by the process, and a refusal that
+  reaches stderr whichever entrance discovers it. **`SecretSource.require()` was deleted** — it was
+  the documented startup entrance and had zero production callers.
+- **`11-Q3`'s comparison covered six of about fourteen flags**, and the row that checks the
+  credentials file's mode derived its gid from the **repo's** unit while every drift row derived
+  its expectation from the **installed** one. Now twelve flags, the gid comes from the unit systemd
+  runs, and a new row compares the installed unit with the repo's — which nothing did.
+- ⚠ **And `check` could tick a file the container refuses to boot on**: a generated corpus of 276
+  files found **21**. Now 0. `11b-Q1`…`11b-Q5` (HANDOVER §8) are the five wording items this left.
+
+
+**Correction 2026-09-11 (11b):** the env file is **`root:<container gid>` 0640**, not `root:root`
+0600 — forced by 11-Q2 (the server, inside an unprivileged container, now reads the file itself),
+and matching the repo's own `/etc/llama-server.apikey`. `SPEC.md` §5 and `INSTALL-SPEC.md` §11.3.
+
+**Ruled 2026-09-11 (11b's five wording questions, all resolved by the parent):** `INSTALL-SPEC.md`
+§6/§7/§9 corrected to `root:<container gid>` 0640 and §7's `--env-file` row **inverted** — the
+container now does see the file (11b-Q1). `SPEC.md` §5.1 sharpened: *at startup* means **one read
+for the process**, a refusal that always reaches **stderr**, and 401-never-500 **plus**
+never-silent (11b-Q2/Q4); a bind mount **pins the inode**, so a rewrite does not reach a running
+container and `check` must compare rather than assume (11b-Q3). **11b-Q5 — a credentials read that
+blocks has no timeout — is OPEN and owned by step 12**, which is where a FIFO or a hung mount can
+actually be produced.
+

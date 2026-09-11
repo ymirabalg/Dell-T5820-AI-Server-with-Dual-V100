@@ -25,9 +25,29 @@ import { config, proxy } from './proxy';
 const SECRET = 'a-secret-of-at-least-thirty-two-characters';
 const HASH = 'scrypt.15.8.1.AAAAAAAAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
+/**
+ * ⚠ **`configured()` stubs the MOUNTED FILE, not `process.env` — SPEC.md §5.1's ruling of
+ * 2026-09-11 (`11-Q2`).** It used to be two `vi.stubEnv` calls, and that is exactly what
+ * changed: `--env-file` put both secrets in the container's environment, where `docker
+ * inspect` shows them to every member of the `docker` group. The gate now reads
+ * `credentialEnvironment()`, so a stub of `process.env` configures nothing — which the test
+ * at the bottom of this file asserts against the REAL module rather than this mock.
+ *
+ * Mocking the module, rather than adding a parameter to `proxy()`, is deliberate: Next calls
+ * a proxy as `proxy(request, event)` and a second positional parameter would be filled with
+ * a `NextFetchEvent` in production — an object with no `PASSWORD_HASH`, which would deny
+ * every request while every test here passed.
+ */
+const mountedFile = vi.hoisted(() => ({
+  env: {} as Record<string, string | undefined>,
+}));
+
+vi.mock('@/lib/auth/secrets', () => ({
+  credentialEnvironment: (): Record<string, string | undefined> => mountedFile.env,
+}));
+
 const configured = (): void => {
-  vi.stubEnv(SESSION_SECRET_KEY, SECRET);
-  vi.stubEnv(PASSWORD_HASH_KEY, HASH);
+  mountedFile.env = { [SESSION_SECRET_KEY]: SECRET, [PASSWORD_HASH_KEY]: HASH };
 };
 
 const request = (path: string, cookie?: string): NextRequest =>
@@ -44,6 +64,7 @@ const isPassThrough = (response: Response): boolean =>
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  mountedFile.env = {};
 });
 
 describe('the two paths that must work without a session', () => {
@@ -145,6 +166,28 @@ describe('a request without one', () => {
 
     expect(proxy(request('/', `${SESSION_COOKIE}=${token}`)).status).toBe(302);
     expect(proxy(request('/api/telemetry', `${SESSION_COOKIE}=${token}`)).status).toBe(401);
+  });
+});
+
+describe('the credentials the gate actually reads', () => {
+  /**
+   * ⚠ The mock above proves the gate asks `credentialEnvironment()`. This proves what the
+   * REAL `credentialEnvironment()` answers, which is the half the mock cannot see: a secret
+   * planted in `process.env` — the shape `--env-file` used to produce — must not configure
+   * this server. Machine-independent by construction: either the box has a real
+   * `/etc/ai-dashboard.env` and that file answered, or nothing answered. Neither is the
+   * planted value.
+   */
+  test('⚠ a SESSION_SECRET planted in process.env does not reach the real credential source', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/auth/secrets')>('@/lib/auth/secrets');
+    const before = process.env[SESSION_SECRET_KEY];
+    try {
+      process.env[SESSION_SECRET_KEY] = SECRET;
+      expect(actual.credentialEnvironment()[SESSION_SECRET_KEY]).not.toBe(SECRET);
+    } finally {
+      if (before === undefined) delete process.env[SESSION_SECRET_KEY];
+      else process.env[SESSION_SECRET_KEY] = before;
+    }
   });
 });
 

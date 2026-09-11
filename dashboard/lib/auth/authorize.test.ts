@@ -145,8 +145,35 @@ describe('§5’s "any error raised while deciding is a 401"', () => {
 });
 
 describe('the production wiring', () => {
-  test('reads process.env and the process-wide revocation store', () => {
-    expect(productionAuthorizeDeps.env).toBe(process.env);
+  /**
+   * ⚠ SPEC.md §5.1's ruling of 2026-09-11 (`11-Q2`): the two secrets are read from the
+   * bind-mounted `/etc/ai-dashboard.env`, never from the container's environment, because
+   * `--env-file` puts them where `docker inspect` shows them to the `docker` group. This used
+   * to assert the opposite — `expect(productionAuthorizeDeps.env).toBe(process.env)` — so it
+   * is the test that would have gone green on the defect.
+   *
+   * ⚠ The negative half is machine-independent on purpose (11-A18a's lesson: a test that
+   * measures its host is not measuring the artefact). Whether or not a
+   * `/etc/ai-dashboard.env` happens to exist where this runs, a `PASSWORD_HASH` planted in
+   * `process.env` must not reach the deps: either the file answered, or nothing did.
+   */
+  test('⚠ the production credentials come from the mounted file, and process.env cannot set them', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(productionAuthorizeDeps, 'env');
+    // A getter, not a captured value: the file is read on first use, once, and importing this
+    // module cannot throw because of a file that is not there.
+    expect(typeof descriptor?.get).toBe('function');
+    expect(descriptor?.value).toBeUndefined();
+    expect(productionAuthorizeDeps.env).not.toBe(process.env);
+
+    const planted = 'scrypt.15.8.1.planted-by-the-environment.planted-by-the-environment';
+    const before = process.env['PASSWORD_HASH'];
+    try {
+      process.env['PASSWORD_HASH'] = planted;
+      expect(productionAuthorizeDeps.env['PASSWORD_HASH']).not.toBe(planted);
+    } finally {
+      if (before === undefined) delete process.env['PASSWORD_HASH'];
+      else process.env['PASSWORD_HASH'] = before;
+    }
     expect(typeof productionAuthorizeDeps.revocations.isRevoked).toBe('function');
   });
 

@@ -178,7 +178,8 @@ rsync -a --delete \
    `printf '%s' "$pw" | python3 scripts/hash-password.py`
 3. **Exit 2 means the policy refused it** — reprompt, printing the script's own message, which
    names the rule that failed.
-4. Write `PASSWORD_HASH=<hash>` into `/etc/ai-dashboard.env`, `install -m 0600 -o root -g root`.
+4. Write `PASSWORD_HASH=<hash>` into `/etc/ai-dashboard.env`, `install -m 0640 -o root` plus a
+   root-conditional `chown root:<the unit's --user gid>` (§11.3 — the container reads this file).
 
 ### What this buys, and it is not small
 
@@ -236,7 +237,8 @@ refused password can never be written by a caller that ignored the exit code.
 
 ## 6. `configure` — the env file
 
-`/etc/ai-dashboard.env`, **`root:root` 0600**, written with `install -m 0600 -o root -g root`.
+`/etc/ai-dashboard.env`, **`root:<container gid>` 0640** (§11.3), written with `install -m 0640 -o root`
+plus a root-conditional `chown`.
 
 | key | written by | rule |
 |---|---|---|
@@ -275,7 +277,7 @@ glob or a careless `cat /etc/ai-dashboard.env*` would find it.
 | `--pid host` | §2.2 | `/proc/stat`, `/proc/meminfo`, `/proc/loadavg`, `/proc/net/dev` |
 | `--gpus all -e NVIDIA_DRIVER_CAPABILITIES=utility` | §2.2 | brings `nvidia-smi` + NVML |
 | `-e UV_THREADPOOL_SIZE=16` | §2.5 | ⚠ **Margin behind §4's outstanding-call rule, not a substitute for it.** libuv's default 4 is below `collectHost`'s nine concurrent reads on a healthy poll; raising it moves the saturation threshold and does not remove it |
-| `--env-file /etc/ai-dashboard.env` | §2.5 | read by the **client**, as root, on the host — which is why 0600 root:root is correct and the container never sees the file |
+| `-v /etc/ai-dashboard.env:/etc/ai-dashboard.env:ro` | §2.5, §5.1 | ⚠ **INVERTED 2026-09-11 (11-Q2).** `--env-file` is gone: the **server** reads this file, inside an unprivileged container, so the container **does** see it and the mode is `root:<container gid>` 0640 (§11.3). The secrets never enter the container's environment |
 | `--log-driver json-file --log-opt max-size=10m --log-opt max-file=3` | §2.5 | |
 | `--rm` | — | with `ExecStartPre=-docker rm -f`, so a stale container cannot block a restart |
 | the ten `-v … :ro` mounts | §2.2 | `/sys`, `/`, `/home`, the D-Bus socket, `/etc/llama-server`, `/etc/ufw/ufw.conf`, `/lib/modules`, `/etc/hostname` |
@@ -368,7 +370,7 @@ with **no diagnostic anywhere**. `check` is the only place any of them can be no
 | **O23** | ~~The image contains the CLI entry~~ — **closed.** `scripts/hash-password.py` needs nothing from the image | — |
 | **new** | `scripts/hash-password.py` is present and executable on the host, and `python3 --version` answers | §5's producer is the only way to set a password; its absence is discovered at the moment someone needs it |
 | **D8** | Every `STANDING` entry matches a condition kind or id | A typo suppresses **nothing** and the banner stays nailed open, with no error. The client already computes this list as `state.unknownStanding` |
-| — | env file is `root:root 0600`, single-line, unquoted values | |
+| — | env file is `root:<container gid> 0640` (§11.3), single-line, unquoted values | |
 | — | `journalctl -b \| grep "ordering cycle"` is empty | Only observable on a real boot |
 | — | `systemctl show ai-dashboard -p StartLimitIntervalUSec` is 300 s | Proves the keys landed in `[Unit]` |
 | — | ufw enforcing, and a rule covers 8090 and 22 | |
@@ -443,6 +445,32 @@ fixture table tests the same property with a real instrument. ⚠ **The test pha
 hole that matters more:** the table measured the *validators* and nothing measured the `check`
 **rows that call them**, so eight edits disconnected all four obligations while every test stayed
 green. A cross-check is only worth the call site it is wired into; assert both.
+
+## 11.2 ⚠ Owner rulings, 2026-09-11 — three more, and they AMEND §7
+
+**`Restart=always`, not `on-failure` (11-Q1).** A `docker stop` exits 0, so `on-failure` treats it
+as a clean stop and the dashboard stays down until someone notices. It is a monitor; it comes back
+from any exit. `systemctl stop ai-dashboard` remains the deliberate way to take it down.
+
+**The secrets are MOUNTED, not in the environment (11-Q2).** See `SPEC.md` §5.1's ruling: mount
+`/etc/ai-dashboard.env` read-only; the server reads `PASSWORD_HASH` and `SESSION_SECRET` from it at
+startup; neither reaches the container's environment. `STANDING` may stay an env var. The reader
+must be **stricter than Docker's grammar, never looser**, and must refuse a quoted or padded value
+loudly at startup — which converts O21 from a silent failure into a startup refusal. `check` must
+verify the secrets are absent from `docker inspect`'s `Env`.
+
+**`check` compares the RUNNING container against the unit's `docker run` line (11-Q3).** The GPU
+mode is read from `.HostConfig.DeviceRequests` already; extend it to the whole flag set — mounts,
+ports, name, restart policy, network mode — and report any drift. A container started by hand with
+different mounts currently passes every check.
+
+## 11.3 ⚠ Correction, 2026-09-11 — the env file is 0640, not 0600
+
+§6 and §11.2 said `root:root` 0600. **That mode cannot survive §11.2's own secrets ruling**: the
+server now reads the file, so the *container* reads it, and the container is unprivileged. It is
+**`root:<the unit's --user gid>` 0640** — the shape root `CLAUDE.md` already uses for
+`/etc/llama-server.apikey`. The `/root` backups stay 0600. `SPEC.md` §5 carries the same
+correction, with the reasoning.
 
 ## 12. Open questions for review
 

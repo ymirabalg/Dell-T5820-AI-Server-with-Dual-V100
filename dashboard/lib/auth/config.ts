@@ -6,17 +6,32 @@
  *
  * ---
  *
- * ### ⚠ Step 7 does not parse that file, and that is the answer to HANDOVER's open question
+ * ### ⚠⚠ "A third parser is not written" — OVERTURNED 2026-09-11, deliberately
  *
- * HANDOVER §7 leaves open "which `KEY=VALUE` grammar `/etc/ai-dashboard.env` is", having
- * established that systemd's `EnvironmentFile` and a shell-sourced `ufw.conf` are two
- * genuinely different grammars that must not share a parser. The answer here is that the
- * dashboard reads **neither**: §2.5 runs the container with `docker run`, so Docker parses
- * the file (`--env-file`) and the values arrive in `process.env`. This module reads
- * `process.env` and nothing else. **A third parser is not written.**
+ * This header used to close HANDOVER §7's open question — *"which `KEY=VALUE` grammar is
+ * `/etc/ai-dashboard.env`?"* — like this, and the paragraph is kept because the reasoning was
+ * sound for what it weighed:
  *
- * What step 7 *does* owe step 11 is the constraint that makes that safe, because Docker's
- * `--env-file` grammar is unlike both of the others:
+ * > "The dashboard reads **neither**: §2.5 runs the container with `docker run`, so Docker
+ * > parses the file (`--env-file`) and the values arrive in `process.env`. This module reads
+ * > `process.env` and nothing else. **A third parser is not written.**"
+ *
+ * What it did not weigh is where `--env-file` **puts** the values: in the container's
+ * environment, where `docker inspect` shows them to every member of the `docker` group and
+ * `/proc/1/environ` to root. The owner ruled on 2026-09-11 (SPEC.md §5.1, INSTALL-SPEC §11.2,
+ * `11-Q2`) that the file is **bind-mounted read-only and parsed by the server**, on the
+ * precedent of `serve-llm.sh`'s `--api-key-file, never --api-key`. So the third parser IS
+ * written, in `lib/auth/secret-file.ts`, and it is held to one rule: **stricter than Docker's
+ * grammar, never looser**, refusing at startup what Docker would keep verbatim.
+ *
+ * **This module is unchanged by that**, and that is the point of its shape. It reads an
+ * {@link Environment}; which `Environment` is the composition root's business. In production
+ * `readAuthConfig` is now handed the file-backed one and `readStandingList` is still handed
+ * `process.env` — `STANDING` is configuration, not a secret, and stays an environment
+ * variable.
+ *
+ * The constraint that made the old arrangement safe still binds on whoever WRITES the file,
+ * because Docker's grammar is what `dashboard.sh` must not produce something unreadable in:
  *
  * - it splits on the **first** `=` and takes the rest of the line verbatim;
  * - it does **not** strip quotes — `SESSION_SECRET="abc"` yields the four characters
@@ -27,6 +42,7 @@
  * So both values must be single-line, unquoted, with no leading or trailing space, and must
  * avoid `$`. `scrypt.ts`'s encoding is chosen to satisfy that; `SESSION_SECRET` must be
  * generated in the same alphabet (base64url or hex — see {@link MIN_SESSION_SECRET_CHARS}).
+ * `secret-file.ts` refuses all of it at startup rather than hoping.
  *
  * ### ⚠ `STANDING` is §6.4's, and it is read here but never judged here
  *
@@ -89,6 +105,12 @@ export type Environment = Readonly<Record<string, string | undefined>>;
  * ⚠ Read **per call**, not captured at module load. The cost is two property reads, and it
  * means a test can hand in an environment without reloading a module — the same reason
  * `lib/telemetry/handler.ts` takes its deps as an argument.
+ *
+ * ⚠ **Still the second lock, and still not the first.** Since 2026-09-11 the production
+ * `Environment` comes from `lib/auth/secret-file.ts`, which refuses at startup anything this
+ * function would merely return `null` for — and a good deal more besides. This stays exactly
+ * as strict as it was: a `null` here is a clean, silent, total denial, which is the correct
+ * behaviour for a process that somehow reached a request with no credentials.
  */
 export const readAuthConfig = (env: Environment): AuthConfig | null => {
   const passwordHash = env[PASSWORD_HASH_KEY]?.trim() ?? '';

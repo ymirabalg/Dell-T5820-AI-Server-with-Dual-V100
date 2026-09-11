@@ -1,23 +1,86 @@
-# Handover — after step 11. **The deployment artefacts exist and are measured AT THEIR CALL SITES: 49 of 63 one-line edits used to disconnect a guard with the whole suite green, and the count is now 0 of 48. `--gpus all` falls back rather than taking the dashboard down, and `check` reports which mode is in force. Step 10's §6.1 answer is kept in full at §0.0.1.**
+# Handover — after **11b**. **The secrets left the container's environment, and the guard built to make that loud had a silent failure of its own. It does not any more: one read shared by the whole process, a refusal that always reaches stderr, and a check-vs-server differential that is GENERATED rather than listed — 21 of 276 files were a green `check` and a container that would not boot; now none are. Step 11's closing state is kept at §0.0.2, step 10's at §0.0.1.**
 
-**Rewritten 2026-09-10 by step 11's reconciliation**, on top of 10h's. §0.0 and §0.13 are step
-11's; §0.0.1 and §0.1-§0.12 are step 10's, unchanged and still the inheritance for anything that
-touches `lib/`, `app/` or `components/`. **Step 11 touched none of those** — it wrote
-`dashboard.sh`, `Dockerfile`, `.dockerignore`, `systemd/ai-dashboard.service`, `README.md` and
-`packaging.test.ts`, and nothing else.
+**Rewritten 2026-09-11 by 11b's reconciliation**, on top of step 11's. §0.0, §0.13 and the new
+**§0.14** are 11b's and step 11's; §0.0.1 and §0.1–§0.12 are step 10's, unchanged and still the
+inheritance for anything that touches `lib/`, `app/` or `components/`. **11b touched `lib/auth/`
+for the first time since step 7** — the credentials the deployment carries are now parsed by the
+server rather than by Docker — so step 07's harness is part of this item's acceptance and not only
+step 11's.
 
-**Previously rewritten 2026-09-10 by 10h's reconciliation** (the owner's ruling of 2026-09-10 — the grid
-itself is bounded — plus §6.4's `+N more`, §3.4's `model` as a filename, and the same day's two
-follow-on rulings on the hostname and on headroom), on top of 10g's. Steps 1–8 are closed,
-**step 9** is closed, **Q1** and **Q2** are closed, and every loop of **step 10** — 10a, 10b,
-10b-S-G, 10c-1, 10c-2, 10c-3, 10e, 10f, 10g and now **10h** — is closed pending the parent's
-review. 10d is a withdrawn design investigation kept as a record; **its stage 2 ("bound the grid")
-is what 10h built.** This file is the whole inheritance: the next phase's agents get clean context
-and read it as fact.
+**Previously rewritten 2026-09-10 by step 11's reconciliation**, on top of 10h's, and before that
+by 10h's (the owner's ruling of 2026-09-10 — the grid itself is bounded — plus §6.4's `+N more`,
+§3.4's `model` as a filename, and the same day's two follow-on rulings on the hostname and on
+headroom). Steps 1–8 are closed, **step 9** is closed, **Q1** and **Q2** are closed, every loop of
+**step 10** is closed pending the parent's review, **step 11** is closed, and **11b** is closed
+pending this review. 10d is a withdrawn design investigation kept as a record. This file is the
+whole inheritance: the next phase's agents get clean context and read it as fact.
 
 ---
 
-## 0.0 ⚠⚠ READ THIS FIRST — **step 11 is closed pending parent review. The deployment artefacts exist, and the thing that was wrong with them was not any one guard: it was that 49 of 63 one-line edits could disconnect a guard with the whole suite green. That is fixed at the cause, and the count is 0 of 48.**
+## 0.0 ⚠⚠ READ THIS FIRST — **11b. Does the secrets ruling cost a silent failure? It DID, and it does not now.**
+
+**The question this loop has to answer in one line, because it is the question the ruling was made
+to settle:** SPEC §5.1's ruling of 2026-09-11 took `PASSWORD_HASH` and `SESSION_SECRET` out of the
+container's environment and had the server parse `/etc/ai-dashboard.env` itself, so that O21 — a
+quoted secret that works today and kills every session tomorrow — would stop being silent and
+become a **startup refusal**. The adversarial then measured that the guard had introduced a new
+silent failure of its own.
+
+| | |
+|---|---|
+| **Did the ruling cost a silent failure?** | ⚠⚠ **YES, it did — measured, not reasoned.** `next build` bundles the reader into **three** server chunks, each with its own memo. Startup validated the file and the server went ready; an **in-place** append (`>>`, `tee -a`, an editor with `backupcopy=yes`, a config-management tool) then made the gate's and the routes' copies read a refused file; both memoised an **empty** environment; **every login returned 401 with nothing logged**; and the process never exited, so `Restart=always` never fired and `StartLimitBurst` never counted. That is O20's exact symptom reached through the guard built to make O21 loud |
+| **Does it now?** | **NO, and on two independent legs.** (1) **One read, shared**: the source lives in a `Symbol.for`-keyed cell on `globalThis`, so the three bundled copies resolve one source, the file is read once for the process, and a post-boot edit cannot change behaviour at all — §4's own *"a change takes effect on the next restart"*. (2) ⚠⚠ **And the property that is TESTED is "never silently degrades", not "reads once"**: whichever entrance performs the read, a refusal reaches stderr — as *"REFUSING TO START"* from the startup check, or as *"the server is RUNNING and EVERY login … is now denied"* from a request path that got there first, **once**, never a value. Leg 2 does not depend on leg 1 holding |
+| **What else was silent?** | **A green `check` on a file the container refuses to boot on — 21 of 276 generated files.** Four causes, three of them in the finding and the fourth found only by generating: no whole-file `\r` rule, no whole-file BOM rule, the 64 KiB line bound applied **after** the comment/blank skip so a large comment was never measured, and **no UTF-8 validity rule at all**. All four are closed; the corpus is 0 of 276 |
+| **And a green tick on a file `check` could not read** | `$ENV_FILE` as a **directory** — which is what `docker run -v` creates at the host path when the source is missing — printed a bash arithmetic **syntax error**, two unjudged read failures, and then *"✓ every line is a single-line, unquoted KEY=VALUE"*. `env_readable` was `[[ -r ]]`, and that is **true for a readable directory** |
+| **Is it measured?** | `pnpm verify` **exit 0 — 105 files, 3171 tests** (was 104 / 3149); `shellcheck dashboard.sh` clean; **step 11's harness exit 0 — 181 mutations, all bit** (was 165) and **step 07's exit 0 — 158** (was 153), every ⚠ mark reddened in both. ⚠ **The first run of each returned 1**, both on the red-test ledger and both correctly — one on a ⚠ name the ledger could not key, one on a ⚠ test no mutation could redden; §5.1 of the reconciliation. The run log with exit codes is `steps/11-packaging/11b-reconciliation.md` §5 |
+| **What is still open?** | The container half of everything: **no Docker and no systemd on this Mac**. Five things step 12 must run on the box, and five spec sentences still owed — §8 |
+
+### ⚠⚠ The three things a later loop must not undo
+
+1. **`lib/auth/secrets.ts`'s cell is not a style choice.** A module-level `makeSecretSource(…)` is
+   exactly what `next build` duplicates, and duplicating it is the 11b-A3 failure verbatim. If it
+   is ever replaced, the replacement must keep **both** legs, and the one that matters is
+   `onDegraded`.
+2. **`SecretSource` has TWO entrances.** `require()` was deleted, not renamed: it was documented as
+   the startup path and had **zero production callers**, while `refusal()` — the entrance the whole
+   ruling turns on — had no test of its own. Re-adding a third entrance re-creates a certificate
+   for something nothing does.
+3. **The check-vs-server differential is GENERATED.** A new rule in `lib/auth/secret-file.ts` means
+   a new payload or a new position in `packaging.test.ts`'s corpus, never a new row in the 21-entry
+   table. The table is kept only for the sentences that say *why* each difference is the right way
+   round, which a generator cannot write.
+
+### ⚠ What step 12 must verify ON THE BOX, and cannot verify anywhere else
+
+**There is no Docker and no systemd on this Mac**, so every statement below about a container, a
+bind mount or a boot is *reasoned, not run*. Step 11's seven are unchanged and are at §0.0.2; 11b
+adds five, in the order they bite:
+
+1. ⚠⚠ **That the three bundled copies really do share the cell.** The mechanism is measured (two
+   module instances share it and read once); that a real `next build` produces Node-runtime chunks
+   in one realm is the test phase's measurement, not this one's. One command in the container:
+   strace or `lsof` the opens of `/etc/ai-dashboard.env`, or simply confirm that a login still works
+   after an in-place `>> /etc/ai-dashboard.env` of a duplicate key.
+2. ⚠⚠ **`docker run --env-file` against the generated shapes.** First to try: a line of **exactly
+   65536 bytes** (the corrected `bufio` boundary), an **invalid UTF-8 comment**, and a **bare
+   line** — whose answer depends on the invoking shell's own environment (11b-A14), so control it.
+3. ⚠ **That a bind-mounted file really does pin the inode** (11b-A4), and therefore that
+   `set-password` on a running container changes nothing until `restart`. ⚠ **Never
+   `docker exec … cat` that file**: the only safe reading is an inode number or a digest.
+4. **That `docker run -v /etc/ai-dashboard.env:…` creates the host path as a DIRECTORY when it is
+   missing.** The whole of 11b-A5's reachability argument rests on it.
+5. **That uid 10001 reads a `root:10001 0640` bind mount**, and that a refused file really does
+   exit 1 five times and land the unit in `failed`.
+
+---
+
+## 0.0.2 — step 11's closing state, kept in FULL and unchanged by 11b. **49 of 63 one-line edits used to disconnect a guard with the whole suite green; the count is 0 of 48.**
+
+⚠ **Every one of its seven box-side verifications is still owed**, and 11b's five in §0.0 are on
+top of them, not instead of them. The counts in the table below are step 11's own and have been
+superseded — see §0.0 and §1 for 11b's — and so is item **6** of its seven, which asked for the
+running container to be compared with the unit's `docker run` line: that is `11-Q3`, it was ruled
+and built, and 11b took it from six flags to **twelve**. The other six verifications stand.
 
 **Step 11 wrote four files and nothing else**: `dashboard.sh` (2099 lines), `Dockerfile`,
 `.dockerignore`, `systemd/ai-dashboard.service`, plus `README.md` and `packaging.test.ts`. They are
@@ -1199,6 +1262,116 @@ Two instances in one file, in opposite directions.
   docker restarted, the image built, the password written and the unit enabled. A refusal belongs
   where it costs nothing, which is before anything has been done.
 
+## 0.14 ⚠ NEW — what 11b found, and the eight rules to carry out of it
+
+### ⚠⚠ THE RULE — **a hand-written table cannot falsify its own property; generate the corpus.** This loop earned it TWICE, and the second time was inside the document that wrote it down the first time
+
+The test phase found that "stricter than Docker, never looser" had been falsified a third time,
+fixed it by **generating** 986 shapes, and wrote the sentence in so many words:
+
+> *"A hand-written table cannot falsify its own property: it only ever asks about the cases whoever
+> wrote it already thought of, and all 26 of its rows were green while this was true."*
+
+…and then, **in the same document**, closed a newly-found check-vs-server hole with a **21-row
+hand-written list**. Every row varied a secret line or appended one line; the constant first line
+was never perturbed; nothing was ever put in a comment or in a non-secret value — which are exactly
+the two regions `check` did not look at. The adversarial's 45 generated files found **11**
+disagreements; this reconciliation's 276 found **21**, and a **fourth cause nobody had named**
+(invalid UTF-8 anywhere in the file).
+
+**The operational form of the rule:** when two implementations of one format must agree, the
+corpus is *payloads × positions*, and the positions are the ones the weaker implementation does
+not look at — comments, blank lines, keys, non-secret values, line 1, the last line with no
+newline, and the bytes that cannot be written as a string at all. **And state the property as an
+implication, not an equality**, when one side is deliberately stricter: *if `check` is green the
+container starts* is generable; *they agree* is not.
+
+⚠ **A second thing the corpus bought, and it was not in any finding.** Files large enough to be
+interesting exposed a **quadratic** loop in `check_env_file` — a leading-whitespace strip that
+copied the whole line once per blank, about four gigabytes on a 65 535-byte line that row must
+still read. Nobody was looking for it; generating the inputs found it.
+
+### ⚠⚠ A guard that removes one silent failure can introduce another, and the place to look is where its RESULT is held
+
+SPEC §5.1's ruling exists to turn O21 from a silent failure into a startup refusal. It did — and
+then the *result* of that refusal check was held in a module-level memo that `next build`
+**duplicates into three server chunks**, so the guard passed at startup and two other copies of it
+quietly failed afterwards, denying every login with nothing logged and never exiting. The guard was
+correct; what was wrong was the lifetime and the scope of what it produced.
+
+**The rule:** for any check that runs once and whose answer is consulted later, ask *who holds the
+answer, how many of them are there, and what happens to a copy that reaches a different verdict*.
+In a bundled runtime, "a module-level constant" is not "one per process".
+
+### ⚠⚠ "Never silently degrades" is a testable property; "reads once" is an implementation detail
+
+The fix has two legs and only one of them is the property. Sharing one read makes the ordinary case
+correct, but it rests on a bundling fact no test in this repo can measure without a `next build`.
+So the **tested** property is the other one: *if the request path returns a degraded environment, a
+refusal has reached stderr* — by the startup check, or by the request path itself if it got there
+first. That holds in every ordering, including the one where `register()` never ran.
+
+⚠ **And the degraded message is its own sentence.** A process that has already started is
+*denying*, not *refusing to start*; borrowing the startup headline would be 11-A18g's defect for
+the third time in this project — a true sentence about the wrong thing, which teaches whoever reads
+it that the message means nothing.
+
+### ⚠⚠ BOTH harnesses returned 1 on their FIRST run, both on the red-test ledger, and both were right
+
+Worth stating together, because they are the two different ways that ledger earns its place — and
+neither would have been visible from a green `pnpm verify`:
+
+1. **A ⚠ name the ledger could not key** (below). It reported a test inert that the same run's log
+   showed going red.
+2. **A ⚠ test no mutation could redden.** `⚠ a bare line is Docker reading the HOST environment …`
+   asserted a verdict (`ok === false`) that stayed true under the very mutation that disables the
+   rule it is about: with the bare-line branch gone, `line.slice(0, -1)` leaves a key one character
+   short, `SESSION_SECRET` is then *absent*, and the file is still refused — **a true refusal for
+   the wrong reason**, which is 11-A18g and which sends an operator to the wrong line. ⚠ **The
+   lesson is the ledger's own rule and it is worth repeating: the first hypothesis is not "add a
+   mutation", it is "the test asserts less than its name."** Fixed by asserting the *sentence*.
+
+### ⚠ An ESCAPED QUOTE in a ⚠ test's name makes the red-test ledger's key unmatchable
+
+11b's first step-11 harness run returned **1** on a ⚠ test the same run's log showed going red.
+The ledger reads a test's name out of the **source literal** — `test('… the repo\\'s copy', …)` is
+`repo\\'s` there — while Vitest reports the name it runs, `repo's`. The two never match, so no
+mutation can ever be credited with reddening it and the ledger reports it **inert**. ⚠ The failure
+direction is the safe one (it under-credits rather than over-credits), and the fix is to
+double-quote the literal. **Swept 2026-09-11: it was the only escaped quote in a ⚠ name anywhere
+in the suite.** If a ledger ever names a test the log shows going red, this is the first thing to
+check.
+
+### ⚠ `[[ -r ]]` is not "is this a file", and `[[ -d ]]` is the shape Docker creates
+
+`env_readable` was `[[ -r "$ENV_FILE" ]]`, and a readable **directory** passes it. A missing
+bind-mount source is exactly what `docker run -v` turns into a directory, so this was reachable by
+an operator who ran `start` before `configure` — and the row then printed a bash arithmetic
+**syntax error**, two unjudged read failures, and a **green tick** claiming every line was a
+well-formed `KEY=VALUE`. ⚠ The general form: **a test that answers "can I read it" is not a test
+that answers "is it the kind of thing I am about to read"**, and every command substitution whose
+failure is not judged is a row that can tick on nothing.
+
+### ⚠ Two producers of one number, when one of them is a FILE that exists twice
+
+`container_gid` read the **repo's** unit while every drift expectation read the **installed** one.
+The build's own rule — *"the gid is read out of the unit's own `--user`, never retyped"* — was
+satisfied textually and defeated in substance, because there are two units and it read the one
+systemd does not run. ⚠ **The fix is not only to pick the right file; it is to compare the two**,
+which nothing anywhere did — and that same comparison is what carries the two drift rows whose
+labels state an absolute (*"systemd owns restarts"*, *"§2.1: NONE"*) but whose expectations come
+from a file anyone can edit.
+
+### ⚠ An exported entrance with no production caller is a certificate for the wrong thing — wire it or delete it
+
+`SecretSource.require()` was documented as *"the startup entrance"*, was called in exactly four
+places (all of them assertions about itself), and the entrance the ruling actually turns on —
+`refusal()` — had no dedicated test at all. **A future edit that broke `require()` broke four tests
+and no behaviour; one that broke `refusal()` broke the whole feature.** It was deleted rather than
+wired, because wiring it meant changing the startup contract from an unambiguous `process.exit(1)`
+to a throw the build had already weighed and rejected. Step 7 removed the same shape once before
+(`noSessionVerifierYet`).
+
 ## 1. How to run anything
 
 `pnpm` is installed through corepack into a directory that is **not** on this machine's
@@ -1288,12 +1461,29 @@ python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  7
 python3 pipeline/steps/04-collector-cooling/regressions.py                  #  94 mutations + ledger
 python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 130 mutations + ledger
 python3 pipeline/steps/06-telemetry-route/regressions.py                    #  63 mutations + ledger
-python3 pipeline/steps/07-auth-login/regressions.py                         # 128 mutations + ledger
+python3 pipeline/steps/07-auth-login/regressions.py                         # 158 mutations + ledger
 python3 pipeline/steps/08-client-runtime/regressions.py                     # 174 mutations + ledger
 python3 pipeline/steps/09-ui-primitives/regressions.py                      # 153 mutations + ledger
 python3 pipeline/steps/10-panels-assembly/regressions.py                    # 299 mutations + ledger
-python3 pipeline/steps/11-packaging/regressions.py                         # 130 mutations + ledger
+python3 pipeline/steps/11-packaging/regressions.py                         # 181 mutations + ledger
 ```
+
+⚠⚠ **11b CHANGED TWO OF THEM, and both counts above are 11b's own.** Step 11's harness went
+**165 → 181** (+16: the four whole-file rules and the corpus that found them, the directory row,
+`env_readable`'s `-f`, `configure`'s mode repair, `env_set`'s inode warning, the dry run's mode,
+the two-units row, three of the six new drift rows, and both spellings of the printed-key bound);
+step 07's went **153 → 158** (+5, −1: `11b-S12` was **deleted with its subject** when
+`SecretSource.require()` was, and `11b-N1`…`N5`/`N7` are the never-silently-degrade family and the
+shared cell). ⚠ **`lib/auth/secrets.test.ts` is new and belongs to STEP 07's `LEDGER_FILES`** —
+ledger ownership follows the FILE (§5.2 rule 6), and `lib/auth/` is step 7's however much of it
+step 11's ruling caused.
+
+⚠ **Step 11's harness is now materially SLOWER**, and it is worth knowing why before assuming
+something is wrong: `packaging.test.ts` carries a 276-file generated corpus that runs three real
+`check` rows per file in bash, which costs ~15 s of the file's ~25 s, and the harness runs the
+whole file once per mutation. If that ever needs to come down, the cheapest saving named by the
+loop that added it is to collapse `check_env_file`'s four whole-file scans (`wc`, `tr`, two
+`grep`s and the `awk`) into **one** pass — about 2.5 forks per file out of ten.
 
 ⚠ **The tenth is the only harness that reads `dashboard.sh`, `Dockerfile`, `.dockerignore` or
 `systemd/ai-dashboard.service`**, and `packaging.test.ts` is the only test file that reads them —
@@ -1516,7 +1706,7 @@ Everything under `dashboard/`. Nothing outside it has been created or modified e
 | `lib/source-text.ts` | `codeOnly`, `sourceFiles`, `projectRoot` — the guardrails' inputs |
 | `lib/collectors/*.ts` | The six collectors, their seams, parsers and bounds — **finished** |
 | `lib/telemetry/*.ts` | §4's cache, gate, ceiling, assembly, source and handler |
-| `lib/auth/*.ts` | scrypt, base64url, config, cookie, session, revocations, rate-limit, authorize, handler, login-view |
+| `lib/auth/*.ts` | scrypt, base64url, config, cookie, session, revocations, rate-limit, authorize, handler, login-view — ⚠ **and, since 2026-09-11 (`11-Q2`), `secret-file.ts` (the file grammar, the per-value rule, the refusal report, the read-once source), `secrets.ts` (the process's ONE read — the only module in the auth path that touches `node:fs`) and `startup.ts` (the four startup verdicts)**, with `instrumentation.ts` at the repo root as Next's four-line `register()` hook |
 | **`lib/client/*.ts`** | **New in step 8** — see §3 |
 | `app/api/telemetry/route.ts` · `app/api/session/route.ts` | `dynamic` + the handler names, and nothing else |
 | `app/login/page.tsx` · `login-form.tsx` | `/login`, and `LoginForm` (stateful) + `LoginCard` (**pure**) |
@@ -2410,17 +2600,39 @@ top of `lib/guardrails.test.ts` — not by a text assertion.
 
 ---
 
-## 8. Spec gaps and open owner questions — ⚠ **step 11's THREE NEW, added 2026-09-10** (all three are INSTALL-SPEC changes); 10h's six; 10g's three ruled-and-assigned are now BUILT and its four are still open; 10f's six, five RULED AND BUILT; 10e's thirteen, five RULED AND BUILT
+## 8. Spec gaps and open owner questions — ⚠⚠ **step 11's three (`11-Q1`…`11-Q3`) were RULED on 2026-09-11 and are BUILT by 11b; 11b raises FIVE of its own, all of them wording**; 10h's six; 10g's four still open; 10f's one; 10e's eight
 
 ⚠ This table has now been **stale five times** (92 % before step 5, 100 % before step 6, again
 before step 7, again in step 8, and again in Q2). **Every time, in the safe direction: entries
 carried as open that the spec had already answered.** Re-check every row against the spec text
 before trusting it. Invariant 7 stands: if the spec is silent, **report it — do not assume**.
 
-**Open, with owners — THIRTY rows: step 11's three (`11-Q1`…`11-Q3`, below), 10h's six, 10g's four, 10f's one still-open (`10f-Q6`;
+**Open, with owners — THIRTY-TWO rows: ⚠ 11b's five (`11b-Q1`…`11b-Q5`, below — step 11's three are
+RULED AND BUILT and their rows are kept only for the reasoning), 10h's six, 10g's four, 10f's one still-open (`10f-Q6`;
 `10f-Q1`…`Q5` were ruled by the owner and BUILT by 10g), 10e's eight still-open ones (`10e-Q4`…`Q11`
 — `10e-Q1`/`Q3`/`Q12`/`Q13` were built by 10f and `10e-Q2` by 10g), Q2's two, 10a's four, 10b's
 three still-open ones, and 10b-S-G's four. S11/G5's rendering residue is CLOSED.**
+
+### ⚠⚠ CLOSED BY THE OWNER 2026-09-11 AND BUILT BY 11b — step 11's three
+
+`11-Q1` (`Restart=always`), `11-Q2` (the secrets leave the environment) and `11-Q3` (container-vs-unit
+drift) were all ruled and are all built. The rows below are **kept for the reasoning that justified
+them**, not as open items. What 11b then found is that the `11-Q2` build had a silent failure of its
+own and that `11-Q3`'s drift comparison covered six flags of about fourteen — both closed; §0.0.
+
+### ⚠ NEW — 11b's five, 2026-09-11. **All five are WORDING, and none of them changes behaviour.**
+
+Raised by 11b's reconcile phase; full statements in `steps/11-packaging/11b-reconciliation.md` §7.
+⚠ **`SPEC.md` §5 and `INSTALL-SPEC.md` §11.3 already carry the parent's file-mode correction**, so
+step 11's `0640` silence is closed and is not repeated here.
+
+| # | Gap | What stands today | Owner |
+|---|---|---|---|
+| **11b-Q1** ⚠ | **`INSTALL-SPEC.md` §6, §7's table and §9's row still say `root:root` 0600**, and §7's sentence — *"read by the **client**, as root, on the host — which is why 0600 root:root is correct and **the container never sees the file**"* — is now **exactly inverted**: the container is handed the file and nothing else | §11.3 corrects §6 and §11.2 *by reference*, so the appendix and the body of the same document disagree. `dashboard.sh` and `check` both implement `root:<gid> 0640` and are measured doing it | **owner** |
+| **11b-Q2** ⚠⚠ | **§5.1 says the server reads the secrets *"at startup"*, and what the deployment actually rests on is stronger: ONE read for the PROCESS, shared by the bundled copies, with a refusal that always reaches stderr.** The weaker sentence is satisfied by the implementation that had the silent failure | One read shared through a `Symbol.for` cell, plus `onDegraded`. Both are measured; neither is specified. One sentence in §5.1 is what stops the next loop reintroducing a per-bundle memo by accident | **owner** |
+| **11b-Q3** ⚠ | **Neither spec says what a running container does when the credentials file is REWRITTEN.** A bind mount pins the **inode**, so `dashboard.sh`'s writes — which all end in a rename, correctly, for atomicity — can never reach a running container, and `check` reads the new file while the container holds the old | `env_set`, `configure` and `set-password` all warn when a container is running, and the warning names the inode. Nothing *verifies* it: a row comparing the container's open inode with the host's needs Docker | **owner**, and step 12 for the verification |
+| **11b-Q4** | **§5's *"any error raised while deciding … is 401, never 500"* is unchanged and is now also "and never silent."** A request path that is the first to read a refused file writes the reasons to stderr once | Recorded so the report is not read as contradicting §5's *"nothing is logged about authentication"* — it logs about the **file**, names keys and reasons, never a value, never a request | **owner**, one sentence |
+| **11b-Q5** ⚠ | **A credentials read that BLOCKS has no timeout.** `statSync` now keeps `readFileSync` off a FIFO, a device node and a directory, but a hung NFS or fuse mount blocks in `stat` too — and `register()` then never returns, so the unit sits `active (running)` for ever, `Restart=always` never fires and `StartLimitBurst` never counts | No timeout, deliberately: adding one means deciding what a *timed-out* credentials read should do, and "start anyway with no credentials" and "exit 1" are both §5 decisions | **owner** |
 
 ### ⚠ NEW — step 11's three, 2026-09-10. **Questions, not proposals** — each names what the code does today.
 
@@ -2836,6 +3048,20 @@ dashboard-backend    3f06e98    == main. Finished; carries ZERO UI; nothing more
 dashboard-frontend   5769522    [origin/dashboard-frontend]   PUSHED. ⚠ THE WORKING BRANCH.
                                 10f is the last commit; 10e is 8ad8b9c
 ```
+
+⚠⚠ **SUPERSEDED — 11b leaves the tree dirty on purpose, on `dc4aad1`** (2026-09-11; the block
+below is 10g's and is kept for the branch facts, which still hold). Modified by loop 11b's four
+phases: `dashboard.sh`, `systemd/ai-dashboard.service`, `packaging.test.ts`, `proxy.ts`,
+`proxy.test.ts`, `lib/auth/{authorize,handler,config}.ts` and their tests,
+`lib/telemetry/source.ts` (one comment), `README.md`,
+`pipeline/steps/{07-auth-login,11-packaging}/regressions.py`, this file, `WORK-ITEMS.md`, plus the
+parent's `SPEC.md` / `INSTALL-SPEC.md` file-mode correction. **Untracked:** `instrumentation.ts`,
+`lib/auth/{secret-file,secrets,startup}.ts` and their three `.test.ts`,
+`pipeline/steps/11-packaging/11b-{build,test,adversarial,reconciliation}.md`, and
+`pipeline/handoffs/11b-*.md`. ⚠ **`Dockerfile` and `.dockerignore` are NOT in it** — 11b touched
+neither, and if `git status` shows one, it is a stranded harness mutation. No `.env`;
+`next-env.d.ts` byte-identical (`8195d2c60ce847a459ae9d308d6a5724`). **A phase agent stages
+nothing.**
 
 ⚠ **10g leaves the tree dirty on purpose, on `5769522`.** Modified by the 10g loop:
 `components/{alarm-banner,sparkline,stacked-time-series-chart}.{tsx,module.css,test.tsx}`,
