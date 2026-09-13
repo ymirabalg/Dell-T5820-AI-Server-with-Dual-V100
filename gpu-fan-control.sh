@@ -496,14 +496,43 @@ cmd_run() {
   local -a TIER_STATE=() TIER_UPS=() TIER_REL=()
   for i in "${!TIER_CH[@]}"; do TIER_STATE[i]=0; TIER_UPS[i]=0; TIER_REL[i]=0; done
 
+  # ⚠ Two traps, not one, and the difference is what systemd records.
+  #
+  # This used to be a single `trap cleanup EXIT INT TERM`, and `cleanup` began with
+  # `local rc=$?`. On SIGTERM — which is how systemd stops this service, every single
+  # time — `$?` is the status of the interrupted `wait`, i.e. 128+15 = **143**. So the
+  # script parked the channels correctly and then exited 143, and the journal read:
+  #
+  #     gpu-fan-control.service: Main process exited, code=exited, status=143/n/a
+  #     gpu-fan-control.service: Failed with result 'exit-code'.
+  #
+  # on every clean shutdown. The parking worked; the record said it failed. That makes a
+  # normal stop indistinguishable from a crash in `journalctl` and in `systemctl status`,
+  # which is exactly the blindness this box has been bitten by before (`is-active` reading
+  # green on a firewall that was not enforcing). **A requested stop is a SUCCESSFUL stop.**
+  #
+  # So: `on_signal` handles INT/TERM and exits 0, while `cleanup` stays on EXIT and
+  # preserves a real failure's status. Both park the channels first — that is not optional
+  # on a box whose GPUs are passively cooled. Neither reads a `local`: `PWM_CHANNELS` and
+  # `STOP_STATE` are globals, because an EXIT handler runs after the frame is gone and
+  # `set -u` would kill it (the bug this file already fixed once, in `probe_cleanup`).
+  park_and_log() {
+    log "stopping — parking channels [$PWM_CHANNELS] at STOP_STATE=$STOP_STATE"
+    apply_stop_state
+  }
   cleanup() {
     local rc=$?
     trap - EXIT INT TERM
-    log "stopping — parking channels [$PWM_CHANNELS] at STOP_STATE=$STOP_STATE"
-    apply_stop_state
+    park_and_log
     exit "$rc"
   }
-  trap cleanup EXIT INT TERM
+  on_signal() {
+    trap - EXIT INT TERM
+    park_and_log
+    exit 0
+  }
+  trap cleanup EXIT
+  trap on_signal INT TERM
   trap 'RELOAD=1' HUP
   RELOAD=0
 
