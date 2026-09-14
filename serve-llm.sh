@@ -56,11 +56,24 @@ SLOTS="${SLOTS:-1}"
 # card, confirm, then the other. Head dims matter here — 256 is well-supported, Gemma 4's
 # 512 global-layer dim is the one to actually test rather than assume.
 FA="${FA:-auto}"
-# Reuse KV across a prompt whose MIDDLE changed (an agent dropping old turns, a system
-# prompt carrying a timestamp) by shifting the cache instead of re-prefilling from the
-# divergence point. Plain prefix caching is already on by default and measured working;
-# this is the increment. 0 = off, which was the shipped default.
-CACHE_REUSE="${CACHE_REUSE:-256}"
+# ⚠ `--cache-reuse` WAS HERE AND IS GONE — removed 2026-09-14, because it never worked on
+# this model and never could. It reuses KV across a prompt whose MIDDLE changed by SHIFTING
+# the cache, and shifting requires a memory that can be shifted. Qwen3.6-27B is hybrid
+# (`full_attention_interval = 4`: 16 of 64 layers keep a KV cache, the other 48 hold a
+# fixed-size recurrent state), so llama.cpp refuses, and every single start logged:
+#
+#     srv load_model: cache_reuse is not supported by this context, it will be disabled
+#
+# It was added 2026-09-06 as a measured improvement and was inert from the first boot; the
+# warning sat in the journal for eight days because nobody read the load lines. That is
+# architectural, not configuration — no context size and no flag value changes it.
+#
+# **Plain prefix caching is untouched and is the one that matters**: a request sharing a
+# prefix with the previous one on that slot skips prefill entirely (measured: a shared
+# 21k-token prefix re-prefilled 39 tokens). It is on by default and needs no flag.
+#
+# If a future model is NOT hybrid, re-adding this is one line — but check the load log
+# says nothing about cache_reuse before believing it took.
 # Host-RAM prompt cache, in MiB: conversation states evicted from a slot get restored
 # instead of re-prefilled. A full 128K re-prefill costs ~140 s, so this is cheap
 # insurance. 12288 x 2 instances = 24 GiB of the box's 61 GiB, leaving plenty.
@@ -252,7 +265,6 @@ ExecStart=${BIN} \\
   --parallel ${SLOTS} \\
   --cont-batching \\
   --flash-attn \${FA} \\
-  --cache-reuse ${CACHE_REUSE} \\
   --cache-ram ${CACHE_RAM} \\
   --spec-type \${SPEC} \\
   --spec-draft-n-max ${SPEC_N_MAX} \\
@@ -404,7 +416,7 @@ cmd_status() {
     printf '         %s\n' "${m:-—}"
   done
   echo
-  info "split=none  slots=${SLOTS}  cache-reuse=${CACHE_REUSE}  cache-ram=${CACHE_RAM}MiB  metrics=on"
+  info "split=none  slots=${SLOTS}  cache-ram=${CACHE_RAM}MiB  metrics=on"
   local j; for j in $(instances); do
     printf '         GPU %s spec=%s\n' "$j" "$(env_get "$j" SPEC || echo '?')"
   done
