@@ -225,12 +225,19 @@ thing. Two rules that fall out of that:
   and restarts on the previous model rather than leaving the card with no server while
   systemd burns through its start limit.
 
-Live configuration (2026-09-06):
+Live configuration (2026-09-14):
 
 | instance | endpoint | GPU | model | ctx | VRAM |
 |---|---|---|---|---|---|
-| `llama-server@0` | `http://192.168.4.71:8080/v1` | 0 | Qwen3.6-27B Q4_K_M (`qwen3.6-27b`) | 131072 | 26452 / 32768 MiB |
-| `llama-server@1` | `http://192.168.4.71:8081/v1` | 1 | Qwen3.6-27B Q4_K_M (`qwen3.6-27b`) | 131072 | 26650 / 32768 MiB |
+| `llama-server@0` | `http://192.168.4.71:8080/v1` | 0 | Qwen3.6-27B Q4_K_M (`qwen3.6-27b`) | **163840** | 28532 / 32768 MiB |
+| `llama-server@1` | `http://192.168.4.71:8081/v1` | 1 | Qwen3.6-27B Q4_K_M (`qwen3.6-27b`) | **163840** | 28532 / 32768 MiB |
+
+**Raised 128K -> 160K on 2026-09-14**, both instances, via `set-model` (which rolls back on a
+failed start). Predicted 28425 MiB, measured 28532 — 0.4 % out. **4236 MiB spare per card.**
+⚠ **It LOADED; that is not the same as it WORKING.** The spare is what compute buffers consume
+during a real prefill, and both servers had processed **zero** tokens when this was measured, so
+nothing has exercised the new ceiling. If it fails it will fail on the first deep prompt, not at
+startup.
 
 Both `--split-mode none`, `--parallel 1`, `FA=auto`, `SPEC=none`. Verified end to end
 from another LAN host: authenticated chat completions work on both, inference without the
@@ -304,9 +311,29 @@ a key" without that qualification.
   adds cross-card traffic. (It *does* help when one instance spans both cards.)
 - **Q4_K_M, not Q6_K/Q8_0.** Decode is bandwidth-bound, so Q6_K costs ~26 % generation
   for ~1-2 points of benchmark. Q8_0 (~31 GiB) does not fit one card alongside KV.
-- **128K context.** Per card: 18211 MiB weights + ~370 MiB fixed buffers + **~65 KiB per
-  token** of KV (GQA, few KV heads). 131072 -> 26452 MiB with ~6.3 GiB spare; **262144
-  is a confirmed OOM.**
+- **160K context** (128K until 2026-09-14). Per card: 18211 MiB weights + ~370 MiB fixed
+  buffers + **~61.5 KiB per token** of KV. 131072 -> 26452 MiB; **163840 -> 28532 MiB with
+  4236 MiB spare**; **262144 at f16 is a confirmed OOM** and the arithmetic says why — it needs
+  ~15.7 GiB of KV against ~14.2 GiB of room.
+  ⚠ **The KV figure is small because the model is HYBRID, and that was not understood before.**
+  `qwen35.full_attention_interval = 4`, so only **16 of 64 layers** keep a growing KV cache; the
+  other 48 hold a fixed-size recurrent state (`ssm.conv_kernel 4`, `ssm.state_size 128`,
+  `ssm.inner_size 6144`) that does **not** scale with context. 16 x 4 KV heads x 512 x 2 B =
+  64 KiB/token, which is the ~65 recorded here by measurement long before the cause was known.
+  **Its trained context is `qwen35.context_length = 262144`** — the model is not the limit, VRAM is.
+  Reaching the full 256K needs `-ctk q8_0 -ctv q8_0` (halves KV, ~26.9 GiB total), which needs
+  flash attention genuinely active on these Volta cards, a `serve-llm.sh` change to plumb the
+  flags, and a quality measurement. None of the three is done.
+- ⚠ **`--cache-reuse 256` IS DEAD ON THIS MODEL and always was.** Every start logs
+  `cache_reuse is not supported by this context, it will be disabled`. It needs a memory that can
+  be *shifted*, and a hybrid model's recurrent state cannot be — so it is architectural, not
+  configuration, and no context size changes it. **Plain prefix reuse is unaffected** and is the
+  one that matters (a shared 21k prefix re-prefilled 39 tokens). The flag should be removed rather
+  than left reading as active.
+- ⚠ **`--cache-ram 12288` sets a ceiling that context growth walks into.** One saved slot state is
+  ~7.9 GiB at 128K, **~9.8 GiB at 160K**, ~11.8 at 192K, ~15.7 at 256K. At 12 GiB the host cache
+  holds exactly one state today; past ~192K it holds **none**, silently. Raise it with the context
+  — the box has 61 GiB against 24 reserved.
 - **`--api-key-file`, never `--api-key`.** The latter is visible in `ps` to every user.
   Key at `/etc/llama-server.apikey`, `root:yorman` 0640 so the unprivileged service can
   read it and no other account can.
