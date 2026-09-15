@@ -4,10 +4,56 @@
 Nothing committed. `SPEC.md`, `MOCK.html` and `INSTALL-SPEC.md` untouched (the parent's edits to the
 first and third are the brief this loop built to). Nothing deployed to the box.
 
-⚠ **Two things in this file are findings rather than work**, and they are the ones to read first if
-you read nothing else: **§6** (the D-Bus diagnosis, measured on the live bus) and **§7.1** (the
-browser measurement harness has been unrunnable since 11b, and that is why §6.1's numbers below are
-derived from a standalone paint measurement rather than from `measure-breakpoints.mjs`).
+⚠ **Three things in this file are findings rather than work**, and they are the ones to read first
+if you read nothing else: **§0** (another session committed this tree in the middle of a mutation
+harness run, and `HEAD` now carries a deliberately broken file), **§6** (the D-Bus diagnosis,
+measured on the live bus) and **§7.1** (the browser measurement harness has been unrunnable since
+11b, and that is why §3.4's numbers are a standalone paint measurement rather than
+`measure-breakpoints.mjs`'s).
+
+---
+
+## 0. ⚠⚠ READ FIRST — ANOTHER SESSION COMMITTED THIS TREE MID-HARNESS, AND HEAD NOW CARRIES A DELIBERATELY BROKEN FILE
+
+**This loop committed nothing.** While it was running, a *different* session working in the same
+repository made two commits on `dashboard-frontend`, both about serving modes and Gemma 4 31B:
+
+```
+ebc60c6  2026-09-14 21:46:57  SERVING-MODES: Gemma 4 31B downloaded and measured …
+5481665  2026-09-14 21:02:59  Specification: two serving modes, split across both cards or one model per card
+e1b1ff1  2026-09-14 17:27:41  serve-llm: remove --cache-reuse …          ← the commit this handoff started from
+```
+
+`ebc60c6` swept **every file of this loop** into itself — `collector-visibility.test.tsx`,
+`header-status.ts`, `dashboard.sh`, both sibling scripts, both harnesses, and this document — which
+is why `git status` is nearly clean and why the tree is no longer in the state the handoff
+described.
+
+⚠⚠ **And it was taken at 21:46:57, while the step-10 mutation harness was running (21:44–21:48).**
+A mutation harness writes a deliberately wrong file, runs vitest, and restores it. The commit landed
+inside one of those windows, so **`HEAD` carries `components/panels/gpu-panel.tsx` with mutation
+`10e-GP8` applied** — *"the power Figure loses its `cap 250.0 W` caption, so the hero row states the
+draw with nothing to read it against"*:
+
+```diff
+-            <Figure value={powerParts.value} unit={powerParts.unit} caption={`cap ${formatWatts(gpu?.powerCapW ?? null)}`} />
++            <Figure value={powerParts.value} unit={powerParts.unit} />
+```
+
+**The WORKING TREE is correct** — the harness restored the file when it finished, `git diff` is
+exactly that one line, and every measurement in §7.3 was taken on the restored tree. Only `HEAD` is
+wrong. Two things follow, and the parent owns both because the fix is a commit:
+
+1. **`git diff` is the whole repair.** The correct line is already on disk; committing the working
+   tree restores it. Nothing else in the tree differs from `HEAD` — checked file by file.
+2. **It is loud, not silent.** `10e-GP8` is a mutation *because* `gpu-panel.test.tsx` goes red on
+   it, so `pnpm verify` on `HEAD`-as-committed fails. That is the one piece of luck here.
+
+⚠ **The general lesson, and it is not about this loop:** a mutation harness makes the working tree
+transiently WRONG on purpose, and any `git add -A` by anything else during that window commits a
+sabotage. Two sessions in one checkout is the hazard; the harnesses are unusually dangerous company
+for a `git commit -a`. A later loop that wants this closed mechanically could have each harness take
+an exclusive lock file that a commit hook refuses to run beside — recorded as `12a-Q8`.
 
 ---
 
@@ -420,7 +466,7 @@ looking for: **43.0 px at 12a's ceiling, against a 500.6 px threshold and 257.3 
 | `shellcheck dashboard.sh` | **clean** |
 | `shellcheck ../gpu-fan-control.sh` | **clean** |
 | `shellcheck ../serve-llm.sh` | 6 SC2015 *info* notices — **6 before this change and 6 after** |
-| `pipeline/steps/10-panels-assembly/regressions.py` | **exit 0 — 319 mutations, all bit; every ⚠ mark reddened** |
+| `pipeline/steps/10-panels-assembly/regressions.py` | **exit 0 — 312 mutations, all bit; 322 ⚠-marked tests checked, every one reddened** |
 | `pipeline/steps/11-packaging/regressions.py` | **exit 0 — 189 mutations, all bit; 82 ⚠-marked tests checked, every one reddened** |
 | `measure-breakpoints.mjs` | ⚠ **could not run — §7.1**, and not because of this change |
 | `measure-arrangements.mjs` / `check-density.mjs` | ⚠ **could not run — §7.1**, same cause |
@@ -529,6 +575,8 @@ Recorded rather than chosen (invariant 7).
 | **12a-Q5** ⚠ | **A `dbus` entry cannot say whether the bus REFUSED the connection or DROPPED us mid-handshake.** Two code paths in `collectUnitStates` write the identical `` `${socket}: ${reason}` `` | Unchanged — the handoff forbids choosing a fix before the cause is known, and §3.7 makes the text the collector's own. A second, distinguishable message is one line | **owner**, then whoever owns §3.7 |
 | **12a-Q6** ⚠ | **An abandoned `connect` leaks its socket** (§6.6). Narrow — it needs `connect` to take ≈2 s — but it is the only mechanism here that could reach a per-user connection limit | Unfixed. The fix means deciding what `deadline` owes an abandoned operation that RESOLVED, which is a `lib/collectors/deadline.ts` contract change, not a one-liner | **owner**, then whoever owns O17 |
 | **12a-Q7** | **The D-Bus reset's own cause is still open**, and the one experiment that would close it is a `daemon-reload` with a client-side trace — the action that revokes the live container's GPU access | §6 narrows it to *a drop at connection setup, silent in the journal*. Needs a maintenance window | **owner** |
+
+| **12a-Q8** ⚠ | **Two sessions in one checkout, and a mutation harness makes the tree transiently wrong ON PURPOSE.** §0: a commit from another session landed inside a harness run and captured a sabotaged file | Nothing prevents it. A lock file each harness holds, plus a pre-commit hook that refuses beside it, would close it mechanically | **owner** |
 
 Also unchanged and worth re-stating, because 12a's sweep measures around it: **`S-G-Q1`** — a panel
 renders the **last** message per source, not every entry — so *"every takeover branch renders its

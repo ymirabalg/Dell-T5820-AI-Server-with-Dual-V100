@@ -246,7 +246,7 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
             </div>
             {/* The mock's `.gpuTop__pw` — the SAME `powerW` reading the meter below draws
                 against the cap; this is its 0px-extra form, not a second reading. */}
-            <Figure value={powerParts.value} unit={powerParts.unit} />
+            <Figure value={powerParts.value} unit={powerParts.unit} caption={`cap ${formatWatts(gpu?.powerCapW ?? null)}`} />
           </div>
           <Meter
             label="power"
