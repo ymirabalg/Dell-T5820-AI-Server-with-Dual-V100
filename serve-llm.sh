@@ -232,6 +232,16 @@ restart_ai_dashboard() {
     info "$unit is ${state:-unknown}, not active — nothing to restart"
     return 0
   fi
+  # ⚠ 12a/TEST — `--dry-run` must not restart a LIVE dashboard. `cmd_install` returns early
+  # under DRY, but `cmd_uninstall` does not: every other line there goes through `run` (which
+  # only prints when DRY=1) and this one did not, so `./serve-llm.sh uninstall --dry-run` on
+  # this box would have taken the dashboard down and back up for real. `dashboard.sh`'s own
+  # `restart_after_daemon_reload` has always had this branch; the port dropped it.
+  if (( DRY )); then
+    info "would run: systemctl restart $unit  (a daemon-reload revokes its container's GPU"
+    info "  device access — §11.4)"
+    return 0
+  fi
   if systemctl restart "$unit" 2>/dev/null; then
     ok "restarted $unit — a daemon-reload revokes its container's GPU device access (§11.4)"
   else

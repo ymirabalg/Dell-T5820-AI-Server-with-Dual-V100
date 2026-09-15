@@ -178,8 +178,13 @@ describe('⚠⚠ 12a — every collector that cannot read says so, across every 
     expect(CASES).toHaveLength(126);
   });
 
+  // ⚠ 12a/TEST — the name carries the exclusion, because the body does. For `hostname` and
+  // `proc-uptime` this test asserts the NEGATIVE (see `NO_MESSAGE_SURFACE`), so a name that
+  // promised only "reaches the page" described 112 of its 126 cases and misdescribed the other
+  // 14 — and a FAIL line naming one of those two would have sent the next reader looking for
+  // the opposite defect to the one that broke.
   test.each(CASES)(
-    '⚠ the collector message reaches the page — shape %s, source %s',
+    '⚠ the collector message reaches the page, or the source is one of the two with no surface — shape %s, source %s',
     (shape, source) => {
       const html = pageFor(shape, source);
       if (NO_MESSAGE_SURFACE.includes(source)) {
@@ -203,6 +208,36 @@ describe('⚠⚠ 12a — every collector that cannot read says so, across every 
       expect(html).toContain('1 source unread');
     },
   );
+
+  test('⚠ a collector that RECOVERED stops being counted — the clause follows the LATEST snapshot, not the ring', () => {
+    // ⚠ 12a/TEST — the other side of the ruling, and nothing in this loop measured it: every
+    // fixture here holds a ring of ONE sample, in which "the latest snapshot" and "the ring"
+    // are the same object, so a shell that counted the OLDEST sample's errors would pass all
+    // 126 cases above. A header that keeps accusing a collector after it recovers is the same
+    // defect as one that never accused it — an operator learns the clause means nothing.
+    const ringOf = (...snapshots: readonly TelemetrySnapshot[]) =>
+      snapshots.reduce(
+        (ring, snapshot, i) => appendSample(ring, { snapshot, tsMs: BASE_MS + i * 5_000 }),
+        EMPTY_RING,
+      );
+    const at = (i: number, errors: TelemetrySnapshot['errors']): TelemetrySnapshot => ({
+      ...everythingZero,
+      ts: isoTimestamp(new Date(BASE_MS + i * 5_000).toISOString()),
+      ...SHAPES.healthy,
+      errors,
+    });
+    const failed = [{ source: 'nvidia-smi' as const, message: 'nvidia-smi: exited 255' }];
+
+    handle = { state: { ...stateFor('healthy', 'nvidia-smi'), ring: ringOf(at(0, failed), at(1, [])) }, runtime: {} as TelemetryRuntime };
+    const recovered = renderToStaticMarkup(<DashboardShell />);
+    expect(recovered).toContain('all healthy');
+    expect(recovered).not.toContain('unread');
+
+    handle = { state: { ...stateFor('healthy', 'nvidia-smi'), ring: ringOf(at(0, []), at(1, failed)) }, runtime: {} as TelemetryRuntime };
+    const justFailed = renderToStaticMarkup(<DashboardShell />);
+    expect(justFailed).toContain('1 source unread');
+    expect(justFailed).not.toContain('all healthy');
+  });
 
   test('⚠ and the healthy page still says all healthy, or the property above is vacuous', () => {
     // The other side of every boundary in this file. Without it, "never says healthy" is

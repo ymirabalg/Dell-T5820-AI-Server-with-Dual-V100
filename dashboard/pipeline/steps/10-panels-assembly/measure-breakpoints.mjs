@@ -73,6 +73,11 @@ import path from 'node:path';
 
 import { chromium } from 'playwright-core';
 
+// ⚠⚠ 12a/RECONCILE (`12a-A3`) — the spawned server's own stdout/stderr, drained and printed on
+// a startup failure. One module, imported by BOTH harnesses, rather than two copies of a
+// diagnosis (`12a-A4`'s lesson, applied to the fix for `12a-A3`).
+import { attachServerLog, waitWithServerOutput } from './server-log.mjs';
+
 const ROOT = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
 const PORT = 39173; // an unlikely-to-collide, fixed port for this one-shot script
 const CHROME_CANDIDATES = [
@@ -84,6 +89,11 @@ const CHROME_CANDIDATES = [
 // random base64url slice alone occasionally lacks a digit (measured: it happened on the
 // second real run of this script). `measure1-` guarantees both unconditionally.
 const PASSWORD = `measure1-${randomBytes(9).toString('base64url')}`;
+/** ⚠ 12a/TEST — the harness-only `/etc/ai-dashboard.env` shim; see the `NODE_OPTIONS` below. */
+const SECRET_FILE_SHIM = path.resolve(
+  fileURLToPath(new URL('.', import.meta.url)),
+  'secret-file-shim.cjs',
+);
 
 function findChrome() {
   for (const candidate of CHROME_CANDIDATES) {
@@ -624,6 +634,98 @@ const fixtureBoxDegraded = () => {
 };
 
 /**
+ * ⚠⚠ 12a/TEST — MEASUREMENT 16'S FIXTURE: the production failure of 2026-09-14, graded.
+ *
+ * `gpus: []` — an enumeration that SUCCEEDED and contains no cards — plus the `nvidia-smi`
+ * entry that says why. This is §6.5's *retired* case, the branch 12a gave a bounded notes well
+ * to, and **it is the first page this project has ever graded that renders a takeover at all**:
+ * `12a-build.md` §7.2 states the gap in so many words — every graded fixture here enumerates
+ * cards 0 and 1, *"which is also why `10e-Q4` was never caught by a browser measurement in the
+ * first place"*. A branch nobody measures is where the last production failure lived for a
+ * month, so it is measured now rather than argued about.
+ *
+ * ⚠ Built on the degraded box rather than the healthy one, so the rest of the page is the
+ * shape measurement 10 grades and the only variable is the GPU row.
+ */
+const NVIDIA_MESSAGE = 'nvidia-smi: exited 255';
+
+/** The two takeover sentences `gpu-panel.tsx` draws — the `absent` branch and the `null` one.
+ *  Named here so a record says WHICH takeover it graded, and so the two cannot be confused. */
+const ABSENT_PHRASE = 'card not enumerated';
+const NULL_PHRASE = 'no GPUs enumerated';
+
+/** A collector message of the length the box really produces — the DKMS entry is 150
+ *  characters and `PanelNotes`' own doc costs it 65.6 px in a 285 px column. */
+const NVIDIA_LONG_MESSAGE =
+  'nvidia-smi: Failed to initialize NVML: Unknown Error — the driver answered on the host but ' +
+  'not inside the container, which is what a systemd daemon-reload leaves behind (cgroup v2)';
+
+const fixtureRetired = () => {
+  const degraded = fixtureBoxDegraded();
+  return {
+    ...degraded,
+    gpus: [],
+    errors: [...degraded.errors, { source: 'nvidia-smi', message: NVIDIA_MESSAGE }],
+  };
+};
+
+/**
+ * ⚠⚠ 12a/RECONCILE (`12a-A7`, gap 2) — **MEASUREMENT 18'S FIXTURE: `gpus: null`.**
+ *
+ * The OTHER takeover — *"the collection could not be read"*, which §9 says retires nothing —
+ * and the one branch of the three that has always rendered its `errors[]`. It is also `roomy`,
+ * and like the other two it had never been rendered in a browser by any fixture: every graded
+ * page in both harnesses enumerates cards 0 and 1 (`12a-build.md` §7.2). Grading it costs one
+ * page load and closes the last unmeasured branch of `GpuPanel`.
+ */
+const fixtureNoGpus = () => {
+  const degraded = fixtureBoxDegraded();
+  return {
+    ...degraded,
+    gpus: null,
+    errors: [...degraded.errors, { source: 'nvidia-smi', message: NVIDIA_MESSAGE }],
+  };
+};
+
+/**
+ * ⚠⚠ 12a/RECONCILE (`12a-A7`, gap 1) — **MEASUREMENT 17'S FIXTURE: one card enumerated and one
+ * not**, which is the configuration the `roomy` bound's own justification rests on and which
+ * nothing had ever rendered in a browser.
+ *
+ * `gpu-panel.tsx:190-192` argues the bound in prose: *"A card absent from a `gpus[]` that WAS
+ * read is the retired case, so at least one card is normally still enumerated and sets the row
+ * on its own."* Measurement 16 grades `gpus: []` — where **no** healthy card sets row 1 and
+ * both cards are 84 px takeovers, i.e. the easy half. This is the other half: gpu0 draws its
+ * full 164-176 px body **and sets row 1**, while gpu1 is a takeover whose bounded well has to
+ * live inside that row without growing it. `10e-Q4` lived for a month in exactly this shape of
+ * gap — the branch that is argued about and not measured.
+ *
+ * ⚠ `gpus: [card 0]` is a SUCCESSFUL enumeration missing card 1, not a failed one: `gpus: null`
+ * is the third branch and retires nothing (§9). The `nvidia-smi` entry rides along because the
+ * production shape carries it, and because the reason has to be legible on the takeover that
+ * shares a row with a live card — not only on a page where every card is a takeover.
+ */
+const fixtureRetiredMixed = () => {
+  const degraded = fixtureBoxDegraded();
+  return {
+    ...degraded,
+    gpus: [fabricatedCard(0)],
+    // ⚠ TWO entries, and one of them LONG (`12a-A7`, gaps 3 and 4). `NVIDIA_MESSAGE` is 22
+    // characters, so measurement 16 leaves the wrapping term §6.1's arithmetic actually cares
+    // about unexercised — `PanelNotes`' own doc measures a 152-character message at 65.6 px in
+    // a 285 px column. A `roomy` well is 46 px, three lines, with a `+N more` marker for the
+    // rest, so this page is where the bound either absorbs a real collector message or is
+    // found not to: two entries from one source, the second one long, on the card that shares
+    // its row with a live one.
+    errors: [
+      ...degraded.errors,
+      { source: 'nvidia-smi', message: NVIDIA_MESSAGE },
+      { source: 'nvidia-smi', message: NVIDIA_LONG_MESSAGE },
+    ],
+  };
+};
+
+/**
  * ⚠ 10g/Q3 — MEASUREMENT 11'S FIXTURE: every source explained AND every reading present.
  *
  * This is NOT the all-collectors-failed page measurements 9 and 10 grade — a collector that
@@ -896,7 +998,13 @@ async function installGpuFabrication(page) {
               ? { ...fixtureAlarms(fabrication.alarms), ts: now }
               : fabrication.mode === 'hostile'
                 ? { ...fixtureHostile(), ts: now }
-                : { ...body, gpus: [fabricatedCard(0), fabricatedCard(1)] };
+                : fabrication.mode === 'retired'
+                  ? { ...fixtureRetired(), ts: now }
+                  : fabrication.mode === 'retired-mixed'
+                    ? { ...fixtureRetiredMixed(), ts: now }
+                    : fabrication.mode === 'no-gpus'
+                      ? { ...fixtureNoGpus(), ts: now }
+                      : { ...body, gpus: [fabricatedCard(0), fabricatedCard(1)] };
     await route.fulfill({
       response,
       contentType: 'application/json',
@@ -1740,6 +1848,244 @@ async function measureBoundMechanism(page, record) {
       : 'fail',
     drawn ?? { well: null },
   );
+
+  // ⚠⚠ 15d — 12a's STATUS LINE AT ITS CEILING, added 2026-09-15 by 12a's TEST phase.
+  //
+  // `.status` is `white-space: nowrap` with no `max-width`, and `.header` is `flex-wrap: wrap`,
+  // so a status string that outgrows the row does not clip — it pushes onto a SECOND row and
+  // takes the band past `--band-reserve: 102px`, the constant §6.1's row arithmetic subtracts
+  // from `100vh`. That is the hazard 10h had to truncate the hostname for, and 12a made this
+  // string longer: `paused · 6 alarms · 18 sources unread`. The build measured it by hand in a
+  // scratch page (§3.4 of `12a-build.md`: 257.3 px of text against a 500.6 px wrap threshold,
+  // header 43.0 px) **because this harness could not log in** — which is the thing this phase
+  // repaired. Measured here instead, on the real assembly, so it re-measures on every run:
+  //
+  // - the hostile fixture files an `errors[]` entry for ALL EIGHTEEN §3.7 sources
+  //   (`EVERY_SOURCE`), so the clause on screen is the widest `aggregateStatus` can produce;
+  // - `oneRow` is the falsifiable half: every child of the header OVERLAPS every other one
+  //   vertically (`max(top) < min(bottom)`), which is true while they share a line and false
+  //   the moment one wraps below another. 15a above measures the CONSEQUENCE (band ≤ reserve);
+  //   this measures the cause, so a run that breaks says which of the two it broke.
+  //   ⚠ It is NOT "the number of distinct `top` positions". That was this record's first
+  //   spelling and the first run FALSIFIED it: the header's five children are centre-aligned at
+  //   four different heights, so an unwrapped header reports FOUR distinct tops — the record
+  //   failed on a page whose own `headerHeight` was 43.0 px, the single-row number. A metric
+  //   that fails on the healthy case is a metric, not a finding.
+  // - `dotSeverity` is 12a-Q2's other half, painted rather than asserted in jsdom: a red
+  //   dashboard keeps its band while eighteen sources are unread (`12a-HS5`'s property).
+  await page.setViewportSize({ width: 1280, height: 1024 });
+  await page.waitForTimeout(250);
+  const statusLine = await page.evaluate(() => {
+    const round = (n) => Math.round(n * 10) / 10;
+    const band = [...document.body.children].find((el) => getComputedStyle(el).position === 'sticky');
+    const header = band?.querySelector('header') ?? null;
+    const status = header?.querySelector('[role="status"]') ?? null;
+    if (header === null || status === null) return null;
+    const words = status.children[1] ?? null;
+    // ⚠ `height > 0`: `.header` carries an `aria-hidden` flex SPACER with no height at all, and
+    // a zero-height child's bottom equals its top — which makes any "do they overlap" test false
+    // on a perfectly unwrapped header. Measured, on the second run of this record.
+    const rects = [...header.children].map((el) => el.getBoundingClientRect()).filter((r) => r.height > 0);
+    return {
+      text: (words?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+      textWidth: words === null ? null : round(words.getBoundingClientRect().width),
+      headerHeight: round(header.getBoundingClientRect().height),
+      // Every child that paints shares a line with every other one: the lowest top is still
+      // above the highest bottom. A wrapped child sits entirely below a sibling and breaks it.
+      oneRow: rects.length > 1 && Math.max(...rects.map((r) => r.top)) < Math.min(...rects.map((r) => r.bottom)),
+      children: rects.length,
+      tops: [...new Set(rects.map((r) => round(r.top)))],
+      dotSeverity: status.querySelector('[data-severity]')?.getAttribute('data-severity') ?? null,
+    };
+  });
+  // ⚠ CALIBRATION, in the same run and on the same page: a deliberately absurd status string is
+  // pushed into the live `.statusText`, the same two numbers are re-read, and the string is put
+  // back. A record that cannot go red is a record that says nothing — this is the browser half of
+  // the discipline `12a-build.md` §3.4 applied by hand, and it is asserted rather than described.
+  const calibration = await page.evaluate(() => {
+    const round = (n) => Math.round(n * 10) / 10;
+    const band = [...document.body.children].find((el) => getComputedStyle(el).position === 'sticky');
+    const header = band?.querySelector('header') ?? null;
+    const words = header?.querySelector('[role="status"]')?.children[1] ?? null;
+    if (header === null || words === null) return null;
+    const before = words.textContent;
+    words.textContent = 'paused · 999 alarms · 18 sources unread'.repeat(6);
+    const rects = [...header.children].map((el) => el.getBoundingClientRect()).filter((r) => r.height > 0);
+    const seen = {
+      oneRow: Math.max(...rects.map((r) => r.top)) < Math.min(...rects.map((r) => r.bottom)),
+      headerHeight: round(header.getBoundingClientRect().height),
+    };
+    words.textContent = before;
+    return seen;
+  });
+  record(
+    '15. 12a’s status line at its CEILING — all eighteen sources unread, the header still ONE row, and a longer string really would break it',
+    statusLine !== null &&
+      statusLine.text.endsWith('18 sources unread') &&
+      statusLine.oneRow &&
+      statusLine.dotSeverity === 'alarm' &&
+      calibration !== null &&
+      calibration.oneRow === false &&
+      calibration.headerHeight > statusLine.headerHeight
+      ? 'pass'
+      : 'fail',
+    { ...(statusLine ?? { status: null }), calibration },
+  );
+}
+
+/**
+ * ⚠⚠ Measurement 16 — 12a/TEST. **The RETIRED page, which is the first takeover this project
+ * has graded in a browser.**
+ *
+ * Its own precondition first, like 10's and 11's (HANDOVER §0.8): a fixture that failed to take
+ * would render the ordinary fabricated page and be graded as a pass. The three things asserted
+ * are exactly what §6.2's ruling of 2026-09-14 requires of this branch and what `12a-GP1`…`GP3`
+ * mutate away — **both** cards draw the takeover, the collector's own sentence is on the page,
+ * and the well it sits in is the bounded one (`data-bound="roomy"`), which is what keeps a long
+ * message from growing the row (`10f-GP1`'s property, on the branch it did not cover).
+ *
+ * Then the same two graded checks every other page gets: §6.1's no-scroll promise at all three
+ * viewports, and that no panel body hides a reading.
+ */
+/**
+ * What both takeover measurements read off the page, in the browser.
+ *
+ * ⚠⚠ 12a/RECONCILE (`12a-A7`) — **`…ReasonInWell` is CONTAINMENT; `…Reason` was CO-PRESENCE.**
+ * Measurement 16 shipped asserting `textOf('gpu0').includes(nvidia)` (the whole slot's text)
+ * beside `querySelectorAll('[data-slot=gpu0] [data-bound=roomy]').length >= 1` — two
+ * independent terms, so a regression that rendered the message in a bespoke UNBOUNDED `<p>`
+ * and left any `roomy` well anywhere in the slot satisfied both. That is 10f/Q1's own defect,
+ * and it is the defect this branch was built to close. The jsdom test checks containment
+ * (`lastIndexOf('<div', at)`); the browser record — added precisely because jsdom cannot see
+ * the page — did not. It does now: the message must be inside a `roomy` well's own subtree.
+ *
+ * ⚠ `=== 1`, not `>= 1`: two wells in one slot is the unbounded-second-block shape wearing the
+ * right attribute, and `>= 1` cannot see it.
+ *
+ * Declared at module level and handed to `page.evaluate` by REFERENCE — it closes over nothing,
+ * so Playwright serialises it whole. One reading, two records.
+ */
+const takeoverShape = ([nvidia, phrase]) => {
+  const flat = (s) => (s ?? '').replace(/\s+/g, ' ');
+  const textOf = (slot) => flat(document.querySelector(`[data-slot="${slot}"]`)?.textContent ?? '');
+  const wellsIn = (slot) => [...document.querySelectorAll(`[data-slot="${slot}"] [data-bound="roomy"]`)];
+  const reasonInWell = (slot) => wellsIn(slot).some((w) => flat(w.textContent).includes(nvidia));
+  return {
+    phrase,
+    gpu0Takeover: textOf('gpu0').includes(phrase),
+    gpu1Takeover: textOf('gpu1').includes(phrase),
+    gpu0Reason: textOf('gpu0').includes(nvidia),
+    gpu1Reason: textOf('gpu1').includes(nvidia),
+    gpu0ReasonInWell: reasonInWell('gpu0'),
+    gpu1ReasonInWell: reasonInWell('gpu1'),
+    gpu0RoomyWells: wellsIn('gpu0').length,
+    gpu1RoomyWells: wellsIn('gpu1').length,
+    gpu0Sample: textOf('gpu0').slice(0, 160),
+  };
+};
+
+async function measureRetired(page, record) {
+  await page.setViewportSize(NO_SCROLL_VIEWPORTS[0]);
+  await page.waitForTimeout(200);
+  const present = await page.evaluate(takeoverShape, [NVIDIA_MESSAGE, ABSENT_PHRASE]);
+  record(
+    '16. the RETIRED fixture TOOK — both cards draw the takeover, both say WHY, and the reason is IN the bounded well',
+    present.gpu0Takeover &&
+      present.gpu1Takeover &&
+      present.gpu0ReasonInWell &&
+      present.gpu1ReasonInWell &&
+      present.gpu0RoomyWells === 1 &&
+      present.gpu1RoomyWells === 1
+      ? 'pass'
+      : 'fail',
+    present,
+  );
+  await recordFit(page, record, '16');
+  await recordNoClipping(page, record, '16');
+}
+
+/**
+ * ⚠⚠ Measurement 17 — 12a/RECONCILE (`12a-A7`, gap 1). **One card enumerated, one absent: the
+ * page the `roomy` bound's own argument is about.**
+ *
+ * Measurement 16 grades `gpus: []`, where every card is an 84 px takeover and nothing sets
+ * row 1 — the half of the branch where the bound cannot cost anything. `gpu-panel.tsx`'s
+ * comment justifies `roomy` on the OTHER half (*"at least one card is normally still
+ * enumerated and sets the row on its own"*), and that page had never been rendered in a
+ * browser by any fixture in either harness. So this grades it, and the term that makes it a
+ * claim rather than a co-presence check is `takeoverNoTallerThanCard`: the bounded well must
+ * live inside the row the healthy card sets, which is the whole content of the prose.
+ *
+ * ⚠ Its precondition is asserted first and it is TWO-SIDED (HANDOVER §0.8): gpu0 must draw the
+ * real body — a chart wrapper, not a takeover — and gpu1 must draw the takeover. A fixture
+ * that failed to take renders two healthy cards, which would satisfy "no takeover is too tall"
+ * vacuously.
+ */
+async function measureRetiredMixed(page, record) {
+  await page.setViewportSize(NO_SCROLL_VIEWPORTS[0]);
+  await page.waitForTimeout(200);
+  const shape = await page.evaluate(takeoverShape, [NVIDIA_MESSAGE, ABSENT_PHRASE]);
+  const geometry = await page.evaluate(() => {
+    const round = (n) => Math.round(n * 10) / 10;
+    const heightOf = (slot) => {
+      const el = document.querySelector(`[data-slot="${slot}"]`);
+      return el === null ? null : round(el.getBoundingClientRect().height);
+    };
+    return {
+      gpu0Chart: document.querySelectorAll('[data-slot="gpu0"] [data-role="gpu-sparkline-wrap"]').length,
+      gpu0Height: heightOf('gpu0'),
+      gpu1Height: heightOf('gpu1'),
+    };
+  });
+  const present = { ...shape, ...geometry };
+  const takeoverNoTallerThanCard =
+    present.gpu0Height !== null && present.gpu1Height !== null && present.gpu1Height <= present.gpu0Height;
+  record(
+    '17. ⚠ one card ENUMERATED and one not — the healthy card sets row 1, and the takeover’s bounded well fits inside it',
+    // The precondition, both sides: a real card on the left, a takeover on the right.
+    present.gpu0Chart >= 1 &&
+      !present.gpu0Takeover &&
+      present.gpu1Takeover &&
+      // The claim `roomy` rests on: the reason is IN the bounded well, and the well did not
+      // grow the row the enumerated card set.
+      present.gpu1ReasonInWell &&
+      present.gpu1RoomyWells === 1 &&
+      takeoverNoTallerThanCard
+      ? 'pass'
+      : 'fail',
+    { ...present, takeoverNoTallerThanCard },
+  );
+  await recordFit(page, record, '17');
+  await recordNoClipping(page, record, '17');
+}
+
+/**
+ * ⚠ Measurement 18 — 12a/RECONCILE (`12a-A7`, gap 2). **`gpus: null`: the third takeover, and
+ * the last branch of `GpuPanel` no browser had ever rendered.**
+ *
+ * This is the branch that has always shown its `errors[]` — §6.2's 2026-09-14 ruling names it
+ * as the one the `absent` branch had to be brought level with — so it is graded here not
+ * because it is suspect but because *"the branch nobody measures"* is where the last production
+ * failure lived for a month, and this was the only one left.
+ */
+async function measureNoGpus(page, record) {
+  await page.setViewportSize(NO_SCROLL_VIEWPORTS[0]);
+  await page.waitForTimeout(200);
+  const present = await page.evaluate(takeoverShape, [NVIDIA_MESSAGE, NULL_PHRASE]);
+  record(
+    '18. ⚠ gpus: null — the OTHER takeover: both cards say "no GPUs enumerated", both say WHY, in the bounded well',
+    present.gpu0Takeover &&
+      present.gpu1Takeover &&
+      present.gpu0ReasonInWell &&
+      present.gpu1ReasonInWell &&
+      present.gpu0RoomyWells === 1 &&
+      present.gpu1RoomyWells === 1
+      ? 'pass'
+      : 'fail',
+    present,
+  );
+  await recordFit(page, record, '18');
+  await recordNoClipping(page, record, '18');
 }
 
 async function main() {
@@ -1770,16 +2116,29 @@ async function main() {
     env: {
       ...process.env,
       PORT: String(PORT),
-      PASSWORD_HASH: passwordHash,
-      SESSION_SECRET: sessionSecret,
+      // ⚠⚠ 12a/TEST — §5.1's ruling of 2026-09-11 took both secrets OUT of the environment
+      // (`11-Q2`), and from that day until this one both browser harnesses answered their own
+      // login with a 401 and timed out on `[data-slot="gpu0"]` — four days, unnoticed, because
+      // `pnpm verify` does not run them. `secret-file-shim.cjs` fakes the one `statSync` +
+      // `readFileSync` of `/etc/ai-dashboard.env` that `lib/auth/secrets.ts` performs, INSIDE
+      // this spawned server only. No production file changed; the login still runs the real
+      // parser, the real scrypt and the real cookie. See that file's header for the rejected
+      // alternative (a path override in `lib/auth/secret-file.ts`).
+      MEASURE_PASSWORD_HASH: passwordHash,
+      MEASURE_SESSION_SECRET: sessionSecret,
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, `--require ${SECRET_FILE_SHIM}`]
+        .filter((part) => part !== undefined && part !== '')
+        .join(' '),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   });
 
+  const serverLog = attachServerLog(server);
+
   let browser = null;
   try {
-    await waitForServer(`http://localhost:${PORT}/login`, 60_000);
+    await waitWithServerOutput(() => waitForServer(`http://localhost:${PORT}/login`, 60_000), serverLog);
 
     browser = await chromium.launch({ headless: true, executablePath: chromePath });
     const page = await browser.newPage();
@@ -1788,7 +2147,17 @@ async function main() {
     await page.goto(`http://localhost:${PORT}/login`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
     await page.fill('#password', PASSWORD);
     await page.click('button[type="submit"]');
-    await page.waitForSelector('[data-slot="gpu0"]', { timeout: 15_000 });
+    // ⚠⚠ 12a/RECONCILE (`12a-A3`) — THE FOUR-DAY FAILURE'S OWN LINE. When §5.1 moved the
+    // credentials out of the environment this selector is where both harnesses died, naming a
+    // slot, while the server was answering 401 and saying why into an unread pipe. The wait is
+    // unchanged; what is added is that its failure now carries the server's own words.
+    await page.waitForSelector('[data-slot="gpu0"]', { timeout: 15_000 }).catch((e) => {
+      console.error(
+        `\n⚠ Logged in and the grid never appeared. The server's own output — a 401 here means the` +
+          ` credentials the shim fakes did not reach it:\n${serverLog.tail()}\n`,
+      );
+      throw e;
+    });
     // Let the client hydrate and the grid settle before the first measurement.
     await page.waitForTimeout(500);
 
@@ -1867,21 +2236,96 @@ async function main() {
     // term the row arithmetic subtracts and nothing else measures.
     await measureBoundMechanism(page, record10);
 
+    // ---- ⚠⚠ 12a/TEST: the production failure of 2026-09-14, graded — `gpus: []` with the
+    // `nvidia-smi` entry that says why. Every fixture above enumerates both cards, so no page
+    // this project has ever measured rendered a takeover branch; this is the one 12a built for.
+    // ⚠ It waits for the TAKEOVER, not for a sparkline: on this page there is no chart to wait
+    // for, and waiting for one would time out on a fixture that took perfectly.
+    fabrication.mode = 'retired';
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    await page
+      .waitForFunction(
+        () => (document.querySelector('[data-slot="gpu1"]')?.textContent ?? '').includes('card not enumerated'),
+        { timeout: 20_000 },
+      )
+      .catch(() => {
+        console.warn('⚠ the retired fixture did not take — measurement 16 will report it.');
+      });
+    await page.waitForTimeout(800);
+    await measureRetired(page, record10);
+
+    // ---- ⚠⚠ 12a/RECONCILE (`12a-A7`): the MIXED page — gpu0 enumerated, gpu1 absent. The
+    // configuration `gpu-panel.tsx`'s own `roomy` comment argues about, and the one no fixture
+    // in either harness has ever rendered. Waits for the takeover on gpu1 AND the chart on
+    // gpu0, because the precondition is two-sided.
+    fabrication.mode = 'retired-mixed';
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    await page
+      .waitForFunction(
+        () =>
+          (document.querySelector('[data-slot="gpu1"]')?.textContent ?? '').includes('card not enumerated') &&
+          document.querySelector('[data-slot="gpu0"] [data-role="gpu-sparkline-wrap"]') !== null,
+        { timeout: 20_000 },
+      )
+      .catch(() => {
+        console.warn('⚠ the mixed fixture did not take — measurement 17 will report it.');
+      });
+    await page.waitForTimeout(800);
+    await measureRetiredMixed(page, record10);
+
+    // ---- ⚠ 12a/RECONCILE (`12a-A7`, gap 2): `gpus: null`, the last unrendered branch.
+    fabrication.mode = 'no-gpus';
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    await page
+      .waitForFunction(
+        (phrase) => (document.querySelector('[data-slot="gpu1"]')?.textContent ?? '').includes(phrase),
+        NULL_PHRASE,
+        { timeout: 20_000 },
+      )
+      .catch(() => {
+        console.warn('⚠ the gpus:null fixture did not take — measurement 18 will report it.');
+      });
+    await page.waitForTimeout(800);
+    await measureNoGpus(page, record10);
+
     console.log('\n=== 10a-F4 / §6.1 breakpoint measurements ===\n');
     for (const { name, detail } of results.pass) {
       console.log(`PASS     ${name}`);
+      /**
+       * ⚠⚠ 12a/RECONCILE (`12a-A1`) — WHETHER A PASS PRINTED ITS NUMBERS IS NOW A FACT THIS
+       * LOOP KNOWS, not a property of whether someone extended a whitelist.
+       *
+       * Everything below used to be eight independent `if (detail && …)` blocks keyed on eight
+       * recognised detail SHAPES, so a record whose detail carried none of those eight keys
+       * printed a bare `PASS` line and nothing else. Both records added in 12a were exactly
+       * that: 15's `{text, textWidth, headerHeight, oneRow, …}` and 16's `{gpu0Takeover, …}`
+       * matched no key, so **the numbers `12a-test.md` §1.4 quotes as standing figures could
+       * only be read by BREAKING the record** — they were transcribed out of the run where 15
+       * failed, and no green run in this project's history contains them.
+       *
+       * That is the rule this printer states three times, broken in the printer that states
+       * it: *"a PASS that is a measured EQUALITY has to print the value it is equal to … a
+       * bare PASS is a claim with no number behind it."* So `say()` records that a line was
+       * printed and the fallback below prints the raw detail for anything the curated lines
+       * did not cover. A new record can no longer be silently mute: at worst it prints JSON.
+       */
+      let printed = false;
+      const say = (line) => {
+        console.log(`         ${line}`);
+        printed = true;
+      };
       if (detail && typeof detail.spare === 'number') {
-        console.log(`         spare ${detail.spare} px (content bottom ${detail.contentBottom}, viewport ${detail.clientHeight}, band+gutter ${detail.bandHeight}); slots ${JSON.stringify(detail.slotHeights)}`);
+        say(`spare ${detail.spare} px (content bottom ${detail.contentBottom}, viewport ${detail.clientHeight}, band+gutter ${detail.bandHeight}); slots ${JSON.stringify(detail.slotHeights)}`);
       }
       // ⚠ 10g — a PASS that is a measured EQUALITY has to print the value it is equal to.
       // "the banner is one height" and "the page did not move" are the two claims 10g is
       // accepted on, and a bare PASS on either is a claim with no number behind it: the next
       // loop would have to re-run the browser to learn what the height WAS.
       if (detail && Array.isArray(detail.heights)) {
-        console.log(`         heights ${JSON.stringify(detail.heights)} px at ${JSON.stringify(detail.stages)} conditions`);
+        say(`heights ${JSON.stringify(detail.heights)} px at ${JSON.stringify(detail.stages)} conditions`);
       }
       if (detail && typeof detail.gridOpen === 'number') {
-        console.log(`         grid ${detail.gridClosed} px closed / ${detail.gridOpen} px open; slots open ${JSON.stringify(detail.slotsOpen)}`);
+        say(`grid ${detail.gridClosed} px closed / ${detail.gridOpen} px open; slots open ${JSON.stringify(detail.slotsOpen)}`);
       }
       // ⚠ Same rule, applied to the record that refuses the vacuous pass (10g TEST phase): the
       // well's own geometry at each count, at the design width. "Scrolled, not hidden" is a
@@ -1892,13 +2336,13 @@ async function main() {
       // the row arithmetic subtracts, so the record that says it still holds has to print the
       // two numbers it compared. A bare PASS here is the claim with its evidence removed.
       if (detail && Array.isArray(detail.boundary)) {
-        console.log(
-          `         ${detail.boundary.map((b) => `${b.viewport}: ${b.capped}/${b.slots} capped, page ${b.pageHeight} of ${b.viewportHeight}`).join(' · ')}`,
+        say(
+          `${detail.boundary.map((b) => `${b.viewport}: ${b.capped}/${b.slots} capped, page ${b.pageHeight} of ${b.viewportHeight}`).join(' · ')}`,
         );
       }
       if (detail && Array.isArray(detail.bands)) {
-        console.log(
-          `         band ${detail.bands.map((b) => `${b.viewport}: ${b.band} of ${b.reserve}`).join(' · ')}`,
+        say(
+          `band ${detail.bands.map((b) => `${b.viewport}: ${b.band} of ${b.reserve}`).join(' · ')}`,
         );
       }
       // ⚠ 10h RECONCILE — the same rule for the record that says nothing is clipped: "no panel
@@ -1906,8 +2350,8 @@ async function main() {
       // 0.4 px and one that clips nothing by 90 are the same word and very different facts.
       // The bodies-found count is printed with it because it is the record's anti-vacuity term.
       if (detail && typeof detail.tightest === 'number') {
-        console.log(
-          `         ${detail.bodiesFound} bodies, none hiding a reading; closest to its cap: ${detail.tightestSlot} by ${detail.tightest} px`,
+        say(
+          `${detail.bodiesFound} bodies, none hiding a reading; closest to its cap: ${detail.tightestSlot} by ${detail.tightest} px`,
         );
       }
       // ⚠ 10h RECONCILE — same rule again, for the focus-ring record: "every ring is inset" is
@@ -1915,19 +2359,27 @@ async function main() {
       // the anti-vacuity term (a run where Chrome's keyboard modality did not engage paints
       // nothing and would otherwise report "no outset rings found" on an empty set).
       if (detail && Array.isArray(detail.clippedRings)) {
-        console.log(
-          `         focus rings: ${detail.ringsPainted} painted of ${detail.focusables} focusable children, offsets ${JSON.stringify(detail.offsets)}${detail.unpainted.length === 0 ? '' : `; not engaged: ${detail.unpainted.join(', ')}`}`,
+        say(
+          `focus rings: ${detail.ringsPainted} painted of ${detail.focusables} focusable children, offsets ${JSON.stringify(detail.offsets)}${detail.unpainted.length === 0 ? '' : `; not engaged: ${detail.unpainted.join(', ')}`}`,
         );
       }
       if (detail && Array.isArray(detail.scrolling)) {
-        console.log(`         scrolling bodies: ${detail.scrolling.length === 0 ? 'none' : detail.scrolling.join(' · ')}`);
+        say(`scrolling bodies: ${detail.scrolling.length === 0 ? 'none' : detail.scrolling.join(' · ')}`);
       }
       if (detail && Array.isArray(detail.unreadable) && detail.measured) {
         const shape = BANNER_STAGES.map((s) => {
           const m = detail.measured[`${s}@1280`] ?? {};
           return `${s}: drawn ${m.itemsInDom} + ${m.more} more / client ${m.restClientHeight} / scroll ${m.restScrollHeight} / last item bottom ${m.lastItemBottom}`;
         });
-        console.log(`         .rest at 1280 — ${shape.join(' · ')}`);
+        say(`.rest at 1280 — ${shape.join(' · ')}`);
+      }
+      // ⚠⚠ 12a/RECONCILE — THE FALLBACK. Nine curated lines above, and this is what makes the
+      // set of them an optimisation rather than a filter: a detail shape none of them knows
+      // still reaches the log, in full, as JSON. A FAIL has always printed its whole detail
+      // (two loops below); until this line a PASS printed its detail only if someone had
+      // thought to add a case for it, which is a whitelist wearing the costume of a printer.
+      if (!printed && detail !== null && detail !== undefined) {
+        console.log(`         ${JSON.stringify(detail)}`);
       }
     }
     for (const { name, detail } of results.blocked) {

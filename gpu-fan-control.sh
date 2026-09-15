@@ -635,6 +635,14 @@ restart_ai_dashboard() {
     info "$unit is ${state:-unknown}, not active — nothing to restart"
     return 0
   fi
+  # ⚠ 12a/TEST — `--dry-run` says it "prints writes instead of making them", and restarting
+  # another service on a LIVE box is the largest write in this file. (`cmd_install`/
+  # `cmd_uninstall` around it do not consult DRY_RUN at all — pre-existing, recorded in
+  # 12a-test.md rather than widened here.)
+  if [[ $DRY_RUN -eq 1 ]]; then
+    info "dry-run: would restart $unit (a daemon-reload revokes its container's GPU access)"
+    return 0
+  fi
   if systemctl restart "$unit" 2>/dev/null; then
     ok "restarted $unit — a daemon-reload revokes its container's GPU device access (§11.4)"
   else

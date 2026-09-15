@@ -146,9 +146,6 @@ const unreadWord = (sources: number): string =>
 export const failingSourceCount = (snapshot: TelemetrySnapshot | null): number =>
   snapshot === null ? 0 : new Set(snapshot.errors.map((e) => e.source)).size;
 
-/** One glyph and one text-builder per {@link RuntimeMode} — exhaustive by construction: an
- *  object literal typed `Record<RuntimeMode, …>` cannot omit a key without a compile error,
- *  so a fifth mode added to `mode.ts` fails here at `tsc`, not silently at runtime. */
 /** What a MODE says on its own, before 12a's failing-source clause and before the band. */
 interface ModeStatus {
   readonly glyph: string;

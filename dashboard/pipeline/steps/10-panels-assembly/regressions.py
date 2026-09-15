@@ -125,6 +125,16 @@ CROSS_HARNESS_LEDGER_TEST = "lib/cross-harness-ledger.test.ts"
 # is a `components/panels/` + `app/` join and lives in this harness with the rest of them.
 COLLECTOR_VISIBILITY_TEST = "app/collector-visibility.test.tsx"
 
+# ⚠⚠ Added by 12a's RECONCILIATION, 2026-09-15 (`12a-A9`). The browser harnesses and the
+# credential shim appeared in NO harness's LEDGER_FILES and in no mutation in any of the ten
+# `regressions.py` — grep found no `.mjs` or `.cjs` anywhere in any of them — so seven of the
+# adversarial's eleven green one-line reverts lived in files nothing in the suite could see.
+# This is the file that can see them, and the mutations `12a-MH*` below are the evidence that
+# it bites. `lib/unsatisfiable-css-rule.test.ts` is the mirror of `dangling-css-class.test.ts`
+# (`12a-A5`): a class with no rule was caught; a rule no element can satisfy was not.
+MEASUREMENT_HARNESS_TEST = "measurement-harness.test.ts"
+UNSATISFIABLE_CSS_TEST = "lib/unsatisfiable-css-rule.test.ts"
+
 LEDGER_FILES = [
     HEADER_STATUS_TEST, BANNER_TEST, HEADER_TEST, ALARM_BANNER_TEST, GRID_TEST,
     USE_TELEMETRY_TEST, USE_TELEMETRY_SSR_TEST, USE_NOW_TICK_TEST,
@@ -136,6 +146,7 @@ LEDGER_FILES = [
     CHART_VIEW_TOGGLE_TEST, FORCE_ALARM_TEST, FORCE_ALARM_WIRING_TEST,
     TOCONTAIN_SCOPE_TEST, DANGLING_CSS_CLASS_TEST, UNIT_SUFFIX_TEST, CROSS_HARNESS_LEDGER_TEST,
     CAPTION_TEST, COLLECTOR_VISIBILITY_TEST,
+    MEASUREMENT_HARNESS_TEST, UNSATISFIABLE_CSS_TEST,
 ]
 
 # `test`/`it`, optionally `.each(<PAREN-BALANCED ARGS>)`, optionally `<A GENERIC ARG>`, then `(`.
@@ -273,6 +284,15 @@ def red_test_lines(out):
     """The `FAIL <file> > <suite> > <test>` lines vitest prints, one per failing test."""
     return [l.strip() for l in out.splitlines() if l.strip().startswith("FAIL ")]
 
+
+# ⚠⚠ 12a/RECONCILE — the three files the ten harnesses could not previously reach, plus the
+# stylesheet whose dead rule is `12a-A5`'s finding.
+MEASURE_BREAKPOINTS_SRC = "pipeline/steps/10-panels-assembly/measure-breakpoints.mjs"
+MEASURE_ARRANGEMENTS_SRC = "pipeline/steps/10-panels-assembly/mocks/measure-arrangements.mjs"
+SERVER_LOG_SRC = "pipeline/steps/10-panels-assembly/server-log.mjs"
+SECRET_FILE_SHIM_SRC = "pipeline/steps/10-panels-assembly/secret-file-shim.cjs"
+SECRET_FILE_SRC = "lib/auth/secret-file.ts"
+HEADER_CSS_SRC = "components/header.module.css"
 
 HEADER_STATUS_SRC = "lib/client/header-status.ts"
 BANNER_SRC = "lib/client/banner.ts"
@@ -2445,6 +2465,98 @@ REGRESSIONS = [
      "          failingSources={failingSourceCount(snapshot)}",
      "          failingSources={0}",
      [COLLECTOR_VISIBILITY_TEST, DASHBOARD_SHELL_TEST]),
+    # ⚠ Added 2026-09-15 by 12a's TEST phase. Every fixture of that loop holds a ring of ONE
+    # sample, in which "the latest snapshot" and "the ring" are the same object — so the shell
+    # could read the OLDEST sample's errors and pass all 126 generated cases. The header would
+    # then go on accusing a collector that had recovered, which teaches an operator that the
+    # clause means nothing: the same defect as never accusing it.
+    ("12a-DS2 the shell counts the OLDEST sample's errors, so the header never stops accusing a collector that recovered",
+     DASHBOARD_SHELL_SRC,
+     "          failingSources={failingSourceCount(snapshot)}",
+     "          failingSources={failingSourceCount(state.ring.samples[0]?.snapshot ?? null)}",
+     [COLLECTOR_VISIBILITY_TEST]),
+
+    # =======================================================================================
+    # ⚠⚠ 12a/RECONCILE — THE BROWSER HARNESSES AND THE SHIM (`12a-A9`)
+    # =======================================================================================
+    #
+    # Two whole regions of 12a's diff were covered by NOTHING: `measure-breakpoints.mjs`,
+    # `mocks/measure-arrangements.mjs` and `secret-file-shim.cjs` are in no LEDGER_FILES list
+    # and in no mutation anywhere, so every browser record could be weakened at will and the
+    # shim's loud refusal — the property its header spends a paragraph on — was guarded by
+    # nothing at all. `measurement-harness.test.ts` is the guard; these are the evidence.
+    #
+    # ⚠ Each of these mutates a file NO OTHER mutation in any harness touches, and the check is
+    # one small test file, so the whole block costs a few seconds.
+    ("12a-MH1 the shim stops refusing when its credentials are absent, and silently fakes an EMPTY secrets file — the four-day outage, rebuilt",
+     SECRET_FILE_SHIM_SRC,
+     "if (!hash || !secret) {",
+     "if (false) {",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12a-MH2 the fake stat answers isFile() and nothing else, so any other Stats call is `undefined is not a function`",
+     SECRET_FILE_SHIM_SRC,
+     "  isDirectory: () => false,",
+     "",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12a-MH3 the shim fakes a path of its own rather than the one lib/auth/secret-file.ts declares",
+     SECRET_FILE_SHIM_SRC,
+     "const SECRET_ENV_FILE = '/etc/ai-dashboard.env';",
+     "const SECRET_ENV_FILE = '/etc/ai-dashboard.env.local';",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12a-MH4 a production module starts naming the harness-only shim — the bound the whole `12a-Q4` candidate (a) argument rests on",
+     SECRET_FILE_SRC,
+     "export const SECRET_ENV_FILE = ",
+     "// see pipeline/steps/10-panels-assembly/secret-file-shim.cjs\nexport const SECRET_ENV_FILE = ",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12a-MH5 a PASS prints no number again — the printer goes back to a whitelist of eight detail shapes (`12a-A1`)",
+     MEASURE_BREAKPOINTS_SRC,
+     "      if (!printed && detail !== null && detail !== undefined) {",
+     "      if (false) {",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12a-MH6 record 15's one-row metric passes on a header with ONE painting child",
+     MEASURE_BREAKPOINTS_SRC,
+     "      oneRow: rects.length > 1 &&",
+     "      oneRow:",
+     [MEASUREMENT_HARNESS_TEST]),
+    # ⚠ Pinned by the record NAME above it: measurement 18 (`gpus: null`) asserts the identical
+    # six conjuncts, so the bare line matches twice and `replace(…, 1)` would take whichever
+    # came first — the harness's own rule (Q1-F6), met the way `10f-GP1` had to meet it.
+    ("12a-MH7 measurement 16's bound assertion goes vacuous — a second unbounded block beside the well passes it",
+     MEASURE_BREAKPOINTS_SRC,
+     "the reason is IN the bounded well',\n    present.gpu0Takeover &&\n      present.gpu1Takeover &&\n      present.gpu0ReasonInWell &&\n      present.gpu1ReasonInWell &&\n      present.gpu0RoomyWells === 1 &&",
+     "the reason is IN the bounded well',\n    present.gpu0Takeover &&\n      present.gpu1Takeover &&\n      present.gpu0ReasonInWell &&\n      present.gpu1ReasonInWell &&\n      present.gpu0RoomyWells >= 0 &&",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12a-MH8 the spawned server's stderr is piped and never read again — a startup failure names the PORT, not the cause (`12a-A3`)",
+     MEASURE_BREAKPOINTS_SRC,
+     "import { attachServerLog, waitWithServerOutput } from './server-log.mjs';",
+     "const attachServerLog = () => ({ tail: () => '' });\nconst waitWithServerOutput = (f) => f();",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12a-MH9 the density harness loses the same diagnosis — the two scripts failed identically and must be diagnosed identically",
+     MEASURE_ARRANGEMENTS_SRC,
+     "import { attachServerLog, waitWithServerOutput } from '../server-log.mjs';",
+     "const attachServerLog = () => ({ tail: () => '' });\nconst waitWithServerOutput = (f) => f();",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12a-MH10 the server-log ring is unbounded, trading a hang for a leak",
+     SERVER_LOG_SRC,
+     "      if (lines.length > MAX_LINES) lines.shift();",
+     "",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12a-MH11 measurement 17's only real claim goes — the takeover is no longer required to fit the row the enumerated card sets",
+     MEASURE_BREAKPOINTS_SRC,
+     "      takeoverNoTallerThanCard\n      ? 'pass'",
+     "      true\n      ? 'pass'",
+     [MEASUREMENT_HARNESS_TEST]),
+
+    # ⚠⚠ 12a/RECONCILE (`12a-A5`) — THE RULE THAT WAS BORN DEAD, re-created. This is the exact
+    # text `header.module.css` carried from 10e (2026-09-09) until this loop: `data-mode` is
+    # stamped on the child `.dot`, so both selectors matched nothing in every commit, and no
+    # guard in the tree could see it — `dangling-css-class.test.ts` resolves the selector to
+    # the CLASS `.status` and asks only whether that exists.
+    ("12a-CSS1 an attribute-qualified rule whose element never stamps the attribute — the `.status[data-mode]` hatch, which has never painted",
+     HEADER_CSS_SRC,
+     ".statusText {",
+     ".status[data-mode='paused'],\n.status[data-mode='stale'] {\n  background: var(--nodata), var(--surface-2);\n}\n\n.statusText {",
+     [UNSATISFIABLE_CSS_TEST]),
 ]
 
 # ---------------------------------------------------------------------------

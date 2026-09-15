@@ -855,3 +855,11 @@ pins instance N to card N, which §4's wire never said. Split mode revealed it r
 A card served jointly says so; an em dash there would be a lie, because the reading is not missing
 but different. `SPEC.md` §6.2 and `SERVING-MODES.md` §4 carry the wording. ⚠ The mode must not be
 inferred from the instance count — one instance can also mean one card's service failed.
+
+**Ruled 2026-09-15 (12a-Q2): `SPEC.md` §9 row 1 rewritten.** The aggregate is still one reduction
+over `displaySeverity`, **with one refusal on top: a `normal` reduction paints as no band while any
+§3.7 source failed to be read**, with the count of unread sources named beside it. `watch` and
+`alarm` are never lowered, so a failing collector can never hide an alarm. The because-cell records
+why: the row as first written was **measured false in production** — a source that cannot be read
+produces no condition, so it contributed nothing to a reduction over conditions, and the header
+read `● all healthy` while the box had lost sight of both GPUs.

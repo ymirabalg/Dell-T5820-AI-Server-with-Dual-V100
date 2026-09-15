@@ -123,11 +123,25 @@
   color: var(--ink-muted);
 }
 
-/* §6.2's paused/stale mode adds the mock's hatch to the same pill, over its severity colour. */
-.status[data-mode='paused'],
-.status[data-mode='stale'] {
-  background: var(--nodata), var(--surface-2);
-}
+/* ⚠⚠ 12a/RECONCILE (`12a-Q10`) — A RULE THAT WAS BORN DEAD, REMOVED. It read:
+ *
+ *     .status[data-mode='paused'],
+ *     .status[data-mode='stale'] { background: var(--nodata), var(--surface-2); }
+ *
+ * `data-mode` is stamped on the CHILD `.dot` (`header.tsx`), never on `.status`, so both
+ * selectors matched nothing. Dated: `data-mode` moved to `.dot` in `b4ffa3e` (10a,
+ * 2026-09-08) and this rule arrived in `8ad8b9c` (10e, 2026-09-09) — one day later, so it has
+ * never matched in any commit, and §6.2's paused/stale hatch has never painted. Removing it
+ * changes not one painted pixel; what it removes is a comment claiming a paint that does not
+ * happen.
+ *
+ * ⚠ The hatch itself is NOT re-spelled here, and that is deliberate rather than lazy: it would
+ * be the first assertion of an unruled paint. `MOCK.html` — the source for FORM (ANCHOR §9) —
+ * does not hatch this pill at all; it renders a SECOND pill beside it (`.agg__mode`, *"the
+ * neutral 'no reading' hatch rather than a status hue"*), so "make the rule match" and "match
+ * the mock" are different changes and the choice is the owner's. §6.2's *"a paused dashboard
+ * must announce it loudly"* is carried today by the `❙❙` glyph and the word `paused`.
+ * `lib/unsatisfiable-css-rule.test.ts` is why no successor can be born dead unnoticed. */
 
 .statusText {
   font-size: 11px;

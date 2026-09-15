@@ -1,11 +1,15 @@
-# Handover — after **11b**. **The secrets left the container's environment, and the guard built to make that loud had a silent failure of its own. It does not any more: one read shared by the whole process, a refusal that always reaches stderr, and a check-vs-server differential that is GENERATED rather than listed — 21 of 276 files were a green `check` and a container that would not boot; now none are. Step 11's closing state is kept at §0.0.2, step 10's at §0.0.1.**
+# Handover — after **12a**. **The first production failure is closed AND VISIBLE: every takeover branch says why, the header stops claiming health over a blind collector, and `check` asks the only question that could have caught it. The loop's own lesson is smaller and sharper — a PASS that prints no number is a claim, and a number transcribed from a failed run is not evidence. 11b's closing state is kept at §0.0.3, step 11's at §0.0.2, step 10's at §0.0.1.**
 
-**Rewritten 2026-09-11 by 11b's reconciliation**, on top of step 11's. §0.0, §0.13 and the new
-**§0.14** are 11b's and step 11's; §0.0.1 and §0.1–§0.12 are step 10's, unchanged and still the
-inheritance for anything that touches `lib/`, `app/` or `components/`. **11b touched `lib/auth/`
-for the first time since step 7** — the credentials the deployment carries are now parsed by the
-server rather than by Docker — so step 07's harness is part of this item's acceptance and not only
-step 11's.
+**Rewritten 2026-09-15 by 12a's reconciliation.** §0.0 and the new **§0.15** are 12a's; §0.0.3,
+§0.13 and §0.14 are 11b's and step 11's, kept in full; §0.0.1 and §0.1–§0.12 are step 10's,
+unchanged and still the inheritance for anything that touches `lib/`, `app/` or `components/`.
+**12a is the first item driven by a real failure in production rather than by the queue**, and the
+first to change the two BROWSER measurement harnesses — which no ledger could see until this loop.
+
+**Previously rewritten 2026-09-11 by 11b's reconciliation**, on top of step 11's. **11b touched
+`lib/auth/` for the first time since step 7** — the credentials the deployment carries are now
+parsed by the server rather than by Docker — so step 07's harness is part of that item's
+acceptance and not only step 11's.
 
 **Previously rewritten 2026-09-10 by step 11's reconciliation**, on top of 10h's, and before that
 by 10h's (the owner's ruling of 2026-09-10 — the grid itself is bounded — plus §6.4's `+N more`,
@@ -17,7 +21,51 @@ whole inheritance: the next phase's agents get clean context and read it as fact
 
 ---
 
-## 0.0 ⚠⚠ READ THIS FIRST — **11b. Does the secrets ruling cost a silent failure? It DID, and it does not now.**
+## 0.0 ⚠⚠ READ THIS FIRST — **12a. Is the production failure of 2026-09-14 visible now? YES — and the measurement that says so had to be repaired before it could say anything.**
+
+**The question this loop has to answer in one line:** on 2026-09-14 a `systemd daemon-reload`
+revoked the container's GPU device access, `nvidia-smi` failed inside it, `errors[]` carried
+`nvidia-smi: exited 255`, and **nothing on screen said so** — the operator found it by reading the
+raw `/api/telemetry` response, while the header read `● all healthy`.
+
+| | |
+|---|---|
+| **Is it visible on the page now?** | **YES, and measured in a browser rather than in jsdom.** Every takeover branch renders its `errors[]` inside a bounded well, and all three are now GRADED: **measurement 16** (`gpus: []`, the production shape), **measurement 17** (one card enumerated and one not — the configuration `gpu-panel.tsx`'s own `roomy` comment argues about, which nothing had ever rendered), **measurement 18** (`gpus: null`). Each asserts its own precondition first, and asserts **containment** — the collector's sentence inside exactly ONE `data-bound="roomy"` well — not co-presence |
+| **Does the header still claim health?** | **No.** `aggregateStatus` takes a fourth input (`failingSourceCount`), `all healthy` is REPLACED rather than suffixed, and the painted dot follows the same reduction: a `normal` band with any unread source paints **no band**. ⚠ That makes **§9 row 1 false as written** — it defines the dot as one reduction over `displaySeverity`, full stop. The wording is the parent's; the proposal is `steps/12-deploy/12a-reconciliation.md` §6 |
+| **Would `check` have caught it?** | **Now yes, and the row judges its own failure.** §11.4's in-container `nvidia-smi` row runs the command in the container and takes its verdict from markers the inner shell prints. ⚠ It shipped with three ways to score a false green, all closed this loop: `RC=255` followed by `RC=0` (last-marker-wins), the SHELL's own 127/126 diagnosed as a revocation with a restart that cannot help, and `nvidia-smi -L >/dev/null` discarding the list so a container enumerating **zero** cards at exit 0 scored the tick |
+| ⚠⚠ **And the finding that governed the loop** | **A passing browser record printed no numbers at all.** The printer was a whitelist of eight detail keys; both records 12a added matched none of them, so the standing figures quoted in `12a-test.md` §1.4 **appear in no green run** — they were transcribed from the run where the record had been deliberately broken. Fixed at the class (any unprinted detail falls through to JSON), re-run, and **every standing figure re-transcribed from `exit 0 — 81 passed, 0 failed`**. Four numbers that no passing run can reproduce are struck: `12a-reconciliation.md` §2.3 |
+| **Is it measured?** | `pnpm verify` **exit 0 — 108 files, 3500 tests** (was 106 / 3455); `shellcheck dashboard.sh` and `../gpu-fan-control.sh` clean, `../serve-llm.sh` 5 SC2015 notices before and after; `measure-breakpoints.mjs` **exit 0 — 81/0/0** (was 67/0/0); `check-density.mjs` **ALL PASS**; **step 10's harness exit 0 — 325 mutations, 335 ⚠ checked** and **step 11's exit 0 — 203, 93 ⚠ checked**, ⚠ the latter on its SECOND run (§1). Exit codes with their commands: `12a-reconciliation.md` §7 |
+| **What is still open?** | The box. **Nothing in this loop was run against a container, a unit or a real GPU** — there is no Docker and no systemd on this Mac. §0.0.3's five and §0.0.2's seven are still owed, and 12a adds three (below). The deployment itself has not been re-done since the 2026-09-14 outage |
+
+### ⚠ What 12a adds to the box-side list
+
+1. ⚠⚠ **That `nvidia-smi -L` inside a healthy container prints one `GPU <n>:` line per card**, so
+   the new count marker reads 2 and not 0. The scoring is measured here with a stubbed `docker`;
+   the container's own output is not, and no hardware on this Mac can produce it.
+2. ⚠ **That a container enumerating zero cards now FAILS `check`** — and therefore that `install`
+   refuses on such a box (INSTALL-SPEC §12.2). That is the intent; it is also a behaviour change
+   an operator meets for the first time on the box.
+3. **That `serve-llm.sh uninstall --dry-run` no longer restarts the live dashboard.** Both sibling
+   scripts' `restart_ai_dashboard` now honour the dry flag, and both are executed by
+   `packaging.test.ts` against a stubbed systemd — but never against real systemd.
+
+### ⚠⚠ The three things a later loop must not undo
+
+1. **The PASS printer's fallback** (`measure-breakpoints.mjs`). Nine curated lines print the
+   shapes we know; the fallback prints everything else. Delete it and every future record is
+   silently a bare PASS again — which is how a standing figure came to exist only inside a
+   failing run. `12a-MH5` reddens on it.
+2. **`marker_number` is the only parse for a marker-borne verdict in `dashboard.sh`.** Exactly one
+   occurrence, a 1-3 digit value in range, normalised to canonical decimal. Two markers are
+   `nomarker`, never the later one. Adding a second, looser reader is the fifth defect in that
+   family wearing a sixth hat.
+3. **`measurement-harness.test.ts`'s terms carry an exact `count`.** Three records assert the same
+   six conjuncts; a whole-file `toContain` cannot see one of three copies removed, and it was
+   measured not seeing it. `toBe(count)`, never `toBeGreaterThanOrEqual`.
+
+---
+
+## 0.0.3 — 11b's closing state, kept in FULL and unchanged by 12a. **Does the secrets ruling cost a silent failure? It DID, and it does not now.**
 
 **The question this loop has to answer in one line, because it is the question the ruling was made
 to settle:** SPEC §5.1's ruling of 2026-09-11 took `PASSWORD_HASH` and `SESSION_SECRET` out of the
@@ -1372,6 +1420,60 @@ wired, because wiring it meant changing the startup contract from an unambiguous
 to a throw the build had already weighed and rejected. Step 7 removed the same shape once before
 (`noSessionVerifierYet`).
 
+## 0.15 ⚠ NEW — what 12a found, and the five rules to carry out of it
+
+### ⚠⚠ THE RULE — **a PASS that prints no number is a claim, and a number transcribed from a failed run is not evidence**
+
+`measure-breakpoints.mjs` states this rule three times, in the printer that broke it: *"a PASS
+that is a measured EQUALITY has to print the value it is equal to … a bare PASS is a claim with no
+number behind it: the next loop would have to re-run the browser to learn what the height WAS."*
+The printer was a whitelist of eight detail SHAPES, so the two records 12a added printed a bare
+`PASS` — and their numbers reached the phase notes from `breakpoints3.log`, the run in which one
+of them FAILED. The values were not wrong; the provenance was, and **nothing in a green run could
+reproduce them**.
+
+Both halves are operational:
+
+- **Print by default, curate as an optimisation.** A printer that knows nine shapes and prints
+  JSON for everything else cannot be silently outgrown; one that knows nine shapes and prints
+  nothing else is outgrown by the next record anybody writes.
+- **Re-transcribe from the run that passed.** A figure that only a broken run can produce is
+  struck, not re-justified. `12a-reconciliation.md` §2.3 struck four.
+
+### ⚠⚠ A text guard that reads a FILE cannot see one of several identical lines removed
+
+`measurement-harness.test.ts` was written to close `12a-A9`'s eleven one-line reverts, and the
+sweep was re-run against it immediately. **Two of the eleven still survived**: measurements 16, 17
+and 18 assert the identical six conjuncts, so deleting one copy left two and a whole-file
+`toContain` was satisfied. The fix is an exact occurrence `count` per term. The general form: a
+guard whose subject is a RECORD must either anchor to that record or count, and *writing the guard
+is not evidence it catches anything — running the sweep against it is.*
+
+### ⚠ The fifth failing-open defect in one family — fix the PARSE, not the arm
+
+`dashboard.sh` has now shipped five verdicts taken from a captured stream that believed the first
+thing which looked like an answer: a `docker inspect | grep`, drift rows expecting the empty
+string, a marker that was not a verdict, `${out##*RC=}` taking the LAST marker, and a `-L
+>/dev/null` that discarded the list it claimed to have read. **None of them had an opinion about
+how many answers were in the capture.** One parser now does, and every marker goes through it.
+
+### ⚠ A CSS rule can be born dead, and only a mirror guard sees it
+
+`.status[data-mode='paused']` never matched in any commit: the attribute moved to the child `.dot`
+one day before the rule was written. `dangling-css-class.test.ts` resolves such a selector to the
+CLASS and asks only whether that exists. `lib/unsatisfiable-css-rule.test.ts` asks the other
+direction — does the element that carries this class ever carry this attribute — and on the whole
+tree it has **exactly one** historical finding and no noise.
+
+### ⚠ The branch nobody renders is where the next failure lives
+
+`10e-Q4` lived for a month in the one takeover branch no fixture rendered, and 12a's own build
+noted in passing that *"no page this project has ever measured renders `gpus: []`"* — as a
+reassurance rather than as a work item. All three takeover branches are graded now. When a build
+note says a branch cannot be reached by any fixture, that sentence is the work item.
+
+---
+
 ## 1. How to run anything
 
 `pnpm` is installed through corepack into a directory that is **not** on this machine's
@@ -1515,6 +1617,29 @@ failed their check` lines, not carried forward. **All nine exit 0.**
 | `08-client-runtime` | 174 | 288 red across 174; 221 ⚠ checked | **exit 0** |
 | `09-ui-primitives` | **153** | 210 red across 153; **155 ⚠ checked** | **exit 0** |
 | `10-panels-assembly` *(second run — see `steps/10-panels-assembly/10h-reconciliation.md` §5.1)* | **299** | 341 red across 299; **302 ⚠ checked** | **exit 0** |
+
+⚠⚠ **12a moved TWO of them, and the current numbers are 12a's own** (2026-09-15, both re-run by
+its reconciliation, serially, neither beside the other):
+
+| harness | mutations | red-test ledger | result |
+|---|---|---|---|
+| `10-panels-assembly` | **325** (was 313) | 502 red across 325; **335 ⚠ checked** (was 326) | **exit 0** |
+| `11-packaging` | **203** (was 191) | 94 red across 203; **93 ⚠ checked** (was 85) | **exit 0** on the second run |
+
+⚠ **Step 11's FIRST run returned 1, correctly**, and it is the most useful thing either harness
+did this loop: `12a-SH15` — delete the card-count marker from the in-container probe — **did not
+bite**, because every guard-table row stubs `docker` wholesale and nothing had ever executed the
+probe string itself. Six tests now run it in a real `sh` against a fake `nvidia-smi`, and three
+more mutations came with them. A harness exiting 1 on a mutation nobody had thought to cover is
+the ledger working; re-aiming it away would have been the defect.
+
+⚠ **12a's two new test files are in step 10's `LEDGER_FILES`**: `measurement-harness.test.ts`
+(the two browser harnesses and the credential shim — which were in NO ledger and in no mutation
+anywhere until this loop) and `lib/unsatisfiable-css-rule.test.ts`. ⚠ **`packaging.test.ts` now
+reads two files OUTSIDE `dashboard/`** — `../serve-llm.sh` and `../gpu-fan-control.sh`, whose
+`restart_ai_dashboard` is executed against a stubbed systemd. It is the only test in the suite
+that does, deliberately: root `CLAUDE.md`'s *"the loop applies to the root scripts too"*, and the
+alternative was no coverage at all for a function this loop wrote.
 
 **1180 mutation ids across the nine, 1180 unique, zero cross-harness collisions** — re-derived by importing each `regressions.py`, never by `grep -c`. **Zero `ANCHOR NOT FOUND`, zero `ANCHOR AMBIGUOUS`, zero `DID NOT BITE`, and every ⚠ mark reddened in all nine.**
 
@@ -2600,18 +2725,32 @@ top of `lib/guardrails.test.ts` — not by a text assertion.
 
 ---
 
-## 8. Spec gaps and open owner questions — ⚠⚠ **step 11's three (`11-Q1`…`11-Q3`) were RULED on 2026-09-11 and are BUILT by 11b; 11b raises FIVE of its own, all of them wording**; 10h's six; 10g's four still open; 10f's one; 10e's eight
+## 8. Spec gaps and open owner questions — ⚠⚠ **12a raises five, and `12a-Q2` is a line of `SPEC.md` §9 that 12a has made false**; step 11's three (`11-Q1`…`11-Q3`) were RULED on 2026-09-11 and are BUILT by 11b; 11b's five are wording; 10h's six; 10g's four still open; 10f's one; 10e's eight
 
 ⚠ This table has now been **stale five times** (92 % before step 5, 100 % before step 6, again
 before step 7, again in step 8, and again in Q2). **Every time, in the safe direction: entries
 carried as open that the spec had already answered.** Re-check every row against the spec text
 before trusting it. Invariant 7 stands: if the spec is silent, **report it — do not assume**.
 
-**Open, with owners — THIRTY-TWO rows: ⚠ 11b's five (`11b-Q1`…`11b-Q5`, below — step 11's three are
+**Open, with owners — THIRTY-SEVEN rows: ⚠⚠ 12a's five (`12a-Q1`/`Q2`/`Q9`/`Q10`/`Q11`, below —
+`12a-Q2` is the only row in this whole table that names a sentence in `SPEC.md` which is FALSE
+rather than absent), 11b's five (`11b-Q1`…`11b-Q5`, below — step 11's three are
 RULED AND BUILT and their rows are kept only for the reasoning), 10h's six, 10g's four, 10f's one still-open (`10f-Q6`;
 `10f-Q1`…`Q5` were ruled by the owner and BUILT by 10g), 10e's eight still-open ones (`10e-Q4`…`Q11`
 — `10e-Q1`/`Q3`/`Q12`/`Q13` were built by 10f and `10e-Q2` by 10g), Q2's two, 10a's four, 10b's
 three still-open ones, and 10b-S-G's four. S11/G5's rendering residue is CLOSED.**
+
+### ⚠⚠ NEW — 12a's five, 2026-09-15. **One of them is a line in `SPEC.md` that is now FALSE as written, and it is the only row here that is not merely a silence.**
+
+Full statements in `steps/12-deploy/12a-reconciliation.md` §6 and §9.
+
+| # | Gap | What stands today | Owner |
+|---|---|---|---|
+| **12a-Q2** ⚠⚠ | **§9 row 1 defines the header dot as *"one reduction over each condition's `displaySeverity`"*, and after 12a the painted dot is no longer exactly that**: a `normal` reduction with any §3.7 source unread paints NO band. The choice follows §6.2's own precedents (S-A, and 10b-S-F one level down) and nothing disagrees with it — the SENTENCE is what is false | Built and measured in both jsdom and a browser (record 15's `dotSeverity`). `watch` and `alarm` are untouched. **A proposed replacement for row 1's two cells is written out in `12a-reconciliation.md` §6, with the five places the tree changes if the parent rules the other way** | **owner / parent** |
+| **12a-Q10** ⚠ | **§6.2's paused/stale hatch has never painted.** `.status[data-mode='paused'\|'stale']` could not match — the attribute is on the child `.dot` — and the rule has been dead since the day after it was written. The dead rule is now REMOVED (no pixel changes); what to paint instead is unruled | §6.2's *"a paused dashboard must announce it loudly"* is carried by the `❙❙` glyph and the word. Two candidates are written down where the rule was: stamp `data-mode` on the pill too, or follow `MOCK.html` and render a **second** pill (`.agg__mode`). They are different designs, and `MOCK.html` is the source for FORM | **owner** |
+| **12a-Q1** | **`unread` collides with the "unread messages" idiom** — `● 2 sources unread` can read as *"two notices you have not looked at"*, the opposite of urgent. Carried unchanged from the TEST phase | Every argument in `header-status.ts`'s module doc survives a swap to `2 sources not read` / `2 sources silent`; the tests key on the literal, so it is a one-line change plus fixtures | **owner** |
+| **12a-Q11** ⚠ NEW | **A container that holds a device request and enumerates ZERO cards now FAILS `check`** — so `install` refuses on such a box (INSTALL-SPEC §12.2). INSTALL-SPEC §11.4 requires the row to judge its own failure but does not say what an exit-0-with-no-cards container is | It is the `gpus: []` shape §9 calls *retired*, and treating it as a pass is what the row exists to stop. Named because it is a box-visible behaviour change an operator meets for the first time during an install | **owner** |
+| **12a-Q9** | `gpu-fan-control.sh`'s `install`/`uninstall` ignore `DRY_RUN` **entirely** — they `install`, `cat >` and `rm -f` unconditionally — so that script's `--dry-run` promise is false for its two most destructive subcommands. Pre-existing; carried from the TEST phase | Only `restart_ai_dashboard` was fixed (and is now executed by `packaging.test.ts`). The rest is a root-script loop of its own | **owner**, then a root-script loop |
 
 ### ⚠⚠ CLOSED BY THE OWNER 2026-09-11 AND BUILT BY 11b — step 11's three
 
@@ -2877,6 +3016,9 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 
 | Work | Owner | Status |
 |---|---|---|
+| ⚠⚠ **`failingSourceCount` crossed with `alarmCount`/`aggregateSeverity` from the SAME snapshot** | step 10's ledger, step 08's module | **DEFERRED by 12a with a reason.** `header-status.test.ts` sweeps 912 points of SCALARS; `collector-visibility.test.tsx` renders the shell with `severity: 'normal', alarms: 0` **pinned in the fixture**. So nothing anywhere derives all three inputs from one snapshot and asks whether the header is right about it. Closing it means driving `lib/conditions.ts` → `lib/client/runtime.ts` from a snapshot and feeding the outputs to the header — a new fixture shape for a property neither loop has stated. `12a-reconciliation.md` §5.2 |
+| ⚠ **The `+N more` fade's geometry inside a GPU takeover well** | the loop that next touches `PanelNotes` | **DEFERRED by 12a.** Measurement 17's fixture files two `nvidia-smi` entries, one 180 characters, so the bounded well is doing real work on a graded page — but the fade's own geometry there is asserted nowhere. Measurement 15's `.rest` record measures that mechanism on the banner and `panel-notes.test.tsx` measures the count in jsdom; a third derivation of a guarded fact is what §0.8 says not to build. `12a-reconciliation.md` §5.3 |
+| ⚠ **A browser record for `measure-arrangements.mjs`'s own terms** | the loop that next touches the density harness | 12a's `measurement-harness.test.ts` pins fourteen terms, and **thirteen of them are `measure-breakpoints.mjs`'s**. The density harness has one (its `server-log` import). Its fixtures and its anatomy assertions are still guarded by nothing |
 | **Panel shell, chips, meters, rows, sparkline, stacked cooling chart** | **step 9** | specified — §6.1, §6.2, §6.6 |
 | ~~**`errorsForPanel(snapshot, panel)`**~~ (D4) | — | **closed 2026-09-07** — `lib/client/observations.ts:350`. ⚠ Carried as open here until Q2 checked |
 | ~~**`traceFor(state, pick)`**~~ (D5) | — | **closed 2026-09-07** — `lib/client/series.ts:201`. Same |

@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest';
 
 import { aggregateStatus, failingSourceCount } from './header-status';
+import { ERROR_SOURCES } from './wire';
 import { everythingZero, nothingReadable } from '../fixtures';
-import type { TelemetryError, TelemetrySnapshot } from '../types';
+import type { ErrorSource, Severity, TelemetryError, TelemetrySnapshot } from '../types';
 import type { RuntimeMode } from './mode';
 
 /**
@@ -251,29 +252,196 @@ describe('⚠⚠ 12a — failingSourceCount is a count of SOURCES, and never of 
   });
 });
 
+/**
+ * ⚠⚠ 12a/TEST — the whole range, generated rather than sampled.
+ *
+ * The cases above pin the shapes that matter one at a time: one failing source, two, the
+ * production case, each band. That leaves the rule stated at three points of a nineteen-point
+ * axis and on four of sixteen (mode × band) crossings, and a rule tested at its examples is a
+ * rule that holds at its examples — HANDOVER §0.14, the reason `collector-visibility.test.tsx`
+ * is a product rather than a list. The counts below run from ZERO through **all eighteen**
+ * §3.7 sources, read from `ERROR_SOURCES` so the ceiling tracks `lib/types.ts` rather than a
+ * number typed here, and cross every count with every mode and every band.
+ */
+describe('⚠⚠ 12a — zero through all eighteen, crossed with every mode and every band', () => {
+  const SOURCES = Object.keys(ERROR_SOURCES) as readonly ErrorSource[];
+  const COUNTS = SOURCES.map((_, i) => i + 1);
+  const MODES: readonly RuntimeMode[] = ['live', 'paused', 'stale', 'expired'];
+  const BANDS: readonly (Severity | null)[] = [null, 'normal', 'watch', 'alarm'];
+
+  test('the axis is the closed union itself, not a number typed here', () => {
+    // Anti-vacuity: a `COUNTS` that generated nothing would satisfy every loop below.
+    expect(SOURCES).toHaveLength(18);
+    expect(COUNTS[0]).toBe(1);
+    expect(COUNTS.at(-1)).toBe(18);
+  });
+
+  test('⚠ every count from 1 to 18 carries the clause, and zero carries nothing, in every mode', () => {
+    for (const mode of MODES) {
+      const clauseless = mode === 'expired';
+      expect(aggregateStatus(mode, 0, 'normal', 0).text).not.toContain('unread');
+      for (const failing of COUNTS) {
+        const { text } = aggregateStatus(mode, 0, 'normal', failing);
+        if (clauseless) {
+          // The hand-off to `/login` has begun; every fact on the page is about to be replaced.
+          expect(text).toBe('signed out');
+          continue;
+        }
+        // ⚠ Singular at exactly one, plural everywhere else — the one place this axis has a
+        // boundary, asserted at the boundary rather than at a sample near it.
+        expect(text).toContain(failing === 1 ? '1 source unread' : `${failing} sources unread`);
+        expect(text).not.toContain('sources unread · ');
+        // §6.2's one forbidden shape, at every count rather than at the two that were fixtured.
+        expect(text).not.toContain('all healthy');
+      }
+    }
+  });
+
+  test('⚠ every band crossed with every count: only a normal one loses its band, and only when failing', () => {
+    for (const band of BANDS) {
+      for (const failing of [0, ...COUNTS]) {
+        const { severity } = aggregateStatus('live', 0, band, failing);
+        // 10b-S-F one level up: `normal` over an unread source is no band; `watch` and `alarm`
+        // keep theirs, or a failing collector would HIDE the alarm it is standing beside.
+        expect(severity).toBe(band === 'normal' && failing > 0 ? null : band);
+      }
+    }
+  });
+
+  /**
+   * ⚠⚠ 12a/RECONCILE (`12a-A6`) — **THE CROSSING, which the two tests above are not.**
+   *
+   * Measured against this file rather than reasoned: the count test calls
+   * `aggregateStatus(mode, 0, 'normal', failing)` and the band test
+   * `aggregateStatus('live', 0, band, failing)`, so **`alarms` is 0 in every generated case**,
+   * mode × band is never crossed at all (4 + 4 slices, not 16), and `glyph` is never asserted
+   * anywhere in the block — a `BY_MODE` table whose `paused` and `stale` glyphs were swapped
+   * passed all of it. The name said *"crossed with every mode and every band"*.
+   *
+   * This is the product: 4 modes × 4 bands × 3 alarm counts × 19 failing counts = 912 points,
+   * every one of them asserted on all three returned fields.
+   *
+   * ⚠ The expectations are STRUCTURAL, deliberately — "does the clause end the string", "is the
+   * alarm word present", "is the mode's own word there" — rather than a second copy of
+   * `aggregateStatus`'s own string building. A test that re-implements the function it tests
+   * agrees with every bug it has. The exact literals are pinned at the named points below,
+   * where a human chose the string.
+   */
+  test('⚠ the real crossing: 4 modes × 4 bands × 3 alarm counts × 0…18 unread sources', () => {
+    const GLYPH: Readonly<Record<RuntimeMode, string>> = {
+      live: '●',
+      paused: '❙❙',
+      stale: '⊘',
+      expired: '⊘',
+    };
+    let points = 0;
+    for (const mode of MODES) {
+      for (const band of BANDS) {
+        for (const alarms of [0, 1, 6]) {
+          for (const failing of [0, ...COUNTS]) {
+            const at = `${mode}/${String(band)}/${alarms}/${failing}`;
+            const { glyph, text, severity } = aggregateStatus(mode, alarms, band, failing);
+            points += 1;
+
+            // 1. The GLYPH is the mode's, in every band and at every count — nothing asserted
+            //    this in the sweep, and it is how §6.2's "❙❙ paused" is told from "⊘ stale".
+            expect(glyph, at).toBe(GLYPH[mode]);
+
+            // 2. §9's omit-at-zero, everywhere: the literal 0 never reaches the header.
+            expect(text, at).not.toMatch(/(^|\s)0\s/);
+            expect(text, at).not.toContain('0 alarms');
+
+            if (mode === 'expired') {
+              // §5.2's hand-off has begun: no count, no clause, and the band untouched.
+              expect(text, at).toBe('signed out');
+              expect(severity, at).toBe(band);
+              continue;
+            }
+
+            // 3. 10b-S-F one level up, now at every alarm count rather than at zero.
+            expect(severity, at).toBe(band === 'normal' && failing > 0 ? null : band);
+
+            // 4. The clause is a SUFFIX and appears exactly when a source is unread.
+            const clause = failing === 1 ? '1 source unread' : `${failing} sources unread`;
+            expect(text.endsWith(clause), `${at}: ${text}`).toBe(failing > 0);
+
+            // 5. The alarm count survives every other rule — a failing collector may never
+            //    hide an alarm (`12a-HS5`), and neither may a paused or stale mode (§6.2).
+            expect(text.includes(alarms === 1 ? '1 alarm' : `${alarms} alarms`), at).toBe(alarms > 0);
+
+            // 6. The mode's own word is there in every mode that has one, and §6.2's one
+            //    forbidden shape is absent whenever any source is unread.
+            if (mode !== 'live') expect(text.startsWith(mode), at).toBe(true);
+            expect(text.includes('all healthy'), at).toBe(
+              mode === 'live' && alarms === 0 && band !== null && failing === 0,
+            );
+            expect(text.includes('no readings'), at).toBe(mode === 'live' && alarms === 0 && band === null);
+          }
+        }
+      }
+    }
+    expect(points).toBe(4 * 4 * 3 * 19);
+  });
+
+  test('⚠ the shapes the two slices could not reach, pinned as literals', () => {
+    // ⚠ `12a-A6` named this one: `live`, no alarms, no band, three sources unread is reachable
+    // — it is the first frames of any page load on a half-blind box — and NO test in the tree
+    // asserted the string it produces. The slices could not: one pinned the band at `normal`,
+    // the other read only `severity`.
+    expect(aggregateStatus('live', 0, null, 3).text).toBe('no readings · 3 sources unread');
+    // The mode × band corners, which 4 + 4 slices never visit.
+    expect(aggregateStatus('paused', 0, null, 2).text).toBe('paused · 2 sources unread');
+    expect(aggregateStatus('stale', 6, 'alarm', 1).text).toBe('stale · 6 alarms · 1 source unread');
+    expect(aggregateStatus('stale', 6, 'alarm', 1).severity).toBe('alarm');
+    expect(aggregateStatus('live', 1, 'watch', 18).text).toBe('1 alarm · 18 sources unread');
+    // And the glyphs, as literals, so the table cannot be swapped silently.
+    expect(aggregateStatus('paused', 0, 'normal', 0).glyph).toBe('❙❙');
+    expect(aggregateStatus('stale', 0, 'normal', 0).glyph).toBe('⊘');
+  });
+
+  test('⚠ every §3.7 source failing at once is eighteen, and a second entry on each is still eighteen', () => {
+    // The ceiling of the axis, taken from a real snapshot rather than from the number 18 — and
+    // doubled, because "distinct sources" and "entries" agree on the first list and not on the
+    // second. This is the same discrimination the four-entry fixture above exists for, applied
+    // to the whole union at once.
+    const one: TelemetryError[] = SOURCES.map((source) => ({ source, message: `${source}: unreadable` }));
+    expect(failingSourceCount({ ...everythingZero, errors: one })).toBe(18);
+    expect(failingSourceCount({ ...everythingZero, errors: [...one, ...one] })).toBe(18);
+    expect(aggregateStatus('live', 0, 'normal', 18).text).toBe('18 sources unread');
+    expect(aggregateStatus('paused', 6, 'alarm', 18).text).toBe('paused · 6 alarms · 18 sources unread');
+  });
+});
+
 describe('12a — the status text is an UNBOUNDED string in a band whose height is a constant', () => {
   test('the longest text this function can produce stays far inside the measured wrap threshold', () => {
     // ⚠ Why this exists. `--band-reserve: 102px` is a CONSTANT §6.1's row arithmetic subtracts
     // from `100vh`, and `.status` in `header.module.css` is `white-space: nowrap` with no
     // `max-width` — so a longer status string is the same class of hazard as the unbounded
-    // hostname 10h had to truncate. 12a makes this string longer, so it was measured in real
-    // headless Chrome at 1280×1024 (the tightest viewport §6.1 names), against the header
-    // markup and this project's own `tokens.css` + `header.module.css`:
+    // hostname 10h had to truncate. 12a makes this string longer, so it is measured in real
+    // headless Chrome at 1280×1024, the tightest viewport §6.1 names.
     //
-    //   | `.statusText`                             | width   | header |
-    //   |-------------------------------------------|---------|--------|
-    //   | `all healthy` (today, healthy)            |  76.5px | 43.0px |
-    //   | `6 alarms` (today, worst)                 |  55.6px | 43.0px |
-    //   | `1 source unread` (12a)                   | 104.3px | 43.0px |
-    //   | `paused · 6 alarms · 18 sources unread`   | 257.3px | 43.0px |  ← 12a's WORST
-    //   | the wrap threshold at 1280                | 500.6px | 43.0px |
-    //   | one character past it                     | 507.5px | 71.8px |  ← the band breaks
+    // ⚠⚠ RE-TRANSCRIBED 2026-09-15 BY THE RECONCILIATION, FROM A PASSING RUN (`12a-A1`). This
+    // comment used to carry a six-row table hand-measured by the BUILD phase in a scratch page,
+    // because `measure-breakpoints.mjs` could not log in that day. Four of its six rows —
+    // `all healthy` 76.5 px, `6 alarms` 55.6 px, `1 source unread` 104.3 px,
+    // `paused · 6 alarms · 18 sources unread` 257.3 px, and the 500.6/507.5/71.8 px wrap
+    // threshold — **cannot be reproduced from any passing run in this repository**: the scratch
+    // page is gone and no standing record measures those strings. Under this loop's own rule
+    // (*a number transcribed from a run nobody can repeat is not evidence*) they are STRUCK
+    // rather than re-justified. What replaces them is record 15 of `measure-breakpoints.mjs`,
+    // which re-measures on every run, and its numbers from the green run of 2026-09-15:
     //
-    // 18 is every §3.7 source failing at once, so that row is the ceiling and not an estimate.
-    // 243px / 36 characters of margin at 1280; the header does not wrap at all at 1600 or 1920
-    // within 60 extra characters. The budget below is a cheap proxy for that paint measurement
-    // — it cannot see a font change or a CSS edit, and it is not marked ⚠ for that reason —
-    // but it is what turns a word added here into a decision rather than an accident.
+    //   | measured on the HOSTILE page, 1280×1024   | value  |
+    //   |-------------------------------------------|--------|
+    //   | the status text on screen                 | `529 alarms · 18 sources unread` |
+    //   | its width                                 | 208.6 px |
+    //   | the header                                | 43.0 px — ONE row (4 painting children) |
+    //   | the same header, absurd status string     | 98.1 px — wrapped |
+    //
+    // 18 is every §3.7 source failing at once, so the clause is at its ceiling and not an
+    // estimate. The budget below is a cheap proxy for that paint measurement — it cannot see a
+    // font change or a CSS edit, and it is not marked ⚠ for that reason — but it is what turns
+    // a word added here into a decision rather than an accident.
     const longest = (['live', 'paused', 'stale', 'expired'] as const).flatMap((mode) =>
       [0, 6, 999].flatMap((alarms) =>
         ([null, 'normal', 'watch', 'alarm'] as const).flatMap((severity) =>

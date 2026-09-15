@@ -39,6 +39,9 @@ import path from 'node:path';
 import { chromium } from 'playwright-core';
 
 import { ARRANGEMENTS } from './arrangements.mjs';
+// ⚠⚠ 12a/RECONCILE (`12a-A3`) — see that module: this script's `next dev` output was piped and
+// never read, so the shim's absence timed out naming a port instead of naming the cause.
+import { attachServerLog, waitWithServerOutput } from '../server-log.mjs';
 
 const HERE = path.resolve(fileURLToPath(new URL('.', import.meta.url)));
 const ROOT = path.resolve(HERE, '../../../..');
@@ -48,6 +51,8 @@ const CHROME_CANDIDATES = [
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
 ];
 const PASSWORD = `measure1-${randomBytes(9).toString('base64url')}`;
+/** ⚠ 12a/TEST — the harness-only `/etc/ai-dashboard.env` shim, shared with `../measure-breakpoints.mjs`. */
+const SECRET_FILE_SHIM = path.resolve(HERE, '../secret-file-shim.cjs');
 
 const VIEWPORTS = [
   { width: 1280, height: 1024 },
@@ -444,15 +449,29 @@ async function main() {
   console.log(`[10d] next dev on :${PORT}, fixture=${FIXTURE}`);
   const server = spawn('pnpm', ['exec', 'next', 'dev', '--port', String(PORT)], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(PORT), PASSWORD_HASH: passwordHash, SESSION_SECRET: sessionSecret },
+    // ⚠⚠ 12a/TEST — the same §5.1 repair `../measure-breakpoints.mjs` carries, and for the same
+    // reason: since 2026-09-11 the two secrets are read from `/etc/ai-dashboard.env`, never from
+    // the environment, so this script's own login has been answering 401. `secret-file-shim.cjs`
+    // fakes that file's two syscalls inside this spawned server and nowhere else.
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      MEASURE_PASSWORD_HASH: passwordHash,
+      MEASURE_SESSION_SECRET: sessionSecret,
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, `--require ${SECRET_FILE_SHIM}`]
+        .filter((part) => part !== undefined && part !== '')
+        .join(' '),
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   });
 
+  const serverLog = attachServerLog(server);
+
   let browser = null;
   const report = { fixture: FIXTURE, arrangements: {}, extras: {} };
   try {
-    await waitForServer(`http://localhost:${PORT}/login`, 90_000);
+    await waitWithServerOutput(() => waitForServer(`http://localhost:${PORT}/login`, 90_000), serverLog);
     browser = await chromium.launch({ headless: true, executablePath: chromePath });
     const page = await browser.newPage();
     await installFabrication(page);

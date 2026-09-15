@@ -1277,7 +1277,13 @@ const BOX_STUBS = [
   // because that status conflates "the command failed" with "the exec never happened" — so a
   // stub that always emitted a marker could not tell the row's `unknown` arm from its `fail`
   // one, which is the distinction the whole row exists for.
-  '    exec*)                   emit "${EXEC_OUT-RC=0}" ;;',
+  //
+  // ⚠⚠ 12a/RECONCILE — the probe now prints TWO markers and the healthy default carries both:
+  // `nvidia-smi -L >/dev/null` discarded the list, so a container that reached the driver and
+  // enumerated ZERO cards exited 0 and scored the tick. A default of `RC=0` alone would now
+  // mean "no GPUS marker", which is the `unknown` arm — so the default is the healthy BOX:
+  // two cards listed, exit 0.
+  '    exec*)                   emit "${EXEC_OUT-$\'GPUS=2\\nRC=0\'}" ;;',
   // ⚠ Each of these can FAIL, deliberately. Until 2026-09-11 only the Env one could, on the
   // reasoning that "every other row compares two values, so a failed read makes them differ".
   // MEASURED false for two of them: the unit carries no --restart and publishes no port, so
@@ -1564,11 +1570,16 @@ describe('⚠⚠ every check row REFUSES on its own bad input and PERMITS on a h
     // The production failure of 2026-09-14, and every way this row can be asked the question.
     // `check_container`'s GPU-mode row passed throughout that outage: the device REQUEST was
     // still there, and the cgroup underneath it was what the daemon-reload rewrote.
+    //
+    // ⚠⚠ 12a/RECONCILE — the probe prints two markers (`GPUS=` and `RC=`) and both go through
+    // ONE parser, `marker_number`, which requires EXACTLY ONE occurrence carrying a number in
+    // range. Every row below states which of the three things it exercises: the exit status,
+    // the card count, or the parse.
     { guard: '⚠⚠ §11.4 device access revoked', row: 'check_container_gpu_access',
       what: 'the production case — a device request in force and nvidia-smi failing inside the container',
-      verdict: 'fail', env: { EXEC_OUT: 'RC=255' }, says: 'THE CONTAINER CANNOT SEE THE GPUs' },
+      verdict: 'fail', env: { EXEC_OUT: 'GPUS=0\nRC=255' }, says: 'THE CONTAINER CANNOT SEE THE GPUs' },
     { guard: '§11.4 device access', row: 'check_container_gpu_access',
-      what: 'a container that can read the cards', verdict: 'pass', says: 'ran nvidia-smi and read the cards' },
+      what: 'a container that can read the cards', verdict: 'pass', says: 'ran nvidia-smi and read 2 card(s)' },
     { guard: '⚠⚠ §11.4 exec produced nothing', row: 'check_container_gpu_access',
       what: 'docker exec that never ran — NOT "the container cannot see the cards"',
       verdict: 'unknown', env: { EXEC_OUT: '' }, says: 'it is nobody looked' },
@@ -1577,13 +1588,88 @@ describe('⚠⚠ every check row REFUSES on its own bad input and PERMITS on a h
       verdict: 'unknown', env: { D_NAMED: '' }, says: 'nvidia-smi cannot be run in one' },
     { guard: '⚠ §11.4 fallback agrees', row: 'check_container_gpu_access',
       what: 'the documented fallback: no device request, and nvidia-smi fails inside — a MEASURED agreement',
-      verdict: 'pass', env: { D_DEVREQ: 'null', EXEC_OUT: 'RC=127' }, says: 'is the fallback' },
+      verdict: 'pass', env: { D_DEVREQ: 'null', EXEC_OUT: 'GPUS=0\nRC=127' }, says: 'is the fallback' },
     { guard: '⚠ §11.4 fallback disagrees', row: 'check_container_gpu_access',
       what: 'no device request, and nvidia-smi answers anyway — two readings that cannot both be right',
-      verdict: 'fail', env: { D_DEVREQ: 'null', EXEC_OUT: 'RC=0' }, says: 'disagree' },
+      verdict: 'fail', env: { D_DEVREQ: 'null', EXEC_OUT: 'GPUS=2\nRC=0' }, says: 'disagree' },
     { guard: '⚠ §11.4 mode unreadable', row: 'check_container_gpu_access',
       what: 'an unreadable DeviceRequests — there is nothing to judge the exit status against',
-      verdict: 'unknown', env: { D_DEVREQ: 'wat', EXEC_OUT: 'RC=0' }, says: 'nothing to judge that against' },
+      verdict: 'unknown', env: { D_DEVREQ: 'wat', EXEC_OUT: 'GPUS=2\nRC=0' }, says: 'nothing to judge that against' },
+    // ---- ⚠⚠ 12a/TEST — THE EIGHTH ARM: a marker with no exit status behind it ------------
+    // Measured 2026-09-15, both directions, because the two verdicts it produced were opposite
+    // and both confident. `${out##*RC=}` on a TRUNCATED marker is the empty string, so
+    // `"${mode}:${rc}"` read `fallback:` — which `fallback:*` matched — and the row printed a
+    // GREEN TICK reading "nvidia-smi exited  inside it"; in `gpu` mode the same input matched
+    // `gpu:*` and printed the production failure's own FAILURE, pointing an operator at a
+    // container whose devices may be fine. A partial write is nobody having looked, which is
+    // the one thing INSTALL-SPEC §11.4 says this row may never turn into a verdict.
+    { guard: '⚠⚠ §11.4 truncated marker, fallback', row: 'check_container_gpu_access',
+      what: 'RC= with no status behind it — this was a green tick, on a row nobody had measured',
+      verdict: 'unknown', env: { D_DEVREQ: 'null', EXEC_OUT: 'GPUS=0\nRC=' }, says: 'it is nobody looked' },
+    { guard: '⚠⚠ §11.4 truncated marker, gpu', row: 'check_container_gpu_access',
+      what: 'the same partial write with a device request in force — this was the production FAILURE message',
+      verdict: 'unknown', env: { EXEC_OUT: 'GPUS=2\nRC=' }, says: 'no exit status behind its marker' },
+    { guard: '⚠ §11.4 non-numeric marker', row: 'check_container_gpu_access',
+      what: 'a marker carrying something that is not an exit status at all',
+      verdict: 'unknown', env: { D_DEVREQ: 'null', EXEC_OUT: 'GPUS=0\nRC=oops' }, says: 'it is nobody looked' },
+    { guard: '⚠ §11.4 marker with trailing noise', row: 'check_container_gpu_access',
+      what: 'a real status with container output after it — the status is read, the noise is not',
+      verdict: 'fail', env: { EXEC_OUT: 'GPUS=0\nRC=255 and some container chatter' },
+      says: 'nvidia-smi inside it exited 255 —' },
+    // ---- ⚠⚠ 12a/RECONCILE — THE NINTH ARM: which of two markers is the verdict ------------
+    // `${out##*RC=}` took everything after the LAST marker, so `RC=255` followed by `RC=0`
+    // scored ✓ "the container ran nvidia-smi and read the cards" — a false green on the one
+    // row that exists to catch a false green. Anything that emits a second marker (an ENV or
+    // profile in the image, a shell exit trap, a retried exec, an operator's instrumentation)
+    // could do it. The safe reading of two disagreeing answers is that nobody looked, and both
+    // ORDERS are fixtured because only one of them looks like the bug.
+    { guard: '⚠⚠ §11.4 two markers, failure then success', row: 'check_container_gpu_access',
+      what: 'RC=255 then RC=0 — the last-marker-wins parse scored this a TICK',
+      verdict: 'unknown', env: { EXEC_OUT: 'GPUS=2\nRC=255\nRC=0' }, says: 'two that disagree' },
+    { guard: '⚠ §11.4 two markers, success then failure', row: 'check_container_gpu_access',
+      what: 'the same ambiguity the other way round — still nobody looked, not a verdict',
+      verdict: 'unknown', env: { EXEC_OUT: 'GPUS=2\nRC=0\nRC=255' }, says: 'two that disagree' },
+    { guard: '⚠ §11.4 two markers on ONE line', row: 'check_container_gpu_access',
+      what: 'RC=0 RC=255 in one line — a line-wise count would see one marker here',
+      verdict: 'unknown', env: { EXEC_OUT: 'GPUS=2\nRC=0 RC=255' }, says: 'two that disagree' },
+    // ---- ⚠⚠ 12a/RECONCILE — the SHELL's own statuses, which are not nvidia-smi's ----------
+    // 127 is *command not found* and 126 is *not executable*: the NVIDIA runtime did not inject
+    // the utility binaries, or the image overwrote them. Both used to print the 2026-09-14
+    // message and "Fix: sudo ./dashboard.sh restart", and a restart cannot put a binary into an
+    // image — it re-creates the container exactly the same way.
+    { guard: '⚠⚠ §11.4 nvidia-smi not in the image', row: 'check_container_gpu_access',
+      what: 'a device request in force and the shell answering 127 — a toolkit fault, not a revocation',
+      verdict: 'fail', env: { EXEC_OUT: 'GPUS=0\nRC=127' }, says: 'IS NOT RUNNABLE' },
+    { guard: '⚠ §11.4 nvidia-smi not executable', row: 'check_container_gpu_access',
+      what: 'the same arm at 126 — found, and not executable',
+      verdict: 'fail', env: { EXEC_OUT: 'GPUS=0\nRC=126' }, says: 'found but not executable' },
+    // ---- ⚠⚠ 12a/RECONCILE — the CARD COUNT, which the row claims to have read --------------
+    // `nvidia-smi -L >/dev/null` threw the list away, so a container that reaches the driver and
+    // enumerates ZERO cards exits 0 and scored "read the cards". That is the `gpus: []` shape
+    // §9 calls retired — the one measurement 16 was added this loop to grade in a browser — and
+    // the row's sentence claimed something nothing had measured.
+    { guard: '⚠⚠ §11.4 zero cards at exit 0', row: 'check_container_gpu_access',
+      what: 'nvidia-smi answers and lists NO cards — the gpus: [] shape, which used to score the tick',
+      verdict: 'fail', env: { EXEC_OUT: 'GPUS=0\nRC=0' }, says: 'THE CONTAINER SEES NO CARDS' },
+    { guard: '⚠ §11.4 the count is read, not assumed', row: 'check_container_gpu_access',
+      what: 'one card listed instead of two — the sentence prints what it counted',
+      verdict: 'pass', env: { EXEC_OUT: 'GPUS=1\nRC=0' }, says: 'read 1 card(s)' },
+    { guard: '⚠⚠ §11.4 no count marker at all', row: 'check_container_gpu_access',
+      what: 'an exit status with no GPUS= behind it — half an answer is not an answer',
+      verdict: 'unknown', env: { EXEC_OUT: 'RC=0' }, says: 'it is nobody looked' },
+    // ---- ⚠ 12a-A10 — the 0-255 boundary, which nothing tested in either direction ---------
+    // The old guard rejected 4+ characters and its comment claimed "1 to 3 digits, since a
+    // status is 0-255", so `RC=300` and `RC=999` were verdicts. Both sides of the real bound
+    // are fixtured here: 255 is an exit status, 256 is not.
+    { guard: '⚠ §11.4 the largest real exit status', row: 'check_container_gpu_access',
+      what: '255 — accepted, and it is the production failure’s own status',
+      verdict: 'fail', env: { EXEC_OUT: 'GPUS=0\nRC=255' }, says: 'exited 255' },
+    { guard: '⚠ §11.4 one past the largest', row: 'check_container_gpu_access',
+      what: '256 — three digits, and not an exit status any shell can produce',
+      verdict: 'unknown', env: { EXEC_OUT: 'GPUS=0\nRC=256' }, says: 'no exit status behind its marker' },
+    { guard: '⚠ §11.4 four digits', row: 'check_container_gpu_access',
+      what: 'RC=1000 — rejected by length as well as by range',
+      verdict: 'unknown', env: { EXEC_OUT: 'GPUS=0\nRC=1000' }, says: 'no exit status behind its marker' },
     // ---- 11-Q3, the container against the unit --------------------------------------
     { guard: 'drift', row: 'check_drift', what: 'a container created from exactly the unit’s flags',
       verdict: 'pass', env: { UNIT_PATH: REAL_UNIT }, says: 'neither secret is in docker inspect' },
@@ -2084,6 +2170,65 @@ describe('⚠⚠ the subcommand guards refuse, and each of them is one line from
     expect(r.status).toBe(0);
     expect(r.out).not.toContain('SYSTEMCTL restart ai-dashboard.service');
     expect(r.out).toContain('not active — nothing to restart');
+  });
+
+  test('⚠⚠ an inactive unit with a container STILL RUNNING is said out loud, not called "nothing to restart"', () => {
+    // ⚠ 12a/TEST — the arm above is right about the unit and says nothing about the CONTAINER,
+    // which is §11.4's own lesson one level up: on 2026-09-14 every host-side reading agreed
+    // while the container was blind. A unit that is inactive (or whose ActiveState could not be
+    // read at all) while a container of that name is up is a container that HAS just lost its
+    // device access — and it was being reported as `nothing to restart`.
+    //
+    // ⚠ It still does not restart: `systemctl restart` would START the unit, which during
+    // `install` brings the dashboard up before `cmd_firewall` writes its rule (11-A9). What
+    // changes is that the operator is told, and told what to run.
+    const r = sourced(
+      [
+        ...CMD_STUBS,
+        'container_ids() { printf "c0ffee\\n"; }',
+        'systemctl() { if [[ "$1" == show ]]; then printf "%s\\n" "${ACTIVE-inactive}"; else printf "SYSTEMCTL %s\\n" "$*"; fi; }',
+        'restart_after_daemon_reload',
+      ],
+      { UNIT_PATH: REAL_UNIT, ACTIVE: 'failed' },
+    );
+    expect(r.status).toBe(0);
+    expect(r.out).not.toContain('SYSTEMCTL restart ai-dashboard.service');
+    expect(r.out).not.toContain('nothing to restart');
+    expect(r.out).toContain('IS running');
+    expect(r.out).toContain('sudo ./dashboard.sh restart');
+  });
+
+  test('⚠ an unreadable ActiveState with a container running is the same warning, not silence', () => {
+    // The state `systemctl show` could not produce at all — indistinguishable from `inactive`
+    // by the reading this guard makes, and the reason the arm may not treat the two alike.
+    const r = sourced(
+      [
+        ...CMD_STUBS,
+        'container_ids() { printf "c0ffee\\n"; }',
+        'systemctl() { if [[ "$1" == show ]]; then return 1; else printf "SYSTEMCTL %s\\n" "$*"; fi; }',
+        'restart_after_daemon_reload',
+      ],
+      { UNIT_PATH: REAL_UNIT },
+    );
+    expect(r.status).toBe(0);
+    expect(r.out).toContain('is unreadable');
+    expect(r.out).toContain('IS running');
+    expect(r.out).not.toContain('SYSTEMCTL restart ai-dashboard.service');
+  });
+
+  test('⚠ and with NO container running it stays the quiet info line it was', () => {
+    // The other side: nothing is running, so nothing has lost anything. Without this, the
+    // warning above is satisfiable by warning always — which would make `install` on a fresh
+    // box shout about a container that does not exist.
+    const r = sourced(
+      [...CMD_STUBS,
+       'systemctl() { if [[ "$1" == show ]]; then printf "inactive\\n"; else printf "SYSTEMCTL %s\\n" "$*"; fi; }',
+       'restart_after_daemon_reload'],
+      { UNIT_PATH: REAL_UNIT },
+    );
+    expect(r.status).toBe(0);
+    expect(r.out).toContain('not active — nothing to restart');
+    expect(r.out).not.toContain('IS running');
   });
 
   test('⚠ a FAILED restart is reported and names the consequence, never swallowed', () => {
@@ -3104,5 +3249,219 @@ describe('⚠ dashboard.sh', () => {
     expect(DASHBOARD_SH).not.toMatch(/(^|[\s(])(\.|source)\s+"?\$\{?ENV_FILE/m);
     expect(DASHBOARD_SH).toContain('IFS= read -rs PW1');
     expect(DASHBOARD_SH).toContain('printf \'%s\' "$PW1" | python3');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// ⚠⚠ 12a/RECONCILE — the SIBLING scripts' `restart_ai_dashboard`, which no test executed
+// ---------------------------------------------------------------------------------------
+//
+// `12a-A9` items 8 and 9: *"delete the whole `if (( DRY ))` block — no test runs the file."*
+// `serve-llm.sh` and `gpu-fan-control.sh` are named in `packaging.test.ts` in three comment
+// strings and nowhere else, and neither is in any harness's `LEDGER_FILES`, so the fix this
+// loop made to both — `--dry-run` must not restart a LIVE dashboard — was guarded by nothing
+// at all. The test phase probed both functions by hand and recorded the probe as *"the only
+// coverage those two functions have"*. That is what this closes: the probe is a standing test.
+//
+// ⚠ Why the function is EXTRACTED and evaluated rather than the script sourced. Both scripts
+// run `main` when sourced, and both hard-code `/etc/systemd/system/<unit>` — a path that does
+// not exist on this Mac, so the function would return at its first line and certify nothing.
+// The body is read out of the file, the systemd directory is rewritten to a temp one, and the
+// result is evaluated with `systemctl` stubbed. **The substitution is asserted**, so a script
+// that stops spelling the path this way fails here rather than quietly testing a no-op.
+//
+// ⚠ This reaches OUTSIDE `dashboard/` — the only test in the suite that does. That is
+// deliberate and it is the root `CLAUDE.md`'s 2026-09-15 note (*"the loop applies to the root
+// scripts too"*): these two functions exist to keep §11.4's daemon-reload rule, they were
+// written by this loop, and the alternative to one file-relative read is no coverage.
+describe('⚠⚠ 12a — the sibling scripts do not restart a LIVE dashboard under --dry-run', () => {
+  const REPO_ROOT = join(projectRoot, '..');
+  const SYSTEMD_DIR = '/etc/systemd/system/';
+
+  /** One shell function's body, read out of a sibling script. */
+  const siblingFunction = (script: string, name: string): string => {
+    const text = readFileSync(join(REPO_ROOT, script), 'utf8');
+    const header = `\n${name}() {\n`;
+    const at = text.indexOf(header);
+    expect(at, `${name}() is not defined in ${script}`).toBeGreaterThan(-1);
+    const to = text.indexOf('\n}\n', at + header.length);
+    expect(to).toBeGreaterThan(at);
+    const body = text.slice(at + header.length, to);
+    // The seam this test depends on, asserted rather than assumed.
+    expect(body, `${script}:${name} no longer reads ${SYSTEMD_DIR}`).toContain(SYSTEMD_DIR);
+    return body;
+  };
+
+  /**
+   * Run one sibling's `restart_ai_dashboard` against a stubbed systemd.
+   *
+   * `dryVar` is the name each script spells its flag with — `DRY` in `serve-llm.sh`,
+   * `DRY_RUN` in `gpu-fan-control.sh`. That they differ is itself worth pinning: a copy of
+   * this function into a third script would most likely carry the wrong one, and the wrong
+   * one is silently `0`.
+   */
+  const runRestart = (
+    script: string,
+    dryVar: string,
+    opts: { readonly dry: string; readonly state: string; readonly unitPresent: boolean },
+  ): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'sibling-unit-'));
+    try {
+      if (opts.unitPresent) writeFileSync(join(dir, 'ai-dashboard.service'), '# unit\n');
+      const body = siblingFunction(script, 'restart_ai_dashboard').split(SYSTEMD_DIR).join(`${dir}/`);
+      const shell = [
+        'set -euo pipefail',
+        `${dryVar}=${opts.dry}`,
+        "info() { printf 'INFO %s\\n' \"$*\"; }",
+        "ok() { printf 'OK %s\\n' \"$*\"; }",
+        "warn() { printf 'WARN %s\\n' \"$*\"; }",
+        // ⚠ The stub PRINTS what it was asked to do, so "did not restart" is a measured
+        // absence of a line rather than the absence of an error.
+        `systemctl() { case "$1" in show) printf '%s\\n' "${opts.state}" ;; restart) printf 'RESTARTED-FOR-REAL\\n' ;; *) : ;; esac; }`,
+        'restart_ai_dashboard() {',
+        body,
+        '}',
+        'restart_ai_dashboard',
+      ].join('\n');
+      return execFileSync('bash', ['-c', shell], { encoding: 'utf8', cwd: REPO_ROOT });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  const SIBLINGS: readonly (readonly [string, string])[] = [
+    ['serve-llm.sh', 'DRY'],
+    ['gpu-fan-control.sh', 'DRY_RUN'],
+  ];
+
+  // ⚠ The `%s` is LAST, not first: every harness keys a ⚠ mark by `name.split('%')[0]`, so a
+  // leading placeholder leaves the key as the marker alone — a substring of every ⚠ FAIL line,
+  // which scores the mark covered without any mutation touching it (10g-A7, HANDOVER §5.2
+  // rule 5). Measured here: the step-11 harness reports it as unmatchably short and returns 1.
+  // ⚠⚠ And the comment lives HERE, above the call, not between `(` and the name: the ⚠-scanner
+  // reads the first STRING LITERAL after the argument list and does not skip comments, so a
+  // comment in that position makes the mark invisible to the ledger. It reported this one
+  // (`a test/it call the ⚠-scanner cannot read`) rather than dropping it, which is Q1-F3's
+  // diagnostic doing exactly what it was added for.
+  test.each(SIBLINGS)(
+    '⚠ --dry-run PRINTS the restart and does not perform it, on an ACTIVE unit — %s',
+    (script, dryVar) => {
+      // The state that matters: the unit is installed and RUNNING, so a real run would restart
+      // it. `./serve-llm.sh uninstall --dry-run` on the box took the live dashboard down and
+      // back up for real until this loop; every other line in that subcommand goes through
+      // `run`, which only prints.
+      const out = runRestart(script, dryVar, { dry: '1', state: 'active', unitPresent: true });
+      expect(out).not.toContain('RESTARTED-FOR-REAL');
+      expect(out.toLowerCase()).toContain('restart');
+    },
+  );
+
+  test.each(SIBLINGS)('⚠ a real run DOES restart an active unit, or the test above is vacuous — %s', (script, dryVar) => {
+    const out = runRestart(script, dryVar, { dry: '0', state: 'active', unitPresent: true });
+    expect(out).toContain('RESTARTED-FOR-REAL');
+  });
+
+  test.each(SIBLINGS)('an inactive unit is left alone in either mode (§11.4: nothing to restart) — %s', (script, dryVar) => {
+    for (const dry of ['0', '1']) {
+      const out = runRestart(script, dryVar, { dry, state: 'inactive', unitPresent: true });
+      expect(out).not.toContain('RESTARTED-FOR-REAL');
+      expect(out).toContain('not active');
+    }
+  });
+
+  test.each(SIBLINGS)('an ABSENT unit is not restarted and says nothing at all — %s', (script, dryVar) => {
+    const out = runRestart(script, dryVar, { dry: '0', state: 'active', unitPresent: false });
+    expect(out).toBe('');
+  });
+
+  test('both siblings restart it after a daemon-reload at all — §11.4’s procedural half', () => {
+    // The rule INSTALL-SPEC §11.4 rules: *"anything that reloads systemd must restart
+    // ai-dashboard afterwards"*. A `--dry-run` guard on a call site that no longer exists
+    // would pass every test above.
+    for (const [script] of SIBLINGS) {
+      const text = readFileSync(join(REPO_ROOT, script), 'utf8');
+      const calls = text.match(/^\s*restart_ai_dashboard\s*$/gm) ?? [];
+      expect(calls.length, `${script} calls restart_ai_dashboard ${calls.length}×`).toBeGreaterThanOrEqual(2);
+      expect(text).toContain('systemctl daemon-reload');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// ⚠⚠ 12a/RECONCILE — the §11.4 PROBE ITSELF, run in a real `sh` against a stubbed nvidia-smi
+// ---------------------------------------------------------------------------------------
+//
+// ⚠ **This exists because the mutation harness said so.** `12a-SH15` deletes the `GPUS=` half
+// of the probe's own `printf` — the marker that carries the card count — and on the first run
+// it **DID NOT BITE**: every row of the guard table stubs `docker` wholesale, so the string the
+// container actually executes is never executed by anything. The scoring was measured; the
+// PRODUCTION of the markers was not. That is the same shape as every other finding in this
+// loop — an expectation tested, its producer untested — and it was found by the harness rather
+// than by reading.
+//
+// So the stub here is `docker exec <name> sh -c <script>` → **run that script**, with a fake
+// `nvidia-smi` first on `PATH`. The counting loop, the `IFS` split, the `$?` capture and both
+// markers are the real ones out of `dashboard.sh`.
+describe('⚠⚠ 12a — the in-container probe, executed: it counts the cards and reports the status', () => {
+  /** Run `container_nvidia_smi_probe` with `docker exec` wired to a real local `sh`. */
+  const probeWith = (nvidiaSmi: string | null): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'nvidia-stub-'));
+    try {
+      if (nvidiaSmi !== null) {
+        const bin = join(dir, 'nvidia-smi');
+        writeFileSync(bin, nvidiaSmi);
+        chmodSync(bin, 0o755);
+      }
+      // `shift 2` drops `exec <container>`, leaving `sh -c <script>` — which then runs for real.
+      const r = sourced(
+        ['docker() { shift 2; "$@"; }', 'container_nvidia_smi_probe', 'printf "\\n"'],
+        { PATH: `${dir}:${process.env['PATH'] ?? ''}` },
+      );
+      expect(r.status).toBe(0);
+      return r.out.trim();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  test('⚠ two cards listed: the probe answers `0 2` — the status AND the count', () => {
+    expect(
+      probeWith('#!/bin/sh\ncat <<EOF\nGPU 0: Tesla PG500-216 (UUID: GPU-aaaa)\nGPU 1: Tesla PG500-216 (UUID: GPU-bbbb)\nEOF\n'),
+    ).toBe('0 2');
+  });
+
+  test('⚠⚠ the 2026-09-14 shape: nvidia-smi fails inside the container', () => {
+    // "Failed to initialize NVML: Unknown Error" goes to stderr and the status is non-zero.
+    expect(probeWith('#!/bin/sh\necho "Failed to initialize NVML: Unknown Error" >&2\nexit 255\n')).toBe('255 0');
+  });
+
+  test('⚠⚠ the `gpus: []` shape: it answers, and lists NOTHING — a count of 0 at exit 0', () => {
+    // The state the row used to tick. The probe must distinguish it from two cards, which it
+    // can only do because the list is counted rather than sent to /dev/null.
+    expect(probeWith('#!/bin/sh\nexit 0\n')).toBe('0 0');
+  });
+
+  test('⚠ nvidia-smi is not in the image at all — the SHELL answers 127, and no card is counted', () => {
+    expect(probeWith(null)).toBe('127 0');
+  });
+
+  test('⚠ a line that is not a card is not counted — the count is of `GPU <n>:` lines, not of lines', () => {
+    // Real `nvidia-smi -L` prints a MIG line per instance, indented, under its parent GPU.
+    expect(
+      probeWith(
+        '#!/bin/sh\ncat <<EOF\nGPU 0: Tesla PG500-216 (UUID: GPU-aaaa)\n  MIG 1g.5gb Device 0: (UUID: MIG-cccc)\nEOF\n',
+      ),
+    ).toBe('0 1');
+  });
+
+  test('⚠ the probe needs nothing but the shell — no grep, no wc, no awk', () => {
+    // The container is not guaranteed to carry coreutils; a missing external would make the
+    // marker unreadable, which the row reads as "nobody looked". Measured against the string
+    // itself rather than promised in a comment.
+    const probeLine = DASHBOARD_SH.slice(DASHBOARD_SH.indexOf('  probe='), DASHBOARD_SH.indexOf("printf \"GPUS="));
+    for (const external of ['grep', 'wc', 'awk', 'sed', 'cut', 'tr', 'head']) {
+      expect(probeLine, `the probe reaches for ${external}`).not.toContain(external);
+    }
+    expect(probeLine).toContain('nvidia-smi -L');
   });
 });

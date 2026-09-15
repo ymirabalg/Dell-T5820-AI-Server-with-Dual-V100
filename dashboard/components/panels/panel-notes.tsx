@@ -57,11 +57,23 @@
  * back the margin the all-sources-explained page was 1 px short of. At 13.77 px a line and a
  * 3 px `gap`, 46 px is three lines of one wrapped message and two-and-a-bit separate ones;
  * `panel-notes.module.css` carries that arithmetic in full.
- * GPU, CPU and SERVING take `'tight'` because each costs the
+ * CPU takes `'tight'`, and so do GPU's and SERVING's PRIMARY wells, because each costs the
  * page 1:1 (GPU sets row 1; CPU shares the governing column; SERVING is 26 px under the log
  * that sets row 4). COOLING, MEMORY and STORAGE take `'roomy'` because their growth is
  * absorbed by the governing column and costs the page nothing. The full arithmetic is in
  * `pipeline/steps/10-panels-assembly/10f-build.md` §2.
+ *
+ * ⚠⚠ **The TAKEOVER branches are the exception, and this paragraph was false about them until
+ * 12a/RECONCILE (`12a-A5`).** It read *"GPU, CPU and SERVING take `'tight'`"*, while
+ * `gpu-panel.tsx:193` and `:204` — the `absent` and `gpus: null` branches — both pass
+ * `bound="roomy"`, as does `serving-panel.tsx:151`. The reason is not an exception to the
+ * arithmetic but an application of it: **a takeover draws no chart**, so the card is far under
+ * the 164-176 px its healthy form sets row 1 to, and the well is spending height the row
+ * already has. That is exactly what the doc is read for — a future caller comes here to decide
+ * a bound — so the list has to name the branch, not only the panel. Both takeover branches are
+ * measured in a browser since 12a: measurement 16 grades `gpus: []` (every card a takeover) and
+ * measurement 17 the mixed page, where an enumerated card sets the row and the takeover beside
+ * it must fit inside it.
  *
  * ⚠ The default is `'tight'`, so a call site that forgets the prop is bounded at the SMALLER
  * height. A forgotten prop must never be the one that breaks the promise.

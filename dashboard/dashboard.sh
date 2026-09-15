@@ -1360,6 +1360,26 @@ restart_after_daemon_reload() {
   local state
   state="$(systemctl show "$UNIT_NAME" -p ActiveState --value 2>/dev/null || true)"
   if [[ "$state" != active ]]; then
+    # ⚠⚠ 12a/TEST — THE UNIT'S STATE IS NOT THE CONTAINER'S, and this arm's justification —
+    # *"nothing that is not running has lost its devices"* — is a claim about the CONTAINER
+    # taken from a reading of the UNIT. That is §11.4's own lesson one level up: on 2026-09-14
+    # every host-side reading agreed while the container was blind. Two states reach here in
+    # which leaving it alone is wrong, and they look identical from the unit alone: an
+    # ActiveState that could not be READ (`systemctl` unavailable, no systemd, a refusal —
+    # `${state:-unknown}`), and a unit that is genuinely inactive or failed while a container
+    # of that name is still up, which `check_one_process` exists because this box can produce.
+    #
+    # Still NOT restarted, and that is unchanged: `systemctl restart` would START the unit, the
+    # ordering 11-A9 moved the ufw refusal to step 0 to protect. What changes is that a running
+    # container is no longer reported as *nothing to restart* — the reload has already taken its
+    # device access, and silence there is the 2026-09-14 failure verbatim.
+    if [[ -n "$(container_ids)" ]]; then
+      warn "$UNIT_NAME is ${state:-unreadable}, but a container named $CONTAINER IS running.
+     systemd has been reloaded, so that container has NO GPU device access — and this unit is
+     not active, so restarting it is not something this step may do (it would start the
+     dashboard before the firewall rule exists). Fix by hand: sudo ./dashboard.sh restart"
+      return 0
+    fi
     info "$UNIT_NAME is ${state:-unknown}, not active — nothing to restart"
     return 0
   fi
@@ -2224,16 +2244,80 @@ check_container() {
 # outcomes in its exit status — the command inside exited non-zero, and the exec never
 # happened at all — so the verdict is taken from a MARKER the inner shell prints. No marker
 # means nobody looked, which is `unknown`, never a tick.
-container_nvidia_smi_rc() {
-  local out
-  out="$(docker exec "$CONTAINER" sh -c 'nvidia-smi -L >/dev/null 2>&1; echo "RC=$?"' 2>/dev/null || true)"
-  case "$out" in
-    *RC=*) printf '%s' "${out##*RC=}" ;;
-    # ⚠ No marker: the exec itself did not run (no such container, a daemon that refused, an
-    # image with no `sh`). NOT "nvidia-smi failed" — a wrong diagnosis sends an operator to
-    # restart a container whose devices are fine.
-    *)     printf 'noexec' ;;
+# ⚠⚠ 12a/RECONCILE — ONE PARSER FOR EVERY MARKER THIS SCRIPT TAKES A VERDICT FROM, and it is
+# the general form of the fifth failing-open defect in this family.
+#
+# The four before it: a `docker inspect | grep` that scored a false pass, drift rows whose
+# expectation was the empty string, a marker that was not a verdict (the eighth arm, fixed
+# 2026-09-15), and — measured the same day — `${out##*RC=}`, which takes everything after the
+# LAST marker. Every one of them read a captured stream and believed the first thing that
+# looked like an answer. The shape they share is that **the parse has no opinion about how many
+# answers were in the capture**, so anything that adds a second one decides the row, and
+# `RC=255` followed by `RC=0` scored ✓ *the container read the cards*.
+#
+# So this refuses the capture unless it contains EXACTLY ONE occurrence of the marker, and
+# unless the first whitespace-delimited token after it is a plausible number for the quantity
+# asked for. Two disagreeing markers, a truncated one, a non-numeric one, an out-of-range one
+# and no marker at all all answer the same way: `nomarker`, which callers must read as *nobody
+# looked*. ⚠ The direction is deliberate — `unknown` is a `?` row and a `check` exit of 2,
+# loud and harmless, where every wrong reading above was confident.
+#
+# ⚠ `max` closes `12a-A10`: `????*` rejected 4+ digits, so `RC=300` and `RC=999` were verdicts
+# while the comment beside them claimed "1 to 3 digits, since a status is 0-255". The
+# constraint the comment states is now the constraint written.
+#
+#   $1 marker key (e.g. RC)   $2 the captured text   $3 largest accepted value
+marker_number() {
+  local key="$1" text="$2" max="$3" rest value="" n=0
+  rest="$text"
+  while [[ "$rest" == *"${key}="* ]]; do
+    rest="${rest#*"${key}="}"
+    n=$((n + 1))
+    if (( n == 1 )); then value="${rest%%[[:space:]]*}"; fi
+  done
+  # Zero markers: nobody answered. Two or more: two answers, and PREFERRING EITHER is the
+  # defect — a second `RC=` from an image profile, a shell exit trap or a retried exec must
+  # never turn a 255 into a tick.
+  if (( n != 1 )); then printf 'nomarker'; return 0; fi
+  case "$value" in
+    ''|*[!0-9]*) printf 'nomarker'; return 0 ;;
   esac
+  # 1-3 digits is not the same constraint as 0-255, and the row's comment claimed the second.
+  if (( ${#value} > 3 )) || (( 10#$value > max )); then printf 'nomarker'; return 0; fi
+  # ⚠ CANONICAL DECIMAL, not the token as written. `RC=08` is a plausible thing for an inner
+  # shell to print, and bash arithmetic reads a leading zero as OCTAL — `(( 08 > 0 ))` is an
+  # error, not a comparison, so every caller doing arithmetic on this would have died on it.
+  # `10#` here means the value leaves this function in exactly one spelling.
+  printf '%s' "$(( 10#$value ))"
+}
+
+# ⚠⚠ 12a/RECONCILE — the probe prints **two** markers, and the second one is the point.
+#
+# `nvidia-smi -L >/dev/null` threw the list away, so a container that talks to the driver and
+# enumerates ZERO cards exits 0 and scored ✓ *"the container ran nvidia-smi and read the
+# cards"*. That is precisely the `gpus: []` shape — the one §9 calls *retired*, the one the
+# browser measurement added this loop exists to grade, and the one a row that claims to have
+# *read the cards* may not tick. The row now counts them.
+#
+# The count is done with shell builtins only (no `grep`/`wc`), because the only thing this
+# `sh` is guaranteed to have is itself; a missing external would have made the count empty,
+# which `marker_number` reads as *nobody looked* rather than as zero cards — fail-closed, but
+# noisily, and there is no reason to accept that when a `for` loop costs nothing.
+#
+# Prints `noexec`, or `<rc> <cards>`.
+container_nvidia_smi_probe() {
+  local probe out rc cards
+  # shellcheck disable=SC2016  # every $ here is read by the CONTAINER's `sh`, not by this one
+  probe='l=$(nvidia-smi -L 2>/dev/null); rc=$?; n=0; IFS="
+"; for line in $l; do case "$line" in "GPU "*) n=$((n+1)) ;; esac; done; printf "GPUS=%s\nRC=%s\n" "$n" "$rc"'
+  out="$(docker exec "$CONTAINER" sh -c "$probe" 2>/dev/null || true)"
+  rc="$(marker_number RC "$out" 255)"
+  cards="$(marker_number GPUS "$out" 255)"
+  # ⚠ No usable marker: the exec itself did not run (no such container, a daemon that refused,
+  # an image with no `sh`), or it came back without one of its two answers. NOT "nvidia-smi
+  # failed" — a wrong diagnosis sends an operator to restart a container whose devices are fine.
+  if [[ "$rc" == nomarker || "$cards" == nomarker ]]; then printf 'noexec'; return 0; fi
+  printf '%s %s' "$rc" "$cards"
 }
 
 check_container_gpu_access() {
@@ -2245,19 +2329,47 @@ check_container_gpu_access() {
     return
   fi
 
-  local mode rc
+  local mode probe rc cards
   mode="$(container_gpu_mode)"
-  rc="$(container_nvidia_smi_rc)"
+  probe="$(container_nvidia_smi_probe)"
 
-  if [[ "$rc" == noexec ]]; then
-    row_unknown "could not run nvidia-smi inside ${CONTAINER} at all — 'docker exec' produced no
-     verdict. This is NOT 'the container cannot see the cards'; it is nobody looked"
+  if [[ "$probe" == noexec ]]; then
+    row_unknown "no verdict from nvidia-smi inside ${CONTAINER} — the 'docker exec' either never
+     ran, or came back with no exit status behind its marker, or with two that disagree. This is
+     NOT 'the container cannot see the cards'; it is nobody looked"
     return
   fi
+  rc="${probe%% *}"
+  cards="${probe##* }"
 
   case "${mode}:${rc}" in
     gpu:0)
-      row_ok "the container ran nvidia-smi and read the cards" ;;
+      # ⚠⚠ 12a/RECONCILE — the exit status is not the claim. A container that reaches the driver
+      # and enumerates ZERO cards exits 0, and this row used to print "read the cards" over it —
+      # `gpus: []`, the retired shape, ticked by the row that exists to catch a false green.
+      if (( cards > 0 )); then
+        row_ok "the container ran nvidia-smi and read ${cards} card(s)"
+      else
+        row_fail "THE CONTAINER SEES NO CARDS. It holds an nvidia device request and nvidia-smi
+     exited 0 inside it, but 'nvidia-smi -L' listed ZERO — which is the \`gpus: []\` shape §9
+     calls RETIRED: the dashboard's GPU panels draw 'card not enumerated' and the machine's two
+     cards are invisible to it. An exit status alone would have called this healthy.
+     Fix: sudo ./dashboard.sh restart, and if that does not restore them, check the host's
+     driver (nvidia-smi on the box) before assuming the container"
+      fi ;;
+    # ⚠⚠ 12a/RECONCILE — 127 and 126 are THE SHELL's statuses, not nvidia-smi's: *command not
+    # found* and *not executable*. Both used to get the 2026-09-14 message and its `restart`
+    # fix, and a restart cannot put a binary into an image. A device request that was honoured
+    # but no `nvidia-smi` to run is a toolkit/image fault, and it is the one shape of this row
+    # where restarting is not merely useless but misleading.
+    gpu:127|gpu:126)
+      local why='command not found'
+      if [[ "$rc" == 126 ]]; then why='found but not executable'; fi
+      row_fail "nvidia-smi IS NOT RUNNABLE inside ${CONTAINER} — the shell there exited ${rc}
+     (${why}). The container holds an nvidia device request, so this is NOT the 2026-09-14
+     revocation: the NVIDIA runtime did not inject the utility binaries, or the image overwrote
+     them. A restart re-creates the container the same way and will not change it. Fix: check
+     the toolkit on the host (nvidia-container-cli info, NVIDIA_DRIVER_CAPABILITIES=utility)" ;;
     gpu:*)
       row_fail "THE CONTAINER CANNOT SEE THE GPUs. It holds an nvidia device request, and
      nvidia-smi inside it exited ${rc} — the shape of 2026-09-14: a 'systemctl daemon-reload'
@@ -2267,8 +2379,8 @@ check_container_gpu_access() {
      Fix: sudo ./dashboard.sh restart" ;;
     fallback:0)
       row_fail "the container holds NO device request and nvidia-smi answered inside it anyway
-     — the mode reported and the access measured disagree, so one of the two readings is wrong
-     and neither should be trusted until that is resolved" ;;
+     (exit 0, ${cards} card(s) listed) — the mode reported and the access measured disagree, so
+     one of the two readings is wrong and neither should be trusted until that is resolved" ;;
     fallback:*)
       # ⚠ Measured agreement, not an unmeasured tick: the command WAS run and its failure is
       # what INSTALL-SPEC §11.1's fallback predicts. A `row_unknown` here would make a box in

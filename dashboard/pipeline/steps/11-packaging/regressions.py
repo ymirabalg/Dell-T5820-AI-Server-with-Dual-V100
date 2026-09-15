@@ -1307,12 +1307,32 @@ REGRESSIONS = [
      [PACKAGING]),
     ("12a-SH2 a `docker exec` that never ran is scored as a PASS — the false-pass shape this project has shipped four times",
      SH,
-     "    *)     printf 'noexec' ;;",
-     "    *)     printf '0' ;;",
+     # ⚠ RE-AIMED TWICE. 2026-09-15 (TEST): the arm gained an explicit `return 0` when the
+     # marker validation was added. 2026-09-15 (RECONCILE): the probe now asks for TWO markers
+     # and the "nobody looked" verdict is one line covering both, so the anchor moved there.
+     # Same property every time: an exec that never ran must never be scored as a verdict.
+     "  if [[ \"$rc\" == nomarker || \"$cards\" == nomarker ]]; then printf 'noexec'; return 0; fi",
+     "  if [[ \"$rc\" == nomarker || \"$cards\" == nomarker ]]; then printf '0 2'; return 0; fi",
+     [PACKAGING]),
+    ("12a-SH9 a marker with NO exit status behind it is scored as a verdict — a partial write reads as a fallback box's green tick",
+     SH,
+     # ⚠ RE-AIMED 2026-09-15 by the RECONCILIATION: the validation moved into `marker_number`,
+     # the one parser every marker now goes through. Dropping the EMPTY case is the same
+     # defect: `10#` reads an empty value as 0, so `RC=` scores a green tick in gpu mode.
+     "    ''|*[!0-9]*) printf 'nomarker'; return 0 ;;",
+     "    *[!0-9]*) printf 'nomarker'; return 0 ;;",
+     [PACKAGING]),
+    # ⚠ Pinned by the line that follows it: `cmd_status` carries the same test one screen down
+    # (the image-id block), so the bare conditional matches twice and `replace(…, 1)` would take
+    # whichever came first — the harness's own rule, met the way 10f-GP1 had to meet it.
+    ("12a-SH10 the non-active arm stops looking at the CONTAINER, so one left running without device access is reported as `nothing to restart`",
+     SH,
+     '    if [[ -n "$(container_ids)" ]]; then\n      warn "$UNIT_NAME is ${state:-unreadable}',
+     '    if false; then\n      warn "$UNIT_NAME is ${state:-unreadable}',
      [PACKAGING]),
     ("12a-SH3 an exec that never ran is scored as a FAILURE, sending an operator to restart a container whose devices are fine",
      SH,
-     '  if [[ "$rc" == noexec ]]; then',
+     '  if [[ "$probe" == noexec ]]; then',
      '  if false; then',
      [PACKAGING]),
     ("12a-SH4 the row reads the exit status alone, so the documented FALLBACK box fails check for ever and can never be installed onto",
@@ -1339,6 +1359,79 @@ REGRESSIONS = [
      SH,
      "  systemctl restart \"$UNIT_NAME\" || rc=$?",
      "  systemctl restart \"$UNIT_NAME\" || true",
+     [PACKAGING]),
+
+    # =======================================================================================
+    # ⚠⚠ 12a/RECONCILE — §11.4's NINTH ARM and the two behind it (`12a-A2`), plus the two
+    # SIBLING scripts, which no test in this repository executed (`12a-A9` items 8 and 9).
+    # =======================================================================================
+    ("12a-SH16 the marker's value is no longer bounded at the first whitespace, so container chatter joins the exit status",
+     SH,
+     '    if (( n == 1 )); then value="${rest%%[[:space:]]*}"; fi',
+     '    if (( n == 1 )); then value="$rest"; fi',
+     [PACKAGING]),
+    ("12a-SH11 `marker_number` accepts the FIRST of several markers again — RC=255 followed by RC=0 scores the green tick",
+     SH,
+     "  if (( n != 1 )); then printf 'nomarker'; return 0; fi",
+     "  if (( n < 1 )); then printf 'nomarker'; return 0; fi",
+     [PACKAGING]),
+    ("12a-SH12 the card COUNT is discarded again — a container enumerating zero cards at exit 0 reads as `read the cards`",
+     SH,
+     "      if (( cards > 0 )); then",
+     "      if true; then",
+     [PACKAGING]),
+    ("12a-SH13 127/126 go back to the 2026-09-14 diagnosis and its restart, which cannot put a binary into an image",
+     SH,
+     "    gpu:127|gpu:126)",
+     "    gpu:1270|gpu:1260)",
+     [PACKAGING]),
+    ("12a-SH14 the 0-255 bound goes back to a digit COUNT, so RC=300 and RC=999 are verdicts (`12a-A10`)",
+     SH,
+     "  if (( ${#value} > 3 )) || (( 10#$value > max )); then printf 'nomarker'; return 0; fi",
+     "  if (( ${#value} > 3 )); then printf 'nomarker'; return 0; fi",
+     [PACKAGING]),
+    ("12a-SH15 the probe stops asking for the list at all, so `marker_number GPUS` has nothing to read",
+     SH,
+     'printf "GPUS=%s\\nRC=%s\\n" "$n" "$rc"',
+     'printf "RC=%s\\n" "$rc"',
+     [PACKAGING]),
+    # ⚠ The two SIBLING scripts. `../` is deliberate and it is the only place any harness
+    # reaches outside `dashboard/`: these two functions were written by this loop to keep
+    # INSTALL-SPEC §11.4's daemon-reload rule, they are executed by no test in the tree, and
+    # `./serve-llm.sh uninstall --dry-run` on the box restarted the LIVE dashboard for real
+    # until 2026-09-15. Root `CLAUDE.md`: *"the loop applies to the root scripts too."*
+    # ⚠ Added 2026-09-15 alongside the probe-execution tests: `12a-SH15` DID NOT BITE on the
+    # first run, because every guard-table row stubs `docker` wholesale and nothing executed the
+    # probe string itself. These two attack the string now that something runs it.
+    ("12a-SH17 the count is of LINES rather than of `GPU <n>:` lines, so a MIG instance or a warning inflates it",
+     SH,
+     'case "$line" in "GPU "*) n=$((n+1)) ;; esac',
+     'case "$line" in *) n=$((n+1)) ;; esac',
+     [PACKAGING]),
+    ("12a-SH18 the list is thrown away at the source again — `-L >/dev/null`, which is the state `12a-A2` measured",
+     SH,
+     "probe='l=$(nvidia-smi -L 2>/dev/null); rc=$?; n=0;",
+     "probe='nvidia-smi -L >/dev/null 2>&1; rc=$?; l=\"\"; n=0;",
+     [PACKAGING]),
+    ("12a-SH19 the count is done with `grep -c` — correct here, and unrunnable in an image that carries only `sh`",
+     SH,
+     'for line in $l; do case "$line" in "GPU "*) n=$((n+1)) ;; esac; done;',
+     'n=$(printf "%s\\n" "$l" | grep -c "^GPU ");',
+     [PACKAGING]),
+    ("12a-SL1 serve-llm.sh --dry-run restarts the LIVE dashboard for real again",
+     "../serve-llm.sh",
+     "  if (( DRY )); then\n    info \"would run: systemctl restart $unit",
+     "  if false; then\n    info \"would run: systemctl restart $unit",
+     [PACKAGING]),
+    ("12a-GF1 gpu-fan-control.sh --dry-run restarts the LIVE dashboard for real again",
+     "../gpu-fan-control.sh",
+     "  if [[ $DRY_RUN -eq 1 ]]; then\n    info \"dry-run: would restart $unit",
+     "  if false; then\n    info \"dry-run: would restart $unit",
+     [PACKAGING]),
+    ("12a-SL2 serve-llm.sh stops restarting the dashboard after a daemon-reload — §11.4's procedural half",
+     "../serve-llm.sh",
+     "  if systemctl restart \"$unit\" 2>/dev/null; then",
+     "  if false; then",
      [PACKAGING]),
 ]
 
