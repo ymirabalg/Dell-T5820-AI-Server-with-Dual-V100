@@ -1255,6 +1255,31 @@ channel 2. Power any fan hub from SATA rather than the header, which is likely r
 around 1 A; the script never reads tach to make decisions, so a hub reporting 0 or one
 fan is harmless.
 
+## How work gets built here — the loop, and it applies to the ROOT SCRIPTS too
+
+⚠ **Owner's instruction, 2026-09-15: every piece of work runs the full loop, and that includes an
+ADVERSARIAL phase and a RECONCILIATION phase.** The dashboard's pipeline has done this for twelve
+steps; the rule is now explicit for `serve-llm.sh`, `gpu-fan-control.sh`, `serving-mode.sh`,
+`dell-smm-5fan.sh` and anything else in this directory.
+
+| phase | runs as | does |
+|---|---|---|
+| **build** | subagent | implements, to a written spec |
+| **test** | subagent, clean context | reads every test name against its body; fixtures on both sides of every boundary |
+| **adversarial** | subagent, clean context | tries to break it and **fixes nothing**; every finding needs a concrete failure scenario and how it was proven |
+| **reconcile** | background subagent | adjudicates every finding ACCEPTED / REJECTED / DEFERRED **with a checkable reason**, applies what survives, re-runs everything |
+| **review** | **the parent, never delegated** | re-runs the checks itself, audits the adjudication — **rejections and deferrals first**, since an accepted fix leaves a visible diff and a rejected finding leaves nothing — then commits |
+
+**Work runs in SEQUENCE, not in parallel.** Two agents in one tree is how `ebc60c6` came to commit
+a file with a mutation applied: a harness had the file swapped out at the moment of `git add`.
+
+**Why this is not ceremony.** Every loop this project has run has found something in the adversarial
+phase that the build and the test phase both missed, and several of those were the difference
+between a thing that worked and a thing that only looked like it did — 49 of 63 one-line edits to
+`dashboard.sh` leaving the whole suite green; a measurement that passed while grading five open
+table views against five open table views; the credentials fix that re-entered the exact silent
+failure it was built to remove. A build plus a test pass is not the same as having tried to break it.
+
 ## Conventions in the scripts
 
 Worth matching if extending `setup-ssh-key.sh` / `provision-base.sh` /
