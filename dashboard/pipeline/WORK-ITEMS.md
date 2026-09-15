@@ -845,3 +845,13 @@ restart `ai-dashboard`, and `check` gains an **in-container** `nvidia-smi` row t
 failure (`INSTALL-SPEC.md` §11.4). The D-Bus `ECONNRESET` entries seen in the same response are
 **undiagnosed** and belong to the same loop.
 
+
+**Ruled 2026-09-15 — the dashboard states the serving mode honestly (loop 12b, after 12a and
+`serving-mode.sh`).** The GPU↔instance join `gpu.index === serving.instance` is **inverted**: an
+instance declares the cards it serves (`serving[].gpus`, from the unit's own
+`CUDA_VISIBLE_DEVICES`) and a card asks which instance lists it. This is not a split-mode
+accommodation — the old join was a **coincidence of per-GPU mode**, true only because the template
+pins instance N to card N, which §4's wire never said. Split mode revealed it rather than broke it.
+A card served jointly says so; an em dash there would be a lie, because the reading is not missing
+but different. `SPEC.md` §6.2 and `SERVING-MODES.md` §4 carry the wording. ⚠ The mode must not be
+inferred from the instance count — one instance can also mean one card's service failed.

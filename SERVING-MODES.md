@@ -13,8 +13,8 @@ sudo ./serving-mode.sh per-gpu    # -> back to one Qwen3.6-27B per card
 sudo ./serving-mode.sh status     # which mode is in force, and what is actually running
 ```
 
-Written 2026-09-14. **Nothing here is built yet.** §7 lists what must be decided or confirmed
-before it can be, and two of those items are not mine to settle.
+Written 2026-09-14, §4 ruled 2026-09-15. **The scripts are being built; the dashboard half of §4 is
+its own loop.** §7 lists what is still open.
 
 ---
 
@@ -98,25 +98,36 @@ subcommand, and a `trap` that restores on failure.
 enabled, which is active, what each card holds, and ⚠ **whether the enabled mode and the running
 mode agree** — disagreement is the interesting state and it is the one a naive check misses.
 
-## 4. ⚠ What this does to the dashboard, and it is not cosmetic
+## 4. ✅ RULED — the dashboard states the mode, honestly
 
-The dashboard discovers instances from `/etc/llama-server/*.env` and joins a card to an instance by
-`gpu.index === serving.instance` (its `SPEC.md` §3.4, §6.2). **In split mode that join has no
-answer**: there is one instance and two cards, and instance `split` is not an index.
+**Owner's ruling, 2026-09-15: the dashboard shows what mode the GPUs are running in, honestly.**
+Option 1 of the three that were offered. It is the most work and the only one that is true.
 
-Left alone, GPU 1's *served by instance 1* becomes an em dash, which by invariant 1 reads as *this
-reading could not be taken* — when the truth is *this card is serving, jointly, and the question
-does not apply*. **That is a false statement by omission, and it is exactly the failure class this
-project spent twelve steps removing.** Three honest options, and the choice is the owner's:
+⚠ **And it fixes something that was never sound.** The join is
+`gpu.index === serving.instance` — which is not a fact about the system, it is a **coincidence of
+per-GPU mode**. Instance N happens to sit on card N because the unit template pins it there with
+`CUDA_VISIBLE_DEVICES=%i`. Nothing on §4's wire says so; the dashboard's own spec already admits
+the join *"is a fact about the deployment that the dashboard cannot verify"*. Split mode does not
+break the join — **it exposes that there was never one**.
 
-1. **Teach the dashboard the mode.** `split.env` is discoverable; the panel says *served jointly
-   with GPU 0* on both cards. Most work, most honest.
-2. **Name the mode without the join.** The SERVING panel shows one row, `split · both cards`, and
-   the GPU cards drop the served-by line entirely in that mode rather than showing an em dash.
-3. **Accept the em dash** and write it down in the spec as a known, deliberate inaccuracy.
+**The fix is to invert it: an instance declares the cards it serves, and a card asks which instance
+lists it.**
 
-**Until one is chosen, split mode ships with a dashboard that misreports GPU 1.** That must be
-stated in the switch script's own output, not left to be discovered.
+- §4's `serving[]` entry gains **`gpus: readonly number[]`** — sourced from the unit's own
+  `CUDA_VISIBLE_DEVICES` (`%i` → `[N]`; the split unit → `[0, 1]`), which is the thing that
+  actually decides it.
+- The GPU card's line becomes *"served by instance N"* when that instance lists **this card alone**,
+  and *"served jointly with GPU M"* (or the mode's own word) when it lists more than one. **No em
+  dash**, because the reading is not missing — it is different.
+- The SERVING panel shows **one row per process**, which is two rows in per-GPU mode and one in
+  split, with the cards it spans named on the row.
+- ⚠ **This is now true in BOTH modes rather than assumed in one**, and it is checkable: a
+  mis-pinned instance would show the wrong card instead of being invisible.
+
+Consequences that must be honoured when it is built: `gpus` is a **reading like any other**, so an
+absent one is an em dash and `null` is not `[]` (invariant 1); the dashboard must not infer the
+mode from the *count* of instances, because one instance can also mean one card failed; and §6.4's
+condition ids must not change meaning when an instance's card list does.
 
 ## 5. Ports, and who breaks
 

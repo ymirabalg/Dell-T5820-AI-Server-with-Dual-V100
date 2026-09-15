@@ -1190,6 +1190,22 @@ so the figure on screen can be compared with `nvidia-smi` and `lspci` without ar
 is §6.6's whole principle. ⚠ `MOCK.html` renders the short form; the mock is a source for
 form only, never for data (§6.1). §6.6 carries the formatting row.
 
+⚠⚠ **THE JOIN IS INVERTED — ruled 2026-09-15, and the paragraph below is kept for its reasoning
+rather than its rule.** `gpu.index === serving.instance` is not a fact about the system; it is a
+**coincidence of the one serving arrangement that existed when it was written**. Instance N sits on
+card N because the unit template pins it with `CUDA_VISIBLE_DEVICES=%i`, and nothing on §4's wire
+says so — which is exactly what the paragraph below already admits. A second arrangement (one
+process across both cards, `SERVING-MODES.md`) does not break the join: it reveals that there was
+never one.
+
+**So an instance declares the cards it serves, and a card asks which instance lists it.**
+`serving[]` gains **`gpus: readonly number[] | null`**, read from the unit's own
+`CUDA_VISIBLE_DEVICES`. The GPU card says *served by instance N* when that instance lists this card
+alone, and names the joint arrangement when it lists more. **An em dash there would be a lie** —
+the reading is not missing, it is different — and invariant 1 still governs a `gpus` that could not
+be read. The SERVING panel shows one row per process, naming the cards it spans. ⚠ **The mode must
+not be inferred from the instance count**: one instance can also mean one card's service failed.
+
 **⚠ The GPU↔instance join is `gpu.index === serving.instance`, and it is a fact about the
 deployment that the dashboard cannot verify.** `llama-server@.service` carries
 `Environment=CUDA_VISIBLE_DEVICES=%i`, so instance N is pinned to GPU N by the unit template
