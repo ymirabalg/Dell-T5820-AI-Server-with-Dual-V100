@@ -108,7 +108,17 @@ const HEALTH_STATES: Readonly<Record<HealthState, true>> = {
   unreachable: true,
 };
 
-const ERROR_SOURCES: Readonly<Record<ErrorSource, true>> = {
+/**
+ * §3.7's eighteen sources, as the only RUNTIME enumeration of them in the project.
+ *
+ * ⚠ Exported since 12a. The type is a closed union and this `Record` cannot omit a member
+ * without a compile error, so it is the one place a generated test can ask *"every source"*
+ * without retyping the list — and a nineteenth source added to `lib/types.ts` then reaches
+ * that test automatically rather than being invisible to it. HANDOVER §0.14: a hand-written
+ * table cannot falsify its own property, because it only ever asks about the cases whoever
+ * wrote it already thought of.
+ */
+export const ERROR_SOURCES: Readonly<Record<ErrorSource, true>> = {
   'nvidia-smi': true,
   coretemp: true,
   'proc-stat': true,

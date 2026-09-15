@@ -1331,6 +1331,56 @@ cmd_configure() {
 
 UNIT_SRC_REL="systemd/ai-dashboard.service"
 
+# ⚠⚠ INSTALL-SPEC §11.4, ruled 2026-09-14 — ANYTHING THAT RELOADS SYSTEMD MUST RESTART THIS
+# CONTAINER AFTERWARDS.
+#
+# Measured in production: a `systemctl daemon-reload` at 2026-09-14 21:00:34 reset the device
+# allow-list on the RUNNING container (cgroup v2 + Docker's default systemd cgroup driver), and
+# from that moment `nvidia-smi` inside it failed while the host's cards, driver and toolkit were
+# all healthy. The restart is cheap — the dashboard holds no state — and it is the fix the owner
+# ruled instead of changing the Docker daemon globally.
+#
+# Three guards, and each of them is a way this could otherwise fail a run it has no business
+# failing:
+#
+#  · ⚠ **A unit that is not installed must not fail the run.** `systemctl restart` on an absent
+#    unit exits non-zero, and under `set -e` that would abort `unit` — from `install`, at the
+#    step after the unit was enabled.
+#  · ⚠ **A unit that is installed but NOT ACTIVE is left alone, and that is deliberate.**
+#    `systemctl restart` would START it, which during `install` means starting the dashboard
+#    BEFORE `cmd_firewall` has written its rule — the ordering 11-A9 moved the ufw refusal to
+#    step 0 to protect. Nothing has lost its devices if nothing is running.
+#  · **The restart's own failure is reported, never swallowed.** A tick over a failure is the
+#    shape this whole script exists to prevent (11-A12).
+restart_after_daemon_reload() {
+  if ! unit_installed; then
+    info "no $UNIT_PATH — nothing to restart"
+    return 0
+  fi
+  local state
+  state="$(systemctl show "$UNIT_NAME" -p ActiveState --value 2>/dev/null || true)"
+  if [[ "$state" != active ]]; then
+    info "$UNIT_NAME is ${state:-unknown}, not active — nothing to restart"
+    return 0
+  fi
+  if (( DRY )); then
+    info "would run: systemctl restart $UNIT_NAME  (INSTALL-SPEC §11.4 — a daemon-reload"
+    info "  revokes a running container's GPU device access)"
+    return 0
+  fi
+  step "§11.4 — restarting $UNIT_NAME, because systemd was reloaded"
+  local rc=0
+  systemctl restart "$UNIT_NAME" || rc=$?
+  if (( rc == 0 )); then
+    ok "restarted $UNIT_NAME — its container has its device access back, and the flags this"
+    ok "  unit file now declares"
+  else
+    warn "systemctl restart exited ${rc}. The reload has already happened, so a container that
+     was running now has NO GPU device access and the GPU panels will read '—' until it is
+     restarted: sudo ./dashboard.sh restart"
+  fi
+}
+
 cmd_unit() {
   preflight 1 0 1
   local src="$SRC/$UNIT_SRC_REL"
@@ -1341,7 +1391,8 @@ cmd_unit() {
   # is the only copy of the container's flags in this project, and a script that rendered a
   # second one would be free to drift from the file an operator reads and reviews.
   if (( DRY )); then
-    info "would install $src -> $UNIT_PATH (0644 root:root), then daemon-reload and enable"
+    info "would install $src -> $UNIT_PATH (0644 root:root), then daemon-reload, enable, and"
+    info "  restart $UNIT_NAME if it is active (INSTALL-SPEC §11.4)"
     info "the file that would be installed:"
     sed 's/^/      /' "$src"
   else
@@ -1367,10 +1418,12 @@ cmd_unit() {
     # --env-file, the GPU probe — is reported `✓ installed`, reported `✓ enabled`, and the
     # container goes on running with the flags it was CREATED with. `check` compares the
     # running container against the image and the GPU mode for exactly this reason.
-    if [[ -n "$(container_ids)" ]]; then
-      warn "a container is already running: it keeps the flags it was CREATED with until you"
-      warn "  run 'sudo ./dashboard.sh restart'. daemon-reload does not restart anything."
-    fi
+    # ⚠⚠ 12a / INSTALL-SPEC §11.4. This block USED to be a warning — "a container is already
+    # running: it keeps the flags it was CREATED with until you run restart" — and that
+    # warning was both true and not enough: `daemon-reload` above has, by this point, already
+    # revoked the running container's GPU device access. So the restart is done rather than
+    # advised, and it fixes both things at once (the stale flags AND the devices).
+    restart_after_daemon_reload
   fi
 
   # ⚠ TRAP 1, checked rather than trusted. StartLimitIntervalSec/StartLimitBurst are IGNORED
@@ -2149,6 +2202,88 @@ check_container() {
 }
 
 # ============================================================================================
+#  11.4 — `nvidia-smi` INSIDE THE CONTAINER. The row the first production failure asked for.
+# ============================================================================================
+#
+# ⚠⚠ INSTALL-SPEC §11.4, ruled 2026-09-14 after this happened on the box. The container
+# started 2026-09-13 00:06:18; a `systemd daemon-reload` at 2026-09-14 21:00:34 (from
+# `gpu-fan-control.sh install`) reset the device allow-list on the RUNNING container — cgroup
+# v2 with Docker's default systemd cgroup driver — and from that moment `nvidia-smi` inside
+# the container failed with *"Failed to initialize NVML: Unknown Error"* while **the host's
+# cards, driver and toolkit were all healthy**. Every host-side row this script had went on
+# passing, including `check_container`'s GPU-mode row: `.HostConfig.DeviceRequests` still
+# named the device request, because the request is what the container was CREATED with and
+# the cgroup is what was rewritten underneath it.
+#
+# So this row asks the only question that could have caught it: **can the container itself
+# read the cards, right now.** Nothing else on this box answers that.
+#
+# ⚠ AND IT JUDGES ITS OWN FAILURE, which this project has now shipped wrong four times (11-A2,
+# 11b-A5, the `docker inspect | grep` false pass in `steps/12-deploy/verification.md` §2.2,
+# and the drift rows whose expectation was the empty string). `docker exec` conflates two
+# outcomes in its exit status — the command inside exited non-zero, and the exec never
+# happened at all — so the verdict is taken from a MARKER the inner shell prints. No marker
+# means nobody looked, which is `unknown`, never a tick.
+container_nvidia_smi_rc() {
+  local out
+  out="$(docker exec "$CONTAINER" sh -c 'nvidia-smi -L >/dev/null 2>&1; echo "RC=$?"' 2>/dev/null || true)"
+  case "$out" in
+    *RC=*) printf '%s' "${out##*RC=}" ;;
+    # ⚠ No marker: the exec itself did not run (no such container, a daemon that refused, an
+    # image with no `sh`). NOT "nvidia-smi failed" — a wrong diagnosis sends an operator to
+    # restart a container whose devices are fine.
+    *)     printf 'noexec' ;;
+  esac
+}
+
+check_container_gpu_access() {
+  step "§11.4 — nvidia-smi INSIDE the container (a daemon-reload revokes device access)"
+  if ! have docker; then row_unknown "docker is not installed, so nothing can be run in the container"; return; fi
+  if ! docker_ok; then row_unknown "cannot talk to the docker daemon (root, or the docker group)"; return; fi
+  if [[ -z "$(container_ids)" ]]; then
+    row_unknown "no container named ${CONTAINER} is running, so nvidia-smi cannot be run in one"
+    return
+  fi
+
+  local mode rc
+  mode="$(container_gpu_mode)"
+  rc="$(container_nvidia_smi_rc)"
+
+  if [[ "$rc" == noexec ]]; then
+    row_unknown "could not run nvidia-smi inside ${CONTAINER} at all — 'docker exec' produced no
+     verdict. This is NOT 'the container cannot see the cards'; it is nobody looked"
+    return
+  fi
+
+  case "${mode}:${rc}" in
+    gpu:0)
+      row_ok "the container ran nvidia-smi and read the cards" ;;
+    gpu:*)
+      row_fail "THE CONTAINER CANNOT SEE THE GPUs. It holds an nvidia device request, and
+     nvidia-smi inside it exited ${rc} — the shape of 2026-09-14: a 'systemctl daemon-reload'
+     resets the device allow-list on a RUNNING container (cgroup v2 + the systemd cgroup
+     driver), the host stays healthy, and every host-side row goes on passing. The GPU panels
+     are reading '—' and the dashboard is blind to the two cards it exists for.
+     Fix: sudo ./dashboard.sh restart" ;;
+    fallback:0)
+      row_fail "the container holds NO device request and nvidia-smi answered inside it anyway
+     — the mode reported and the access measured disagree, so one of the two readings is wrong
+     and neither should be trusted until that is resolved" ;;
+    fallback:*)
+      # ⚠ Measured agreement, not an unmeasured tick: the command WAS run and its failure is
+      # what INSTALL-SPEC §11.1's fallback predicts. A `row_unknown` here would make a box in
+      # the documented fallback state exit 2 for ever — and `install` FAILS on a non-zero
+      # check (§12.2), so a legitimately-fallback box could never be installed onto.
+      row_ok "the container holds no device request and nvidia-smi exited ${rc} inside it, which
+     is the fallback INSTALL-SPEC §11.1 rules (the GPU panels read '—'; the other eight are
+     unaffected). check_container above says whether that fallback is still warranted" ;;
+    *)
+      row_unknown "nvidia-smi exited ${rc} inside the container, but .HostConfig.DeviceRequests
+     could not be read — so there is nothing to judge that against" ;;
+  esac
+}
+
+# ============================================================================================
 #  11-Q3 — the RUNNING container against the UNIT'S OWN `docker run` line
 # ============================================================================================
 #
@@ -2620,6 +2755,7 @@ cmd_check() {
   check_unit
   check_one_process
   check_container
+  check_container_gpu_access
   check_drift
   check_firewall
   check_gate

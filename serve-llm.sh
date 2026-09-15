@@ -214,6 +214,32 @@ cmd_check() {
   [[ -s "$KEYFILE" ]] && ok "api key: present" || info "api key: will be generated on install"
 }
 
+# ⚠⚠ INSTALL-SPEC (dashboard/pipeline) §11.4, ruled 2026-09-14 after this bit in production.
+# A `systemctl daemon-reload` resets the device allow-list on a RUNNING container on this box
+# (cgroup v2 + Docker's default systemd cgroup driver): at 2026-09-14 21:00:34 this script's own
+# `install` reloaded systemd, and from that moment `nvidia-smi` inside the ai-dashboard
+# container failed with "Failed to initialize NVML: Unknown Error" while the host's cards,
+# driver and toolkit were all healthy. The dashboard holds no state, so the restart is cheap.
+#
+# ⚠ It must never fail this run: the dashboard is OPTIONAL to everything in this file, and a box
+# that has never installed it is the ordinary case. Not installed, or installed and not running,
+# is an `info` line and exit 0 — nothing that is not running has lost anything.
+restart_ai_dashboard() {
+  local unit=ai-dashboard.service state
+  [[ -f "/etc/systemd/system/$unit" ]] || return 0
+  state="$(systemctl show "$unit" -p ActiveState --value 2>/dev/null || true)"
+  if [[ "$state" != active ]]; then
+    info "$unit is ${state:-unknown}, not active — nothing to restart"
+    return 0
+  fi
+  if systemctl restart "$unit" 2>/dev/null; then
+    ok "restarted $unit — a daemon-reload revokes its container's GPU device access (§11.4)"
+  else
+    warn "could not restart $unit. systemd was reloaded, so its container has NO GPU device"
+    warn "     access until someone runs: sudo /path/to/dashboard.sh restart"
+  fi
+}
+
 cmd_install() {
   need_root
   cmd_check
@@ -282,6 +308,7 @@ EOF
   ok "wrote $TMPL"
   systemctl daemon-reload
   ok "systemd reloaded"
+  restart_ai_dashboard
 
   local n; n="$(gpu_count)"
   if command -v ufw >/dev/null; then
@@ -321,6 +348,7 @@ cmd_uninstall() {
   [[ -f "$TMPL" ]] && { run rm -f "$TMPL"; ok "removed $TMPL"; }
   [[ -d "$ENVDIR" ]] && { run rm -rf "$ENVDIR"; ok "removed $ENVDIR"; }
   run systemctl daemon-reload
+  restart_ai_dashboard
   command -v ufw >/dev/null && \
     run ufw delete allow from "$LAN" to any port "${PORT_BASE}:$(( PORT_BASE + n - 1 ))" proto tcp || true
   info "api key left at $KEYFILE — remove by hand if you want it gone"

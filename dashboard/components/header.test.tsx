@@ -30,6 +30,9 @@ const BASE: HeaderProps = {
   severity: 'normal',
   mode: 'live',
   alarms: 0,
+  // ⚠ 12a — a healthy box: no §3.7 source filed an `errors[]` entry. The cases that exercise
+  // §6.2's 2026-09-14 ruling override it, and `aggregateStatus` owns the rule itself.
+  failingSources: 0,
   timeOfDay: '14:47:31',
   zoneAbbreviation: 'EDT',
   ageText: '2 s ago',
@@ -319,5 +322,35 @@ describe('interaction — real DOM events, real callbacks', () => {
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onLogout).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('⚠⚠ 12a — §6.2, 2026-09-14: the dot and the words both stop claiming health', () => {
+  test('⚠ a failing collector reaches the rendered header, dot included', () => {
+    // The production shape: every other collector read fine, so `severity` is a confirmed
+    // `normal` and `alarms` is 0. Before this, the band rendered `data-severity="normal"` (a
+    // green ✓) beside the words `all healthy`, for a box whose GPUs nothing could read.
+    const html = renderToStaticMarkup(<Header {...BASE} severity="normal" failingSources={2} />);
+    expect(html).toContain('2 sources unread');
+    expect(html).not.toContain('all healthy');
+    // ⚠ The DOT is `status.severity`, not the `severity` PROP. Rendering the prop here is a
+    // one-word edit that leaves every text assertion above green.
+    expect(html).toContain('data-severity="none"');
+    expect(html).not.toContain('data-severity="normal"');
+  });
+
+  test('⚠ an alarming header keeps its red band while a collector is failing', () => {
+    const html = renderToStaticMarkup(
+      <Header {...BASE} severity="alarm" alarms={6} failingSources={2} />,
+    );
+    expect(html).toContain('data-severity="alarm"');
+    expect(html).toContain('6 alarms · 2 sources unread');
+  });
+
+  test('⚠ the healthy page is unchanged — same words, same band', () => {
+    const html = renderToStaticMarkup(<Header {...BASE} severity="normal" failingSources={0} />);
+    expect(html).toContain('all healthy');
+    expect(html).toContain('data-severity="normal"');
+    expect(html).not.toContain('unread');
   });
 });

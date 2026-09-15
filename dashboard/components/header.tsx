@@ -88,6 +88,14 @@ export interface HeaderProps {
   readonly mode: RuntimeMode;
   /** `RuntimeState.alarms`, raw. Never pre-omitted — `aggregateStatus` owns that rule. */
   readonly alarms: number;
+  /**
+   * ⚠⚠ 12a — `failingSourceCount(latestSample(state)?.snapshot ?? null)`: how many §3.7
+   * sources filed an `errors[]` entry on the latest snapshot (§6.2's ruling of 2026-09-14).
+   * **Required**, because a defaulted `0` is what a call site that forgot it would get, and
+   * that is the header which read `● all healthy` over a blind `nvidia-smi` in production.
+   * Raw, like `alarms`: `aggregateStatus` owns the omit-at-zero rule for both.
+   */
+  readonly failingSources: number;
   /** `formatTimeOfDay(latestSample(state)?.ts ?? null)`. */
   readonly timeOfDay: string;
   /** `formatZoneAbbreviation(...)`, shown once beside the clock. */
@@ -121,6 +129,7 @@ export function Header({
   severity,
   mode,
   alarms,
+  failingSources,
   timeOfDay,
   zoneAbbreviation,
   ageText,
@@ -136,7 +145,7 @@ export function Header({
   // ⚠ `severity` is passed here, not only to `data-severity` below: §9 makes the dot and the
   // count ONE reduction, and splitting them let the words say "all healthy" beside a grey
   // "no band" dot (10a-reconcile, adversarial F5). Both now come from the same three inputs.
-  const status = aggregateStatus(mode, alarms, severity);
+  const status = aggregateStatus(mode, alarms, severity, failingSources);
 
   return (
     <header className={styles.header}>
@@ -154,11 +163,17 @@ export function Header({
             the … severity, never instead of it." `data-mode` picks the GLYPH (❙❙/⊘/●); colour
             still tracks the current severity in every mode, so a paused dashboard sitting on
             an alarm stays visibly red rather than fading to neutral the moment it is paused. */}
+        {/* ⚠⚠ 12a — `status.severity`, NOT the `severity` prop. §9 makes the dot and the
+            words ONE reduction, and 12a's rule can drop a `normal` band to none while any
+            collector is failing; painting the raw prop here would put a green ✓ three pixels
+            from the words `2 sources unread`, which is the disagreement §6.2 rejected
+            `all healthy` for. `watch`/`alarm` are unchanged by that rule, so an alarming
+            dashboard stays red. */}
         <span
           aria-hidden="true"
           className={styles.dot}
           data-mode={mode}
-          data-severity={severity ?? 'none'}
+          data-severity={status.severity ?? 'none'}
         >
           {status.glyph}
         </span>

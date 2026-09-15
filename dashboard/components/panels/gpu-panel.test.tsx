@@ -324,6 +324,27 @@ describe('⚠ the GPU↔instance join is gpu.index === serving.instance', () => 
     expect(html).not.toContain('served by instance 1');
   });
 
+  test('⚠⚠ 12a — the RETIRED takeover shows WHY, in the same bounded well, ROOMY', () => {
+    // §6.2's ruling of 2026-09-14, after this exact branch stayed silent through the first
+    // production failure: a `daemon-reload` revoked the container's GPU device access,
+    // `nvidia-smi` failed inside it, `errors[]` said so, and this branch drew
+    // `card not enumerated` and nothing else. It was measured in 10g, recorded as `10e-Q4`,
+    // and never built. `roomy` for the same reason the `gpus: null` branch below takes it:
+    // this branch draws NO chart, so the card sits far under the 176 px its healthy form sets
+    // row 1 to (10f-GP1 is the same property on the other branch).
+    const snapshot: TelemetrySnapshot = {
+      ...rawGpuSnapshot(),
+      errors: [{ source: 'nvidia-smi', message: 'nvidia-smi: exited 255' }],
+    };
+    const html = renderToStaticMarkup(<GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu1" />);
+    expect(html).toContain('card not enumerated');
+    const at = html.indexOf('nvidia-smi: exited 255');
+    expect(at).toBeGreaterThan(-1);
+    const well = html.slice(html.lastIndexOf('<div', at), at);
+    expect(well).toContain('data-bound="roomy"');
+    expect(well).toContain('role="group"');
+  });
+
   test('⚠ absent-from-the-enumeration and present-with-every-reading-null do not render alike', () => {
     // These two rendered BYTE-IDENTICALLY before the branch above: `a === b` was `true`.
     const absent = renderToStaticMarkup(

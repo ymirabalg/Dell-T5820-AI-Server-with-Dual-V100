@@ -131,31 +131,57 @@ over this: one process cannot serve two ports, and a proxy that forwards 8081 to
 two agents one KV cache while looking like two independent endpoints — the *correctness* failure
 the one-agent-per-port rule exists to prevent, not merely an efficiency one.
 
-## 6. Sizing Gemma 4 31B, and what is genuinely known
+## 6. Gemma 4 31B — downloaded and MEASURED, 2026-09-14
 
-**Known, measured on this box:** Gemma 4 is 5:1 sliding-window — for the 12B, 40 of 48 layers are
-SWA with a 1024-token window and only 8 are global with **one** KV head, so KV costs **~16 KiB per
-token** against Qwen3.6-27B's ~61.5. Context is nearly free on this architecture, which is why the
-12B's full 262K window fits one card.
+`~/models/gemma-4-31B-it-Q8_0.gguf`, **32.64 GB**, from `ggml-org/gemma-4-31B-it-GGUF` (the same
+org the 12B came from; `unsloth` publishes a byte-identical Q8_0). Fetched with `hf-get.sh` into
+`~/models/.staging` and renamed on success, GGUF magic verified, no name collision.
 
-**Not known, and not to be assumed:** the 31B's layer counts, its KV geometry, its native context,
-and therefore its actual footprint. **Do not scale the 12B's numbers by parameter count.** The
-method that works here is in root `CLAUDE.md`: load it CPU-only and read `RssAnon`, ⚠ **with
-`--no-repack`**, without which llama.cpp's CPU-optimised weight rewrite lands in `RssAnon` and
-inflates the answer — measured at 13.87 GiB against a true 2.74 GiB on one model.
+**Read from its own GGUF header, not assumed:**
 
-Across two cards there is 64 GiB of VRAM, so Q8_0 (~33 GiB of weights) is plausible where it is not
-on one card, and Q4_K_M has room to spare. **Choose the quantisation after measuring, not before**,
-and remember the measured rule from this box: decode is bandwidth-bound, so Q6_K costs ~26 % of
-generation for ~1–2 benchmark points.
+| | |
+|---|---|
+| architecture | `gemma4` — this build knows it (`strings libllama.so* \| grep -x gemma4`) |
+| layers | **60: 10 global, 50 sliding-window** (window 1024) |
+| KV heads | global **4** at head dim 512; SWA **16** at head dim 256 |
+| native context | **262144** |
+| **global KV** | **80.0 KiB per token** |
+| **SWA KV** | **0.78 GiB in total, fixed** — it does not grow with context |
+
+⚠ **Context is NOT nearly free on the 31B, and scaling the 12B's number would have been wrong by
+5×.** The 12B costs ~16 KiB/token because it has **one** global layer with **one** KV head. The
+31B has **ten** global layers with **four** KV heads each, so 10 × 4 × (512+512) × 2 B = **80
+KiB/token**. This is exactly the trap §6 was written to avoid; the answer came from the file.
+
+**Footprint across the two cards (64 GiB total), weights 30.4 GiB + KV:**
+
+| context | KV | total | of 64 GiB |
+|---|---|---|---|
+| 65536 | 5.78 GiB | 36.2 GiB | 57 % |
+| 131072 | 10.78 GiB | 41.2 GiB | 64 % |
+| 163840 | 13.28 GiB | 43.7 GiB | 68 % |
+| **262144** (native) | 20.78 GiB | **51.2 GiB** | **80 %** |
+
+**The full native 262K window fits with ~13 GiB to spare** — which is the whole argument for split
+mode on this model. Q8_0 at 32.64 GB cannot go on one 32 GiB card at all; Q4_K_M (18.32 GB) could,
+and if that is ever preferred then split mode is not needed for it.
+
+⚠ **Two things those totals do NOT include, and acceptance must:**
+
+1. **Compute buffers at a deep prefill**, which are on top. On Qwen at 160K these measured only
+   ~196 MiB, but that is a different architecture and has not been measured here.
+2. ⚠ **Layer split divides by LAYER, not evenly by bytes**, so the two cards will not hold half
+   each. **Check both cards, never the sum** — a total that fits inside 64 GiB says nothing about
+   whether the busier card fits inside 32.
 
 ## 7. ⚠ Open — must be settled before this is built
 
-1. **Which model, exactly.** `Gemma 4 31B` is not on the box and I have not confirmed the repo or
-   filename upstream. The build knows the `gemma4` architecture, which is necessary and not
-   sufficient. Needed: the Hugging Face repo, the file, the quantisation, and its size.
-   ⚠ **`hf-get.sh` writes by SOURCE filename** — stage into a scratch directory and rename on
-   success, because a name collision here has already nearly overwritten a live model.
+1. ~~**Which model, exactly.**~~ **CLOSED 2026-09-14** — see §6. Downloaded, verified and its
+   geometry measured. The repo also carries a **vision tower** (`mmproj-*`) and a **multi-token
+   prediction head** (`mtp-*`); **neither is fetched and neither should be loaded** without a
+   reason — the instance is text-only without `--mmproj`, and speculative decoding measured a
+   **20× wall-clock LOSS** on these Volta cards (root `CLAUDE.md`), while reporting healthy
+   internal metrics throughout.
 2. **The dashboard question in §4** — owner's, and it decides whether split mode ships honest.
 3. **Which mode is the default at boot** if both end up enabled or neither does.
 4. **`--cache-reuse` is still in the INSTALLED per-GPU unit.** It was removed from `serve-llm.sh`

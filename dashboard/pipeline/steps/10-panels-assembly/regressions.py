@@ -119,6 +119,12 @@ DANGLING_CSS_CLASS_TEST = "lib/dangling-css-class.test.ts"
 UNIT_SUFFIX_TEST = "lib/unit-suffix.test.ts"
 CROSS_HARNESS_LEDGER_TEST = "lib/cross-harness-ledger.test.ts"
 
+# ⚠⚠ Added by 12a, 2026-09-14 — the GENERATED sweep behind §6.2's ruling of that day ("a
+# collector that cannot read must be visible at a glance"). It renders the real
+# `DashboardShell` over the product of §3.7's eighteen sources and seven snapshot shapes, so it
+# is a `components/panels/` + `app/` join and lives in this harness with the rest of them.
+COLLECTOR_VISIBILITY_TEST = "app/collector-visibility.test.tsx"
+
 LEDGER_FILES = [
     HEADER_STATUS_TEST, BANNER_TEST, HEADER_TEST, ALARM_BANNER_TEST, GRID_TEST,
     USE_TELEMETRY_TEST, USE_TELEMETRY_SSR_TEST, USE_NOW_TICK_TEST,
@@ -129,7 +135,7 @@ LEDGER_FILES = [
     SESSION_EVENT_LOG_PANEL_TEST, PANEL_NOTES_TEST, PANEL_CHIP_TEST,
     CHART_VIEW_TOGGLE_TEST, FORCE_ALARM_TEST, FORCE_ALARM_WIRING_TEST,
     TOCONTAIN_SCOPE_TEST, DANGLING_CSS_CLASS_TEST, UNIT_SUFFIX_TEST, CROSS_HARNESS_LEDGER_TEST,
-    CAPTION_TEST,
+    CAPTION_TEST, COLLECTOR_VISIBILITY_TEST,
 ]
 
 # `test`/`it`, optionally `.each(<PAREN-BALANCED ARGS>)`, optionally `<A GENERIC ARG>`, then `(`.
@@ -426,8 +432,10 @@ REGRESSIONS = [
      [HEADER_TEST]),
     ("10a-H12 a paused dashboard hides its severity colour instead of showing it alongside the mode",
      HEADER_SRC,
-     "data-severity={severity ?? 'none'}",
-     "data-severity={mode === 'paused' ? 'none' : (severity ?? 'none')}",
+     # ⚠ RE-AIMED 2026-09-14 by 12a: the span now paints `status.severity` (§6.2's ruling of
+     # that day makes the dot and the words ONE reduction). Same element, same property.
+     "data-severity={status.severity ?? 'none'}",
+     "data-severity={mode === 'paused' ? 'none' : (status.severity ?? 'none')}",
      [HEADER_TEST]),
     # ⚠ 10e RETIRED `10a-H13`, not re-aimed. Its whole premise was "the refresh-now button loses
     # its visible text `⟳ refresh`" — but 10e's own §4 redesign makes every header button
@@ -564,13 +572,16 @@ REGRESSIONS = [
      [HEADER_STATUS_TEST, HEADER_TEST, DASHBOARD_SHELL_TEST]),
     ("10a-H14 a null severity paints the dot GREEN — the side of the guard that had no fixture",
      HEADER_SRC,
-     "data-severity={severity ?? 'none'}",
-     "data-severity={severity ?? 'normal'}",
+     # ⚠ RE-AIMED 2026-09-14 by 12a — see 10a-H12.
+     "data-severity={status.severity ?? 'none'}",
+     "data-severity={status.severity ?? 'normal'}",
      [HEADER_TEST]),
     ("10a-H15 the header stops handing aggregateStatus the severity it colours the dot with",
      HEADER_SRC,
-     "const status = aggregateStatus(mode, alarms, severity);",
-     "const status = aggregateStatus(mode, alarms, 'normal');",
+     # ⚠ RE-AIMED 2026-09-14 by 12a: the call gained a fourth argument. Same property — the
+     # header stops handing the function the severity it colours the dot with.
+     "const status = aggregateStatus(mode, alarms, severity, failingSources);",
+     "const status = aggregateStatus(mode, alarms, 'normal', failingSources);",
      [HEADER_TEST, DASHBOARD_SHELL_TEST]),
 
     # -------------------------------------------------- F1/F2/F3: §6.1's grid had two
@@ -1859,10 +1870,14 @@ REGRESSIONS = [
      '        bound="roomy"\n',
      "",
      [COOLING_PANEL_TEST]),
+    # ⚠ PINNED TO ONE SITE 2026-09-14 by 12a. This mutation is about the `gpus: null` takeover,
+    # and 12a gave the ABSENT takeover the same bounded well — so the bare call text now matches
+    # TWICE and `replace(…, 1)` would have taken whichever came first. The trailing `) : (`
+    # belongs to the `gpus: null` branch alone. `12a-GP3` is the same property on the other one.
     ("10f-GP1 the GPU takeover explanation loses its roomy bound",
      GPU_PANEL_SRC,
-     '<PanelNotes subject={`GPU ${index}`} bound="roomy" messages={errorsForPanel(snapshot, \'gpu\')} />',
-     '<PanelNotes subject={`GPU ${index}`} messages={errorsForPanel(snapshot, \'gpu\')} />',
+     "<PanelNotes subject={`GPU ${index}`} bound=\"roomy\" messages={errorsForPanel(snapshot, 'gpu')} />\n        </div>\n      ) : (",
+     "<PanelNotes subject={`GPU ${index}`} messages={errorsForPanel(snapshot, 'gpu')} />\n        </div>\n      ) : (",
      [GPU_PANEL_TEST]),
     ("10f-SV1 the SERVING takeover explanation loses its roomy bound",
      SERVING_PANEL_SRC,
@@ -2356,6 +2371,80 @@ REGRESSIONS = [
      "                title: instance?.model ?? null,",
      "                title: instance?.model ?? '',",
      [GPU_PANEL_TEST]),
+
+    # ========================================== 12a — §6.2's ruling of 2026-09-14
+    # The first production failure: a `daemon-reload` revoked the container's GPU device
+    # access, `nvidia-smi` failed inside it, `errors[]` carried `nvidia-smi: exited 255`, and
+    # NOTHING on screen said so. Each mutation below reinstates one half of that page.
+    ("12a-GP1 the RETIRED-card takeover goes back to \"card not enumerated\" and nothing else — the production failure verbatim",
+     GPU_PANEL_SRC,
+     '          <PanelNotes subject={`GPU ${index}`} bound="roomy" messages={errorsForPanel(snapshot, \'gpu\')} />\n        </div>\n      ) : snapshot !== null && snapshot.gpus === null ? (',
+     '        </div>\n      ) : snapshot !== null && snapshot.gpus === null ? (',
+     [GPU_PANEL_TEST, COLLECTOR_VISIBILITY_TEST]),
+    ("12a-GP2 the retired-card takeover explains the WRONG panel — cooling's messages under a GPU card",
+     GPU_PANEL_SRC,
+     "messages={errorsForPanel(snapshot, 'gpu')} />\n        </div>\n      ) : snapshot !== null",
+     "messages={errorsForPanel(snapshot, 'cooling')} />\n        </div>\n      ) : snapshot !== null",
+     [COLLECTOR_VISIBILITY_TEST]),
+    ("12a-GP3 the RETIRED-card takeover's well loses its roomy bound — 10f-GP1's property on the other branch",
+     GPU_PANEL_SRC,
+     "<PanelNotes subject={`GPU ${index}`} bound=\"roomy\" messages={errorsForPanel(snapshot, 'gpu')} />\n        </div>\n      ) : snapshot !== null",
+     "<PanelNotes subject={`GPU ${index}`} messages={errorsForPanel(snapshot, 'gpu')} />\n        </div>\n      ) : snapshot !== null",
+     [GPU_PANEL_TEST]),
+    ("12a-HS1 the header claims health again while a collector is failing",
+     HEADER_STATUS_SRC,
+     "  const failing = failingSources > 0 && !MODES_WITHOUT_THE_CLAUSE.includes(mode);",
+     "  const failing = false;",
+     [HEADER_STATUS_TEST, HEADER_TEST, COLLECTOR_VISIBILITY_TEST]),
+    ("12a-HS2 `all healthy` is SUFFIXED rather than replaced — the one shape the ruling forbids in as many words",
+     HEADER_STATUS_SRC,
+     "  const words = [failing && base.text === ALL_HEALTHY ? '' : base.text, failing ? unreadWord(failingSources) : '']",
+     "  const words = [base.text, failing ? unreadWord(failingSources) : '']",
+     [HEADER_STATUS_TEST, HEADER_TEST, COLLECTOR_VISIBILITY_TEST]),
+    ("12a-HS3 the clause replaces every mode's own words, so a paused dashboard stops saying it is paused",
+     HEADER_STATUS_SRC,
+     "  const words = [failing && base.text === ALL_HEALTHY ? '' : base.text, failing ? unreadWord(failingSources) : '']",
+     "  const words = [failing ? '' : base.text, failing ? unreadWord(failingSources) : '']",
+     [HEADER_STATUS_TEST]),
+    ("12a-HS4 the dot stays green beside the words that say a collector is failing",
+     HEADER_STATUS_SRC,
+     "    severity: failing && severity === 'normal' ? null : severity,",
+     "    severity,",
+     [HEADER_STATUS_TEST, HEADER_TEST]),
+    ("12a-HS5 an unrelated failing collector greys out a RED dashboard, hiding the alarm beside it",
+     HEADER_STATUS_SRC,
+     "    severity: failing && severity === 'normal' ? null : severity,",
+     "    severity: failing ? null : severity,",
+     [HEADER_STATUS_TEST]),
+    ("12a-HS6 the count is of ENTRIES, so one wedged collector reads as five faults",
+     HEADER_STATUS_SRC,
+     "  snapshot === null ? 0 : new Set(snapshot.errors.map((e) => e.source)).size;",
+     "  snapshot === null ? 0 : snapshot.errors.length;",
+     [HEADER_STATUS_TEST]),
+    # ⚠ HS7/HS8 were added by the RED-TEST LEDGER, not by the build: its first run reported four
+    # ⚠ tests no mutation could redden. Two of them were fixtures that could not tell the
+    # property from its wrong implementation (fixed in the tests); these two are the other
+    # half — real wrong implementations nothing was yet writing.
+    ("12a-HS7 a snapshot that has not landed yet counts as a failing collector, so the pre-first-poll header accuses a machine it has not read",
+     HEADER_STATUS_SRC,
+     "  snapshot === null ? 0 : new Set(snapshot.errors.map((e) => e.source)).size;",
+     "  snapshot === null ? 1 : new Set(snapshot.errors.map((e) => e.source)).size;",
+     [HEADER_STATUS_TEST]),
+    ("12a-HS8 the clause stops being omitted at zero, so a healthy page reads `0 sources unread` — §9's rule the alarm count already has",
+     HEADER_STATUS_SRC,
+     "  const failing = failingSources > 0 && !MODES_WITHOUT_THE_CLAUSE.includes(mode);",
+     "  const failing = !MODES_WITHOUT_THE_CLAUSE.includes(mode);",
+     [HEADER_STATUS_TEST, HEADER_TEST, COLLECTOR_VISIBILITY_TEST]),
+    ("12a-H1 the header renders the RAW severity prop, so the dot and the words disagree again",
+     HEADER_SRC,
+     "          data-severity={status.severity ?? 'none'}",
+     "          data-severity={severity ?? 'none'}",
+     [HEADER_TEST, COLLECTOR_VISIBILITY_TEST]),
+    ("12a-DS1 the shell hard-codes a healthy collector count, so the header never sees a failure",
+     DASHBOARD_SHELL_SRC,
+     "          failingSources={failingSourceCount(snapshot)}",
+     "          failingSources={0}",
+     [COLLECTOR_VISIBILITY_TEST, DASHBOARD_SHELL_TEST]),
 ]
 
 # ---------------------------------------------------------------------------
@@ -2381,10 +2470,12 @@ def _assert_unique_ids() -> None:
     #    throttle line, and the `… N more` affordance) — same instruction, same reasoning.
     # ⚠ `10h-` added by 10h (the loop that bounds the GRID itself, §6.1's 2026-09-10 ruling,
     #    plus §6.4's `+N more` and §3.4's filename rendering) — same instruction, same reasoning.
-    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-", "10c-", "10e-", "10f-", "10g-", "10h-")))
+    # ⚠ `12a-` added by 12a (the first production failure: §6.2's "a collector that cannot
+    #   read must be visible at a glance") — same instruction, same reasoning.
+    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-", "10c-", "10e-", "10f-", "10g-", "10h-", "12a-")))
     if bad_prefix:
         raise SystemExit(
-            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-/10c-/10e-/10f-/10g-/10h-): {', '.join(bad_prefix)}"
+            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-/10c-/10e-/10f-/10g-/10h-/12a-): {', '.join(bad_prefix)}"
         )
 
 

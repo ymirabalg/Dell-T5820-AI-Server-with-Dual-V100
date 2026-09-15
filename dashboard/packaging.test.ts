@@ -1173,6 +1173,9 @@ const CHECK_ROWS = [
   'check_unit',
   'check_one_process',
   'check_container',
+  // ⚠⚠ 12a — INSTALL-SPEC §11.4, the row the first production failure asked for: it runs
+  // nvidia-smi INSIDE the container, because host-side health proved nothing there.
+  'check_container_gpu_access',
   'check_drift',
   'check_firewall',
   'check_gate',
@@ -1182,7 +1185,7 @@ const CHECK_ROWS = [
 /**
  * Run `cmd_check` with every row REPLACED by a stub, and return its exit status.
  *
- * ⚠ This is the mechanism. With all eleven rows stubbed silent the run must be 0; with
+ * ⚠ This is the mechanism. With every row stubbed silent the run must be 0; with
  * exactly one of them raising `row_fail` it must be 1 — and it can only be 1 if `cmd_check`
  * actually CALLS that function. So one table proves the call graph and the exit-code
  * contract at the same time, for every row, from one place.
@@ -1202,7 +1205,7 @@ const cmdCheckWithRows = (overrides: Readonly<Record<string, string>> = {}): num
 };
 
 describe('⚠⚠ cmd_check calls every row it is supposed to, and a failed row reaches the exit code', () => {
-  test('⚠ the body of cmd_check calls exactly the twelve rows, in order and with nothing else', () => {
+  test('⚠ the body of cmd_check calls exactly the thirteen rows, in order and with nothing else', () => {
     // ⚠ A SOURCE-TEXT half as well as the behavioural one below, because they are blind to
     // different things. `check_one_process` was replaceable by `  true` — the whole O22
     // section deleted from `check` — with 31 tests green. Reading the body means a row
@@ -1269,6 +1272,12 @@ const BOX_STUBS = [
   '    ps*ancestor=*)           emit "$D_BYID" ;;',
   '    "ps --format"*)          emit "$D_PS" ;;',
   '    top*)                    emit "$D_TOP" ;;',
+  // ⚠⚠ 12a — `docker exec`, and it can produce NOTHING, deliberately. §11.4's row takes its
+  // verdict from a marker the inner shell prints rather than from `docker exec`'s exit status,
+  // because that status conflates "the command failed" with "the exec never happened" — so a
+  // stub that always emitted a marker could not tell the row's `unknown` arm from its `fail`
+  // one, which is the distinction the whole row exists for.
+  '    exec*)                   emit "${EXEC_OUT-RC=0}" ;;',
   // ⚠ Each of these can FAIL, deliberately. Until 2026-09-11 only the Env one could, on the
   // reasoning that "every other row compares two values, so a failed read makes them differ".
   // MEASURED false for two of them: the unit carries no --restart and publishes no port, so
@@ -1551,6 +1560,30 @@ describe('⚠⚠ every check row REFUSES on its own bad input and PERMITS on a h
       verdict: 'pass', env: { D_DEVREQ: 'null', GPU_PROBE: 'broken' }, says: 'FALLBACK, and the probe agrees' },
     { guard: 'GPU mode', row: 'check_container', what: 'the GPU device request in force',
       verdict: 'pass', says: 'nvidia device request' },
+    // ---- ⚠⚠ 12a / INSTALL-SPEC §11.4 — nvidia-smi INSIDE the container -------------------
+    // The production failure of 2026-09-14, and every way this row can be asked the question.
+    // `check_container`'s GPU-mode row passed throughout that outage: the device REQUEST was
+    // still there, and the cgroup underneath it was what the daemon-reload rewrote.
+    { guard: '⚠⚠ §11.4 device access revoked', row: 'check_container_gpu_access',
+      what: 'the production case — a device request in force and nvidia-smi failing inside the container',
+      verdict: 'fail', env: { EXEC_OUT: 'RC=255' }, says: 'THE CONTAINER CANNOT SEE THE GPUs' },
+    { guard: '§11.4 device access', row: 'check_container_gpu_access',
+      what: 'a container that can read the cards', verdict: 'pass', says: 'ran nvidia-smi and read the cards' },
+    { guard: '⚠⚠ §11.4 exec produced nothing', row: 'check_container_gpu_access',
+      what: 'docker exec that never ran — NOT "the container cannot see the cards"',
+      verdict: 'unknown', env: { EXEC_OUT: '' }, says: 'it is nobody looked' },
+    { guard: '⚠ §11.4 no container', row: 'check_container_gpu_access',
+      what: 'nothing to run the command in — unknown, never a tick',
+      verdict: 'unknown', env: { D_NAMED: '' }, says: 'nvidia-smi cannot be run in one' },
+    { guard: '⚠ §11.4 fallback agrees', row: 'check_container_gpu_access',
+      what: 'the documented fallback: no device request, and nvidia-smi fails inside — a MEASURED agreement',
+      verdict: 'pass', env: { D_DEVREQ: 'null', EXEC_OUT: 'RC=127' }, says: 'is the fallback' },
+    { guard: '⚠ §11.4 fallback disagrees', row: 'check_container_gpu_access',
+      what: 'no device request, and nvidia-smi answers anyway — two readings that cannot both be right',
+      verdict: 'fail', env: { D_DEVREQ: 'null', EXEC_OUT: 'RC=0' }, says: 'disagree' },
+    { guard: '⚠ §11.4 mode unreadable', row: 'check_container_gpu_access',
+      what: 'an unreadable DeviceRequests — there is nothing to judge the exit status against',
+      verdict: 'unknown', env: { D_DEVREQ: 'wat', EXEC_OUT: 'RC=0' }, says: 'nothing to judge that against' },
     // ---- 11-Q3, the container against the unit --------------------------------------
     { guard: 'drift', row: 'check_drift', what: 'a container created from exactly the unit’s flags',
       verdict: 'pass', env: { UNIT_PATH: REAL_UNIT }, says: 'neither secret is in docker inspect' },
@@ -1666,6 +1699,11 @@ describe('⚠⚠ every check row REFUSES on its own bad input and PERMITS on a h
     { guard: 'the gate', row: 'check_gate', what: '401 without a cookie', verdict: 'pass' },
   ];
 
+  // ⚠ 12a: an explicit timeout, because this table sources `dashboard.sh` once per row in a
+  // real bash subprocess and §11.4's seven new rows took it past vitest's 5 s default (5 692 ms
+  // measured before them). The number is a bound on the HARNESS, not on anything the script
+  // does; raising it is not weakening the guard, and leaving it to time out would have retired
+  // the whole table's verdict — sixty-odd refusals — for an unrelated reason.
   test('⚠ each of the check rows above refuses its own bad input, and permits a healthy box', () => {
     const actual = cases.map((c) => {
       const envFile = c.envFile ?? `PASSWORD_HASH=x\nSESSION_SECRET=${HEX64_SECRET}\nSTANDING=\n`;
@@ -1681,7 +1719,7 @@ describe('⚠⚠ every check row REFUSES on its own bad input and PERMITS on a h
       says: true,
     }));
     expect(actual).toEqual(expected);
-  });
+  }, 30_000);
 
   test('⚠ the row for a bare line prints its LINE NUMBER and its length, never the line', () => {
     // ⚠ It printed `${line%%[!A-Za-z0-9_]*}…` — the prefix up to the first character outside
@@ -1992,6 +2030,74 @@ describe('⚠⚠ the subcommand guards refuse, and each of them is one line from
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  // ⚠⚠ 12a / INSTALL-SPEC §11.4, ruled 2026-09-14 after the first production failure. A
+  // `systemctl daemon-reload` reset the device allow-list on the RUNNING container, nvidia-smi
+  // inside it then failed while the host stayed healthy, and the UI said nothing. The ruling
+  // closes it procedurally: anything that reloads systemd restarts this unit afterwards.
+  //
+  // ⚠ Three of the four cases below are about NOT restarting, and each is a way this could
+  // fail a run it has no business failing — an absent unit aborting `install` under `set -e`,
+  // and an inactive one being STARTED before `cmd_firewall` has written its rule.
+  const unitRestart = (
+    over: Readonly<Record<string, string>>,
+    systemctlStub = 'systemctl() { if [[ "$1" == show ]]; then printf "%s\\n" "${ACTIVE-inactive}"; else printf "SYSTEMCTL %s\\n" "$*"; fi; }',
+  ): ScriptRun => {
+    const dir = mkdtempSync(join(tmpdir(), 'dashboard-sh-'));
+    try {
+      const unit = join(dir, 'ai-dashboard.service');
+      if (over.NO_UNIT === undefined) writeFileSync(unit, '[Unit]\n');
+      return sourced([...CMD_STUBS, systemctlStub, 'cmd_unit'], { UNIT_PATH: unit, ...over });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  test('⚠⚠ unit RESTARTS ai-dashboard after reloading systemd — §11.4, the production failure', () => {
+    // The reload has already happened by the time this runs, so the container's GPU device
+    // access is already gone. Before this, `cmd_unit` printed a WARNING about stale flags and
+    // left the box in exactly the state of 2026-09-14: a dashboard that is up, serving, and
+    // blind to the two cards it exists for, with every host-side check still passing.
+    const r = unitRestart({ ACTIVE: 'active' });
+    expect(r.status).toBe(0);
+    expect(r.out).toContain('SYSTEMCTL daemon-reload');
+    expect(r.out).toContain('SYSTEMCTL restart ai-dashboard.service');
+    // ⚠ ORDER, not merely presence: a restart BEFORE the reload restores nothing.
+    expect(r.out.indexOf('SYSTEMCTL daemon-reload')).toBeLessThan(
+      r.out.indexOf('SYSTEMCTL restart ai-dashboard.service'),
+    );
+  });
+
+  test('⚠ a unit that is not installed is not restarted, and does not fail the run', () => {
+    // `systemctl restart` on an absent unit exits non-zero, and under `set -e` that would
+    // abort `unit` — from `install`, at the step after the unit was enabled.
+    const r = unitRestart({ NO_UNIT: '1', ACTIVE: 'active' });
+    expect(r.out).not.toContain('SYSTEMCTL restart ai-dashboard.service');
+  });
+
+  test('⚠ an installed but INACTIVE unit is left alone rather than started', () => {
+    // Deliberate: `restart` would START it, which during `install` means the dashboard comes
+    // up BEFORE `cmd_firewall` has written its rule — the ordering 11-A9 moved the ufw refusal
+    // to step 0 to protect. Nothing that is not running has lost its devices.
+    const r = unitRestart({ ACTIVE: 'inactive' });
+    expect(r.status).toBe(0);
+    expect(r.out).not.toContain('SYSTEMCTL restart ai-dashboard.service');
+    expect(r.out).toContain('not active — nothing to restart');
+  });
+
+  test('⚠ a FAILED restart is reported and names the consequence, never swallowed', () => {
+    // A tick over a failure is the shape this whole script exists to prevent (11-A12) — and
+    // here the operator has to be told, because the reload already happened: silence means a
+    // container running without device access that nobody knows about.
+    const r = unitRestart(
+      { ACTIVE: 'active' },
+      'systemctl() { if [[ "$1" == show ]]; then printf "active\\n"; elif [[ "$1" == restart ]]; then return 1; else printf "SYSTEMCTL %s\\n" "$*"; fi; }',
+    );
+    expect(plain(r.out)).not.toContain('✓ restarted');
+    expect(r.out).toContain('systemctl restart exited 1');
+    expect(r.out).toContain('NO GPU device access');
+    expect(r.out).toContain('sudo ./dashboard.sh restart');
   });
 
   test('⚠ install FAILS on a failed check, and never re-prompts for a password it already has', () => {

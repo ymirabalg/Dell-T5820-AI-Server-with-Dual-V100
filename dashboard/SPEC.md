@@ -1062,6 +1062,27 @@ every row cap still holding. It renders on one line with an ellipsis and the **w
 cannot rest on a string the box chooses. 320 px fits 53 characters, so any realistic hostname is
 whole (this box's is `ai-server`, nine).
 
+⚠⚠ **A COLLECTOR THAT CANNOT READ MUST BE VISIBLE AT A GLANCE — ruled 2026-09-14, after this
+failed in production on the day of deployment.** A systemd `daemon-reload` revoked the container's
+GPU device access (a known cgroup-v2 interaction, not a fault of the cards, driver, toolkit or
+image). `nvidia-smi` then failed inside the container, `errors[]` carried
+`nvidia-smi: exited 255`, and **nothing on screen said so**: the operator found it by reading the
+raw `/api/telemetry` response. Two defects, both of which this document had already recorded and
+neither of which had been built:
+
+- **Every no-card branch renders its `errors[]`.** The `gpus: null` branch does; the **absent**
+  branch (a card missing from a `gpus[]` that was read) renders `card not enumerated` and nothing
+  else. That was found by measurement in 10g, recorded as an open question, and is now ruled:
+  **a takeover that replaces a panel's readings must still show why**, in every branch.
+- **The header may not read healthy while any collector is failing.** §9's aggregate is computed
+  from readings; a source that could not be read produces no reading and so contributed nothing.
+  An absent reading is not a healthy one — the same law §6.6 applies to a cell, applied to the
+  summary. If any `errors[]` entry exists, the header says so.
+
+**Acceptance is the production case, fabricated:** `gpus: []` and `gpus: null`, each with an
+`nvidia-smi` entry, must both put the reason on screen, and the header must not say `all healthy`
+with either.
+
 **Header** — hostname, **`uptimeSec` beside it** in §3.2's four forms, an aggregate status
 dot, the snapshot timestamp and the age of the last successful snapshot, then four controls:
 the **cadence selector** (1/2/5/10/30 s, default 5), the **window selector**

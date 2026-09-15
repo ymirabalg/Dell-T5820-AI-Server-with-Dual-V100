@@ -837,3 +837,11 @@ container and `check` must compare rather than assume (11b-Q3). **11b-Q5 — a c
 blocks has no timeout — is OPEN and owned by step 12**, which is where a FIFO or a hung mount can
 actually be produced.
 
+**Ruled 2026-09-14, after the first production failure (loop 12a):** (1) **every no-card branch
+renders its `errors[]`** and **the header may not read healthy while any collector is failing** —
+`SPEC.md` §6.2, closing `10e-Q4` which had been recorded and deferred since 10g and then bit on day
+one; (2) the `daemon-reload` GPU revocation is closed **procedurally** — unit-installing scripts
+restart `ai-dashboard`, and `check` gains an **in-container** `nvidia-smi` row that judges its own
+failure (`INSTALL-SPEC.md` §11.4). The D-Bus `ECONNRESET` entries seen in the same response are
+**undiagnosed** and belong to the same loop.
+

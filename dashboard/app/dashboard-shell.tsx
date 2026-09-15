@@ -51,6 +51,7 @@ import { AlarmBanner } from '@/components/alarm-banner';
 import type { AlarmBannerItem } from '@/components/alarm-banner';
 import { Grid } from '@/components/grid';
 import { Header } from '@/components/header';
+import { failingSourceCount } from '@/lib/client/header-status';
 import type { PanelProps } from '@/components/panel-props';
 import type { BannerCondition } from '@/lib/client/banner';
 import { bannerView } from '@/lib/client/banner';
@@ -220,6 +221,12 @@ export function DashboardShell() {
           severity={state.severity}
           mode={state.mode}
           alarms={state.alarms}
+          // ⚠⚠ 12a — §6.2's ruling of 2026-09-14. §9's aggregate is computed from READINGS, so
+          // a collector that could not read contributes nothing to it and the header summarised
+          // a half-blind machine as `all healthy` in production. This is the fourth input that
+          // stops it: the number of §3.7 sources that filed an `errors[]` entry on the latest
+          // snapshot. `null` — before the first poll — is 0, not unknown.
+          failingSources={failingSourceCount(snapshot)}
           timeOfDay={formatTimeOfDay(sample?.ts ?? null)}
           zoneAbbreviation={formatZoneAbbreviation(sample?.ts ?? null)}
           // ⚠ The trailing word is composed HERE, not in `Header` (F9): `formatAge(null)` is

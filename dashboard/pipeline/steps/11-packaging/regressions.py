@@ -1052,10 +1052,13 @@ REGRESSIONS = [
      '  if false; then',
      [PACKAGING]),
 
+    # ⚠ RE-AIMED 2026-09-14 by 12a: INSTALL-SPEC §11.4's `check_container_gpu_access` row now sits
+    # between these two, so the old two-line anchor no longer matches. Same property — `check_drift`
+    # is dropped from `cmd_check` and 11-Q3's whole comparison goes with it.
     ("11b-K5 check_drift is dropped from cmd_check, and 11-Q3's whole comparison goes with it",
      SH,
-     "  check_container\n  check_drift\n",
-     "  check_container\n",
+     "  check_container_gpu_access\n  check_drift\n",
+     "  check_container_gpu_access\n",
      [PACKAGING]),
     ("11b-D12 an unreadable docker inspect is reported as a container with no secrets in its Env",
      SH,
@@ -1291,6 +1294,51 @@ REGRESSIONS = [
      SECRETFILE_SRC,
      "  if (value.includes('\\\\')) {\n    return 'contains a backslash, which systemd and a sourcing shell both read as an escape';\n  }\n  if (value.includes('#')) {\n    return \"contains a '#', which several .env readers take as a comment and Docker does not\";\n  }\n",
      "  if (value.includes('#')) {\n    return \"contains a '#', which several .env readers take as a comment and Docker does not\";\n  }\n  if (value.includes('\\\\')) {\n    return 'contains a backslash, which systemd and a sourcing shell both read as an escape';\n  }\n",
+     [PACKAGING]),
+
+    # ======================================= 12a — INSTALL-SPEC §11.4, 2026-09-14
+    # The first production failure. A `systemctl daemon-reload` reset the device allow-list on
+    # the RUNNING container; `nvidia-smi` inside it then failed while the host's cards, driver
+    # and toolkit stayed healthy, so every host-side row this script had went on passing.
+    ("12a-SH1 `check` loses its in-container nvidia-smi row entirely — back to host-side health proving nothing",
+     SH,
+     "  check_container\n  check_container_gpu_access\n  check_drift",
+     "  check_container\n  check_drift",
+     [PACKAGING]),
+    ("12a-SH2 a `docker exec` that never ran is scored as a PASS — the false-pass shape this project has shipped four times",
+     SH,
+     "    *)     printf 'noexec' ;;",
+     "    *)     printf '0' ;;",
+     [PACKAGING]),
+    ("12a-SH3 an exec that never ran is scored as a FAILURE, sending an operator to restart a container whose devices are fine",
+     SH,
+     '  if [[ "$rc" == noexec ]]; then',
+     '  if false; then',
+     [PACKAGING]),
+    ("12a-SH4 the row reads the exit status alone, so the documented FALLBACK box fails check for ever and can never be installed onto",
+     SH,
+     '  case "${mode}:${rc}" in',
+     '  case "gpu:${rc}" in',
+     [PACKAGING]),
+    ("12a-SH5 `unit` goes back to WARNING about a running container instead of restarting it — the 2026-09-14 state verbatim",
+     SH,
+     "    restart_after_daemon_reload\n  fi",
+     "    :\n  fi",
+     [PACKAGING]),
+    ("12a-SH6 the restart no longer checks that the unit is INSTALLED, so `install` aborts on a box that has none",
+     SH,
+     "  if ! unit_installed; then\n    info \"no $UNIT_PATH — nothing to restart\"\n    return 0\n  fi",
+     "  if false; then\n    info \"no $UNIT_PATH — nothing to restart\"\n    return 0\n  fi",
+     [PACKAGING]),
+    ("12a-SH7 an INACTIVE unit is started by the restart, bringing the dashboard up before the firewall rule exists",
+     SH,
+     '  if [[ "$state" != active ]]; then',
+     '  if false; then',
+     [PACKAGING]),
+    ("12a-SH8 a failed restart is swallowed, so a container left without device access says nothing",
+     SH,
+     "  systemctl restart \"$UNIT_NAME\" || rc=$?",
+     "  systemctl restart \"$UNIT_NAME\" || true",
      [PACKAGING]),
 ]
 

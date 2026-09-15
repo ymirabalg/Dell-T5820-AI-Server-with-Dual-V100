@@ -472,6 +472,25 @@ server now reads the file, so the *container* reads it, and the container is unp
 `/etc/llama-server.apikey`. The `/root` backups stay 0600. `SPEC.md` §5 carries the same
 correction, with the reasoning.
 
+## 11.4 ⚠ Owner ruling, 2026-09-14 — a `daemon-reload` revokes the container's GPUs
+
+**Measured in production.** The container started 2026-09-13 00:06:18; `systemd[1]: Reloading...`
+at 2026-09-14 21:00:34 (a `gpu-fan-control.sh install`); from that moment `nvidia-smi` inside the
+container failed with *"Failed to initialize NVML: Unknown Error"* while the host's cards, driver
+and toolkit were all healthy. This box is cgroup v2 with Docker's default systemd cgroup driver, so
+a reload resets the device allow-list on a running container. **A container restart fixes it.**
+
+**Ruled: close it procedurally, not by changing the Docker daemon.**
+
+- **Anything that reloads systemd must restart `ai-dashboard` afterwards** — `dashboard.sh unit`
+  and `install`, and the sibling scripts that install units (`serve-llm.sh`, `gpu-fan-control.sh`)
+  where they can reach it. The restart is cheap; the dashboard holds no state.
+- ⚠ **`check` gains a row that runs `nvidia-smi` INSIDE the container**, because host-side health
+  proves nothing about the container's device access — that is the whole lesson of this incident.
+  It must judge its own failure: a row that cannot run the command is `unknown`, never a tick.
+- The daemon-wide `native.cgroupdriver=cgroupfs` workaround is **not taken**: it changes the
+  daemon globally, runs two cgroup managers on a systemd host, and was not verified to hold here.
+
 ## 12. Open questions for review
 
 Recorded rather than guessed (invariant 7).

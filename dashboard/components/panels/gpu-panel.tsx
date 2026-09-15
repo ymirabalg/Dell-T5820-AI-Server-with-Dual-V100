@@ -175,6 +175,22 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
       {absent ? (
         <div>
           <p className={styles.takeover}>card not enumerated</p>
+          {/* ⚠⚠ 12a — §6.2's ruling of 2026-09-14, after this branch's silence was found in
+              PRODUCTION on the day of deployment. A `daemon-reload` revoked the container's
+              GPU device access, `nvidia-smi` failed inside it, `errors[]` carried
+              `nvidia-smi: exited 255`, and the operator found it by reading the raw
+              /api/telemetry response because THIS branch drew `card not enumerated` and
+              nothing else. It was measured in 10g, recorded as `10e-Q4`, and never built.
+              **A takeover that replaces a panel's readings must still show why**, in every
+              branch — the `gpus: null` branch below has always done it; this one is the
+              other half of the same rule.
+
+              `roomy`, for the same reason the branch below takes it and by the same
+              arithmetic: row 1 is `max(gpu0, gpu1)`, this branch draws NO chart, and a
+              takeover card is far under the 176 px the healthy card sets row 1 to. A card
+              absent from a `gpus[]` that WAS read is the *retired* case, so at least one
+              card is normally still enumerated and sets the row on its own. */}
+          <PanelNotes subject={`GPU ${index}`} bound="roomy" messages={errorsForPanel(snapshot, 'gpu')} />
         </div>
       ) : snapshot !== null && snapshot.gpus === null ? (
         <div>
@@ -230,7 +246,7 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
             </div>
             {/* The mock's `.gpuTop__pw` — the SAME `powerW` reading the meter below draws
                 against the cap; this is its 0px-extra form, not a second reading. */}
-            <Figure value={powerParts.value} unit={powerParts.unit} caption={`cap ${formatWatts(gpu?.powerCapW ?? null)}`} />
+            <Figure value={powerParts.value} unit={powerParts.unit} />
           </div>
           <Meter
             label="power"
