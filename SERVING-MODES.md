@@ -89,6 +89,25 @@ subcommand, and a `trap` that restores on failure.
 5. **Poll `/health` until it answers, and roll back on failure** exactly as `serve-llm.sh
    set-model` does today: restore the previous mode and say why. A context or a quantisation that
    does not fit must leave the box serving, not dark.
+
+   ⚠⚠ **THE ROLLBACK MUST VERIFY ITS OWN RESULT — added 2026-09-15, after the first version was
+   measured lying.** It re-enabled the previous mode with the failure suppressed and the next line
+   asserted the mode was back; with that enable failing, **both per-GPU units and the split unit
+   ended `disabled inactive`** — the box unserved, and still unserved after a reboot — while the
+   output said the previous arrangement had been restored. **A rollback is reached only when
+   something has already gone wrong, so one that lies is worse than none.**
+
+   So: after restoring, **re-read systemd** per unit on **both axes** — is it serving now
+   (`ActiveState`), and will it come back at a reboot (`UnitFileState`) — print what was read, and
+   when any unit fails either axis say **"the rollback did not restore <mode> mode"**, list the
+   steps that failed with systemd's own output, give the by-hand commands, and **exit 3**, distinct
+   from the 1 that means the switch failed but the box is still serving.
+
+   ⚠ **Design for the SECOND failure, not the first.** The rollback runs with `errexit` off so one
+   bad step cannot abandon the rest; a failed backup restore **keeps** the backup rather than
+   deleting it; and the rollback ignores `INT`/`TERM` so a second interrupt cannot stop it
+   half-way. It deliberately does **not** poll `/health` — that costs minutes on a reload — and it
+   says so rather than implying it checked.
 6. Print what is now true: mode, model, context, ports live and ports now dark.
 
 **`serving-mode.sh per-gpu`** is the same in reverse, and **restores the arrangement recorded in
@@ -157,7 +176,7 @@ org the 12B came from; `unsloth` publishes a byte-identical Q8_0). Fetched with 
 | KV heads | global **4** at head dim 512; SWA **16** at head dim 256 |
 | native context | **262144** |
 | **global KV** | **80.0 KiB per token** |
-| **SWA KV** | **0.78 GiB in total, fixed** — it does not grow with context |
+| **SWA KV** | ⚠ **1200 MiB in total, fixed** — it does not grow with context. *Corrected 2026-09-15: this said 0.78 GiB, computed from the 1024-token window. llama.cpp sizes the SWA cache `PAD(n_swa + n_ubatch, 256)` = **1536 cells**, not 1024, so the true figure is ~50 % higher. Read from the source at `01818e4`, not from the window.* |
 
 ⚠ **Context is NOT nearly free on the 31B, and scaling the 12B's number would have been wrong by
 5×.** The 12B costs ~16 KiB/token because it has **one** global layer with **one** KV head. The
@@ -168,12 +187,12 @@ KiB/token**. This is exactly the trap §6 was written to avoid; the answer came 
 
 | context | KV | total | of 64 GiB |
 |---|---|---|---|
-| 65536 | 5.78 GiB | 36.2 GiB | 57 % |
-| 131072 | 10.78 GiB | 41.2 GiB | 64 % |
-| 163840 | 13.28 GiB | 43.7 GiB | 68 % |
-| **262144** (native) | 20.78 GiB | **51.2 GiB** | **80 %** |
+| 65536 | 6.17 GiB | 36.6 GiB | 57 % |
+| 131072 | 11.17 GiB | 41.6 GiB | 64 % |
+| 163840 | 13.67 GiB | 44.1 GiB | 68 % |
+| **262144** (native) | 21.17 GiB | **51.6 GiB** | **80 %** |
 
-**The full native 262K window fits with ~13 GiB to spare** — which is the whole argument for split
+**The full native 262K window fits with ~12.4 GiB to spare** — which is the whole argument for split
 mode on this model. Q8_0 at 32.64 GB cannot go on one 32 GiB card at all; Q4_K_M (18.32 GB) could,
 and if that is ever preferred then split mode is not needed for it.
 
