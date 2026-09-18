@@ -26,10 +26,12 @@ import type { UnitState } from '../types';
 import { DEFAULT_PATHS } from './collect';
 import {
   ACTIVE_STATE_PROPERTY,
+  ENVIRONMENT_PROPERTY,
   FAN_SERVICE_UNIT,
   NO_SUCH_UNIT_ERROR,
   NO_SUCH_UNIT_STATE,
   SYSTEMD_MANAGER_IFACE,
+  SYSTEMD_SERVICE_IFACE,
   SYSTEMD_UNIT_IFACE,
   asUnitState,
   collectUnitStates,
@@ -103,8 +105,32 @@ const variantStringBody = (text: string): readonly number[] => {
   return out;
 };
 
+/**
+ * ⚠ 12b — a `VARIANT` wrapping an `as`, which is what `Properties.Get(Service, Environment)`
+ * returns. The elements are built first so the array's length field is a count of BYTES.
+ */
+const variantStringArrayBody = (values: readonly string[]): readonly number[] => {
+  const out: number[] = [2, 0x61, 0x73, 0];
+  pad(out, 4);
+  const elements: number[] = [];
+  for (const value of values) putString(elements, value);
+  out.push(...le32(elements.length), ...elements);
+  return out;
+};
+
 /** What the scripted bus knows about one unit. */
-type UnitAnswer = { readonly kind: 'state'; readonly state: string } | { readonly kind: 'no-such-unit' };
+type UnitAnswer =
+  | {
+      readonly kind: 'state';
+      readonly state: string;
+      /**
+       * ⚠ 12b — what this unit's {@link ENVIRONMENT_PROPERTY} answers. Omitted means the
+       * empty list a unit with no `Environment=` really returns; `'error'` scripts an ERROR
+       * reply; `'not-a-list'` scripts a well-formed reply whose body is a plain string.
+       */
+      readonly environment?: readonly string[] | 'error' | 'not-a-list' | 'not-strings';
+    }
+  | { readonly kind: 'no-such-unit' };
 
 interface FakeBusOptions {
   readonly units?: Readonly<Record<string, UnitAnswer>>;
@@ -122,6 +148,20 @@ interface FakeBusOptions {
   readonly absurdLengthAfterBegin?: boolean;
   /** Never answer anything after `BEGIN` — a bus that accepts the socket and goes quiet. */
   readonly silent?: boolean;
+  /**
+   * ⚠⚠ 12b-RECONCILE — answer `GetUnit` with a SIGNAL that carries our `REPLY_SERIAL`. Not
+   * legal D-Bus, and the shape a desynchronised or hostile peer produces; the client used to
+   * accept it as a method return because it checked the serial and nothing else.
+   */
+  readonly replyAsSignal?: boolean;
+  /**
+   * ⚠⚠ 12b-RECONCILE — answer `GetUnit` honestly, in the same read as the NEXT call's reply,
+   * with the first message's `bodyLength` inflated by exactly the second message's length.
+   * Every value in message one is correct; only the number saying how long it is lies. Before
+   * the region invariant, `Conversation.message()` advanced by that number and the second
+   * reply was silently discarded.
+   */
+  readonly inflatedReplyLength?: boolean;
 }
 
 interface FakeBus {
@@ -212,6 +252,25 @@ const fakeBus = (options: FakeBusOptions = {}): FakeBus => {
           }
           const objectPath = `/org/freedesktop/systemd1/unit/${first.replace(/[^A-Za-z0-9]/g, '_')}`;
           paths.set(objectPath, first);
+          if (options.replyAsSignal) {
+            emit(reply(DBUS_MESSAGE_TYPE.signal, serial, 'o', stringBody(objectPath)));
+            return;
+          }
+          if (options.inflatedReplyLength) {
+            // The two-messages-in-one-read shape this bus really produces (the captured
+            // `Hello` reply is two messages in 262 bytes), with the first message's declared
+            // body inflated by exactly the second's length. The second message is the reply to
+            // the call the client has not made yet — its serial is this one plus one.
+            const ret = reply(DBUS_MESSAGE_TYPE.methodReturn, serial, 'o', stringBody(objectPath));
+            const next = reply(DBUS_MESSAGE_TYPE.methodReturn, serial + 1, 'v', variantStringBody('active'));
+            const view = new DataView(ret.buffer, ret.byteOffset, ret.byteLength);
+            view.setUint32(4, view.getUint32(4, true) + next.length, true);
+            const both = new Uint8Array(ret.length + next.length);
+            both.set(ret);
+            both.set(next, ret.length);
+            emit(both);
+            return;
+          }
           emit(reply(DBUS_MESSAGE_TYPE.methodReturn, serial, 'o', stringBody(objectPath)));
           return;
         }
@@ -222,6 +281,33 @@ const fakeBus = (options: FakeBusOptions = {}): FakeBus => {
         // `GetUnit` it belongs to, which is the property `collectUnitStates` is built on.
         const unit = [...paths.entries()].map(([, name]) => name).at(-1) ?? '';
         const known = options.units?.[unit];
+        if (second === ENVIRONMENT_PROPERTY) {
+          const scripted = known?.kind === 'state' ? known.environment : undefined;
+          if (scripted === 'error') {
+            emit(
+              reply(
+                DBUS_MESSAGE_TYPE.error,
+                serial,
+                's',
+                stringBody('Access denied'),
+                'org.freedesktop.DBus.Error.AccessDenied',
+              ),
+            );
+            return;
+          }
+          if (scripted === 'not-a-list') {
+            emit(reply(DBUS_MESSAGE_TYPE.methodReturn, serial, 'v', variantStringBody('CUDA_VISIBLE_DEVICES=0')));
+            return;
+          }
+          if (scripted === 'not-strings') {
+            // ⚠ A VARIANT holding `au` — a list, and not of strings. The one shape that
+            // reaches `firstStringArray`'s per-element check rather than its `Array.isArray`.
+            emit(reply(DBUS_MESSAGE_TYPE.methodReturn, serial, 'v', [2, 0x61, 0x75, 0, ...le32(4), ...le32(7)]));
+            return;
+          }
+          emit(reply(DBUS_MESSAGE_TYPE.methodReturn, serial, 'v', variantStringArrayBody(scripted ?? [])));
+          return;
+        }
         emit(
           reply(
             DBUS_MESSAGE_TYPE.methodReturn,
@@ -586,6 +672,58 @@ describe('collectUnitStates', () => {
     expect(errors[0]?.message).not.toContain('timed out');
   });
 
+  test('⚠⚠ 12b-RECONCILE — an inflated reply length is a named failure, not a timeout about a bus that answered', async () => {
+    /*
+     * ⚠ MEASURED, 2026-09-17 (`12b-A1`). The bus answers `GetUnit` and, in the SAME read, the
+     * `ActiveState` reply for the next serial — the two-messages-in-one-read shape this bus
+     * really produces. Only message one's declared length is inflated, by exactly message two's
+     * length. Every value in message one is correct.
+     *
+     * Before the region invariant: `Conversation.message()` advanced the buffer by the number
+     * message one declared, message two was discarded unread, and the client waited for a reply
+     * that had already arrived — **`unitState: null` with "timed out after 300 ms" about a bus
+     * that answered in 2 ms**, which is verbatim the failure `DbusDecode`'s two kinds,
+     * `DBUS_MAX_MESSAGE_BYTES` and the test phase's own Finding 1 all exist to prevent.
+     *
+     * ⚠ The elapsed time is the assertion, as in the two tests above: the broken implementation
+     * also files exactly one entry, 300 ms later and blaming the clock.
+     */
+    const bus = fakeBus({ units: liveBox, inflatedReplyLength: true });
+    const started = performance.now();
+    const { states, errors } = await collectUnitStates({
+      dbus: bus.dbus,
+      units: [FAN_SERVICE_UNIT],
+      timeoutMs: 1500,
+    });
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(states.get(FAN_SERVICE_UNIT)).toBeNull();
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.message).toContain('not a D-Bus message');
+    expect(errors[0]?.message).not.toContain('timed out');
+  });
+
+  test('⚠⚠ 12b-RECONCILE — a SIGNAL carrying our REPLY_SERIAL is refused, never read as the answer', async () => {
+    /*
+     * ⚠ MEASURED (`12b-A4`): `call` matched on the serial alone and `collectUnitStates` tests
+     * only for `error`, so a SIGNAL with an object path — followed by a variant `"active"` —
+     * came back as a unit state of `active` with **`errors: []`**. A fabricated reading with
+     * nothing beside it is the one outcome §6.5 rules out, and it is the reason this dashboard
+     * prints an em dash rather than a zero everywhere else.
+     *
+     * The doc above `call` reasons explicitly about signals — the bus's own `NameAcquired`
+     * arrives in the same read as the `Hello` reply — and then guarded only the serial.
+     */
+    const bus = fakeBus({ units: liveBox, replyAsSignal: true });
+    const { states, errors } = await collectUnitStates({
+      dbus: bus.dbus,
+      units: [FAN_SERVICE_UNIT],
+      timeoutMs: 1500,
+    });
+    expect(states.get(FAN_SERVICE_UNIT)).toBeNull();
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.message).toContain('which is not a reply');
+  });
+
   test('⚠ a bus that accepts the socket and never answers is bounded, not a hang', async () => {
     // O17: the seam bounds `run` only. §4 samples per request, so an unbounded read here
     // hangs the telemetry route and every browser polling it.
@@ -726,5 +864,157 @@ describe('nodeDbus — the real seam', () => {
     await stream.write(Uint8Array.of(42));
     expect([...(await stream.next())]).toEqual([42]);
     stream.close();
+  });
+});
+
+describe('⚠⚠ 12b — the `Environment` read: §3.4’s `gpus` at its source', () => {
+  test('⚠ a unit not named in environmentUnits is NEVER asked for its environment', () => {
+    // The opt-in is not tidiness. `collectSafety` asks this function about
+    // `gpu-fan-control.service` alone, which has no `gpus` column to fill; fetching its
+    // environment would be one more round trip per poll inside a 2 s budget, for a value
+    // nothing renders — and it would make this change non-additive for that caller.
+    const bus = fakeBus({ units: { [FAN_SERVICE_UNIT]: { kind: 'state', state: 'active' } } });
+    return collectUnitStates({ dbus: bus.dbus, units: [FAN_SERVICE_UNIT] }).then((collection) => {
+      expect(bus.properties).toEqual(['org.freedesktop.systemd1.Unit/ActiveState']);
+      expect(collection.environments.size).toBe(0);
+      expect(collection.states.get(FAN_SERVICE_UNIT)).toBe('active');
+    });
+  });
+
+  test('⚠ the environment is read from the SERVICE interface, after ActiveState, on one connection', async () => {
+    // `Environment` is not on `org.freedesktop.systemd1.Unit`: asking the generic interface
+    // answers UnknownProperty. And the ORDER matters — the unit state is the reading every
+    // panel needs, so if the conversation's budget runs out it is the second read that is
+    // lost, not the first.
+    const unit = servingUnitName(0);
+    const bus = fakeBus({
+      units: { [unit]: { kind: 'state', state: 'active', environment: ['CUDA_VISIBLE_DEVICES=0'] } },
+    });
+    const collection = await collectUnitStates({ dbus: bus.dbus, units: [unit], environmentUnits: [unit] });
+    // ⚠ The interface names are LITERAL here, not interpolated from the constants under test.
+    // With `${SYSTEMD_SERVICE_IFACE}` on both sides, changing the constant changes the
+    // expectation with it and the assertion holds for any value at all — measured: step 5's
+    // `12b-D9` (point it at the generic `Unit` interface, which does not carry `Environment`)
+    // DID NOT BITE until this line was written out.
+    expect(bus.properties).toEqual([
+      'org.freedesktop.systemd1.Unit/ActiveState',
+      'org.freedesktop.systemd1.Service/Environment',
+    ]);
+    // …and the constants really are those strings, asserted once, here.
+    expect(`${SYSTEMD_UNIT_IFACE}/${ACTIVE_STATE_PROPERTY}`).toBe('org.freedesktop.systemd1.Unit/ActiveState');
+    expect(`${SYSTEMD_SERVICE_IFACE}/${ENVIRONMENT_PROPERTY}`).toBe(
+      'org.freedesktop.systemd1.Service/Environment',
+    );
+    expect(bus.asked).toEqual([unit]);
+    expect(collection.environments.get(unit)).toEqual(['CUDA_VISIBLE_DEVICES=0']);
+  });
+
+  test('⚠ two instances get two DIFFERENT environments — not one answer reused', async () => {
+    const units = [servingUnitName(0), servingUnitName(1)];
+    const bus = fakeBus({
+      units: {
+        [units[0] as string]: { kind: 'state', state: 'active', environment: ['CUDA_VISIBLE_DEVICES=0'] },
+        [units[1] as string]: { kind: 'state', state: 'active', environment: ['CUDA_VISIBLE_DEVICES=1'] },
+      },
+    });
+    const collection = await collectUnitStates({ dbus: bus.dbus, units, environmentUnits: units });
+    expect(collection.environments.get(units[0] as string)).toEqual(['CUDA_VISIBLE_DEVICES=0']);
+    expect(collection.environments.get(units[1] as string)).toEqual(['CUDA_VISIBLE_DEVICES=1']);
+  });
+
+  test('⚠ an EMPTY environment is `[]`, never `null` — the unit answered', async () => {
+    // What `gpu-fan-control.service` really returns (captured). `null` here would mean "the
+    // property could not be read" about a property that was read perfectly.
+    const unit = servingUnitName(0);
+    const bus = fakeBus({ units: { [unit]: { kind: 'state', state: 'active', environment: [] } } });
+    const collection = await collectUnitStates({ dbus: bus.dbus, units: [unit], environmentUnits: [unit] });
+    expect(collection.environments.get(unit)).toEqual([]);
+    expect(collection.environments.get(unit)).not.toBeNull();
+    expect(collection.errors).toEqual([]);
+  });
+
+  test('⚠ an ERROR reply leaves it null, files ONE entry, and does not disturb ActiveState', async () => {
+    const unit = servingUnitName(1);
+    const bus = fakeBus({ units: { [unit]: { kind: 'state', state: 'active', environment: 'error' } } });
+    const collection = await collectUnitStates({
+      dbus: bus.dbus,
+      units: [unit],
+      environmentUnits: [unit],
+      unitInstances: new Map([[unit, 1]]),
+    });
+    // §6.5: a failed reading blanks the figure it explains and nothing else.
+    expect(collection.states.get(unit)).toBe('active');
+    expect(collection.environments.get(unit)).toBeNull();
+    expect(collection.errors).toHaveLength(1);
+    expect(collection.errors[0]?.source).toBe('dbus');
+    expect(collection.errors[0]?.message).toContain(ENVIRONMENT_PROPERTY);
+    // 10b-S-G: attached structurally from the map the caller built, never read back out of
+    // the message — so this entry lands on instance 1's SERVING row and no other.
+    expect(collection.errors[0]?.instance).toBe(1);
+  });
+
+  test('⚠ a reply that is not a list of strings is null WITH an entry, not an empty list', async () => {
+    // Distinct from an empty environment, which IS a value. This branch is a well-formed
+    // reply whose body is not `as` — a different systemd, a fake, a desynchronised read —
+    // and reporting it as "this unit declares nothing" would be a claim, not a gap.
+    const unit = servingUnitName(0);
+    const bus = fakeBus({ units: { [unit]: { kind: 'state', state: 'active', environment: 'not-a-list' } } });
+    const collection = await collectUnitStates({ dbus: bus.dbus, units: [unit], environmentUnits: [unit] });
+    expect(collection.environments.get(unit)).toBeNull();
+    expect(collection.environments.get(unit)).not.toEqual([]);
+    expect(collection.errors).toHaveLength(1);
+    expect(collection.errors[0]?.message).toContain('did not come back as a list of strings');
+  });
+
+  test('⚠ a list that is not of STRINGS is null too — `Array.isArray` alone is not the check', async () => {
+    // Distinct from the row above: this reply IS an array, so a reader that only asked
+    // "is it a list?" would hand `parseVisibleDevices` a list of numbers, where reading a
+    // `KEY=VALUE` out of each entry would throw from a collector whose contract is that it
+    // does not. A `v` wrapping `au` is the shortest frame that reaches that check.
+    const unit = servingUnitName(0);
+    const bus = fakeBus({ units: { [unit]: { kind: 'state', state: 'active', environment: 'not-strings' } } });
+    const collection = await collectUnitStates({ dbus: bus.dbus, units: [unit], environmentUnits: [unit] });
+    expect(collection.environments.get(unit)).toBeNull();
+    expect(collection.errors).toHaveLength(1);
+    expect(collection.errors[0]?.message).toContain('did not come back as a list of strings');
+  });
+
+  test('⚠ a unit systemd has never loaded gets NO second entry — one fact, stated once', async () => {
+    // `NoSuchUnit` already files an entry naming the unit, and there is no object path to
+    // read a property from. A second entry would put the same fault on the row twice.
+    const unit = servingUnitName(7);
+    const bus = fakeBus({ units: { [unit]: { kind: 'no-such-unit' } } });
+    const collection = await collectUnitStates({ dbus: bus.dbus, units: [unit], environmentUnits: [unit] });
+    expect(collection.states.get(unit)).toBe(NO_SUCH_UNIT_STATE);
+    expect(collection.environments.get(unit)).toBeNull();
+    expect(collection.errors).toHaveLength(1);
+    expect(collection.errors[0]?.message).toContain(NO_SUCH_UNIT_ERROR);
+    expect(bus.properties).toEqual([]);
+  });
+
+  test('⚠ every requested environment unit is a KEY even when the bus is unreachable', async () => {
+    // The same promise `states` makes, and for the same reason: a caller doing
+    // `environments.get(name)` must not have to tell "not asked for" from "asked for and
+    // unknown", because §3.4 renders those two differently — absent is an older server.
+    const unit = servingUnitName(0);
+    const bus = fakeBus({ connectError: new Error('connect ENOENT /run/dbus/system_bus_socket') });
+    const collection = await collectUnitStates({ dbus: bus.dbus, units: [unit], environmentUnits: [unit] });
+    expect([...collection.environments.keys()]).toEqual([unit]);
+    expect(collection.environments.get(unit)).toBeNull();
+    expect(collection.errors).toHaveLength(1);
+  });
+
+  test('⚠ a name in environmentUnits that is not in units is not fetched and is not a key', async () => {
+    // The object path a property read needs comes from that unit's own `GetUnit` reply, so
+    // a unit nobody asked about could never be fetched — promising it a key would be a
+    // `null` that says "could not be read" about a unit never looked at.
+    const unit = servingUnitName(0);
+    const bus = fakeBus({ units: { [unit]: { kind: 'state', state: 'active' } } });
+    const collection = await collectUnitStates({
+      dbus: bus.dbus,
+      units: [unit],
+      environmentUnits: [unit, servingUnitName(3)],
+    });
+    expect([...collection.environments.keys()]).toEqual([unit]);
   });
 });

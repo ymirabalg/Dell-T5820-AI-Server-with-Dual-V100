@@ -296,8 +296,8 @@ REGRESSIONS = [
      WIRE),
     ("05-W3 a VARIANT decodes to its own type name instead of the value inside it",
      WIRE_SRC,
-     "      case 'v':\n        return this.basic(this.signature());",
-     "      case 'v':\n        return this.signature();",
+     "        return this.value(this.signature());",
+     "        return this.signature();",
      [WIRE, DBUS, SERVING, SAFETY]),
     ("05-W4 an unsupported type is skipped instead of reported — the reader desynchronises",
      WIRE_SRC,
@@ -393,10 +393,13 @@ REGRESSIONS = [
      "export const NO_SUCH_UNIT_STATE: UnitState = 'inactive';",
      "export const NO_SUCH_UNIT_STATE: UnitState = 'failed';",
      [DBUS, SERVING]),
+    # ⚠ Re-aimed 2026-09-17 by 12b's reconciliation: `call` now checks the TYPE as well as the
+    # serial (12b-A4, mutated by `12b-D16`), so the serial test is one line of three rather than
+    # the whole loop body. The defect is unchanged — every message is taken as the answer.
     ("05-D3 the client takes the NEXT message as its reply instead of matching the serial",
      DBUS_SRC,
-     "      const message = await this.message();\n      if (message.replySerial === serial) return message;",
-     "      const message = await this.message();\n      void serial;\n      return message;",
+     "      if (message.replySerial !== serial) continue;",
+     "      void serial;",
      [DBUS, SERVING, SAFETY]),
     ("05-D4 a malformed frame is retried as though more bytes would help — a hang, not an error",
      DBUS_SRC,
@@ -413,8 +416,8 @@ REGRESSIONS = [
      DBUS),
     ("05-D6 an unreachable bus files one entry PER UNIT instead of one for the bus",
      DBUS_SRC,
-     "    return { states, errors: tag('dbus', [`${socket}: ${reason(e)}`]) };",
-     "    return { states, errors: tag('dbus', units.map((unit) => `${unit}: ${socket}: ${reason(e)}`)) };",
+     "    return { states, environments, errors: tag('dbus', [`${socket}: ${reason(e)}`]) };",
+     "    return { states, environments, errors: tag('dbus', units.map((unit) => `${unit}: ${socket}: ${reason(e)}`)) };",
      [DBUS, SERVING]),
     ("05-D7 the conversation is unbounded — O17's failure, on a per-request route",
      DBUS_SRC,
@@ -423,7 +426,7 @@ REGRESSIONS = [
      DBUS),
     ("05-D8 an empty unit list still opens a connection",
      DBUS_SRC,
-     "  if (units.length === 0) return { states, errors: [] };\n",
+     "  if (units.length === 0) return { states, environments, errors: [] };\n",
      "",
      [DBUS, SERVING]),
     ("05-D9 GetUnit becomes LoadUnit — what `systemctl show` calls, and it MUTATES the box",
@@ -842,8 +845,8 @@ REGRESSIONS = [
     # entry). Same property under test — O9's single read must not widen to a second unit.
     ("05-V7 collectServing also reads gpu-fan-control — O9's single read becomes two",
      SERVING_SRC,
-     "    collectUnitStates({\n      dbus,\n      paths,\n      units: instances.map(servingUnitName),\n      unitInstances,\n      timeoutMs: dbusTimeoutMs,\n    }),",
-     "    collectUnitStates({\n      dbus,\n      paths,\n      units: [...instances.map(servingUnitName), 'gpu-fan-control.service'],\n      unitInstances,\n      timeoutMs: dbusTimeoutMs,\n    }),",
+     "      units: instances.map(servingUnitName),\n      unitInstances,",
+     "      units: [...instances.map(servingUnitName), 'gpu-fan-control.service'],\n      unitInstances,",
      SERVING),
     ("05-V8 env problems are filed against `llama-health`",
      SERVING_SRC,
@@ -1063,6 +1066,298 @@ REGRESSIONS = [
      "types"),
     ("05-T5 ufwEnforcing is stringified, and the contract's boolean|null stops being enforced",
      SAFETY_SRC, "    ufwEnforcing: ufw.value,", "    ufwEnforcing: `${String(ufw.value)}`,", "types"),
+
+    # ============================================ 12b — §3.4's `gpus`, from the unit itself
+    # ⚠ The array reader is the first CONTAINER this codec has ever decoded. Every mutation
+    # below is the plausible wrong version of one line of it, and each one is the difference
+    # between a `dbus` entry that names a real fault and one that reports a timeout about a
+    # peer that answered in a millisecond.
+    ("12b-W15 a VARIANT is read as a BASIC, so `Environment` ends the whole conversation",
+     WIRE_SRC,
+     "        return this.value(this.signature());",
+     "        return this.basic(this.signature());",
+     [WIRE, DBUS]),
+    ("12b-W16 the body signature is split one CHARACTER at a time, so `as` is an `a` then an `s`",
+     WIRE_SRC,
+     """      out.push(`a${element}`);
+      at += 2;
+      continue;""",
+     """      out.push(head);
+      at += 1;
+      continue;""",
+     [WIRE, DBUS]),
+    ("12b-W17 a declared byte count is read as an ELEMENT count — every region is four times too long",
+     WIRE_SRC,
+     "    const end = start + declared;",
+     "    const end = start + declared * 4;",
+     [WIRE, DBUS]),
+    ("12b-W18 rule 1 is gone: a region is not checked to FIT the region that declared it",
+     WIRE_SRC,
+     """    if (end > this.limit) {
+      throw new Malformed(`${what} claims ${String(declared)} bytes, past the end of the ${this.declaredBy}`);
+    }
+""",
+     "",
+     WIRE),
+    ("12b-W19 D-Bus's own 2^26 array ceiling is not checked, so a wire value bounds the loop",
+     WIRE_SRC,
+     """    if (bytes > DBUS_MAX_ARRAY_BYTES) {
+      throw new Malformed(
+        `array claims ${String(bytes)} bytes, above D-Bus's ${String(DBUS_MAX_ARRAY_BYTES)}`,
+      );
+    }
+""",
+     "",
+     WIRE),
+    # ⚠⚠ 12b-RECONCILE — this is the mutation for THE finding of the loop. Rule 3 is what a
+    # message's own `byteLength` never had: `Conversation.message()` advances the stream by that
+    # number, so values that stop short of it discard the bytes in between — which in a stream
+    # are the next message. One flipped byte in the real captured `GetUnit` reply was enough.
+    ("12b-W20 rule 3 is gone: a region's values need not ACCOUNT for its declared bytes",
+     WIRE_SRC,
+     """      if (this.pos !== end) {
+        throw new Malformed(
+          `the ${what} declared ${String(declared)} bytes and its values account for ${String(this.pos - start)}`,
+        );
+      }
+""",
+     "",
+     [WIRE, DBUS]),
+    ("12b-W21 a D-Bus BOOLEAN is treated as 1-aligned, which it is not — it is a uint32",
+     WIRE_SRC,
+     """    case 'b':
+    case 'i':""",
+     """    case 'i':""",
+     WIRE),
+    ("12b-W22 the element alignment after an array's length is skipped",
+     WIRE_SRC,
+     "    this.align(alignmentOf(elementSig));",
+     "    void alignmentOf;",
+     WIRE),
+
+    ("12b-D9 `Environment` is read from the generic Unit interface, which does not carry it",
+     DBUS_SRC,
+     "export const SYSTEMD_SERVICE_IFACE = 'org.freedesktop.systemd1.Service';",
+     "export const SYSTEMD_SERVICE_IFACE = 'org.freedesktop.systemd1.Unit';",
+     DBUS),
+    ("12b-D10 every unit is asked for its environment, including the fan service",
+     DBUS_SRC,
+     "        if (!wantsEnvironment.has(unit)) continue;",
+     "        if (wantsEnvironment.size === -1) continue;",
+     DBUS),
+    ("12b-D11 environmentUnits is not intersected with units, so a name never looked at gets a key",
+     DBUS_SRC,
+     "  const wantsEnvironment = new Set(environmentUnits.filter((unit) => units.includes(unit)));",
+     "  const wantsEnvironment = new Set(environmentUnits);",
+     DBUS),
+    ("12b-D12 an EMPTY environment is reported as null — a read that succeeded called a failure",
+     DBUS_SRC,
+     "  if (!Array.isArray(first)) return null;",
+     "  if (!Array.isArray(first) || first.length === 0) return null;",
+     [DBUS, SERVING]),
+    ("12b-D13 the elements of the `as` are not checked, so a list of numbers passes as strings",
+     DBUS_SRC,
+     "  return first.every((v): v is string => typeof v === 'string') ? first : null;",
+     "  return first as readonly string[];",
+     DBUS),
+    ("12b-D14 the environment error carries no instance, so it lands on no SERVING row",
+     DBUS_SRC,
+     """              [
+                `${unit}: ${ENVIRONMENT_PROPERTY}: ${environment.errorName ?? 'error'}: ` +
+                  `${firstString(environment) ?? 'no detail'}`,
+              ],
+              instance,""",
+     """              [
+                `${unit}: ${ENVIRONMENT_PROPERTY}: ${environment.errorName ?? 'error'}: ` +
+                  `${firstString(environment) ?? 'no detail'}`,
+              ],""",
+     DBUS),
+
+    ("12b-L12 the FIRST CUDA_VISIBLE_DEVICES assignment wins, not the last systemd applies",
+     LLAMA_SRC,
+     "    raw = entry.slice(at + 1);",
+     "    raw ??= entry.slice(at + 1);",
+     LLAMA),
+    ("12b-L13 an empty CUDA_VISIBLE_DEVICES is `null`, conflating a value with a failed read",
+     LLAMA_SRC,
+     "  if (raw.trim() === '') return { value: [], problems };",
+     "  if (raw.trim() === '') return { value: null, problems };",
+     LLAMA),
+    ("12b-L14 no assignment at all yields `[]` — an older contract's silence read as an answer",
+     LLAMA_SRC,
+     """    return {
+      value: null,
+      problems: [`the unit declares no \\`${CUDA_VISIBLE_DEVICES}=\\`, so which cards it serves is unknown`],
+    };""",
+     "    return { value: [], problems };",
+     [LLAMA, SERVING]),
+    ("12b-L15 an unparseable member is skipped, so a PARTIAL card list is reported as whole",
+     LLAMA_SRC,
+     """      return {
+        value: null,
+        problems: [
+          `\\`${CUDA_VISIBLE_DEVICES}=${raw}\\` is not a list of card indices ` +
+            `(\\`${text}\\` is not one), so which cards this instance serves cannot be read`,
+        ],
+      };""",
+     "      continue;",
+     LLAMA),
+    ("12b-L16 a non-canonical index such as `01` is accepted as card 1",
+     LLAMA_SRC,
+     "    if (index === null || index < 0 || String(index) !== text) {",
+     "    if (index === null || index < 0) {",
+     LLAMA),
+    ("12b-L17 the key is matched by CONTAINMENT, so MY_CUDA_VISIBLE_DEVICES_BACKUP decides it",
+     LLAMA_SRC,
+     "    if (entry.slice(0, at) !== CUDA_VISIBLE_DEVICES) continue;",
+     "    if (!entry.includes(CUDA_VISIBLE_DEVICES)) continue;",
+     LLAMA),
+    ("12b-L18 the card list is neither sorted nor de-duplicated, so `1,0` and `0,1` differ",
+     LLAMA_SRC,
+     """    if (cards.has(index)) problems.push(`\\`${CUDA_VISIBLE_DEVICES}=${raw}\\` names card ${text} more than once`);
+    cards.add(index);
+  }
+  return { value: [...cards].sort((a, b) => a - b), problems };""",
+     """    cards.add(index);
+  }
+  return { value: [...raw.split(',').map((s) => Number(s.trim()))], problems };""",
+     LLAMA),
+
+    ("12b-S9 the serving row omits `gpus` when it could not be read — absent, not null",
+     SERVING_SRC,
+     "    gpus: gpusFor(instance),\n",
+     "",
+     SERVING),
+    ("12b-S10 an unreadable environment files a SECOND entry beside the one that explains it",
+     SERVING_SRC,
+     "    if (environment === undefined || environment === null) return null;",
+     "    if (environment === undefined) return null;\n    if (environment === null) {\n      const missing = parseVisibleDevices([]);\n      gpuProblems.push(...tag('dbus', missing.problems.map((p) => `${unit}: ${p}`), instance));\n      return missing.value;\n    }",
+     SERVING),
+    ("12b-S11b the environment is never requested, so every instance reports `gpus: null`",
+     SERVING_SRC,
+     "      environmentUnits: instances.map(servingUnitName),",
+     "      environmentUnits: [],",
+     SERVING),
+    # ⚠ Added after the FIRST run of this harness reported five ⚠ tests no mutation reddens —
+    # every one of them a HAPPY-PATH property, which the edge-case mutations above cannot
+    # reach. The ledger is what found them: writing a test is not evidence anything can make
+    # it fail.
+    ("12b-D15 only successfully read environments are keys, so `not asked` and `unknown` merge",
+     DBUS_SRC,
+     """const allEnvironmentsUnknown = (units: readonly string[]): Map<string, readonly string[] | null> =>
+  new Map(units.map((unit) => [unit, null]));""",
+     """const allEnvironmentsUnknown = (units: readonly string[]): Map<string, readonly string[] | null> => {
+  void units;
+  return new Map();
+};""",
+     [DBUS, SERVING]),
+    ("12b-L19 the whole `KEY=VALUE` entry is parsed, not the value — the key is never stripped",
+     LLAMA_SRC,
+     "    raw = entry.slice(at + 1);",
+     "    raw = entry;",
+     [LLAMA, SERVING]),
+    ("12b-L20 a list member is parsed untrimmed, so `0, 1` loses the card after the space",
+     LLAMA_SRC,
+     "    const text = piece.trim();",
+     "    const text = piece;",
+     LLAMA),
+    ("12b-S12b the `gpus` entry is filed from inside the map, re-ordering errors[]",
+     SERVING_SRC,
+     "    gpuProblems.push(...tag('dbus', parsed.problems.map((p) => `${unit}: ${p}`), instance));",
+     "    errors.push(...tag('dbus', parsed.problems.map((p) => `${unit}: ${p}`), instance));",
+     SERVING),
+
+    # ====================================================== 12b TEST PHASE — the two findings
+    # ⚠ Both are the SAME rule the array reader was given in 12b, on the paths 12b did not
+    # touch. `decodeMessage` has already established the whole message is present, so a length
+    # field pointing past it is a lie and `incomplete` is a 2 s hang that ends in a `dbus`
+    # entry saying "timed out" about a peer that answered instantly. Measured, not reasoned:
+    # `W23`'s mutation IS the code as it shipped, and `W24`'s is the reader as it shipped.
+    ("12b-W23 an over-long value inside a COMPLETE message says `read more` — the documented hang",
+     WIRE_SRC,
+     """      return { kind: 'malformed', problem: e.message };""",
+     "      return { kind: 'incomplete' };",
+     [WIRE, DBUS]),
+    # ⚠⚠ 12b-RECONCILE — W24 and W25 were "the reader is built on the whole BUFFER", and both
+    # went INERT the moment the header field array and the body became regions of their own:
+    # `region` re-bounds the reads at `fieldsEnd`/`bodyStart + bodyLength` whichever buffer the
+    # reader was constructed on, so the frame subarray is no longer what refuses the read. That
+    # is the invariant subsuming the symptom — measured, not assumed, by applying both original
+    # mutations and watching every test stay green. Both ids are re-aimed at the rule that DOES
+    # refuse it now. The frame construction stays: it is what makes "the message" the outermost
+    # region, which is what the other two nest inside.
+    ("12b-W24 rule 2 is gone: a value is bounded by the FRAME, not by the region that declared it",
+     WIRE_SRC,
+     "    if (this.pos + count > this.limit) {",
+     "    if (this.pos + count > this.bytes.length) {",
+     WIRE),
+    ("12b-W25 a `bodyLength` with no SIGNATURE to read it is accepted as an empty body",
+     WIRE_SRC,
+     "    bodyReader.region('message body', bodyLength, () => {",
+     "    if (signature !== '') bodyReader.region('message body', bodyLength, () => {",
+     WIRE),
+
+    # ====================================================== 12b RECONCILE — the five reverts
+    # ⚠ Each of these five one-line reverts kept `vitest run` completely green when 12b's
+    # adversarial applied it (`12b-A5`), three of them inside the codec the test phase had just
+    # fuzzed exhaustively. The sweep could not reach the last two: every truncation it builds is
+    # shorter than `byteLength`, so it is answered `incomplete` before a reader is entered.
+    ("12b-W26 a VARIANT is 4-aligned, which the D-Bus specification says it is not",
+     WIRE_SRC,
+     """    case 'g':
+    case 'v':
+      return 1;""",
+     """    case 'g':
+      return 1;
+    case 'v':
+      return 4;""",
+     WIRE),
+    ("12b-W27 a STRING's NUL terminator need not be inside the region that declared it",
+     WIRE_SRC,
+     """  string(): string {
+    const length = this.uint32();
+    this.need(length + 1);""",
+     """  string(): string {
+    const length = this.uint32();
+    this.need(length);""",
+     WIRE),
+    ("12b-W28 a SIGNATURE's NUL terminator need not be inside the region that declared it",
+     WIRE_SRC,
+     """  signature(): string {
+    const length = this.byte();
+    this.need(length + 1);""",
+     """  signature(): string {
+    const length = this.byte();
+    this.need(length);""",
+     WIRE),
+    # ⚠ 12b-A4 — the serial was the only thing checked, and `collectUnitStates` tests only for
+    # `error`, so a SIGNAL carrying our REPLY_SERIAL became a unit state with `errors: []`.
+    # ⚠⚠ Both added by 12b's RECONCILIATION after its first full run, and the reason is the
+    # finding of §7.2: `Reader.region`'s rule 3 refuses bodies that other mutations used to make
+    # decodable, so two ⚠ tests that had been scoring covered — by mutations with nothing to do
+    # with their subject — lost their only reddening entry. Each now has one that expresses the
+    # wrong implementation the test's own NAME describes.
+    ("12b-W29 a signature ending in a bare `a` is silently dropped rather than refused",
+     WIRE_SRC,
+     "      if (element === undefined) throw new Malformed('signature ends with a bare `a`');",
+     "      if (element === undefined) break;",
+     WIRE),
+    ("12b-W30 an unexpected throw ESCAPES `decodeMessage`, ending the whole conversation",
+     WIRE_SRC,
+     "    return { kind: 'malformed', problem: e instanceof Error ? e.message : 'decode failed' };",
+     "    throw e;",
+     WIRE),
+    ("12b-D16 a reply is matched on its SERIAL alone — a SIGNAL is accepted as the answer",
+     DBUS_SRC,
+     """      if (message.type !== DBUS_MESSAGE_TYPE.methodReturn && message.type !== DBUS_MESSAGE_TYPE.error) {
+        throw new Error(
+          `the system bus answered ${member} with a message of type ${String(message.type)} carrying our reply serial, ` +
+            'which is not a reply',
+        );
+      }
+""",
+     "",
+     DBUS),
 ]
 
 

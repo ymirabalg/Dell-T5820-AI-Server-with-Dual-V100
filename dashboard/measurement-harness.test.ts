@@ -241,6 +241,43 @@ const TERMS: readonly Term[] = [
     text: "fabrication.mode = 'retired-mixed';",
     why: 'the mixed page is never rendered, and measurement 17 grades the retired page twice — the branch `gpu-panel.tsx` argues about goes back to being unmeasured',
   },
+  // ---- measurements 19 and 20 (12b) -------------------------------------------------------
+  {
+    file: BREAKPOINTS,
+    text: "fabrication.mode = 'declared';",
+    why: 'the page the box becomes on its NEXT REBUILD is never rendered — every other fixture here sends no `gpus` at all, so the whole harness would go back to grading only the pre-12b rendering',
+  },
+  {
+    file: BREAKPOINTS,
+    text: "fabrication.mode = 'split';",
+    why: 'SPLIT MODE goes back to being drawn by no fixture in either harness — the arrangement §6.2 inverted the join FOR, and the one carrying the longest served-by label on the row that sets §6.1’s first term',
+  },
+  {
+    file: BREAKPOINTS,
+    text: 'present.gpu0NotBlank && present.gpu1NotBlank',
+    why: '§6.2’s "an em dash there would be a lie" stops being measured — and it is the failure a fit measurement cannot see, because a blank strip makes the page SHORTER rather than taller',
+  },
+  {
+    file: BREAKPOINTS,
+    text: "gpu0Says: textOf('gpu0').includes(gpu0Phrase),",
+    why: 'measurements 19 and 20 lose their precondition: a fixture that failed to take renders §3.4’s fallback, and every remaining term would then grade the page this loop did NOT change',
+  },
+  {
+    file: BREAKPOINTS,
+    text: "servingSays: textOf('serving').includes(servingPhrase),",
+    why: 'the SERVING half of §6.2’s ruling — "one row per process, naming the cards it spans" — stops being graded, leaving only the GPU cards measured',
+  },
+  // ---- measurement 21 (12b-RECONCILE) -----------------------------------------------------
+  {
+    file: BREAKPOINTS,
+    text: "fabrication.mode = 'cross-pinned';",
+    why: 'the one browser page whose rendering can tell the two joins APART is never drawn — measurement 19 is the box\u2019s own arrangement, where naming a card from `gpus`, from the instance number or from the row\u2019s position all render the same page, so the browser record would go back to grading the coincidence 12b replaced',
+  },
+  {
+    file: BREAKPOINTS,
+    text: 'present.gpu0Lacks && present.gpu1Lacks',
+    why: 'measurement 21 stops checking that each card carries the model of the instance that LISTS it — the right label with the WRONG model beside it is \u00a76.2\u2019s own complaint, and asserting that the label is present does not exclude it',
+  },
   // ---- the login itself (12a-A9 #11) ------------------------------------------------------
   {
     file: BREAKPOINTS,

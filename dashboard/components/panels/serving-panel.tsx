@@ -3,6 +3,19 @@
  * model alias, context, `/health` result. **No token rates** (decision 13) — nothing here
  * reads or renders anything about generation speed.
  *
+ * ### ⚠⚠ 12b — the row names the cards it spans (§6.2, ruled 2026-09-15)
+ *
+ * *"The SERVING panel shows one row per process, naming the cards it spans."* §3.4's `gpus`
+ * is the reading, and its four shapes are four different renderings that must not be
+ * collapsed: `[0]` → `GPU 0`, `[0, 1]` → `GPUs 0, 1`, `null` → `—` (the unit exists and its
+ * `CUDA_VISIBLE_DEVICES` could not be read, with the `dbus` entry already beside it through
+ * `errors[].instance`), and **absent** → nothing at all, because the key's absence means an
+ * older SERVER rather than a failed reading, and such a server's rows must render exactly as
+ * they did before this file changed.
+ *
+ * ⚠ **The mode is never inferred from the number of rows.** One row can equally mean one
+ * card's service failed; the cards come from the arrays themselves and nowhere else.
+ *
  * §6.4 fixes the join key between an instance and its unit as `llama-server@<i>.service`
  * (`lib/units.ts`'s `servingUnitName`), derived from the index rather than matched by string —
  * this file reuses that function rather than building the name a second time.
@@ -48,7 +61,7 @@
 
 import type { DisplayedCondition } from '@/lib/conditions';
 import { conditionId } from '@/lib/conditions';
-import { errorsForPanel } from '@/lib/client/observations';
+import { errorsForPanel, servedCards } from '@/lib/client/observations';
 import { latestSample } from '@/lib/client/runtime';
 import { formatModelName, formatPort, formatText, formatTokens } from '@/lib/format';
 import { severityHealth, severityUnitState, worstSeverity } from '@/lib/severity';
@@ -83,6 +96,10 @@ const instanceRow = (
   const unitSeverity = severityUnitState(instance.unitState);
   const healthSeverity = severityHealth(instance.health);
   const severity = worstSeverity(unitSeverity, healthSeverity);
+  // ⚠ 12b — §3.4's four shapes, as one string or none. `null` here means the key is ABSENT
+  // (an older server), which renders nothing; a `gpus` that is `null` renders an em dash,
+  // and those are two different facts (§3.4 forbids collapsing them).
+  const cards = servedCards(instance.gpus);
 
   const unitCondition = findDisplayed(displayed, conditionId('unit', servingUnitName(instance.instance)));
   const healthCondition = findDisplayed(displayed, conditionId('health', String(instance.instance)));
@@ -93,7 +110,15 @@ const instanceRow = (
       panel="serving"
       key={instance.instance}
       label={`llama-server@${instance.instance}`}
-      secondaryLabel={`:${formatPort(instance.port)}`}
+      // ⚠⚠ 12b — §6.2: *"The SERVING panel shows one row per process, naming the cards it
+      // spans."* The cards go in `secondaryLabel`, beside the port, because both answer
+      // *where is this process* — identity, not measurement — and because that slot wraps
+      // with the row rather than forcing a line of its own (10e §2.7).
+      //
+      // ⚠ On a server that does not publish `gpus`, `servedCards` returns `null` and this is
+      // the string it has always been. That is what keeps the running box's rows
+      // byte-identical across a client-only deploy.
+      secondaryLabel={cards === null ? `:${formatPort(instance.port)}` : `:${formatPort(instance.port)} · ${cards}`}
       // ⚠ 10h/§3.4 — the model renders as its FILENAME (ruled 2026-09-10), with the raw value
       // in the row's `title`. Measured cost of the path form: +21 px per row, on the panel
       // that sets §6.1's row 4 whenever a third instance exists.

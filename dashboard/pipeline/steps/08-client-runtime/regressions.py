@@ -325,6 +325,12 @@ RUNTIME_SRC = "lib/client/runtime.ts"
 GAPS_SRC = "lib/client/gaps.ts"
 MODE_SRC = "lib/client/mode.ts"
 UNITS_SRC = "lib/units.ts"
+# ⚠ 12b-RECONCILE — `lib/fixtures.ts` is a SOURCE file here, not a test file: it holds
+# `LIVE_BOX_SERVING_WIRE`, the frozen bytes the deployed server really sends, and the one
+# mutation below is the edit that would quietly turn that evidence back into a fixture
+# (regenerating it on a dev box). Ledger ownership follows the TEST file, which is
+# `lib/client/wire.test.ts` — this harness's.
+FIXTURES_SRC = "lib/fixtures.ts"
 
 # D5's whole function body, which three mutations below replace with a different composition.
 TRACE_BODY = (
@@ -1249,6 +1255,123 @@ REGRESSIONS = [
      "    case 'ufw':\n      return ['safety'];", "types"),
     ("08-T3 the runtime state becomes writable, so a panel can mutate the ring it renders",
      RUNTIME_SRC, "  readonly ring: SampleRing;", "  ring: SampleRing;", "types"),
+
+    # ================================== 12b — §3.4's `gpus` on the wire, and the inverted join
+    # ⚠ The first four are the one-character mistakes that would put an em dash on a healthy
+    # box: each collapses §3.4's ABSENT (an older server) into its `null` (a failed read), in a
+    # different place. The live box sends no `gpus` at all, so every one of them is a
+    # production failure on the next client-only deploy rather than a test-only concern.
+    ("12b-WR1 an absent `gpus` validates as null — an older server reported as a failed read",
+     WIRE_SRC,
+     "  if (!Object.hasOwn(source, key)) return ABSENT;\n  const raw = source[key];",
+     "  const raw = Object.hasOwn(source, key) ? source[key] : null;",
+     [WIRE, OBS]),
+    ("12b-WR2 the validated row always CARRIES the key, so `Object.hasOwn` can never say absent",
+     WIRE_SRC,
+     "  return gpus === ABSENT ? row : { ...row, gpus };",
+     "  return { ...row, gpus: gpus === ABSENT ? null : gpus };",
+     [WIRE, OBS]),
+    ("12b-WR3 a card index may be negative, so a value no `Gpu.index` can equal is accepted",
+     WIRE_SRC,
+     "  return whole === undefined || whole < 0 ? undefined : whole;",
+     "  return whole;",
+     WIRE),
+    ("12b-WR4 `gpus` is validated as a plain array, so a member that is not a card is kept",
+     WIRE_SRC,
+     "  return arrayOf(raw, cardIndex);",
+     "  return arrayOf(raw, (v) => (typeof v === 'number' ? v : cardIndex(v)));",
+     WIRE),
+    ("12b-WR5 the field is not validated at all, and a string reaches the join as a card list",
+     WIRE_SRC,
+     "  const gpus = optionalCardList(value, 'gpus');",
+     "  const gpus = optionalCardList(value, 'gpus') === undefined ? ABSENT : optionalCardList(value, 'gpus');",
+     [WIRE, OBS]),
+
+    ("12b-OB1 the index-join fallback is chosen per ROW, so one unreadable unit restores it",
+     OBS_SRC,
+     "  if (!serving.some(declaresGpus)) {",
+     "  if (!serving.every(declaresGpus)) {",
+     OBS),
+    ("12b-OB2 `unserved` and `unknown` collapse — we-looked-and-nobody-claims-it becomes an em dash",
+     OBS_SRC,
+     "  return serving.some((s) => declaresGpus(s) && s.gpus === null)",
+     "  return serving.some((s) => declaresGpus(s))",
+     OBS),
+    ("12b-OB3 an unreadable `gpus` yields `unserved`, asserting nothing serves a card we cannot see",
+     OBS_SRC,
+     """  return serving.some((s) => declaresGpus(s) && s.gpus === null)
+    ? { kind: 'unknown' }
+    : { kind: 'unserved' };""",
+     "  return { kind: 'unserved' };",
+     OBS),
+    ("12b-OB4 `alongside` keeps the asking card, so GPU 0 is served jointly with itself",
+     OBS_SRC,
+     "      return { kind: 'declared', instance, alongside: gpus.filter((g) => g !== index) };",
+     "      return { kind: 'declared', instance, alongside: [...gpus] };",
+     OBS),
+    ("12b-OB5 `serving: null` becomes a claim about cards rather than the index-join fallback",
+     OBS_SRC,
+     "  if (serving === null) return { kind: 'indexed', instance: null };",
+     "  if (serving === null) return { kind: 'unserved' };",
+     OBS),
+    ("12b-OB6 the declaration is read as `gpus !== undefined`, not as the key's own presence",
+     OBS_SRC,
+     "const declaresGpus = (instance: ServingInstance): boolean => Object.hasOwn(instance, 'gpus');",
+     "const declaresGpus = (instance: ServingInstance): boolean => instance.gpus !== null;",
+     OBS),
+    ("12b-OB7 an ABSENT card list renders an em dash — §3.4's two silences collapsed",
+     OBS_SRC,
+     "  if (gpus === undefined) return null;",
+     "  if (gpus === undefined) return EM_DASH;",
+     OBS),
+    ("12b-OB8 `[]` renders as an em dash, so `CUDA_VISIBLE_DEVICES=` reads as a failed read",
+     OBS_SRC,
+     "  if (gpus.length === 0) return 'no GPUs';",
+     "  if (gpus.length === 0) return EM_DASH;",
+     OBS),
+    ("12b-OB9 one card renders in the plural, so the joint arrangement stops standing out",
+     OBS_SRC,
+     "  return gpus.length === 1 ? `GPU ${String(gpus[0])}` : `GPUs ${gpus.join(', ')}`;",
+     "  return `GPUs ${gpus.join(', ')}`;",
+     OBS),
+    ("12b-OB10 the claimant is found by instance NUMBER again, reinstating the coincidence",
+     OBS_SRC,
+     "    if (gpus != null && gpus.includes(index)) {",
+     "    if (gpus != null && instance.instance === index) {",
+     OBS),
+
+    # ================================================ 12b RECONCILE — three of the five reverts
+    # ⚠ Each kept all 3634 tests green when 12b's adversarial applied it (`12b-A5`), and the
+    # protection each one carries was argued at length in a doc comment and asserted nowhere.
+    # `R1` is the one that matters most: with it applied, a row SPREAD as
+    # `{ ...instance, gpus: undefined }` stops declaring, and the whole snapshot silently falls
+    # back to the index join this loop exists to retire.
+    ("12b-OB11 `declaresGpus` asks for a value, not for a KEY — a spread row re-enables the index join",
+     OBS_SRC,
+     "const declaresGpus = (instance: ServingInstance): boolean => Object.hasOwn(instance, 'gpus');",
+     "const declaresGpus = (instance: ServingInstance): boolean => instance.gpus !== undefined;",
+     OBS),
+    ("12b-WR6 a PRESENT `gpus` key whose value is `undefined` reads as ABSENT rather than refusing the row",
+     WIRE_SRC,
+     "  if (!Object.hasOwn(source, key)) return ABSENT;",
+     "  if (source[key] === undefined) return ABSENT;",
+     WIRE),
+    # ⚠ 12b-A6 — the fixture's only claim to being CAPTURED is one number, and `163840` occurred
+    # in exactly three places in the tree: a doc comment and the fixture twice. This mutation is
+    # "regenerated on a dev box", which is how the evidence would be lost.
+    ("12b-WR7 the live-box wire fixture carries this repo's own ctx, not the box's",
+     FIXTURES_SRC,
+     """    "instance": 0,
+    "port": 8080,
+    "unitState": null,
+    "model": "qwen3.6-27b",
+    "ctx": 163840,""",
+     """    "instance": 0,
+    "port": 8080,
+    "unitState": null,
+    "model": "qwen3.6-27b",
+    "ctx": 131072,""",
+     WIRE),
 ]
 
 

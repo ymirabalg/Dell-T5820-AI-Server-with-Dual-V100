@@ -688,6 +688,91 @@ const fixtureNoGpus = () => {
 };
 
 /**
+ * ⚠⚠ 12b — **MEASUREMENT 19'S FIXTURE: the page this box becomes the day it is REDEPLOYED.**
+ *
+ * Identical to {@link fixtureBox} except that each instance declares §3.4's `gpus`, which is
+ * what `collectServing` emits from the unit's own `CUDA_VISIBLE_DEVICES` (read from the live
+ * bus 2026-09-17: `llama-server@0.service` answers `CUDA_VISIBLE_DEVICES=0`, `@1` answers `=1`).
+ *
+ * ⚠⚠ **It cannot tell the two joins apart, and that is deliberate** — `gpus: [i.instance]` is
+ * the truth about this box, so naming a card from `gpus`, from the instance number or from the
+ * row's position in `serving[]` all render this page identically. It stays that way because it
+ * is a PIXEL record of the page the box becomes; the discrimination is measurement 21's job.
+ * See {@link fixtureCrossPinned}.
+ *
+ * ⚠ **It is a different page from `fixtureBox`, and the difference has a height.** The GPU
+ * cards render identically — §3.4's fallback makes the absent and `[N]` forms the same strip —
+ * but the SERVING row grows `· GPU 0` after its port, and SERVING governs §6.1's row 4. The
+ * running container sends no `gpus`, so nothing on the box shows this today; it appears on the
+ * first poll after the image is rebuilt, which is exactly the class of change this project has
+ * twice met for the first time in production.
+ */
+const fixtureDeclared = () => {
+  const box = fixtureBox();
+  return { ...box, serving: box.serving.map((i) => ({ ...i, gpus: [i.instance] })) };
+};
+
+/**
+ * ⚠⚠ 12b-RECONCILE — **MEASUREMENT 21'S FIXTURE: the two numbers DISAGREE.** Instance 0 serves
+ * card 1 and instance 1 serves card 0, with a different model on each, which is what a
+ * mis-`%i`'d template or a hand-edited drop-in produces.
+ *
+ * ⚠ **It exists because measurement 19 cannot tell the two joins apart** (12b-A7). Above,
+ * `gpus: [i.instance]` is the truth about this box and therefore the coincidence: naming a card
+ * from `gpus`, from the instance number, or from the row's position in `serving[]` all render
+ * measurement 19's page identically, so its three text expectations hold for a client that
+ * ignores §3.4 entirely. That is exactly the condition `lib/fixtures.ts:322-334` records as
+ * having made `12b-SP3`/`SP4`/`SP5` inert, reappearing one harness over. Measurement 19 stays
+ * as it is — it is a PIXEL record of the page the box becomes, and it must keep being that —
+ * and the discrimination is this measurement's job instead.
+ *
+ * The models differ so the failure is the one §6.2 names: under the old join card 0 would carry
+ * **instance 0's model**, which is the wrong model on a card rather than a missing one.
+ */
+const fixtureCrossPinned = () => {
+  const box = fixtureBox();
+  return {
+    ...box,
+    serving: [
+      { ...box.serving[0], model: 'qwen3.6-27b', gpus: [1] },
+      { ...box.serving[1], model: 'gemma-4-12b', gpus: [0] },
+    ],
+  };
+};
+
+/**
+ * ⚠⚠ 12b — **MEASUREMENT 20'S FIXTURE: SPLIT MODE**, `SERVING-MODES.md` §2's one process across
+ * both cards.
+ *
+ * One `serving[]` row whose `gpus` is `[0, 1]`, so both GPU cards read *served jointly with
+ * GPU M* — the longest served-by label the panel can produce (25 characters against the
+ * ordinary 20) on the row that sets §6.1's FIRST term — and the SERVING panel shows one row
+ * naming both cards. This is the arrangement the join this loop replaces had no answer for at
+ * all, and `serving-mode.sh`'s own caveat names it as the thing the dashboard got wrong.
+ *
+ * ⚠ The model is a FILENAME rather than an alias, because `serving-mode.sh` writes `ALIAS` and
+ * a rollback can leave it unset (§3.4's 2026-09-10 ruling) — the longer of the two forms is
+ * the one worth measuring on the card that sets row 1.
+ */
+const fixtureSplit = () => {
+  const box = fixtureBox();
+  return {
+    ...box,
+    serving: [
+      {
+        instance: 0,
+        port: 8080,
+        unitState: 'active',
+        model: 'gemma-4-31B-it-Q4_K_M.gguf',
+        ctx: 262144,
+        health: 'ok',
+        gpus: [0, 1],
+      },
+    ],
+  };
+};
+
+/**
  * ⚠⚠ 12a/RECONCILE (`12a-A7`, gap 1) — **MEASUREMENT 17'S FIXTURE: one card enumerated and one
  * not**, which is the configuration the `roomy` bound's own justification rests on and which
  * nothing had ever rendered in a browser.
@@ -1004,7 +1089,13 @@ async function installGpuFabrication(page) {
                     ? { ...fixtureRetiredMixed(), ts: now }
                     : fabrication.mode === 'no-gpus'
                       ? { ...fixtureNoGpus(), ts: now }
-                      : { ...body, gpus: [fabricatedCard(0), fabricatedCard(1)] };
+                      : fabrication.mode === 'declared'
+                        ? { ...fixtureDeclared(), ts: now }
+                        : fabrication.mode === 'split'
+                          ? { ...fixtureSplit(), ts: now }
+                          : fabrication.mode === 'cross-pinned'
+                            ? { ...fixtureCrossPinned(), ts: now }
+                            : { ...body, gpus: [fabricatedCard(0), fabricatedCard(1)] };
     await route.fulfill({
       response,
       contentType: 'application/json',
@@ -2088,6 +2179,76 @@ async function measureNoGpus(page, record) {
   await recordNoClipping(page, record, '18');
 }
 
+/**
+ * ⚠⚠ Measurements 19 and 20 — 12b. **§6.2's inverted join, in a browser, on the two pages the
+ * box can actually be in.**
+ *
+ * Everything else in this file renders a `serving[]` with no `gpus` at all, which is §3.4's
+ * absent case and therefore the *old* rendering: that is what makes the rest of this harness
+ * the additivity proof, and it is also why neither new rendering had ever been drawn by any
+ * fixture here. Two things are being asked:
+ *
+ * 1. **Does it say the right thing?** The preconditions are the whole point — a fixture that
+ *    failed to take renders the fallback, which would satisfy "no panel clips" vacuously while
+ *    measuring the page this loop did not change.
+ * 2. **What does it cost in pixels?** `recordNoClipping` prints `tightest` on PASS as well as
+ *    FAIL, and that number is the answer: the SERVING row grows `· GPU 0` on the redeployed
+ *    page, and both GPU cards grow five characters of label in split mode — on the rows that
+ *    set §6.1's first and fourth terms respectively.
+ *
+ * ⚠ **`gpu0NotBlank` is a term, not decoration.** §6.2 rules that an em dash on a jointly
+ * served card *"would be a lie — the reading is not missing, it is different"*, and the failure
+ * it names is one a fit measurement cannot see: a blank strip makes the page SHORTER.
+ */
+async function measureServedBy(page, record, label, want) {
+  await page.setViewportSize(NO_SCROLL_VIEWPORTS[0]);
+  await page.waitForTimeout(200);
+  const present = await page.evaluate(
+    ([gpu0Phrase, gpu1Phrase, servingPhrase, gpu0Absent, gpu1Absent]) => {
+      const flat = (s) => (s ?? '').replace(/\s+/g, ' ');
+      const textOf = (slot) => flat(document.querySelector(`[data-slot="${slot}"]`)?.textContent);
+      const round = (n) => Math.round(n * 10) / 10;
+      const heightOf = (slot) => {
+        const el = document.querySelector(`[data-slot="${slot}"]`);
+        return el === null ? null : round(el.getBoundingClientRect().height);
+      };
+      return {
+        gpu0Says: textOf('gpu0').includes(gpu0Phrase),
+        gpu1Says: textOf('gpu1').includes(gpu1Phrase),
+        servingSays: textOf('serving').includes(servingPhrase),
+        // §6.2: an em dash on a card that IS being served is the lie the ruling names.
+        gpu0NotBlank: !textOf('gpu0').includes(`${gpu0Phrase} —`),
+        gpu1NotBlank: !textOf('gpu1').includes(`${gpu1Phrase} —`),
+        // ⚠ 12b-RECONCILE — the phrase that must NOT be on the card, for a fixture where the
+        // instance number and the card number disagree: the WRONG model is what the retired
+        // join prints there, and "the right label is present" does not exclude it.
+        gpu0Lacks: gpu0Absent === null || !textOf('gpu0').includes(gpu0Absent),
+        gpu1Lacks: gpu1Absent === null || !textOf('gpu1').includes(gpu1Absent),
+        gpu0Height: heightOf('gpu0'),
+        gpu1Height: heightOf('gpu1'),
+        servingHeight: heightOf('serving'),
+        gpu0Text: textOf('gpu0').slice(-120),
+        servingText: textOf('serving').slice(0, 160),
+      };
+    },
+    [want.gpu0, want.gpu1, want.serving, want.gpu0Absent ?? null, want.gpu1Absent ?? null],
+  );
+  // ⚠ The five original terms stay on ONE line and in one expression: `measurement-harness.
+  // test.ts` grades this harness by counting the not-blank conjunction below EXACTLY once —
+  // the only thing in the suite that can see a browser term go missing — so reformatting this
+  // line, or quoting it in a comment, is itself a failure. (Both happened while 12b's
+  // reconciliation added the two `Lacks` terms.)
+  const asExpected =
+    present.gpu0Says && present.gpu1Says && present.servingSays && present.gpu0NotBlank && present.gpu1NotBlank;
+  record(
+    `${label}. ⚠ ${want.title}`,
+    asExpected && present.gpu0Lacks && present.gpu1Lacks ? 'pass' : 'fail',
+    present,
+  );
+  await recordFit(page, record, label);
+  await recordNoClipping(page, record, label);
+}
+
 async function main() {
   const chromePath = findChrome();
   if (chromePath === null) {
@@ -2287,6 +2448,76 @@ async function main() {
       });
     await page.waitForTimeout(800);
     await measureNoGpus(page, record10);
+
+    // ---- ⚠⚠ 12b: §6.2's INVERTED join. Measurement 19 is the page the box becomes on its
+    // next rebuild (every instance declares its card); measurement 20 is split mode, which no
+    // fixture in either harness has ever drawn and which the join this loop replaces had no
+    // answer for. Both wait for the SENTENCE rather than for a sparkline: the sparkline is
+    // present on the fallback page too, so waiting for it would not prove the fixture took.
+    fabrication.mode = 'declared';
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    await page
+      .waitForFunction(
+        () => (document.querySelector('[data-slot="serving"]')?.textContent ?? '').includes('GPU 0'),
+        { timeout: 20_000 },
+      )
+      .catch(() => {
+        console.warn('⚠ the declared fixture did not take — measurement 19 will report it.');
+      });
+    await page.waitForTimeout(800);
+    await measureServedBy(page, record10, '19', {
+      title:
+        'REDEPLOYED — every instance declares its card: the GPU strip is unchanged and the SERVING row names the card',
+      gpu0: 'served by instance 0',
+      gpu1: 'served by instance 1',
+      serving: ':8080 · GPU 0',
+    });
+
+    fabrication.mode = 'split';
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    await page
+      .waitForFunction(
+        () => (document.querySelector('[data-slot="gpu1"]')?.textContent ?? '').includes('served jointly'),
+        { timeout: 20_000 },
+      )
+      .catch(() => {
+        console.warn('⚠ the split fixture did not take — measurement 20 will report it.');
+      });
+    await page.waitForTimeout(800);
+    await measureServedBy(page, record10, '20', {
+      title:
+        'SPLIT MODE — one process across both cards: each card names the OTHER, neither shows an em dash, one SERVING row spans both',
+      gpu0: 'served jointly with GPU 1',
+      gpu1: 'served jointly with GPU 0',
+      serving: ':8080 · GPUs 0, 1',
+    });
+
+    // ---- ⚠⚠ 12b-RECONCILE (12b-A7): the measurement that can tell the two joins APART.
+    // Measurement 19 is the box's own arrangement, where instance N serves card N — so its
+    // three text expectations hold for a client that ignores `gpus` and joins by index, which
+    // is the coincidence this whole loop replaced. Here the two numbers disagree: card 0 is
+    // served by instance 1 and carries instance 1's model, and a page built on the retired join
+    // would print `served by instance 0` and `qwen3.6-27b` there instead.
+    fabrication.mode = 'cross-pinned';
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    await page
+      .waitForFunction(
+        () => (document.querySelector('[data-slot="gpu0"]')?.textContent ?? '').includes('served by instance 1'),
+        { timeout: 20_000 },
+      )
+      .catch(() => {
+        console.warn('⚠ the cross-pinned fixture did not take — measurement 21 will report it.');
+      });
+    await page.waitForTimeout(800);
+    await measureServedBy(page, record10, '21', {
+      title:
+        'CROSS-PINNED — instance 0 serves card 1: each card names the instance that LISTS it, and carries that instance’s model',
+      gpu0: 'served by instance 1',
+      gpu1: 'served by instance 0',
+      serving: ':8080 · GPU 1',
+      gpu0Absent: 'qwen3.6-27b',
+      gpu1Absent: 'gemma-4-12b',
+    });
 
     console.log('\n=== 10a-F4 / §6.1 breakpoint measurements ===\n');
     for (const { name, detail } of results.pass) {

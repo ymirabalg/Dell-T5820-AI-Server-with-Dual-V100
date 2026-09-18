@@ -313,10 +313,12 @@ export const THERMAL_THROTTLE_BITS = 0x8 | 0x20 | 0x40;
 /**
  * One row of `nvidia-smi --query-gpu=... --format=csv,noheader,nounits` (§3.1).
  *
- * `index` is the only non-null field: it is the row's identity. §6.2 joins the serving
- * data onto the GPU card *by index*, so a row whose index did not parse cannot be placed
- * in a panel at all and is not a GPU — it is an `errors[]` entry. Every other column,
- * `name` and `bus` included, can come back as `[N/A]` and is therefore nullable.
+ * `index` is the only non-null field: it is the row's identity. ⚠ **It is also what
+ * {@link ServingInstance.gpus} names** — since 2026-09-15 the serving join runs the other
+ * way, a card asking which instance *lists* its index (§6.2) — so a row whose index did not
+ * parse cannot be placed in a panel at all and is not a GPU; it is an `errors[]` entry.
+ * Every other column, `name` and `bus` included, can come back as `[N/A]` and is therefore
+ * nullable.
  */
 export interface Gpu {
   readonly index: number;
@@ -542,6 +544,49 @@ export interface ServingInstance {
   readonly ctx: Tokens | null;
   /** §3.7. `null` means not probed this cycle, which is not `unreachable`. */
   readonly health: HealthState | null;
+  /**
+   * ⚠⚠ **The cards this instance serves — the field §6.2's join READS, added 2026-09-15
+   * (§3.4).** Sourced from the unit's own `CUDA_VISIBLE_DEVICES`, read over the same
+   * read-only D-Bus socket §2.2 already mounts (`org.freedesktop.systemd1.Service`'s
+   * `Environment` property), and parsed to card indices: the template's `%i` → `[N]`, the
+   * split unit's `0,1` → `[0, 1]`.
+   *
+   * **Why the field exists at all.** `gpu.index === serving.instance` was never a fact about
+   * this system — it is a coincidence of the one serving arrangement that has run here,
+   * because `llama-server@.service` pins instance N to card N and **nothing on §4's wire ever
+   * said so**. §6.2 admitted as much in its own words: the join "is a fact about the
+   * deployment that the dashboard cannot verify". So the direction is inverted: **an instance
+   * declares the cards it serves, and a card asks which instance lists it.**
+   *
+   * ### ⚠ Four values, four meanings, and NONE of them may be collapsed (§3.4's table)
+   *
+   * | value | means | renders |
+   * |---|---|---|
+   * | `[N]` | this instance serves card N alone | *served by instance N* on that card |
+   * | `[0, 1]` | one process across both | *served jointly with GPU M* on each card |
+   * | `[]` | the unit declares `CUDA_VISIBLE_DEVICES=` — an empty list, so it sees no card | the SERVING row says `no GPUs`; no card claims it |
+   * | `null` | the unit exists and its `CUDA_VISIBLE_DEVICES` could not be read | invariant 1: an em dash, with the `dbus` `errors[]` entry saying why |
+   * | **absent** | **the SERVER predates this field** | fall back to `gpu.index === serving.instance`, silently |
+   *
+   * ⚠ **`null` and absent are DIFFERENT, exactly as `null` and `[]` are one level up (§3.1).**
+   * `null` is a real failure to read a unit that exists. Absent is an older contract — and
+   * §3.4 rules the fallback *correct rather than a compromise*: a server old enough not to
+   * publish `gpus` is a server that **cannot be in split mode**, because split mode arrives
+   * with the same deployment that adds the field. On such a server the index join is not an
+   * assumption; it is the only arrangement that exists. It is self-retiring: the day the box
+   * is redeployed, the field appears.
+   *
+   * ⚠ **This is the contract's SECOND optional member**, after
+   * {@link TelemetryError.instance}, and for the same reason and only that reason: an old
+   * server omits the key outright, and the key's own *absence* — never a `null` — is what
+   * makes an old server's snapshot still validate under a new client. Every other member of
+   * this contract is `T | null`, and `lib/types.test-d.ts`'s optional census names both
+   * exceptions by name so a third cannot be added by accident.
+   *
+   * ⚠ **The MODE is never inferred from the number of instances.** One instance can equally
+   * mean one card's service failed. Any mode word is derived from these arrays themselves.
+   */
+  readonly gpus?: readonly number[] | null;
 }
 
 // ---------------------------------------------------------------------------

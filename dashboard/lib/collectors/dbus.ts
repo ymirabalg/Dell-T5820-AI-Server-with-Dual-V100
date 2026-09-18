@@ -26,6 +26,22 @@
  * the framing, and it never interprets a byte itself.
  *
  * Every failure in this file is `errors[].source === 'dbus'` (§3.7).
+ *
+ * ### ⚠⚠ 12b — this file now answers a SECOND question, and §2.2 is why it is this file
+ *
+ * §3.4's `gpus` — the cards an instance serves — is *"the unit's own
+ * `CUDA_VISIBLE_DEVICES`"*, and the unit is where it lives: `llama-server@.service` carries
+ * `Environment=CUDA_VISIBLE_DEVICES=%i` and the split unit carries `=0,1`. **The env files
+ * §2.2 mounts do not contain it** (`PORT`, `MODEL`, `ALIAS`, `CTX`, `FA`, `SPEC`, and §3.4
+ * says so in as many words), and §2.2 mounts **no unit files**. The read-only system bus
+ * socket §2.2 already mounts is therefore the only place in the container from which that
+ * value is reachable at all, and {@link ENVIRONMENT_PROPERTY} is the property that holds it —
+ * already expanded, so instance 0 answers `0` rather than `%i`.
+ *
+ * ⚠ It stays read-only and unprivileged: the same `GetUnit` + `Properties.Get` pair, one more
+ * property on the same object path, on the same connection. **The mechanism is a spec
+ * silence** — §3.4 names the source and not the transport — and it is recorded as such in
+ * `12b-build.md`.
  */
 
 import { connect } from 'node:net';
@@ -69,8 +85,29 @@ export const SYSTEMD_DESTINATION = 'org.freedesktop.systemd1';
 export const SYSTEMD_MANAGER_PATH = '/org/freedesktop/systemd1';
 export const SYSTEMD_MANAGER_IFACE = 'org.freedesktop.systemd1.Manager';
 export const SYSTEMD_UNIT_IFACE = 'org.freedesktop.systemd1.Unit';
+/**
+ * ⚠ 12b — the interface `Environment` lives on. It is **not** `SYSTEMD_UNIT_IFACE`: the
+ * generic `Unit` interface carries `ActiveState`, and everything about how a service is
+ * *started* — `Environment`, `ExecStart`, `MainPID` — is on `Service`. Asking the wrong one
+ * answers `org.freedesktop.DBus.Error.UnknownProperty`, which this file reports rather than
+ * guesses past.
+ */
+export const SYSTEMD_SERVICE_IFACE = 'org.freedesktop.systemd1.Service';
 export const PROPERTIES_IFACE = 'org.freedesktop.DBus.Properties';
 export const ACTIVE_STATE_PROPERTY = 'ActiveState';
+/**
+ * ⚠ 12b — §3.4's `gpus` at its source: the unit's own `Environment=` directives, as systemd
+ * holds them **after specifier expansion**, so `llama-server@0.service` answers
+ * `CUDA_VISIBLE_DEVICES=0` rather than `CUDA_VISIBLE_DEVICES=%i`. Verified read-only on this
+ * box 2026-09-17; the frame is `samples.ts`'s `CAPTURED_DBUS_ENVIRONMENT_REPLY`.
+ *
+ * ⚠ **It is the `Environment=` directives ONLY, never `EnvironmentFile=`'s contents.** That
+ * is the property this dashboard wants and also the one it is allowed to want: §2.2 mounts
+ * `/etc/llama-server` and nothing else, and a property that inlined an environment file would
+ * put whatever a future unit references into `errors[]` on a screen. `CUDA_VISIBLE_DEVICES`
+ * is the only key read out of it, and no value is ever carried into a message.
+ */
+export const ENVIRONMENT_PROPERTY = 'Environment';
 
 /**
  * `gpu-fan-control.service` and `llama-server@<i>.service` — **defined in `lib/units.ts`**
@@ -377,6 +414,16 @@ class Conversation {
    * read as the `Hello` reply on this box — measured, and kept as a fixture. A client that
    * took "the next message" as its answer would read the signal's body as an object path
    * on its second call and be wrong from then on.
+   *
+   * ⚠⚠ **12b-RECONCILE — the serial is not enough; the TYPE has to be a reply.** This loop
+   * checked the serial and nothing else, and `collectUnitStates` tests only for `error`, so a
+   * `SIGNAL` or a `METHOD_CALL` carrying our `REPLY_SERIAL` was read as a method return:
+   * measured, a signal with an object path and then a variant `"active"` produced a unit state
+   * of **`active` with `errors: []`** — a fabricated reading with nothing beside it, which is
+   * the failure this whole dashboard exists to prevent. `REPLY_SERIAL` on a call or a signal is
+   * not legal D-Bus, so this is refused loudly rather than skipped: skipping would burn the
+   * budget and end in "timed out" about a bus that answered, and the reasoning
+   * {@link Conversation.message} gives for throwing on `malformed` is the same reasoning.
    */
   async call(destination: string, path: string, iface: string, member: string, args: readonly string[]): Promise<DbusMessage> {
     this.serial += 1;
@@ -384,7 +431,14 @@ class Conversation {
     await this.within(() => this.stream.write(encodeMethodCall({ serial, destination, path, iface, member, args })));
     for (;;) {
       const message = await this.message();
-      if (message.replySerial === serial) return message;
+      if (message.replySerial !== serial) continue;
+      if (message.type !== DBUS_MESSAGE_TYPE.methodReturn && message.type !== DBUS_MESSAGE_TYPE.error) {
+        throw new Error(
+          `the system bus answered ${member} with a message of type ${String(message.type)} carrying our reply serial, ` +
+            'which is not a reply',
+        );
+      }
+      return message;
     }
   }
 }
@@ -397,6 +451,27 @@ const sayHello = (c: Conversation): Promise<DbusMessage> =>
 const firstString = (message: DbusMessage): string | null => {
   const first = message.body[0];
   return typeof first === 'string' && first !== '' ? first : null;
+};
+
+/**
+ * Turn a reply into its first **array-of-string** body value, or `null`.
+ *
+ * ⚠ **`[]` is a value here and `null` is not one**, which is why this cannot be written as
+ * `firstString`'s sibling with a `!== ''` guard bolted on. `Environment` on a unit with no
+ * `Environment=` directive is a legitimately empty `as` (captured:
+ * `CAPTURED_DBUS_EMPTY_ENVIRONMENT_REPLY`), and collapsing it to `null` would report *"the
+ * property could not be read"* about a property that was read perfectly — §3.1's `null` ≠
+ * `[]` discipline, one protocol layer down.
+ *
+ * Every element must be a `string`. `dbus-wire.ts` only ever produces `as` from an `as`
+ * signature, so a non-string member cannot arrive from a real bus; the check is here because
+ * `body` is `readonly unknown[]` and a cast is the one thing this project does not do to
+ * bytes it did not check.
+ */
+const firstStringArray = (message: DbusMessage): readonly string[] | null => {
+  const first = message.body[0];
+  if (!Array.isArray(first)) return null;
+  return first.every((v): v is string => typeof v === 'string') ? first : null;
 };
 
 /** Arguments to {@link collectUnitStates}. Options object, like every collector. */
@@ -414,6 +489,22 @@ export interface CollectUnitStatesOptions {
    * build the unit name, never by re-reading the message this file writes.
    */
   readonly unitInstances?: ReadonlyMap<string, number>;
+  /**
+   * ⚠ 12b — which of {@link units} should ALSO have their {@link ENVIRONMENT_PROPERTY} read,
+   * for §3.4's `gpus`.
+   *
+   * **A separate list rather than "all of them", and the reason is not tidiness.**
+   * `collectSafety` asks this function about `gpu-fan-control.service` alone, which has no
+   * instance and no `gpus` column to fill; reading its environment would be one more round
+   * trip per poll inside a 2 s budget, taken for a value nothing renders. Opting in also
+   * keeps the change **additive for every existing caller**: omit it and the conversation is
+   * byte-for-byte the one this file has always had.
+   *
+   * ⚠ Membership is by unit name and is intersected with `units` — a name here that is not
+   * being asked about is not fetched, because the object path comes from that unit's own
+   * `GetUnit` reply and there is none for a unit nobody asked for.
+   */
+  readonly environmentUnits?: readonly string[];
   /** O17's bound on the whole conversation. See {@link DBUS_TIMEOUT_MS}. */
   readonly timeoutMs?: number;
 }
@@ -434,11 +525,28 @@ export interface CollectUnitStatesOptions {
  */
 export interface UnitStateCollection {
   readonly states: ReadonlyMap<string, UnitState | null>;
+  /**
+   * ⚠ 12b — each {@link CollectUnitStatesOptions.environmentUnits} member's `Environment=`
+   * directives, or `null` when they could not be read.
+   *
+   * **Every requested environment unit is a key, always**, for the same reason {@link states}
+   * makes that promise: a caller doing `environments.get(name)` must not have to tell "not
+   * asked for" from "asked for and unknown", because §3.4 renders those differently — absent
+   * is an older server and `null` is a failure with an em dash and an entry.
+   *
+   * ⚠ **`[]` is not `null`.** A unit with no `Environment=` directive answers an empty array
+   * and that is an answer; see {@link firstStringArray}.
+   */
+  readonly environments: ReadonlyMap<string, readonly string[] | null>;
   readonly errors: readonly TelemetryError[];
 }
 
 /** Every requested unit, unknown. The shape returned when the bus itself is unreachable. */
 const allUnknown = (units: readonly string[]): Map<string, UnitState | null> =>
+  new Map(units.map((unit) => [unit, null]));
+
+/** Every requested environment unit, unknown — the {@link allUnknown} of §3.4's `gpus`. */
+const allEnvironmentsUnknown = (units: readonly string[]): Map<string, readonly string[] | null> =>
   new Map(units.map((unit) => [unit, null]));
 
 /**
@@ -466,10 +574,16 @@ export const collectUnitStates = async ({
   paths = DEFAULT_PATHS,
   units,
   unitInstances,
+  environmentUnits = [],
   timeoutMs = DBUS_TIMEOUT_MS,
 }: CollectUnitStatesOptions): Promise<UnitStateCollection> => {
   const states = allUnknown(units);
-  if (units.length === 0) return { states, errors: [] };
+  // ⚠ Intersected with `units`: the object path a property read needs comes from that unit's
+  // own `GetUnit` reply, so a name nobody asked about could never be fetched and must not be
+  // promised a key either.
+  const wantsEnvironment = new Set(environmentUnits.filter((unit) => units.includes(unit)));
+  const environments = allEnvironmentsUnknown([...wantsEnvironment]);
+  if (units.length === 0) return { states, environments, errors: [] };
 
   const within = deadline(timeoutMs, DBUS_TIMEOUT_MS);
   const socket = paths.dbusSystemSocket;
@@ -478,7 +592,7 @@ export const collectUnitStates = async ({
   try {
     stream = await within(() => dbus.connect(socket, boundedTimeoutMs(timeoutMs, DBUS_TIMEOUT_MS)));
   } catch (e) {
-    return { states, errors: tag('dbus', [`${socket}: ${reason(e)}`]) };
+    return { states, environments, errors: tag('dbus', [`${socket}: ${reason(e)}`]) };
   }
 
   const errors: TelemetryError[] = [];
@@ -559,6 +673,47 @@ export const collectUnitStates = async ({
           continue;
         }
         states.set(unit, state);
+
+        // ⚠ 12b — §3.4's `gpus`, on the SAME connection and the same `objectPath`. It runs
+        // after `ActiveState` deliberately: the unit state is the reading every panel needs
+        // and the environment is one column of one panel, so if the conversation's budget
+        // runs out it is the second read that is lost, not the first.
+        if (!wantsEnvironment.has(unit)) continue;
+        const environment = await conversation.call(
+          SYSTEMD_DESTINATION,
+          objectPath,
+          PROPERTIES_IFACE,
+          'Get',
+          [SYSTEMD_SERVICE_IFACE, ENVIRONMENT_PROPERTY],
+        );
+        if (environment.type === DBUS_MESSAGE_TYPE.error) {
+          errors.push(
+            ...tag(
+              'dbus',
+              [
+                `${unit}: ${ENVIRONMENT_PROPERTY}: ${environment.errorName ?? 'error'}: ` +
+                  `${firstString(environment) ?? 'no detail'}`,
+              ],
+              instance,
+            ),
+          );
+          continue;
+        }
+        const values = firstStringArray(environment);
+        if (values === null) {
+          // ⚠ Distinct from an empty environment, which IS a value. This branch is a reply
+          // whose body is not `as` at all — a different systemd, a fake, a desynchronised
+          // read — and it must not be reported as "this unit declares nothing".
+          errors.push(
+            ...tag(
+              'dbus',
+              [`${unit}: ${ENVIRONMENT_PROPERTY} did not come back as a list of strings`],
+              instance,
+            ),
+          );
+          continue;
+        }
+        environments.set(unit, values);
       } catch (e) {
         // A failure mid-conversation ends it: the stream framing is now at an unknown
         // offset, so the remaining units stay `null` rather than being read from a
@@ -573,5 +728,5 @@ export const collectUnitStates = async ({
     stream.close();
   }
 
-  return { states, errors };
+  return { states, environments, errors };
 };

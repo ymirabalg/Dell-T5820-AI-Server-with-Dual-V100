@@ -26,7 +26,7 @@ import { execFileSync } from 'node:child_process';
 
 import { describe, expect, test } from 'vitest';
 
-import { conditionsFrom } from '@/lib/client/observations';
+import { conditionsFrom, servedCards } from '@/lib/client/observations';
 import { parseSnapshot } from '@/lib/client/wire';
 import {
   EM_DASH,
@@ -129,11 +129,17 @@ describe('the live API', () => {
     );
     row('gpu-fan-control', formatText(s.cooling.serviceState));
 
-    head('serving', 'one instance per GPU · /health + /v1/models');
+    // ⚠ 12b-A13 — the head used to read `one instance per GPU`, which is a hard-coded claim about
+    // an ARRANGEMENT the probe cannot see and which §6.2 retired on 2026-09-15. The cards come
+    // from each unit's own `CUDA_VISIBLE_DEVICES` now, so the probe prints what the row SAYS —
+    // through `servedCards`, the same function the SERVING panel renders, never a second
+    // implementation of §3.4's three values. An older server sends no `gpus` and prints nothing.
+    head('serving', '§3.4 · /health + /v1/models · cards from each unit');
     for (const i of s.serving ?? []) {
+      const cards = servedCards(i.gpus);
       row(
         `llama-server@${i.instance}`,
-        `:${formatPort(i.port)}  ${formatText(i.unitState)}`,
+        `:${formatPort(i.port)}  ${formatText(i.unitState)}${cards === null ? '' : `  ${cards}`}`,
         `${formatText(i.model)}   ctx ${formatTokens(i.ctx)}   health ${formatText(i.health)}`,
       );
     }

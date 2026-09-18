@@ -1,7 +1,17 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 
-import { everythingZero, nothingReadable, servingInstances } from '@/lib/fixtures';
+import {
+  LIVE_BOX_SERVING_WIRE,
+  everythingZero,
+  nothingReadable,
+  servingCrossPinned,
+  servingGpusUnreadable,
+  servingInstances,
+  servingPerGpu,
+  servingSplit,
+} from '@/lib/fixtures';
+import { parseSnapshot } from '@/lib/client/wire';
 import { GPU_TEMP_ALARM_C, GPU_TEMP_WATCH_C } from '@/lib/severity';
 import { celsius, mib, throttleMask, watts } from '@/lib/types';
 import type { Gpu, ServingInstance, TelemetrySnapshot } from '@/lib/types';
@@ -16,7 +26,9 @@ import type { Gap } from '@/lib/client/gaps';
  *
  * - the name/bus render RAW, in full, never prettified or trimmed to the short bus form;
  * - a throttle row appears only when something other than `0x4` is active;
- * - the served-model row is joined by `gpu.index === serving.instance`, not "on this card";
+ * - the served-model row names the instance that LISTS this card in its own `gpus` (§6.2's
+ *   inverted join, through `servedBy`), never "on this card" — and `gpu.index ===
+ *   serving.instance` is only the fallback §3.4 licenses for a server that sends no `gpus`;
  * - `gpus: null` takes the whole body over with §6.5's message, and every other field is
  *   still shown as `—` rather than reused from a stale-looking previous render.
  */
@@ -227,7 +239,7 @@ describe('⚠ throttle — the normal power cap must never be styled as a warnin
   });
 });
 
-describe('⚠ the GPU↔instance join is gpu.index === serving.instance', () => {
+describe('⚠ §3.4’s FALLBACK — with no `gpus` on the wire, the card IS found by instance NUMBER', () => {
   test('the served model renders as "served by instance N", never "on this card"', () => {
     const snapshot: TelemetrySnapshot = { ...rawGpuSnapshot(), serving: servingInstances };
     const html = renderToStaticMarkup(<GpuPanel state={stateWith(snapshot)} nowMs={0} panelId="gpu0" />);
@@ -347,12 +359,23 @@ describe('⚠ the GPU↔instance join is gpu.index === serving.instance', () => 
 
   test('⚠ absent-from-the-enumeration and present-with-every-reading-null do not render alike', () => {
     // These two rendered BYTE-IDENTICALLY before the branch above: `a === b` was `true`.
+    //
+    // ⚠⚠ 12b-RECONCILE — **both snapshots now come from ONE base and differ in ONE field.** The
+    // absent case used to be `rawGpuSnapshot()`, a different snapshot whose `serving[]` is also
+    // different; when `allReadingsNull` gained §3.4's `gpus: null` (12b-A8) the two renders began
+    // differing in the served-by strip as well, which is not what this test is about. `10b-GP4`
+    // (*an absent card renders identically to a present card whose readings all failed*) stopped
+    // reddening it, and the red-test ledger is what said so. Varying the enumeration alone makes
+    // the difference this test NAMES the only difference on offer.
+    const cards = allReadingsNull.gpus ?? [];
+    const withoutCard1: TelemetrySnapshot = { ...allReadingsNull, gpus: cards.slice(0, 1) };
     const absent = renderToStaticMarkup(
-      <GpuPanel state={stateWith(rawGpuSnapshot())} nowMs={0} panelId="gpu1" />,
+      <GpuPanel state={stateWith(withoutCard1)} nowMs={0} panelId="gpu1" />,
     );
     const presentButUnread = renderToStaticMarkup(
       <GpuPanel state={stateWith(allReadingsNull)} nowMs={0} panelId="gpu1" />,
     );
+    expect(absent).toContain('card not enumerated');
     expect(absent).not.toBe(presentButUnread);
   });
 });
@@ -582,6 +605,27 @@ describe('⚠ invariant 1, across EVERY reading on this card — not just the te
   // `smClockMHz` and `memUsedMiB` all still took a `?? <zero-of-their-unit>` mutation with the
   // whole suite green (10b-reconcile, adversarial F1c). This asserts over every value cell at
   // once, so a new row is covered the day it is added rather than the day someone remembers.
+  test('⚠⚠ 12b-RECONCILE — with every reading null the card CLAIMS nothing: `served by —`, not `served by instance 0`', () => {
+    /*
+     * ⚠ 12b-A8. `allReadingsNull` is the panel suite's *"current server, nothing readable"*
+     * snapshot, and until this loop its `serving[]` rows carried no `gpus` KEY at all — so
+     * `servedBy` read the whole snapshot as an OLDER SERVER and fell back to the index join.
+     * Every panel test built on that fixture rendered **`served by instance 0`**: a positive
+     * claim about who serves this card, printed from a fixture whose name says nothing about
+     * this instance could be read.
+     *
+     * The sweep below it did not notice, and could not: it asserts that no VALUE CELL prints a
+     * numeral, and `served by instance 0` is a `Strip`'s LABEL — the numeral is in the name of
+     * the reading, not in the reading. §6.5's rule is about claims, not about cells.
+     */
+    const html = renderToStaticMarkup(
+      <GpuPanel state={stateWith(allReadingsNull)} nowMs={0} panelId="gpu0" />,
+    );
+    expect(html).toContain('served by');
+    expect(html).not.toContain('served by instance');
+    expect(html).not.toContain('no instance');
+  });
+
   test('⚠ with every reading null, no value cell prints a numeral', () => {
     const html = renderToStaticMarkup(
       <GpuPanel state={stateWith(allReadingsNull)} nowMs={0} panelId="gpu0" />,
@@ -772,5 +816,162 @@ describe('⚠ 10e §3.2 / OQ-6 — the ≥1600px promotion carries the reference
       expect(y).toBeGreaterThan(PAD_TOP);
       expect(y).toBeLessThan(CHART_SIZE.gpuPromoted.height - PAD_BOTTOM);
     }
+  });
+});
+
+describe('⚠⚠ 12b — the join is INVERTED: a card asks which instance lists it', () => {
+  /** Both cards enumerated, so neither takes §6.5's absent-card branch. */
+  const twoCards = (serving: readonly ServingInstance[] | null): TelemetrySnapshot => {
+    const card0 = rawGpuSnapshot().gpus?.[0] as Gpu;
+    return { ...rawGpuSnapshot(), gpus: [card0, { ...card0, index: 1 }], serving };
+  };
+  const render = (serving: readonly ServingInstance[] | null, panelId: 'gpu0' | 'gpu1'): string =>
+    renderToStaticMarkup(<GpuPanel state={stateWith(twoCards(serving))} nowMs={0} panelId={panelId} />);
+
+  test('⚠ SHAPE 1 of 4 — `gpus: [N]`: “served by instance N”, from the wire rather than the index', () => {
+    // ⚠⚠ 12b-TEST — **the DEFAULT subject is the cross-pinned fixture**, where the instance
+    // number and the card number disagree. Asserted only against `servingPerGpu` (instance N
+    // on card N — the arrangement this box runs), every wrong version of this label renders
+    // correctly, which is the coincidence the whole loop exists to stop relying on and which
+    // 12b's build measured reappearing inside its own mutations. The per-GPU arrangement is
+    // asserted afterwards, because it is the one the box is actually in.
+    const crossed0 = render(servingCrossPinned, 'gpu0');
+    const crossed1 = render(servingCrossPinned, 'gpu1');
+    // Instance 0 serves card 1, so card 1 names instance 0 AND carries instance 0's model —
+    // the model is the half a label-only assertion would miss.
+    expect(crossed1).toContain('served by instance 0');
+    expect(crossed1).toContain('qwen3.6-27b');
+    expect(crossed1).not.toContain('served by instance 1');
+    // …and card 0 names instance 1, whose unit is down, so it does NOT carry that model.
+    expect(crossed0).toContain('served by instance 1');
+    expect(crossed0).not.toContain('qwen3.6-27b');
+
+    expect(render(servingPerGpu, 'gpu0')).toContain('served by instance 0');
+    expect(render(servingPerGpu, 'gpu1')).toContain('served by instance 1');
+    expect(render(servingPerGpu, 'gpu0')).toContain('qwen3.6-27b');
+  });
+
+  test('⚠ SHAPE 2 of 4 — `gpus: [0,1]`: each card names the OTHER, and there is NO em dash', () => {
+    // §6.2: "An em dash there would be a lie — the reading is not missing, it is different."
+    // This is the state `serving-mode.sh`'s caveat says the shipped dashboard gets wrong on
+    // GPU 1, and the caveat names this loop as the thing that retires it.
+    const zero = render(servingSplit, 'gpu0');
+    const one = render(servingSplit, 'gpu1');
+    expect(zero).toContain('served jointly with GPU 1');
+    expect(one).toContain('served jointly with GPU 0');
+    expect(rowContaining(one, 'served jointly with GPU 0')).toContain('gemma-4-31b');
+    // ⚠ The negative that makes it a test of the RULE: neither card falls back to the index,
+    // and GPU 1 — served by instance 0 — must not be blanked.
+    expect(one).not.toContain('served by instance');
+    expect(rowContaining(one, 'served jointly with GPU 0')).not.toContain('—');
+  });
+
+  test('⚠ SHAPE 3 of 4 — `gpus: null`: an em dash, because the reading really is missing', () => {
+    // Invariant 1. The `dbus` entry that blanked it names the unit and the instance, and it
+    // renders beside that row on the SERVING panel — the same panel this cell has always
+    // borrowed its explanation from, since `llama-env` has never reached the GPU card.
+    const html = render(servingGpusUnreadable, 'gpu1');
+    expect(html).toContain('served by<');
+    expect(rowContaining(html, 'served by')).toContain('—');
+    expect(html).not.toContain('served by instance');
+    expect(html).not.toContain('qwen3.6-27b');
+  });
+
+  test('⚠ SHAPE 4 of 4 — ABSENT: the index join, restored verbatim and silently', () => {
+    // §3.4's fallback. A server old enough not to publish `gpus` cannot be in split mode, so
+    // the index join is not an assumption on it — it is the only arrangement that exists.
+    const html = render(servingInstances, 'gpu0');
+    expect(html).toContain('served by instance 0');
+    expect(html).toContain('qwen3.6-27b');
+    expect(html).not.toContain('served jointly');
+    expect(html).not.toContain('no instance');
+  });
+
+  test('⚠⚠ ABSENT and `[N]` render BYTE-IDENTICALLY — the additivity claim, rendered', () => {
+    // The bar this loop was given: the live box's snapshot must render exactly as it does
+    // today. `servingInstances` and `servingPerGpu` differ in exactly one key (asserted in
+    // `lib/collectors/serving.test.ts`), and on this arrangement they must be indistinguishable
+    // on screen — one is a claim the wire makes, the other is a claim we used to make for it.
+    for (const panelId of ['gpu0', 'gpu1'] as const) {
+      expect(render(servingPerGpu, panelId)).toBe(render(servingInstances, panelId));
+    }
+  });
+
+  test('⚠⚠ 12b-TEST — the four shapes are four different TEXTS on the card, not four markups', () => {
+    // ⚠ The GPU card's half of §3.4's "`null` and absent must NOT be collapsed". A difference
+    // carried only by an attribute is one nobody reading the screen can act on, so this
+    // compares the rendered TEXT with every tag stripped — what the accessibility tree holds —
+    // and it compares the strip item's own two halves, the label and the value.
+    const textOf = (serving: readonly ServingInstance[] | null, panelId: 'gpu0' | 'gpu1'): string =>
+      render(serving, panelId).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    const declared = textOf(servingPerGpu, 'gpu0');
+    const joint = textOf(servingSplit, 'gpu0');
+    const unreadable = textOf(servingGpusUnreadable, 'gpu0');
+    const absent = textOf(servingInstances, 'gpu0');
+    const unclaimed = textOf([{ ...(servingPerGpu[0] as ServingInstance), gpus: [1] }], 'gpu0');
+    expect(new Set([declared, joint, unreadable, unclaimed]).size).toBe(4);
+
+    // ⚠⚠ And the one pair that must NOT differ: §3.4 rules the absent case a silent fallback
+    // to the index join, so on this arrangement it is the SAME text as the declared one — the
+    // additivity claim at the level a person actually reads.
+    expect(absent).toBe(declared);
+
+    // The three answers, in the words each of them carries, so the set-size assertion above
+    // cannot be satisfied by four irrelevant differences.
+    expect(declared).toContain('served by instance 0 qwen3.6-27b');
+    expect(joint).toContain('served jointly with GPU 1');
+    expect(unreadable).toContain('served by —');
+    expect(unclaimed).toContain('served by no instance');
+  });
+
+  test('⚠ a card no instance lists reads `no instance`, never an em dash', () => {
+    // §6.5's retired-vs-stale distinction one level down: every list was READ and none names
+    // this card, which is an answer. An em dash would say "we could not look".
+    const onlyCardZero = [{ ...(servingPerGpu[0] as ServingInstance), gpus: [0] }];
+    const html = render(onlyCardZero, 'gpu1');
+    expect(html).toContain('no instance');
+    expect(rowContaining(html, 'served by')).not.toContain('—');
+  });
+
+  test('⚠ a MIS-PINNED instance prints on the card it really serves — the failure §6.2 wanted visible', () => {
+    // §6.2's own named failure mode was "getting it wrong prints the wrong model on a card
+    // rather than failing visibly". Instance 0 pinned to card 1: GPU 1 now names instance 0,
+    // and GPU 0 says nothing serves it. Under the old join this was undetectable.
+    const misPinned = [{ ...(servingPerGpu[0] as ServingInstance), gpus: [1] }];
+    expect(render(misPinned, 'gpu1')).toContain('served by instance 0');
+    expect(render(misPinned, 'gpu0')).toContain('no instance');
+    expect(render(misPinned, 'gpu0')).not.toContain('qwen3.6-27b');
+  });
+
+  test('⚠ the joint and unknown branches carry NO title — there is a reading, or there is none', () => {
+    // 10f's rule that an optional prop is an untested one: `title="undefined"` is exactly
+    // the shape that ships unnoticed. The joint case HAS a model, so it keeps its title.
+    expect(render(servingSplit, 'gpu1')).toContain('title="gemma-4-31b"');
+    const unknown = render(servingGpusUnreadable, 'gpu1');
+    // ⚠ 12b-TEST — the negative below passes on an EMPTY string, so the guard has to judge its
+    // own failure first: this render must be the one the test is about before its absence of a
+    // `title` means anything.
+    expect(unknown).toContain('served by');
+    expect(unknown).not.toContain('title=');
+    expect(unknown).not.toContain('undefined');
+  });
+
+  test('⚠⚠ the DEPLOYED server’s own bytes render exactly as they do today', () => {
+    // End to end on the real thing: `LIVE_BOX_SERVING_WIRE` is the pre-change collector's
+    // output on the box's real env files and `/v1/models` bodies, taken through the SAME
+    // validator a browser would use, and rendered. Not a fixture written to match the change.
+    const wire = parseSnapshot({
+      ...(JSON.parse(JSON.stringify(twoCards(null))) as Record<string, unknown>),
+      serving: JSON.parse(LIVE_BOX_SERVING_WIRE) as unknown,
+    });
+    expect(wire).not.toBeNull();
+    const html = renderToStaticMarkup(
+      <GpuPanel state={stateWith(wire?.snapshot as TelemetrySnapshot)} nowMs={0} panelId="gpu1" />,
+    );
+    expect(html).toContain('served by instance 1');
+    expect(html).toContain('qwen3.6-27b');
+    expect(html).not.toContain('no instance');
+    expect(rowContaining(html, 'served by instance 1')).not.toContain('—');
   });
 });

@@ -132,7 +132,6 @@ describe('the contract has no optional members', () => {
       Assert<Equals<OptionalKeys<CoolingManual>, never>>,
       Assert<Equals<OptionalKeys<CoolingEcAuto>, never>>,
       Assert<Equals<OptionalKeys<CoolingUnavailable>, never>>,
-      Assert<Equals<OptionalKeys<ServingInstance>, never>>,
       Assert<Equals<OptionalKeys<Filesystem>, never>>,
       Assert<Equals<OptionalKeys<Network>, never>>,
       Assert<Equals<OptionalKeys<Storage>, never>>,
@@ -159,7 +158,6 @@ describe('the contract has no optional members', () => {
       Assert<Equals<UndefinedKeys<CoolingManual>, never>>,
       Assert<Equals<UndefinedKeys<CoolingEcAuto>, never>>,
       Assert<Equals<UndefinedKeys<CoolingUnavailable>, never>>,
-      Assert<Equals<UndefinedKeys<ServingInstance>, never>>,
       Assert<Equals<UndefinedKeys<Filesystem>, never>>,
       Assert<Equals<UndefinedKeys<Network>, never>>,
       Assert<Equals<UndefinedKeys<Storage>, never>>,
@@ -184,6 +182,27 @@ describe('the contract has no optional members', () => {
       Assert<Equals<UndefinedKeys<TelemetryError>, 'instance'>>,
     ];
     expectTypeOf<TelemetryErrorIsOptionalOnlyInInstance>().toBeArray();
+  });
+
+  /*
+   * ⚠⚠ **12b: `ServingInstance.gpus` is the SECOND, and §3.4 names the same reason.** A
+   * server old enough not to publish the cards an instance serves omits the key outright, and
+   * the key's own absence — never a `null` — is what makes the running box's snapshot still
+   * validate under a client that knows about it. §3.4 goes further and rules that fallback
+   * *correct rather than a compromise*: such a server cannot be in split mode, so the index
+   * join is the only arrangement it can be in.
+   *
+   * ⚠ This test is written as an EXACT set, not as `'gpus' extends OptionalKeys<…>`. The
+   * census above is what stops a third optional member appearing by accident, and moving
+   * `ServingInstance` out of it would have removed that protection from this type entirely —
+   * so the exact-set form restores it here: a future `model?:` fails on this line.
+   */
+  test('⚠ the second exception: ServingInstance.gpus is genuinely optional, and it is the ONLY one', () => {
+    type ServingInstanceIsOptionalOnlyInGpus = [
+      Assert<Equals<OptionalKeys<ServingInstance>, 'gpus'>>,
+      Assert<Equals<UndefinedKeys<ServingInstance>, 'gpus'>>,
+    ];
+    expectTypeOf<ServingInstanceIsOptionalOnlyInGpus>().toBeArray();
   });
 });
 
@@ -388,6 +407,11 @@ describe('the field census', () => {
       Assert<Equals<ServingInstance['model'], string | null>>,
       Assert<Equals<ServingInstance['ctx'], Tokens | null>>,
       Assert<Equals<ServingInstance['health'], HealthState | null>>,
+      // ⚠ 12b — §3.4's `gpus`. The `| undefined` is not a typo and not a nullability leak:
+      // it is the OPTIONAL key's third state, and §3.4 makes absent and `null` two different
+      // facts. An assertion of `readonly number[] | null` alone would pass with the `?`
+      // deleted, which is the one edit that would break the running box.
+      Assert<Equals<ServingInstance['gpus'], readonly number[] | null | undefined>>,
     ];
     expectTypeOf<ServingFields>().toBeArray();
   });

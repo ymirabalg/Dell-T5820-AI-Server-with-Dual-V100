@@ -121,7 +121,18 @@ const gpuWithNoReadings = (index: number): Gpu => ({
   throttleReasons: null,
 });
 
-/** An instance discovered from its env filename and nothing more (§3.4's nullability case). */
+/**
+ * An instance discovered from its env filename and nothing more (§3.4's nullability case).
+ *
+ * ⚠⚠ 12b-RECONCILE — **`gpus: null`, and the key is PRESENT.** This is the twin of
+ * `lib/fixtures.ts`'s `servingIdentityOnly`, which gained the key in 12b while this copy did
+ * not (12b-A8). Without it {@link allReadingsNull} — the panel suite's *"current server,
+ * nothing readable"* snapshot — is an **older-server** snapshot: no row declares, so `servedBy`
+ * falls back to the index join and every GPU card built on it renders *served by instance N*,
+ * a positive claim about who serves the card, under a fixture whose name says nothing is
+ * readable. With the key it renders `served by —`, the branch 12b added for exactly this
+ * reading. The two fixtures mean the same thing and must say it the same way.
+ */
 const instanceWithNoReadings = (instance: number): ServingInstance => ({
   instance,
   port: null,
@@ -129,6 +140,7 @@ const instanceWithNoReadings = (instance: number): ServingInstance => ({
   model: null,
   ctx: null,
   health: null,
+  gpus: null,
 });
 
 /**

@@ -262,6 +262,136 @@ export const servingPopulated: TelemetrySnapshot = {
 };
 
 /**
+ * ⚠⚠ 12b — **the `serving[]` the DEPLOYED server really sends, frozen as unparsed bytes.**
+ *
+ * This is not a fixture written by hand to match 12b's change; it is the output of the
+ * collector **as it stood before that change**, run on 2026-09-17 against the live box's own
+ * inputs — `/etc/llama-server/0.env` and `1.env` read over SSH, and the real `/v1/models`
+ * bodies from 127.0.0.1:8080 and :8081 — then `JSON.stringify`d. That is why the context is
+ * 163840 and the model is `qwen3.6-27b`: those are the box's values on the day, not this
+ * repo's older 131072 fixtures.
+ *
+ * ⚠ **What it is evidence FOR**: §3.4's `gpus` is *additive*. Six keys per instance and no
+ * `gpus` among them — so a client that knows about the field must still validate this body
+ * and render it exactly as it renders today, because this is the body the running container
+ * will keep sending until it is rebuilt. The alternative spelling (`gpus: readonly number[] |
+ * null`, required) would refuse **every poll the live box makes**.
+ *
+ * ⚠ **A string, not an object literal.** It has to enter `parseSnapshot` as bytes nobody
+ * checked; typing it would have TypeScript agree with the validator about a shape the
+ * validator is the thing under test for.
+ *
+ * ⚠ `unitState` is `null` here and that is honest rather than a gap: the capture script had
+ * no D-Bus socket to the box, so systemd was never asked. It changes nothing about the key
+ * set, which is what this asset exists to pin.
+ */
+export const LIVE_BOX_SERVING_WIRE = `[
+  {
+    "instance": 0,
+    "port": 8080,
+    "unitState": null,
+    "model": "qwen3.6-27b",
+    "ctx": 163840,
+    "health": "ok"
+  },
+  {
+    "instance": 1,
+    "port": 8081,
+    "unitState": null,
+    "model": "qwen3.6-27b",
+    "ctx": 163840,
+    "health": "ok"
+  }
+]`;
+
+/**
+ * ⚠⚠ 12b — the same two instances **declaring the cards they serve** (§3.4's `gpus`).
+ *
+ * This is the arrangement the box has always run and the only one the old join was ever
+ * right about: one process per card, `CUDA_VISIBLE_DEVICES=%i`, so instance N lists card N.
+ * Rendered, it must be **byte-identical** to {@link servingInstances} — which carries no
+ * `gpus` at all — because §3.4's fallback says an older server in this arrangement gets the
+ * same answer. A fixture pair that renders identically for two different reasons is the
+ * point: one is a claim the wire makes, the other is a claim we used to make for it.
+ */
+export const servingPerGpu: readonly ServingInstance[] = [
+  { ...(servingInstances[0] as ServingInstance), gpus: [0] },
+  { ...(servingInstances[1] as ServingInstance), gpus: [1] },
+];
+
+/**
+ * ⚠⚠ 12b-TEST — **the same two instances CROSS-PINNED: instance 0 serves card 1, instance 1
+ * serves card 0.** The fixture where the instance number and the card number DISAGREE.
+ *
+ * ⚠ **This exists because the loop's own coincidence reappeared inside the tests written to
+ * catch it.** `servingPerGpu` has instance N on card N — which is the truth about this box —
+ * and on that fixture *every* wrong implementation of the join renders correctly: naming the
+ * card from `gpus`, from the instance number, or from the row's position in `serving[]` all
+ * produce `GPU 0` for instance 0. 12b's build found three of its own mutations
+ * (`12b-SP3`/`SP4`/`SP5`) inert for exactly that reason and answered it with a fourth
+ * mutation; the answer that generalises is a FIXTURE in which the two numbers cannot be
+ * confused, used as the DEFAULT subject of every test whose subject is the join.
+ *
+ * Rendered: GPU 1 carries instance 0's model, GPU 0 carries instance 1's (which is `null`,
+ * because that instance's unit is down — so the LABEL is what discriminates there, not the
+ * value), and the SERVING rows read `:8080 · GPU 1` and `:8081 · GPU 0`.
+ *
+ * ⚠ It is a real state, not a contrivance: it is what a mis-`%i`'d template or a hand-edited
+ * drop-in produces, and §6.2's whole complaint about the old join is that it *"prints the
+ * wrong model on a card rather than failing visibly"* when it happens.
+ */
+export const servingCrossPinned: readonly ServingInstance[] = [
+  { ...(servingInstances[0] as ServingInstance), gpus: [1] },
+  { ...(servingInstances[1] as ServingInstance), gpus: [0] },
+];
+
+/**
+ * ⚠⚠ 12b — **one process across both cards** (`SERVING-MODES.md` §4): a single instance whose
+ * `gpus` is `[0, 1]`.
+ *
+ * One row on the SERVING panel and a *joint* line on both GPU cards. ⚠ The instance number is
+ * deliberately **0**, so a panel that recovered the old join by accident would still print
+ * "served by instance 0" on GPU 0 and would be caught only on GPU 1 — which is exactly the
+ * card `serving-mode.sh`'s own caveat says the shipped dashboard gets wrong.
+ */
+export const servingSplit: readonly ServingInstance[] = [
+  {
+    instance: 0,
+    port: port(8080),
+    unitState: 'active',
+    model: 'gemma-4-31b',
+    ctx: tokens(262144),
+    health: 'ok',
+    gpus: [0, 1],
+  },
+];
+
+/**
+ * ⚠⚠ 12b — §3.4's `null`: the unit exists and its `CUDA_VISIBLE_DEVICES` could not be read.
+ *
+ * ⚠ **Not the same fixture as an older server**, and keeping them apart is the whole ruling:
+ * this one carries the key holding `null` and an `errors[]` entry naming the unit, and it
+ * renders an em dash. {@link servingInstances} omits the key and renders the index join
+ * silently. Collapsing them would put an em dash on a perfectly healthy box.
+ */
+export const servingGpusUnreadable: readonly ServingInstance[] = [
+  { ...(servingInstances[0] as ServingInstance), gpus: null },
+];
+
+/** A snapshot carrying {@link servingGpusUnreadable} and the `dbus` entry that explains it. */
+export const servingGpusUnreadableSnapshot: TelemetrySnapshot = {
+  ...everythingZero,
+  serving: servingGpusUnreadable,
+  errors: [
+    {
+      source: 'dbus',
+      message: 'llama-server@0.service: Environment: org.freedesktop.DBus.Error.AccessDenied: no detail',
+      instance: 0,
+    },
+  ],
+};
+
+/**
  * An instance discovered from its env filename and nothing more — `/etc/llama-server/`
  * was listed, but the file itself could not be read and D-Bus did not answer.
  *
@@ -275,4 +405,9 @@ export const servingIdentityOnly: ServingInstance = {
   model: null,
   ctx: null,
   health: null,
+  // ⚠ 12b — `null`, and the key is PRESENT. The bus did not answer, so the unit's own
+  // `CUDA_VISIBLE_DEVICES` could not be read: §3.4's `null`, an em dash with the `dbus` entry
+  // beside it — never the absent key, which would say "this server has never heard of the
+  // field" about a server that has.
+  gpus: null,
 };

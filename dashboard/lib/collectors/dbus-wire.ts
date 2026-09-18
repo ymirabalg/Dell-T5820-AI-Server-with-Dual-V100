@@ -22,9 +22,25 @@
  *    against captured frames and against its own encoder.
  *
  * The narrowness is deliberate and is enforced by returning `malformed` rather than
- * guessing: **containers (`a`, `(`, `{`) are not implemented**, because no reply this
- * dashboard asks for contains one. A future caller that needs `ListUnits` must widen this
- * on purpose, with tests, rather than discover a silent misparse.
+ * guessing: **structs (`(`) and dict entries (`{`) are not implemented**, because no reply
+ * this dashboard asks for contains one. A future caller that needs `ListUnits` must widen
+ * this on purpose, with tests, rather than discover a silent misparse.
+ *
+ * ### ⚠ 12b — ARRAYS of a single basic type, and nothing wider
+ *
+ * §3.4's `gpus` is read from the unit's own `CUDA_VISIBLE_DEVICES`, which lives in
+ * `org.freedesktop.systemd1.Service`'s **`Environment`** property — a `v` carrying an `as`.
+ * That is the first container this dashboard has ever had to decode, so {@link Reader} grew
+ * exactly one: `a` followed by ONE basic type character. `a(`, `a{` and `aa` still return
+ * `malformed`, for the reason the whole module is narrow — a container skipped by guesswork
+ * desynchronises the reader by an unknown number of bytes and every value after it is
+ * silently wrong.
+ *
+ * ⚠ **An array's declared length is checked BEFORE its bytes are read**, in both directions,
+ * and the reason is the one {@link DBUS_MAX_MESSAGE_BYTES} records: a length field the reader
+ * merely *waits* for turns a peer that answered instantly into a `dbus` entry saying "timed
+ * out". `decodeMessage` has already established that the whole message is present, so an
+ * array claiming more bytes than the message holds is **malformed**, never `incomplete`.
  *
  * ⚠ **Two places where this file is deliberately WIDER than the three calls it makes, and
  * the reason is the same in both.** Nine of {@link Reader.basic}'s fourteen branches — `y b
@@ -34,7 +50,10 @@
  * thrown error that ends the **whole conversation** — blanking every unit's `ActiveState`
  * rather than one field of one reply. Decoding a `y` nobody reads costs nothing; refusing to
  * decode it costs the panel. (The file's doc used to claim "~250 lines … and no more"; it is
- * 458 lines and the generality is a decision, not an oversight.)
+ * several times that, and the generality is a decision rather than an oversight. ⚠ 12b-TEST
+ * removed the exact figure that stood here — it said 458 and the file was already longer. A
+ * number in a comment is a claim that goes stale in silence, which is the same failure as the
+ * `need()` claim corrected under {@link decodeMessage}, in a cheaper place.)
  *
  * ### The subset
  *
@@ -72,15 +91,24 @@ export const DBUS_HEADER_BYTES = 16;
 /**
  * The D-Bus specification's own ceiling on a whole message: **2²⁷ bytes** (128 MiB).
  *
- * ⚠ **Without it, sixteen bytes of rubbish cost the whole budget.** `bodyLength` and
- * `fieldsLength` are raw uint32s off the wire, and the only consequence of an absurd value
- * was `bytes.length < byteLength → incomplete`, which {@link module:lib/collectors/dbus}'s
- * `Conversation.message()` answers by pulling more bytes until the deadline. Measured
- * against `collectUnitStates` with a scripted stream (`OK`, then 16 bytes declaring a
- * four-billion-byte body): **one `dbus` entry saying "timed out after 400 ms" about a peer
- * that answered in 1 ms** — verbatim the failure {@link DbusDecode}'s two kinds exist to
- * prevent. The endian-invalid case was already caught at byte 0 and fails in 1 ms; the
- * length-field case had no check at all.
+ * ⚠ **It moves that failure's threshold; it does not close it, and the claim that used to
+ * stand here said otherwise.** `bodyLength` and `fieldsLength` are raw uint32s off the wire,
+ * and the only consequence of an absurd value was `bytes.length < byteLength → incomplete`,
+ * which {@link module:lib/collectors/dbus}'s `Conversation.message()` answers by pulling more
+ * bytes until the deadline. Measured against `collectUnitStates` with a scripted stream
+ * (`OK`, then 16 bytes declaring a four-billion-byte body): **one `dbus` entry saying "timed
+ * out after 400 ms" about a peer that answered in 1 ms** — verbatim the failure
+ * {@link DbusDecode}'s two kinds exist to prevent. What this constant does is refuse the
+ * declarations D-Bus itself forbids; every declaration *at or under* the ceiling is still
+ * waited for, because a stream decoder cannot tell an inflated length from a large message
+ * until the bytes arrive. Measured 2026-09-17, one byte apart: 16 bytes declaring `2**27`
+ * exactly → **timed out after 300 ms**; declaring `2**27 + 1` → `malformed` in **7 ms**.
+ * ⚠ The line that used to stand here — *"without it, sixteen bytes of rubbish cost the whole
+ * budget"* — is true of `2**32` and false of `2**27 + 1`, which is the same class of mistake
+ * as the `need()` sentence corrected under {@link decodeMessage}: a written claim standing in
+ * for a measurement. The self-contradiction a header CAN prove on its own — a `bodyLength`
+ * with no signature to read it — is now refused by {@link Reader.region}'s rule 3, but that
+ * needs the bytes too.
  *
  * The limits are the protocol's, not invented: no legitimate systemd reply can exceed them,
  * because the specification forbids emitting one.
@@ -89,6 +117,18 @@ export const DBUS_MAX_MESSAGE_BYTES = 2 ** 27;
 
 /** The specification's ceiling on the header field array: **2²⁶ bytes**. */
 export const DBUS_MAX_FIELDS_BYTES = 2 ** 26;
+
+/**
+ * The specification's ceiling on **any** array: **2²⁶ bytes** (64 MiB).
+ *
+ * ⚠ It is not redundant with {@link DBUS_MAX_MESSAGE_BYTES}. That one bounds the *declared*
+ * message, which is why an over-long message is `malformed` rather than "read more"; this one
+ * bounds a length field **inside** a body that has already been fully received, where the
+ * failure is different — a four-billion-byte array length inside a 40-byte reply would make
+ * `Reader.array` allocate against a loop bound taken from the wire. The limit is the
+ * protocol's, not invented: systemd cannot legally emit an array above it.
+ */
+export const DBUS_MAX_ARRAY_BYTES = 2 ** 26;
 
 /** §-less: the four message types, from the D-Bus specification. */
 export const DBUS_MESSAGE_TYPE = {
@@ -277,6 +317,14 @@ class Reader {
   private readonly bytes: Uint8Array;
   private readonly view: DataView;
   private readonly le: boolean;
+  /**
+   * The end of the innermost region a declared length has opened — see {@link region}. It
+   * starts as the whole frame, because **the frame is itself a region**: `decodeMessage`
+   * cut it to the byte count the message's own header declared.
+   */
+  private limit: number;
+  /** What declared {@link limit}. Carried only so a diagnosis can name the region. */
+  private declaredBy: string;
   pos: number;
 
   constructor(bytes: Uint8Array, view: DataView, pos: number, le: boolean) {
@@ -284,14 +332,90 @@ class Reader {
     this.view = view;
     this.pos = pos;
     this.le = le;
+    this.limit = bytes.length;
+    this.declaredBy = 'message';
   }
 
   align(to: number): void {
     this.pos = alignUp(this.pos, to);
   }
 
+  /**
+   * ⚠ **Rule 2 of {@link region}: bounded by the region that declared the value, not by the
+   * buffer and not by the frame.** The {@link Incomplete} it raises carries its own sentence
+   * because by the time it is converted at {@link decodeMessage}'s boundary the region that
+   * was overrun is no longer on the stack.
+   */
   private need(count: number): void {
-    if (this.pos + count > this.bytes.length) throw new Incomplete();
+    if (this.pos + count > this.limit) {
+      throw new Incomplete(`a value in the ${this.declaredBy} overran its declared length`);
+    }
+  }
+
+  /**
+   * ⚠⚠ **THE INVARIANT, stated once: a declared length is a REGION.**
+   *
+   * Every byte this codec reads sits inside some count the *peer* supplied — the message's
+   * own `bodyLength`, its `fieldsLength`, an array's byte count. Three rules follow, and
+   * they are the same three every time:
+   *
+   * 1. a region must FIT the region that declared it;
+   * 2. nothing inside it may read past its end;
+   * 3. its values must account for EXACTLY its bytes — stopping short is the same lie as
+   *    running over, told in the other direction.
+   *
+   * ⚠ **Rule 3 is the one that was stated only here, for arrays, and nowhere else** — and it
+   * is the one that costs the most when it is missing. {@link decodeMessage} returns
+   * `byteLength` and `Conversation.message()` advances the stream by it, so a message whose
+   * values stop short of its own declared length **eats the next message**. Measured on the
+   * real captured `GetUnit` reply, 2026-09-17: one flipped byte at offset 4 yields a
+   * perfectly well-formed message — right serial, right object path — declaring 191 bytes
+   * instead of 96, and the 95 bytes of the *following* reply are discarded. End to end that
+   * turned `active` in 2 ms into `null` and *"timed out after 300 ms"* about a bus that had
+   * already answered.
+   *
+   * ⚠ **Rule 2 is why {@link need} bounds on {@link limit} and not on the buffer.** A header
+   * field whose value overran the *field array* used to read on into the BODY and still
+   * return a message: `errorName` decoded out of the unit's own environment strings, then
+   * interpolated into an `errors[]` sentence on a panel. Bounding the reads at the frame —
+   * which is what 12b's test phase fixed — is not the same as bounding them at the region
+   * that declared them.
+   *
+   * ⚠ **An {@link Incomplete} raised inside a region is `malformed`, never "read more".**
+   * {@link decodeMessage} has already established that every declared byte is present, so a
+   * length inside the message pointing past its own region is a lie no waiting can repair;
+   * answering `incomplete` is the documented failure where a peer that replied in one
+   * millisecond is reported as a timeout. See {@link DBUS_MAX_MESSAGE_BYTES}. The conversion
+   * stays at {@link decodeMessage}'s boundary — the one place this module turns a throw into
+   * a value — and the sentence {@link need} raises is what names the region it happened in.
+   *
+   * ⚠ **Do not add a fourth bounds check beside these.** A new reader that needs one needs a
+   * region instead — that is what this method is for. Three phases of one loop each found a
+   * different symptom of rule 3 going unstated: the build shipped it, the test phase bounded
+   * two readers, the adversarial found the rule. `12b-reconciliation.md` records it.
+   */
+  region<T>(what: string, declared: number, read: (end: number) => T): T {
+    const start = this.pos;
+    const end = start + declared;
+    if (end > this.limit) {
+      throw new Malformed(`${what} claims ${String(declared)} bytes, past the end of the ${this.declaredBy}`);
+    }
+    const outerLimit = this.limit;
+    const outerDeclaredBy = this.declaredBy;
+    this.limit = end;
+    this.declaredBy = what;
+    try {
+      const value = read(end);
+      if (this.pos !== end) {
+        throw new Malformed(
+          `the ${what} declared ${String(declared)} bytes and its values account for ${String(this.pos - start)}`,
+        );
+      }
+      return value;
+    } finally {
+      this.limit = outerLimit;
+      this.declaredBy = outerDeclaredBy;
+    }
   }
 
   byte(): number {
@@ -379,12 +503,130 @@ class Reader {
       case 'g':
         return this.signature();
       case 'v':
-        return this.basic(this.signature());
+        // ⚠ A variant's own signature is ONE complete type, and since 12b that type may be
+        // an array — `Environment` arrives as `v` wrapping `as`. Reading it with `basic`
+        // would have thrown `Malformed` on the leading `a`, which `Conversation.message()`
+        // turns into a thrown error that ends the WHOLE conversation.
+        return this.value(this.signature());
       default:
         throw new Malformed(`unsupported D-Bus type \`${sig}\``);
     }
   }
+
+  /**
+   * One value of a **complete** type signature — a basic type, or `a` + one basic type.
+   *
+   * ⚠ Every other container is {@link Malformed} by construction: the check is that what
+   * follows `a` is exactly one character and that {@link basic} knows it, so `a(ii)`, `a{sv}`
+   * and `aas` are refused rather than half-read. See the module doc.
+   */
+  value(sig: string): unknown {
+    if (sig.length === 1) return this.basic(sig);
+    if (sig.length === 2 && sig.startsWith('a')) return this.array(sig.slice(1));
+    throw new Malformed(`unsupported D-Bus type \`${sig}\``);
+  }
+
+  /**
+   * `a<basic>`: a 4-aligned uint32 **byte count**, then the elements, each aligned to its own
+   * type's boundary.
+   *
+   * ⚠ **The padding after the length belongs to the array, not to the first element**, and it
+   * is present even when the array is EMPTY — `Environment` on a unit with no `Environment=`
+   * directive is exactly that frame, captured from this box on 2026-09-17. Reading the
+   * element alignment only when there is an element to read would leave the cursor short and
+   * every value after it wrong.
+   *
+   * ⚠ **The count is a REGION, and {@link region} is where that is stated** — this reader
+   * used to carry its own copy of the two rules and was the only caller that had them, which
+   * is exactly how the message itself came to have neither. The count fitting the message,
+   * the elements not reading past it, and the elements accounting for all of it are all
+   * {@link region}'s; the only thing left here is D-Bus's own ceiling, which is about what is
+   * *legal* rather than about what fits. See {@link DBUS_MAX_ARRAY_BYTES}.
+   */
+  array(elementSig: string): unknown[] {
+    const bytes = this.uint32();
+    if (bytes > DBUS_MAX_ARRAY_BYTES) {
+      throw new Malformed(
+        `array claims ${String(bytes)} bytes, above D-Bus's ${String(DBUS_MAX_ARRAY_BYTES)}`,
+      );
+    }
+    this.align(alignmentOf(elementSig));
+    return this.region('array', bytes, (end) => {
+      const out: unknown[] = [];
+      while (this.pos < end) out.push(this.basic(elementSig));
+      return out;
+    });
+  }
 }
+
+/**
+ * The boundary a value of `sig` is aligned to, per the D-Bus specification's type table.
+ *
+ * Written out rather than derived, because the one that looks wrong is right: `b` (BOOLEAN)
+ * is marshalled as a **uint32** and is therefore 4-aligned, not 1. `v` and `g` are 1-aligned
+ * because both begin with a single-byte length.
+ *
+ * ⚠ **Exported only so the table can be read against the specification.** It is reached from
+ * exactly one place — {@link Reader.array}, for the padding after an array's length — and the
+ * cursor there is always 4-aligned already (the length is a `uint32`, which aligns itself), so
+ * every row below 8 is INVISIBLE through a decode: `v`'s 1 and `s`'s 4 produce identical
+ * bytes for every frame this codec can be handed. 12b's adversarial found `case 'v': return 1`
+ * → `4` — a D-Bus specification violation — with all 3634 tests green, and it is green for
+ * that reason rather than for want of a frame to try. A table whose rows cannot be observed
+ * one at a time has to be asserted as a table.
+ */
+export const alignmentOf = (sig: string): number => {
+  switch (sig) {
+    case 'y':
+    case 'g':
+    case 'v':
+      return 1;
+    case 'n':
+    case 'q':
+      return 2;
+    case 'b':
+    case 'i':
+    case 'u':
+    case 'h':
+    case 's':
+    case 'o':
+      return 4;
+    case 'x':
+    case 't':
+    case 'd':
+      return 8;
+    default:
+      throw new Malformed(`unsupported D-Bus type \`${sig}\``);
+  }
+};
+
+/**
+ * Split a body signature into complete types — `ss` → `['s','s']`, `as` → `['as']`.
+ *
+ * ⚠ **The body loop used to be `for (const sig of signature)`, one CHARACTER at a time**, and
+ * that is only correct while every type is one character. A body of `as` would have been read
+ * as an `a` (malformed) followed by an `s`; a body of `sas` as three basics. Since 12b the
+ * loop asks this function instead, and anything it cannot split is `malformed` rather than
+ * guessed.
+ */
+const completeTypes = (signature: string): string[] => {
+  const out: string[] = [];
+  let at = 0;
+  while (at < signature.length) {
+    const head = signature[at];
+    if (head === 'a') {
+      const element = signature[at + 1];
+      if (element === undefined) throw new Malformed('signature ends with a bare `a`');
+      out.push(`a${element}`);
+      at += 2;
+      continue;
+    }
+    if (head === undefined) throw new Malformed('signature ended unexpectedly');
+    out.push(head);
+    at += 1;
+  }
+  return out;
+};
 
 /**
  * Decode the first complete message in `bytes`.
@@ -394,11 +636,28 @@ class Reader {
  *
  * ⚠ **The length ceiling is checked BEFORE the "have I got all the bytes yet" test**, and
  * that ordering is the whole point: an over-long declared length must be *"this is not
- * D-Bus"* and never *"read more"*. See {@link DBUS_MAX_MESSAGE_BYTES}. One check here also
- * covers the two sites a reader would otherwise want their own guards on —
- * `Reader.string()`'s four-billion-byte length and `Reader.signature()`'s 255-byte one both
- * reach `need()` only after this function has already returned `malformed`, and the body
- * reader is built on `bytes.subarray(0, byteLength)`.
+ * D-Bus"* and never *"read more"*. See {@link DBUS_MAX_MESSAGE_BYTES}.
+ *
+ * ⚠⚠ **12b-TEST — the claim that used to stand here was FALSE, and it mattered.** It said
+ * that one check "also covers the two sites a reader would otherwise want their own guards
+ * on — `Reader.string()`'s four-billion-byte length and `Reader.signature()`'s 255-byte
+ * one". It does not: the ceiling bounds the *message*, and a string length inside a
+ * legal-sized, fully-received body reached `need()` and threw {@link Incomplete}, which this
+ * function returned as `incomplete` — *read more bytes* about a message that was entirely
+ * present. `Reader.array` was given its own guard for exactly this in 12b; the string, the
+ * signature and every alignment inside a body had none. The guard now lives at the one place
+ * that covers all of them: **after the "have I got all the bytes" test, an `Incomplete` is
+ * `malformed`.** See the `catch` below.
+ *
+ * ⚠⚠ **12b-RECONCILE — and that was still the second of three layers.** Bounding the reads
+ * said nothing about the number they were bounded BY: this function waited for `byteLength`
+ * bytes, cut the frame to exactly that, read the fields and the body — and never checked that
+ * what it read accounted for them. One flipped byte at offset 4 of the real captured `GetUnit`
+ * reply returns a well-formed message declaring 191 bytes instead of 96, and
+ * `Conversation.message()` advances the stream by that number: the next reply's first 95
+ * bytes are gone. The rule is {@link Reader.region}'s and it is stated once there; this
+ * function is one of its three callers. **A bounds check that is not stated as an invariant
+ * gets re-found as a symptom, once per phase.**
  */
 export const decodeMessage = (bytes: Uint8Array): DbusDecode => {
   if (bytes.length < DBUS_HEADER_BYTES) return { kind: 'incomplete' };
@@ -432,30 +691,72 @@ export const decodeMessage = (bytes: Uint8Array): DbusDecode => {
   }
   if (bytes.length < byteLength) return { kind: 'incomplete' };
 
+  // ⚠⚠ **The frame is the OUTERMOST region** — {@link Reader} takes its initial `limit` from
+  // the buffer it is given, so cutting the buffer to the byte count this message's own header
+  // declared is what makes "the message" a region like any other. 12b's test phase added it
+  // to stop a header field reading into the NEXT MESSAGE's bytes; 12b's reconciliation made
+  // the field array and the body regions of their own, which bound tighter still. Both
+  // statements are the same rule at different scales, and {@link Reader.region} is where it is
+  // written down. See the `⚠ nothing is read past the frame` tests.
+  const frame = bytes.subarray(0, byteLength);
+
   try {
-    const reader = new Reader(bytes, view, DBUS_HEADER_BYTES, le);
+    const reader = new Reader(frame, view, DBUS_HEADER_BYTES, le);
     const fieldsEnd = DBUS_HEADER_BYTES + fieldsLength;
     let replySerial: number | null = null;
     let errorName: string | null = null;
     let signature = '';
-    while (reader.pos < fieldsEnd) {
-      reader.align(8);
-      if (reader.pos >= fieldsEnd) break;
-      const code = reader.byte();
-      const value = reader.basic('v');
-      if (code === DBUS_HEADER_FIELD.replySerial && typeof value === 'number') replySerial = value;
-      else if (code === DBUS_HEADER_FIELD.errorName && typeof value === 'string') errorName = value;
-      else if (code === DBUS_HEADER_FIELD.signature && typeof value === 'string') signature = value;
-    }
+    // ⚠⚠ 12b-RECONCILE — **the header field array is a REGION** ({@link Reader.region}), which
+    // is the boundary that actually applies to a field: `fieldsLength` is what declared it.
+    // The frame is the wrong boundary here even though it is the tighter-sounding one — a
+    // field value bounded only by the frame reads on into the BODY, the loop then exits
+    // because the cursor is past `fieldsEnd`, and the decode returns a message whose
+    // `errorName` is made of the unit's own environment strings.
+    reader.region('header field array', fieldsLength, () => {
+      while (reader.pos < fieldsEnd) {
+        reader.align(8);
+        if (reader.pos >= fieldsEnd) break;
+        const code = reader.byte();
+        const value = reader.basic('v');
+        if (code === DBUS_HEADER_FIELD.replySerial && typeof value === 'number') replySerial = value;
+        else if (code === DBUS_HEADER_FIELD.errorName && typeof value === 'string') errorName = value;
+        else if (code === DBUS_HEADER_FIELD.signature && typeof value === 'string') signature = value;
+      }
+    });
 
     const body: unknown[] = [];
-    if (signature !== '') {
-      const bodyReader = new Reader(bytes.subarray(0, byteLength), view, bodyStart, le);
-      for (const sig of signature) body.push(bodyReader.basic(sig));
-    }
+    const bodyReader = new Reader(frame, view, bodyStart, le);
+    // ⚠⚠ 12b-RECONCILE — **the message's own body is a region too, and it is entered even when
+    // the signature is EMPTY.** A `bodyLength` with no signature to read it is a
+    // self-contradiction the header alone proves, and rule 3 is what proves it: zero values
+    // cannot account for a declared 95 bytes. This is the check whose absence let one flipped
+    // byte at offset 4 eat the next reply — see {@link Reader.region}.
+    bodyReader.region('message body', bodyLength, () => {
+      for (const sig of completeTypes(signature)) body.push(bodyReader.value(sig));
+    });
     return { kind: 'message', message: { type, serial, replySerial, errorName, signature, body, byteLength } };
   } catch (e) {
-    if (e instanceof Incomplete) return { kind: 'incomplete' };
+    // ⚠⚠ 12b-TEST — **an {@link Incomplete} raised HERE is `malformed`, not "read more".**
+    //
+    // Every genuinely-short buffer has already been answered above: `bytes.length <
+    // DBUS_HEADER_BYTES` and `bytes.length < byteLength` are both returned before this
+    // `try`, and both readers are built on {@link frame}, which is exactly the message the
+    // header declared. So the only way {@link Reader.need} can fail from here is a length
+    // field INSIDE a fully-received message pointing past that message's own end — a lie
+    // the peer told, which no amount of waiting will repair.
+    //
+    // ⚠ It is the same lesson as {@link DBUS_MAX_ARRAY_BYTES} and {@link
+    // DBUS_MAX_MESSAGE_BYTES}, on the two paths those two do not cover. Measured before this
+    // line existed: a 46-byte `METHOD_RETURN` whose body `STRING` declared 4096 bytes
+    // decoded as `incomplete`, and `Conversation.message()` answers that by pulling bytes
+    // until the deadline — **one `dbus` entry saying "timed out after 2 s" about a peer that
+    // answered in one millisecond**, verbatim the failure {@link DbusDecode}'s two kinds
+    // exist to prevent. `Reader.array` had its own guard for this and `Reader.string`,
+    // `Reader.signature` and every alignment inside a body did not; the module doc claimed
+    // otherwise, which is how it survived.
+    if (e instanceof Incomplete) {
+      return { kind: 'malformed', problem: e.message };
+    }
     if (e instanceof Malformed) return { kind: 'malformed', problem: e.message };
     return { kind: 'malformed', problem: e instanceof Error ? e.message : 'decode failed' };
   }

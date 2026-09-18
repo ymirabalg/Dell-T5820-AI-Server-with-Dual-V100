@@ -28,6 +28,14 @@
  * - **`ts` must parse as a date.** §6.7 draws traces "against time, not index", so a `ts`
  *   that is not a time has no place on the axis. {@link parseSnapshot} returns the parsed
  *   epoch alongside the snapshot rather than re-parsing it at every render.
+ * - **⚠⚠ The second exception, 12b: `serving[].gpus` (§3.4).** Absent means the SERVER
+ *   predates the field, and §3.4 rules that case *correct rather than a compromise* — a
+ *   server old enough not to publish `gpus` cannot be in split mode, so the index join is the
+ *   only arrangement that exists on it. **This is the sentence that keeps the live box
+ *   rendering as it does today across a client-only deploy**, and it is why the field is
+ *   optional rather than `readonly gpus: … | null`: a nullable-but-required field would
+ *   refuse the running server's every poll. See {@link optionalCardList}, where `null` and
+ *   absent are kept apart.
  * - **⚠ One exception to "every field must be present": `errors[].instance` (10b-S-G).** It
  *   is the contract's first genuinely OPTIONAL field — absent means "this entry names no
  *   row", which is both an old server that has never heard of it and a current one whose
@@ -242,6 +250,43 @@ const ABSENT = Symbol('absent');
 const optionalInteger = (source: Record<string, unknown>, key: string): number | typeof ABSENT | undefined =>
   Object.hasOwn(source, key) ? integer(source[key]) : ABSENT;
 
+/** A card index: a non-negative integer. `Gpu.index` is what these are compared against. */
+const cardIndex = (value: unknown): Checked<number> => {
+  const whole = integer(value);
+  return whole === undefined || whole < 0 ? undefined : whole;
+};
+
+/**
+ * ⚠⚠ §3.4's `gpus` — the contract's **second** optional field, and the one place in this file
+ * where FOUR outcomes have to stay apart rather than three.
+ *
+ * | wire | returns | means |
+ * |---|---|---|
+ * | key missing | {@link ABSENT} | the server predates the field — §3.4 rules the index join the correct answer on such a server, silently |
+ * | `null` | `null` | the unit exists and its `CUDA_VISIBLE_DEVICES` could not be read — an em dash with a `dbus` entry |
+ * | `[]`, `[0]`, `[0,1]` | the array | the cards this instance serves |
+ * | anything else | `undefined` | malformed — refuse the instance, exactly like a bad `port` |
+ *
+ * ⚠ **{@link ABSENT} and `null` must not be collapsed**, and this function is where the
+ * collapse would happen: `arrayOrNull(field(value,'gpus'), …)` reads a missing key as
+ * `undefined` → refused, and `field(...) ?? null` reads it as `null` → an em dash on a server
+ * that is behaving perfectly. Both are one character away and both are wrong.
+ *
+ * ⚠ **A non-integer, fractional or negative member refuses the whole instance rather than
+ * being dropped.** A partial list is the failure §3.4's `null` exists for: a card silently
+ * missing from an otherwise plausible list would read as "no instance serves this card",
+ * which is a claim, not a gap.
+ */
+const optionalCardList = (
+  source: Record<string, unknown>,
+  key: string,
+): readonly number[] | null | typeof ABSENT | undefined => {
+  if (!Object.hasOwn(source, key)) return ABSENT;
+  const raw = source[key];
+  if (raw === null) return null;
+  return arrayOf(raw, cardIndex);
+};
+
 /** Map a branded reading through its constructor, keeping `null` as `null`. */
 const branded = <T>(value: Checked<number | null>, make: (v: number) => T): Checked<T | null> =>
   value === undefined ? undefined : value === null ? null : make(value);
@@ -445,17 +490,24 @@ const servingInstanceOf = (value: unknown): Checked<ServingInstance> => {
   const model = stringOrNull(field(value, 'model'));
   const ctx = branded(numberOrNull(field(value, 'ctx')), tokens);
   const health = memberOrNull(HEALTH_STATES, field(value, 'health'));
+  const gpus = optionalCardList(value, 'gpus');
   if (
     instance === undefined ||
     portValue === undefined ||
     unitState === undefined ||
     model === undefined ||
     ctx === undefined ||
-    health === undefined
+    health === undefined ||
+    gpus === undefined
   ) {
     return undefined;
   }
-  return { instance, port: portValue, unitState, model, ctx, health };
+  const row = { instance, port: portValue, unitState, model, ctx, health };
+  // ⚠ The key is OMITTED, not set to `undefined`. `exactOptionalPropertyTypes` is on, and
+  // more importantly `Object.hasOwn(row, 'gpus')` is what `servedBy` reads to tell an older
+  // server from one reporting a failure — a present key holding `undefined` would answer
+  // `true` and send a perfectly healthy old snapshot down the new-server path.
+  return gpus === ABSENT ? row : { ...row, gpus };
 };
 
 const filesystemOf = (value: unknown): Checked<Filesystem> => {

@@ -12,11 +12,20 @@ import { describe, expect, test } from 'vitest';
 
 import { CONDITION_KINDS, EMPTY_CONDITION_STATE, observePoll, standingIdsFrom } from '../conditions';
 import type { ConditionObservation } from '../conditions';
-import { everythingZero, nothingReadable, servingInstances, servingPopulated } from '../fixtures';
+import {
+  everythingZero,
+  nothingReadable,
+  servingGpusUnreadable,
+  servingInstances,
+  servingPerGpu,
+  servingPopulated,
+  servingSplit,
+} from '../fixtures';
+import { EM_DASH } from '../format';
 import { FAN_SERVICE_UNIT } from '../units';
 import { celsius, gib, mib, pwm, rpm, throttleMask } from '../types';
-import type { ErrorSource, Gpu, TelemetryError, TelemetrySnapshot } from '../types';
-import { GPU_ENUMERATION, SERVING_ENUMERATION, VALUE_IS_A_BAND, conditionSource, conditionsFrom, enumerationsRead, errorsForPanel } from './observations';
+import type { ErrorSource, Gpu, ServingInstance, TelemetryError, TelemetrySnapshot } from '../types';
+import { GPU_ENUMERATION, SERVING_ENUMERATION, VALUE_IS_A_BAND, conditionSource, conditionsFrom, enumerationsRead, errorsForPanel, servedBy, servedCards } from './observations';
 import type { Panel } from './observations';
 
 const card = everythingZero.gpus?.[0];
@@ -558,5 +567,177 @@ describe('⚠ §6.5: the errors[] entries that explain a panel’s em dashes', (
     ]);
     expect(errorsForPanel(nothingReadable, 'cpu')).toEqual([]);
     expect(errorsForPanel(nothingReadable, 'header')).toEqual([]);
+  });
+});
+
+describe('⚠⚠ 12b — the INVERTED join: a card asks which instance lists it', () => {
+  test('⚠ a server that does not publish `gpus` falls back to the index join, SILENTLY', () => {
+    // §3.4's ruling, and the reason it is correct rather than a compromise: a server old
+    // enough not to publish the field cannot be in split mode, because split mode arrives
+    // with the same deployment that adds it. `servingInstances` is that server's shape.
+    const zero = servedBy(servingInstances, 0);
+    expect(zero.kind).toBe('indexed');
+    expect(zero.kind === 'indexed' ? zero.instance?.instance : null).toBe(0);
+    const one = servedBy(servingInstances, 1);
+    expect(one.kind === 'indexed' ? one.instance?.instance : null).toBe(1);
+  });
+
+  test('⚠ `serving: null` is `indexed` with NO instance — unknown cannot become a claim', () => {
+    // "Which instances exist is unknown" says nothing about cards, and the `llama-env` entry
+    // that explains it already sits on the SERVING panel.
+    expect(servedBy(null, 0)).toEqual({ kind: 'indexed', instance: null });
+  });
+
+  test('⚠ per-GPU mode gives today’s answer FOR A REASON: instance N declares card N', () => {
+    const zero = servedBy(servingPerGpu, 0);
+    expect(zero.kind).toBe('declared');
+    expect(zero.kind === 'declared' ? zero.instance.instance : null).toBe(0);
+    expect(zero.kind === 'declared' ? zero.alongside : null).toEqual([]);
+  });
+
+  test('⚠ SPLIT MODE: one instance, both cards, and each card names the OTHER one', () => {
+    // The arrangement the old join had no answer for. `alongside` is what the GPU card
+    // renders as "served jointly with GPU M", and it excludes the asking card — a list that
+    // included it would make GPU 0 say it is served jointly with itself.
+    const zero = servedBy(servingSplit, 0);
+    const one = servedBy(servingSplit, 1);
+    expect(zero.kind === 'declared' ? zero.alongside : null).toEqual([1]);
+    expect(one.kind === 'declared' ? one.alongside : null).toEqual([0]);
+    expect(one.kind === 'declared' ? one.instance.instance : null).toBe(0);
+  });
+
+  test('⚠ a MIS-PINNED instance names the card it really serves, not the card its number implies', () => {
+    // The property the inversion buys, stated as a test: instance 0 pinned to card 1. Under
+    // `gpu.index === serving.instance` this was invisible; now GPU 1 says instance 0 and GPU
+    // 0 says nothing serves it.
+    const misPinned = [{ ...(servingPerGpu[0] as ServingInstance), gpus: [1] }];
+    expect(servedBy(misPinned, 1).kind).toBe('declared');
+    expect(servedBy(misPinned, 0).kind).toBe('unserved');
+  });
+
+  test('⚠ every list READ and none naming this card is `unserved`, which is NOT `unknown`', () => {
+    // §6.5's retired-vs-stale distinction one level down: we looked, and nobody claims it.
+    // An em dash here would say "we could not look", which is a different fact.
+    expect(servedBy(servingPerGpu, 7).kind).toBe('unserved');
+  });
+
+  test('⚠ a `gpus` that could not be READ makes the card `unknown`, even for a card nobody claims', () => {
+    // Invariant 1. The instance whose list is null might be the one serving this card, so
+    // asserting "nothing serves it" would be a claim made on a reading we do not have.
+    expect(servedBy(servingGpusUnreadable, 1).kind).toBe('unknown');
+  });
+
+  test('⚠ a claimed card beats an unreadable sibling — `unknown` is the LAST resort', () => {
+    // A reading that exists is not made uncertain by one that does not: instance 0 declares
+    // card 0, so card 0 has its answer however instance 1's read went.
+    const mixed = [
+      { ...(servingPerGpu[0] as ServingInstance), gpus: [0] },
+      { ...(servingPerGpu[1] as ServingInstance), gpus: null },
+    ];
+    expect(servedBy(mixed, 0).kind).toBe('declared');
+    expect(servedBy(mixed, 1).kind).toBe('unknown');
+  });
+
+  test('⚠ the fallback is chosen by the SNAPSHOT, not per row', () => {
+    // A row without the key on a snapshot where another row HAS it cannot re-enable the
+    // index join for its own card — that would let one unreadable unit silently restore the
+    // coincidence this change exists to stop relying on. (`collectServing` cannot produce a
+    // mixed snapshot; this is the defence, and it is why `some(declaresGpus)` is the test.)
+    const mixed = [servingInstances[0] as ServingInstance, { ...(servingInstances[1] as ServingInstance), gpus: [1] }];
+    expect(servedBy(mixed, 0).kind).toBe('unserved');
+    expect(servedBy(mixed, 1).kind).toBe('declared');
+  });
+
+  test('⚠ an instance declaring `[]` claims nothing, and does not make other cards unknown', () => {
+    // `CUDA_VISIBLE_DEVICES=` is an answer, so the snapshot was fully read: `unserved`.
+    const none = [{ ...(servingPerGpu[0] as ServingInstance), gpus: [] }];
+    expect(servedBy(none, 0).kind).toBe('unserved');
+  });
+
+  test('⚠⚠ 12b-TEST — the `unknown` em dash is explained on SERVING, NOT on the GPU card', () => {
+    // ⚠ Invariant 1 says an em dash always has an entry behind it, and for `servedBy`'s
+    // `unknown` that entry is **on another panel**: `panelsForSource('dbus')` is
+    // `['cooling','serving','safety']` and 12b left it alone deliberately, because adding
+    // `'gpu'` would change what the LIVE box renders today the moment any unrelated `dbus`
+    // entry exists. Pinned here so the compromise is a recorded decision rather than
+    // something a later reader discovers and takes for an oversight — and so that widening
+    // the fan-out becomes a visible change to this test rather than a silent one.
+    const snapshot: TelemetrySnapshot = {
+      ...everythingZero,
+      serving: servingGpusUnreadable,
+      errors: [
+        {
+          source: 'dbus',
+          message: 'llama-server@0.service: Environment: org.freedesktop.DBus.Error.AccessDenied: no detail',
+          instance: 0,
+        },
+      ],
+    };
+    expect(servedBy(snapshot.serving, 0).kind).toBe('unknown');
+    expect(errorsForPanel(snapshot, 'gpu')).toEqual([]);
+    expect(errorsForPanel(snapshot, 'serving')).toHaveLength(1);
+    expect(errorsForPanel(snapshot, 'serving')[0]?.message).toContain('Environment');
+  });
+
+  test('⚠⚠ 12b-RECONCILE — a row SPREAD with `gpus: undefined` still DECLARES: a present key is not an absent one', () => {
+    /*
+     * ⚠ `declaresGpus` is `Object.hasOwn`, never `instance.gpus !== undefined`, and 12b's
+     * adversarial reverted it to the second spelling with all 3634 tests green (`R1`) — the
+     * protection was argued at length in two doc comments and asserted nowhere. This is the
+     * shape that separates them, and it is one this project's own code writes:
+     * `{ ...instance, gpus: undefined }` has the key. `lib/collectors/serving.test.ts:400`
+     * already spreads a row that way for an unrelated assertion.
+     *
+     * ⚠ What the two spellings cost is not cosmetic. With `!== undefined`, a snapshot in which
+     * one row was spread stops declaring, `some(declaresGpus)` goes false, and **the index join
+     * is silently re-enabled for the whole snapshot** — the coincidence this loop exists to
+     * stop relying on, restored by a spread. The verdict below (`unserved` for the spread row)
+     * is 12b-A9's ruling and is the parent's to change; that it is not `indexed` is this test's
+     * subject.
+     */
+    // ⚠ The cast is the finding, not a workaround. `exactOptionalPropertyTypes` is on, so
+    // TypeScript REFUSES `{ ...instance, gpus: undefined }` against `gpus?: readonly number[] |
+    // null` — the shape cannot be written in typed code in this tree, which narrows R1's
+    // surface to what arrives across the wire boundary, where `parseSnapshot` takes `unknown`.
+    // That boundary is `optionalCardList`'s own `Object.hasOwn` (12b-WR6), and it refuses such
+    // a row outright. So this is the SECOND line, asserted here because the first is one
+    // character away from turning the row into an older server's instead (see that test).
+    const spread = { ...(servingPerGpu[0] as ServingInstance), gpus: undefined } as unknown as ServingInstance;
+    expect(Object.hasOwn(spread, 'gpus')).toBe(true);
+    expect(servedBy([spread], 0)).toEqual({ kind: 'unserved' });
+
+    // …and the same snapshot with the key genuinely ABSENT is the older-server path, which is
+    // the answer the spread must not be allowed to borrow.
+    const absent = servingInstances[0] as ServingInstance;
+    expect(Object.hasOwn(absent, 'gpus')).toBe(false);
+    expect(servedBy([absent], 0)).toEqual({ kind: 'indexed', instance: absent });
+  });
+
+  test('⚠ `serving: []` is `indexed` with no instance — not `unserved`', () => {
+    // No instance carries the key because there is no instance, so this is the older-server
+    // path by construction, and it renders exactly what an empty `serving` renders today.
+    expect(servedBy([], 0)).toEqual({ kind: 'indexed', instance: null });
+  });
+});
+
+describe('⚠⚠ 12b — `servedCards`: §3.4’s four shapes as the SERVING row’s own words', () => {
+  test.each([
+    ['one card', [0], 'GPU 0'],
+    ['the other card', [1], 'GPU 1'],
+    ['both cards', [0, 1], 'GPUs 0, 1'],
+    ['three cards', [0, 1, 2], 'GPUs 0, 1, 2'],
+    ['no card', [], 'no GPUs'],
+  ])('⚠ the SERVING row names %s as %s', (_name, gpus, expected) => {
+    expect(servedCards(gpus)).toBe(expected);
+  });
+
+  test('⚠ `null` is an em dash and ABSENT is nothing at all — the two §3.4 forbids collapsing', () => {
+    // `null`: the unit exists and could not be read — invariant 1, with the `dbus` entry
+    // beside it. `undefined`: the key is not on the wire, so the row renders exactly as it
+    // did before this field existed, and printing an em dash there would put a failure on a
+    // healthy box.
+    expect(servedCards(null)).toBe(EM_DASH);
+    expect(servedCards(undefined)).toBeNull();
+    expect(servedCards(null)).not.toBe(servedCards(undefined));
   });
 });

@@ -14,9 +14,14 @@
  * - ⚠ **Throttle reasons render only when `decodeThrottleMask(...).notable` is true** — i.e.
  *   something other than `0x4` (the routine power cap) is active. A mask of `0` or `0x4` alone
  *   renders NO throttle row at all, so the normal power cap is never styled as a warning.
- * - ⚠ **The GPU↔instance join is `gpu.index === serving.instance`** (SPEC.md §6.2) — not
- *   derivable from anything else on the snapshot. The row is labelled "served by instance N",
- *   never "on this card", because that is the claim the data actually supports.
+ * - ⚠⚠ **The GPU↔instance join is INVERTED — ruled 2026-09-15, built 12b.** `gpu.index ===
+ *   serving.instance` was never a fact about the system: it is a coincidence of the one
+ *   serving arrangement that has run here, and §4's wire never said so. A card now asks
+ *   **which instance lists it** (`serving[].gpus`, from the unit's own
+ *   `CUDA_VISIBLE_DEVICES`), through `lib/client/observations.ts`'s `servedBy`. The row is
+ *   still labelled "served by instance N", never "on this card" — but N is now the
+ *   **instance's** number rather than this card's, and on a server that does not publish
+ *   `gpus` the index join is restored verbatim (§3.4's fallback). See `servedItem`.
  * - **`gpus: null`** (nvidia-smi absent, or no poll has landed yet) takes over the whole body
  *   with §6.5's "no GPUs enumerated" message and whatever `errorsForPanel` has to say about it.
  *   Every other panel is unaffected (§6.5) — that is `dashboard-shell.tsx`'s and the header's
@@ -61,10 +66,11 @@ import { CHART_SIZE } from '../grid';
 import { SERIES_COLORS } from '../palette';
 import type { PanelProps } from '../panel-props';
 import { decodeThrottleMask } from '@/lib/throttle';
-import { errorsForPanel } from '@/lib/client/observations';
+import { errorsForPanel, servedBy, servedCards } from '@/lib/client/observations';
 import { traceFor } from '@/lib/client/series';
 import { latestSample } from '@/lib/client/runtime';
 import {
+  EM_DASH,
   formatCelsius,
   formatCelsiusParts,
   formatMHz,
@@ -77,7 +83,7 @@ import {
 } from '@/lib/format';
 import { GPU_TEMP_ALARM_C, GPU_TEMP_WATCH_C, severityGpuTemp, severityVram, usedPercent } from '@/lib/severity';
 import { celsius } from '@/lib/types';
-import type { Gpu, ServingInstance, TelemetrySnapshot } from '@/lib/types';
+import type { Gpu, TelemetrySnapshot } from '@/lib/types';
 
 import { PanelNotes } from './panel-notes';
 import { panelChip } from './panel-chip';
@@ -114,8 +120,61 @@ export interface GpuPanelProps extends Omit<PanelProps, 'panelId'> {
 const gpuAt = (snapshot: TelemetrySnapshot | null, index: number): Gpu | null =>
   snapshot?.gpus?.find((g) => g.index === index) ?? null;
 
-const servingFor = (snapshot: TelemetrySnapshot | null, index: number): ServingInstance | null =>
-  snapshot?.serving?.find((s) => s.instance === index) ?? null;
+/**
+ * ⚠⚠ 12b — the served-by strip item, from {@link servedBy}'s four answers.
+ *
+ * The `k`/`v` split is the point: `k` is the CLAIM (who serves this card) and `v` is the
+ * READING (what they are running). Under §3.4's four shapes:
+ *
+ * | `gpus` | `k` | `v` |
+ * |---|---|---|
+ * | absent | `served by instance <this card's index>` | the model, as today |
+ * | `[N]` | `served by instance N` — **the INSTANCE's number, not the card's** | the model |
+ * | `[0, 1]` | `served jointly with GPU M` | the model |
+ * | `null` | `served by` | `—` |
+ * | read, unclaimed | `served by` | `no instance` |
+ *
+ * ⚠ **`k` takes the instance's own number in the `declared` case, and that is the whole
+ * change.** They coincide in per-GPU mode — so this renders byte-identically on the box as it
+ * stands — and they come apart exactly when the deployment is not what the old join assumed,
+ * which is the state §6.2 wanted made visible rather than silent.
+ *
+ * ⚠ **No em dash in the joint case.** §6.2: *"An em dash there would be a lie — the reading is
+ * not missing, it is different."*
+ */
+const servedItem = (
+  snapshot: TelemetrySnapshot | null,
+  index: number,
+): { readonly k: string; readonly v: string; readonly title: string | null } => {
+  const served = servedBy(snapshot?.serving ?? null, index);
+  switch (served.kind) {
+    case 'indexed':
+      return {
+        k: `served by instance ${String(index)}`,
+        v: formatModelName(served.instance?.model ?? null),
+        title: served.instance?.model ?? null,
+      };
+    case 'declared':
+      return {
+        k:
+          served.alongside.length === 0
+            ? `served by instance ${String(served.instance.instance)}`
+            : `served jointly with ${servedCards(served.alongside) ?? EM_DASH}`,
+        v: formatModelName(served.instance.model),
+        title: served.instance.model,
+      };
+    case 'unknown':
+      // Invariant 1. The `dbus` entry that blanked it names the unit and the instance, and it
+      // renders on the SERVING panel beside that row — the same panel this cell has always
+      // borrowed its explanation from, since `llama-env` has never reached the GPU card
+      // either (`panelsForSource`, unchanged by this loop).
+      return { k: 'served by', v: EM_DASH, title: null };
+    case 'unserved':
+      // Not an em dash: every list was READ and none of them names this card. §6.5's
+      // retired-vs-stale distinction, one level down — "we looked, and nobody claims it".
+      return { k: 'served by', v: 'no instance', title: null };
+  }
+};
 
 /** §6.3's own boundaries, on the ≥1600px promoted sparkline only (OQ-6: leave the rest out). */
 const TEMP_REFS = [
@@ -131,7 +190,7 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
   const index: 0 | 1 = panelId === 'gpu0' ? 0 : 1;
   const snapshot = latestSample(state)?.snapshot ?? null;
   const gpu = gpuAt(snapshot, index);
-  const instance = servingFor(snapshot, index);
+  const served = servedItem(snapshot, index);
   // ⚠ §3.1's *retired* case, at the panel (10b-reconcile, adversarial F7). `gpus` was READ and
   // this card is not in it — the card has left the machine, which §6.5 calls an answer — and
   // that is a different fact from "the card is here and every reading failed". Without this
@@ -276,11 +335,9 @@ export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPa
               // ⚠ 10h/§3.4 — the model renders as its FILENAME (ruled 2026-09-10), raw on the
               // wire and whole in the item's `title`. Measured cost of the path form here:
               // +17.9 px per GPU card, on the row that sets §6.1's first term.
-              {
-                k: `served by instance ${index}`,
-                v: formatModelName(instance?.model ?? null),
-                title: instance?.model ?? null,
-              },
+              // ⚠⚠ 12b — the LABEL now comes from §3.4's `gpus`, not from this card's own
+              // index. See `servedItem`.
+              served,
             ]}
           />
           {decode !== null && decode.notable ? (

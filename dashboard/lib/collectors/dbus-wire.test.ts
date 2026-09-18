@@ -19,12 +19,14 @@ import {
   DBUS_HEADER_BYTES,
   DBUS_HEADER_FIELD,
   DBUS_LITTLE_ENDIAN,
+  DBUS_MAX_ARRAY_BYTES,
   DBUS_MAX_FIELDS_BYTES,
   DBUS_MAX_MESSAGE_BYTES,
   DBUS_MESSAGE_TYPE,
   DBUS_PROTOCOL_VERSION,
   authExternalLine,
   classifyAuthReply,
+  alignmentOf,
   decodeMessage,
   encodeMethodCall,
   hexAscii,
@@ -33,6 +35,9 @@ import type { DbusMessage } from './dbus-wire';
 import {
   CAPTURED_DBUS_ACTIVE_STATE_REPLY,
   CAPTURED_DBUS_AUTH_OK,
+  CAPTURED_DBUS_EMPTY_ENVIRONMENT_REPLY,
+  CAPTURED_DBUS_ENVIRONMENT_REPLY,
+  CAPTURED_DBUS_ENVIRONMENT_REPLY_INSTANCE_1,
   CAPTURED_DBUS_GET_UNIT_REPLY,
   CAPTURED_DBUS_HELLO_REPLY,
   CAPTURED_DBUS_NO_SUCH_UNIT_ERROR,
@@ -306,6 +311,23 @@ describe('incomplete is not malformed', () => {
     expect(decoded.problem).toContain('a');
   });
 
+  test('⚠ a basic type this codec does not know is malformed, never decoded as null', () => {
+    // ⚠ 12b — the test above no longer reaches `Reader.basic`'s `default` branch: a `a` in
+    // the signature is now caught by `completeTypes` ("signature ends with a bare `a`") and a
+    // container by `alignmentOf`, both BEFORE `basic` is asked. Measured: step 5's `05-W4`
+    // (make the unknown type return `null` instead of throwing) stopped biting the moment the
+    // array reader landed. `z` is not a D-Bus type at all, so it reaches `basic` and nothing
+    // else — a body decoded as `[null]` is the silent desynchronisation this file is narrow
+    // to avoid.
+    const frame = encodeMethodCall(GET_UNIT);
+    const at = frame.indexOf(DBUS_HEADER_FIELD.signature, DBUS_HEADER_BYTES);
+    frame[at + 5] = 0x7a; // 'z'
+    const decoded = decodeMessage(frame);
+    expect(decoded.kind).toBe('malformed');
+    if (decoded.kind !== 'malformed') return;
+    expect(decoded.problem).toContain('z');
+  });
+
   test('⚠ a big-endian message is decoded as big-endian, not read little-endian', () => {
     // The endianness byte is the PEER's choice, so the decoder must not assume. Nothing on
     // this x86 box sends big-endian, so this frame is hand-built rather than captured — a
@@ -358,5 +380,619 @@ describe('SASL', () => {
     ['SOMETHING ELSE\r\n', 'unknown'],
   ])('%j classifies as %s', (line, expected) => {
     expect(classifyAuthReply(line)).toBe(expected);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ⚠⚠ 12b — ARRAYS. §3.4's `gpus` arrives as a `v` holding an `as`.
+// ---------------------------------------------------------------------------
+
+/** Little-endian uint32, as four bytes. */
+const le32 = (v: number): readonly number[] => [v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff];
+
+/**
+ * A `METHOD_RETURN` with an arbitrary body signature and body bytes.
+ *
+ * ⚠ Hand-built rather than taken from `encodeMethodCall`, which can only write `STRING`
+ * arguments: the whole point of these tests is bodies that encoder cannot produce, and a
+ * decoder tested only against its own encoder is the failure this file's module doc records.
+ */
+const returnFrame = (signature: string, body: readonly number[]): Uint8Array => {
+  const sig = [...new TextEncoder().encode(signature)];
+  const fields: number[] = [
+    DBUS_HEADER_FIELD.replySerial, 1, 0x75, 0, ...le32(7),
+    DBUS_HEADER_FIELD.signature, 1, 0x67, 0, sig.length, ...sig, 0,
+  ];
+  while (fields.length % 8 !== 0) fields.push(0);
+  const out: number[] = [
+    DBUS_LITTLE_ENDIAN, DBUS_MESSAGE_TYPE.methodReturn, 0, DBUS_PROTOCOL_VERSION,
+    ...le32(body.length), ...le32(11), ...le32(fields.length),
+  ];
+  out.push(...fields);
+  while (out.length % 8 !== 0) out.push(0);
+  out.push(...body);
+  return Uint8Array.from(out);
+};
+
+/** The bytes of one `as` value: a 4-byte element count in BYTES, then the strings. */
+const stringArrayBytes = (values: readonly string[]): number[] => {
+  const elements: number[] = [];
+  for (const value of values) {
+    while (elements.length % 4 !== 0) elements.push(0);
+    const e = [...new TextEncoder().encode(value)];
+    elements.push(...le32(e.length), ...e, 0);
+  }
+  return [...le32(elements.length), ...elements];
+};
+
+describe('⚠⚠ 12b — decoding the `Environment` frames captured from the live system bus', () => {
+  test('⚠ instance 0 answers a VARIANT holding `as` with CUDA_VISIBLE_DEVICES=0', () => {
+    // This is §3.4's `gpus` at its source, captured read-only from this box on 2026-09-17.
+    // It is the frame that proves the claim the whole inverted join rests on: systemd has
+    // ALREADY expanded the template's `%i`, so the unit says which card it serves on the
+    // wire rather than by our arithmetic.
+    const message = decodeOne(CAPTURED_DBUS_ENVIRONMENT_REPLY);
+    expect(message.type).toBe(DBUS_MESSAGE_TYPE.methodReturn);
+    expect(message.signature).toBe('v');
+    expect(message.body).toEqual([['CUDA_VISIBLE_DEVICES=0']]);
+  });
+
+  test('⚠ instance 1 answers card 1 — the two frames are NOT interchangeable', () => {
+    // A fixture whose two subjects are identical cannot discriminate between them
+    // (HANDOVER §0.6). With only instance 0's frame, a reader that answered every unit
+    // from the first reply it saw would score green on the one arrangement this box runs.
+    const message = decodeOne(CAPTURED_DBUS_ENVIRONMENT_REPLY_INSTANCE_1);
+    expect(message.body).toEqual([['CUDA_VISIBLE_DEVICES=1']]);
+  });
+
+  test('⚠ a unit with no Environment= answers an EMPTY list, which is not a failure', () => {
+    // `gpu-fan-control.service`, same capture. Eight body bytes: the `as` signature and a
+    // zero length. The reader still pads to the element alignment after the length — making
+    // that padding conditional on there being an element leaves the cursor short — and the
+    // value is `[]`, which §3.1's `null` ≠ `[]` discipline says is an answer, not a gap.
+    const message = decodeOne(CAPTURED_DBUS_EMPTY_ENVIRONMENT_REPLY);
+    expect(message.body).toEqual([[]]);
+    expect(message.body[0]).not.toBeNull();
+  });
+});
+
+describe('⚠⚠ 12b — the array reader, and the four ways it must refuse rather than guess', () => {
+  test('a body of `as` decodes its elements in order, with the count read as BYTES', () => {
+    const frame = returnFrame('as', stringArrayBytes(['A=1', 'BB=22', 'C=3']));
+    const decoded = decodeMessage(frame);
+    expect(decoded.kind).toBe('message');
+    if (decoded.kind !== 'message') return;
+    expect(decoded.message.body).toEqual([['A=1', 'BB=22', 'C=3']]);
+  });
+
+  test('⚠ a multi-type body signature splits into COMPLETE types, not characters', () => {
+    // The body loop used to be `for (const sig of signature)`, which is only correct while
+    // every type is one character: `sas` would have been read as three basics and `as`
+    // alone as a malformed `a` followed by an `s`.
+    const body: number[] = [];
+    const first = [...new TextEncoder().encode('first')];
+    body.push(...le32(first.length), ...first, 0);
+    while (body.length % 4 !== 0) body.push(0);
+    body.push(...stringArrayBytes(['X=1']));
+    const decoded = decodeMessage(returnFrame('sas', body));
+    expect(decoded.kind).toBe('message');
+    if (decoded.kind !== 'message') return;
+    expect(decoded.message.body).toEqual(['first', ['X=1']]);
+  });
+
+  test('⚠ an array claiming more bytes than the message holds is MALFORMED, never incomplete', () => {
+    // The lesson `DBUS_MAX_MESSAGE_BYTES` was added for, one layer in: `decodeMessage` has
+    // already established the whole message is present, so saying "read more" here would
+    // make `Conversation.message()` wait for bytes that will never come and file a `dbus`
+    // entry saying "timed out" about a peer that answered in one millisecond.
+    const body = stringArrayBytes(['X=1']);
+    const overstated = [...le32(4096), ...body.slice(4)];
+    const decoded = decodeMessage(returnFrame('as', overstated));
+    expect(decoded.kind).toBe('malformed');
+    if (decoded.kind !== 'malformed') return;
+    expect(decoded.problem).toContain('past the end of the message');
+  });
+
+  test('⚠ an array above D-Bus’s own 2^26 ceiling is malformed, and is refused by the CEILING', () => {
+    // Distinct from the row above, and both directions are needed: this one is refused for
+    // being illegal rather than for overrunning, so a reader that only compared against the
+    // buffer would still allocate against a wire-supplied loop bound on a longer message.
+    const decoded = decodeMessage(returnFrame('as', [...le32(DBUS_MAX_ARRAY_BYTES + 1)]));
+    expect(decoded.kind).toBe('malformed');
+    if (decoded.kind !== 'malformed') return;
+    expect(decoded.problem).toContain(String(DBUS_MAX_ARRAY_BYTES));
+  });
+
+  test('⚠ elements that overrun the declared length are malformed, not returned as data', () => {
+    // A count that does not divide into whole elements means the element type is not what
+    // the signature said. Returning what was read would be a silent misparse — the exact
+    // failure this module is narrow to avoid.
+    const body = stringArrayBytes(['X=1']);
+    const understated = [...le32(2), ...body.slice(4)];
+    const decoded = decodeMessage(returnFrame('as', understated));
+    expect(decoded.kind).toBe('malformed');
+    if (decoded.kind !== 'malformed') return;
+    expect(decoded.problem).toContain('overran');
+  });
+
+  /*
+   * ⚠⚠ 12b-RECONCILE — **the ⚠ was DROPPED from this test, deliberately, and the harness's own
+   * rule is why**: *"the second hypothesis is that the property has no plausible wrong
+   * implementation, in which case drop the ⚠ rather than the standard."* These three signatures
+   * are refused by TWO independent guards (`alignmentOf`'s `default` and `Reader.basic`'s), and
+   * the body is too short for either container to complete under any of them, so no one-line
+   * change makes them decode — three were tried and measured (`alignmentOf`'s default → `1`,
+   * `value`'s `length === 2` → `>= 2`, `completeTypes` swallowing the rest of the signature), and
+   * each reddened a different test or none.
+   *
+   * ⚠ It HAD been scoring covered, and by an accident worth recording: its only reddening
+   * mutation was `05-W3` (*a VARIANT decodes to its own type name*), which corrupts the SIGNATURE
+   * **header field** and has nothing to do with the widening — the body then decoded as whatever
+   * the wrong signature said, and this test's `malformed` expectation failed for a reason it does
+   * not name. {@link Reader.region}'s rule 3 refuses those bodies now, so the accident is gone
+   * and what was left is a mark with no mutation of its own. **The ledger is a necessary
+   * condition, not a sufficient one**, and this is what the difference looks like.
+   */
+  test.each([
+    ['a(ii)', 'an array of structs'],
+    ['a{sv}', 'an array of dict entries'],
+    ['aas', 'an array of arrays'],
+  ])('the widening is ONE level deep — %s (%s) is still malformed', (signature) => {
+    const decoded = decodeMessage(returnFrame(signature, [...le32(0), 0, 0, 0, 0]));
+    expect(decoded.kind).toBe('malformed');
+  });
+
+  test('⚠ a signature ending in a bare `a` is malformed rather than silently dropped', () => {
+    const decoded = decodeMessage(returnFrame('sa', [...le32(0), 0]));
+    expect(decoded.kind).toBe('malformed');
+  });
+
+  test('⚠ an 8-ALIGNED element is padded to after the length — the alignment belongs to the array', () => {
+    // `as` and `ab` are both 4-aligned, so the padding this asserts is INVISIBLE on every
+    // type this dashboard actually reads: dropping `align(alignmentOf(...))` altogether would
+    // still decode `Environment` perfectly. A `t` (uint64) is the shortest signature that can
+    // tell the difference — its element starts 4 bytes after the length, not 0.
+    const body = [...le32(8), 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
+    const decoded = decodeMessage(returnFrame('at', body));
+    expect(decoded.kind).toBe('message');
+    if (decoded.kind !== 'message') return;
+    expect(decoded.message.body).toEqual([[1n]]);
+  });
+
+  test('⚠ an array of BOOLEANs is 4-aligned, because a D-Bus boolean is a uint32', () => {
+    // The alignment that looks wrong and is right. `ab` is not a type this dashboard reads;
+    // it is here because `alignmentOf` is a table, and a table with one entry wrong is a
+    // silent misparse the moment anything asks for that type.
+    const decoded = decodeMessage(returnFrame('ab', [...le32(8), ...le32(1), ...le32(0)]));
+    expect(decoded.kind).toBe('message');
+    if (decoded.kind !== 'message') return;
+    expect(decoded.message.body).toEqual([[true, false]]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ⚠⚠ 12b-TEST — the widening, fuzzed. **Nothing may throw, nothing may read past the
+// frame, and `malformed` vs `incomplete` must be right in every NEIGHBOURING case.**
+//
+// The array reader was given its own "past the end of the message" guard in 12b and the
+// reasoning it was given is general: `decodeMessage` has already established that the whole
+// message is present, so a length field pointing beyond it is a lie, not a short read. The
+// tests below are what happens when that reasoning is applied to the paths 12b did not
+// touch — and the first one FAILED when it was written.
+// ---------------------------------------------------------------------------
+
+describe('⚠⚠ 12b-TEST — a length inside a complete message is MALFORMED, never `incomplete`', () => {
+  test('⚠ a body STRING claiming more bytes than the message holds is malformed', () => {
+    // ⚠ MEASURED FAILING, 2026-09-17. This returned `incomplete`, and `Conversation.message()`
+    // answers `incomplete` by pulling bytes until the deadline: one `dbus` entry saying
+    // "timed out" about a peer that answered in a millisecond, which is verbatim the failure
+    // `DBUS_MAX_MESSAGE_BYTES` and `Reader.array`'s own guard exist to prevent. The array had
+    // a guard; the string beside it did not, and the module doc claimed it did.
+    const decoded = decodeMessage(returnFrame('s', [...le32(4096), 0x61, 0]));
+    expect(decoded.kind).toBe('malformed');
+  });
+
+  test('⚠ a body SIGNATURE claiming more bytes than the message holds is malformed', () => {
+    // `Reader.signature`'s length is one byte, so it cannot lie by four billion — but 200
+    // bytes in a 3-byte body is the same lie at a smaller scale and had the same answer.
+    expect(decodeMessage(returnFrame('g', [200, 0x61, 0])).kind).toBe('malformed');
+  });
+
+  test('⚠ a body value whose ALIGNMENT runs off the end of the message is malformed', () => {
+    // No length field lies here: `t` is 8-aligned, and the padding needed to reach that
+    // boundary is itself past the declared body. The guard has to be about the FRAME, not
+    // about any one length field, or each new reader needs its own copy of it.
+    expect(decodeMessage(returnFrame('yt', [0x01, 0x02])).kind).toBe('malformed');
+  });
+
+  test('⚠ an element STRING inside an array may not run past the array either', () => {
+    // One layer further in than the declared-length guard: the array's own count fits the
+    // message, and the string inside it does not.
+    const decoded = decodeMessage(returnFrame('as', [...le32(8), ...le32(4096), 0x61, 0, 0, 0]));
+    expect(decoded.kind).toBe('malformed');
+  });
+
+  test('⚠ a truncated frame is still `incomplete` — the two kinds did NOT collapse', () => {
+    // The other direction, and the one the fix above could have broken: every prefix of a
+    // real captured frame must still say "read more bytes". `05-W5` is the mutation for it.
+    const frame = bytes(CAPTURED_DBUS_ENVIRONMENT_REPLY);
+    for (let cut = 0; cut < frame.length; cut += 1) {
+      expect(decodeMessage(frame.subarray(0, cut)).kind, `truncated to ${String(cut)} bytes`).toBe('incomplete');
+    }
+    expect(decodeMessage(frame).kind).toBe('message');
+  });
+
+  test('⚠ a legal message longer than the buffer is `incomplete`, however large it claims to be', () => {
+    // The distinction survives at the boundary: a declared length inside D-Bus's own ceiling
+    // is a message we have not finished receiving, and only a length ABOVE the ceiling — or
+    // one inside a message we HAVE finished receiving — is a lie.
+    const header = new Uint8Array(DBUS_HEADER_BYTES);
+    header[0] = DBUS_LITTLE_ENDIAN;
+    header[1] = DBUS_MESSAGE_TYPE.methodReturn;
+    header[3] = DBUS_PROTOCOL_VERSION;
+    new DataView(header.buffer).setUint32(4, 4096, true);
+    expect(decodeMessage(header).kind).toBe('incomplete');
+  });
+});
+
+describe('⚠⚠ 12b-TEST — nothing is read past the frame', () => {
+  const twoMessages = (): Uint8Array => {
+    const first = returnFrame('s', [...le32(3), 0x6f, 0x6e, 0x65, 0]); // "one"
+    const second = returnFrame('s', [...le32(3), 0x74, 0x77, 0x6f, 0]); // "two"
+    return Uint8Array.from([...first, ...second]);
+  };
+
+  test('⚠ two complete messages in one buffer frame independently, by `byteLength`', () => {
+    // The positive half, and the reason the negative one below is not vacuous: this is the
+    // arrangement a stream really produces (the captured `Hello` reply is two messages in one
+    // 262-byte read), so a buffer holding a second message is the normal case, not a contrived
+    // one.
+    const buffer = twoMessages();
+    const first = decodeMessage(buffer);
+    expect(first.kind).toBe('message');
+    if (first.kind !== 'message') return;
+    expect(first.message.body).toEqual(['one']);
+    const second = decodeMessage(buffer.subarray(first.message.byteLength));
+    expect(second.kind === 'message' ? second.message.body : null).toEqual(['two']);
+  });
+
+  test('⚠ a HEADER FIELD that reaches beyond its own message cannot read the NEXT one', () => {
+    // ⚠ MEASURED, 2026-09-17: the header-field reader was built on the whole BUFFER while the
+    // body reader was built on `subarray(0, byteLength)`. `REPLY_SERIAL`'s variant is retyped
+    // from `u` to `s` and its four bytes become a 20-byte string length — 20 bytes that end
+    // inside the SECOND message. Measured against a reader built on the buffer, this decoded
+    // as a **`message`**: the field ran off the end of message one, the cursor landed past the
+    // field array, `SIGNATURE` was therefore never read, and a well-formed empty-bodied reply
+    // came back from bytes that are not message one's at all.
+    const buffer = twoMessages();
+    buffer[18] = 0x73; // the REPLY_SERIAL field's variant signature: `u` -> `s`
+    buffer[20] = 20; // …so its uint32 is now a STRING length, reaching into message two
+    expect(decodeMessage(buffer).kind).toBe('malformed');
+
+    // …and not merely because 20 bytes of the next message failed to parse: the same
+    // corruption with NO second message behind it reaches the same answer, so the test is
+    // about the FRAME rather than about what happens to follow it.
+    const alone = Uint8Array.from(twoMessages().subarray(0, 40));
+    alone[18] = 0x73;
+    alone[20] = 20;
+    expect(decodeMessage(alone).kind).toBe('malformed');
+  });
+
+  test('⚠ a BODY value that reaches beyond its own message cannot read the NEXT one either', () => {
+    // The same fault on the other reader, and the same measurement: with the body reader
+    // built on the buffer, message one's `s` body came back as its own three characters
+    // followed by the LITERAL BYTES OF MESSAGE TWO'S HEADER — the endianness byte, the type,
+    // the lengths — returned as a decoded string with `kind: 'message'`. A caller cannot tell
+    // that from data.
+    const buffer = twoMessages();
+    buffer[32] = 20; // the body STRING's length: 3 -> 20, which ends inside message two
+    expect(decodeMessage(buffer).kind).toBe('malformed');
+    const alone = Uint8Array.from(twoMessages().subarray(0, 40));
+    alone[32] = 20;
+    expect(decodeMessage(alone).kind).toBe('malformed');
+  });
+});
+
+describe('⚠⚠ 12b-RECONCILE — a declared length is a REGION, and its values must account for it', () => {
+  /*
+   * ⚠⚠ The third layer of one bug, and the one nothing stated. 12b's build gave `Reader.array`
+   * the rule; 12b's test phase bounded both readers at the frame; neither asked whether the
+   * frame's own number was accounted for. `decodeMessage` returns `byteLength` and
+   * `Conversation.message()` advances the stream by it, so a message whose values stop short of
+   * its declared length DISCARDS the bytes in between — which in a stream are the next message.
+   *
+   * These tests are the measurements from `12b-adversarial.md` §1, run against the fix.
+   */
+
+  test('⚠⚠ a message whose body stops SHORT of its declared length is refused — it would eat the next one', () => {
+    // The construction from the adversarial's §1(a): two legal `METHOD_RETURN`s, the first's
+    // `bodyLength` inflated by exactly the second's length. Before the fix this decoded as a
+    // well-formed message — right serial, correct body value — with `byteLength` covering BOTH,
+    // and message two was gone with no error anywhere.
+    const first = returnFrame('s', [...le32(3), 0x6f, 0x6e, 0x65, 0]); // "one"
+    const second = returnFrame('s', [...le32(3), 0x74, 0x77, 0x6f, 0]); // "two"
+    const honest = Uint8Array.from([...first, ...second]);
+    expect(decodeMessage(honest).kind).toBe('message');
+
+    const lying = Uint8Array.from(honest);
+    const view = new DataView(lying.buffer, lying.byteOffset, lying.byteLength);
+    view.setUint32(4, view.getUint32(4, true) + second.length, true);
+    const decoded = decodeMessage(lying);
+    expect(decoded.kind).toBe('malformed');
+    if (decoded.kind !== 'malformed') return;
+    expect(decoded.problem).toContain('account for');
+  });
+
+  test('⚠⚠ ONE flipped byte in the REAL captured `GetUnit` reply cannot inflate its `byteLength`', () => {
+    // ⚠ MEASURED, 2026-09-17, on the frame this box's own system bus sent: byte 4 is the low
+    // byte of `bodyLength`, and `0x7f` there returned `kind: 'message'` with the right serial,
+    // the right object path and `byteLength: 191` instead of 96. End to end that was
+    // `unitState: null` and "timed out after 300 ms" about a bus that answered in 2 ms.
+    const honest = bytes(CAPTURED_DBUS_GET_UNIT_REPLY);
+    const decodedHonest = decodeMessage(honest);
+    expect(decodedHonest.kind === 'message' ? decodedHonest.message.byteLength : null).toBe(honest.length);
+
+    // Padded with a second copy of the frame, because a declared length nobody has the bytes
+    // for is `incomplete` — honestly so. The lie only becomes reachable once the bytes arrive,
+    // which in a stream is the next reply.
+    const stream = Uint8Array.from([...honest, ...honest]);
+    stream[4] = 0x7f;
+    const decoded = decodeMessage(stream);
+    expect(decoded.kind).toBe('malformed');
+    if (decoded.kind !== 'malformed') return;
+    expect(decoded.problem).toContain('message body');
+  });
+
+  test('⚠ a `bodyLength` with no SIGNATURE to read it is a self-contradiction, not an empty body', () => {
+    // The one lie a header can prove on its own, and rule 3 is what proves it: zero values
+    // cannot account for a declared body. The body region is therefore entered even when the
+    // signature is empty — before, an empty signature skipped the body reader altogether and
+    // whatever `bodyLength` claimed was simply believed and skipped over.
+    // Built by hand rather than from `returnFrame`, because the point is a message with NO
+    // `SIGNATURE` header field at all: REPLY_SERIAL alone, eight bytes exactly, and a body
+    // length that claims eight bytes nothing will ever read.
+    const fields = [DBUS_HEADER_FIELD.replySerial, 1, 0x75, 0, ...le32(7)];
+    const frame = Uint8Array.from([
+      DBUS_LITTLE_ENDIAN, DBUS_MESSAGE_TYPE.methodReturn, 0, DBUS_PROTOCOL_VERSION,
+      ...le32(8), ...le32(11), ...le32(fields.length),
+      ...fields,
+      ...le32(3), 0x6f, 0x6e, 0x65, 0,
+    ]);
+    const decoded = decodeMessage(frame);
+    expect(decoded.kind).toBe('malformed');
+    if (decoded.kind !== 'malformed') return;
+    expect(decoded.problem).toContain('message body');
+  });
+
+  test('⚠⚠ a HEADER FIELD may not read out of the BODY — the field array is the region that declared it', () => {
+    // 12b-A2. The frame is the wrong boundary for a header field even though it is the tighter
+    // one: with the reads bounded only by the frame, an `ERROR_NAME` whose declared length is a
+    // lie decoded out of the BODY's bytes, the loop exited because the cursor was past
+    // `fieldsEnd`, and `kind: 'message'` came back carrying it. `errorName` is compared against
+    // `NoSuchUnit` and interpolated into `errors[]` sentences that render on two panels, and
+    // for `Environment` the body is the unit's own environment strings.
+    const frameWith = (declaredNameLength: number): Uint8Array => {
+      const fields: number[] = [4, 1, 0x73, 0, ...le32(declaredNameLength), 0x78, 0x2e, 0x79, 0]; // ERROR_NAME "x.y"
+      while (fields.length % 8 !== 0) fields.push(0);
+      fields.push(8, 1, 0x67, 0, 1, 0x73, 0); // SIGNATURE `s`
+      const body = [...le32(17), ...new TextEncoder().encode('BODY-SECRET-VALUE'), 0];
+      const out: number[] = [
+        DBUS_LITTLE_ENDIAN, DBUS_MESSAGE_TYPE.error, 0, DBUS_PROTOCOL_VERSION,
+        ...le32(body.length), ...le32(11), ...le32(fields.length),
+      ];
+      out.push(...fields);
+      while (out.length % 8 !== 0) out.push(0);
+      out.push(...body);
+      return Uint8Array.from(out);
+    };
+
+    const honest = decodeMessage(frameWith(3));
+    expect(honest.kind).toBe('message');
+    if (honest.kind !== 'message') return;
+    expect(honest.message.errorName).toBe('x.y');
+    expect(honest.message.body).toEqual(['BODY-SECRET-VALUE']);
+
+    // 16 and 24 both decoded — as `x.y` followed by NULs and then the body's own uint32 length
+    // prefix and its first characters. Both are inside the frame; neither is inside the field
+    // array that declared them.
+    for (const lie of [16, 24]) {
+      const decoded = decodeMessage(frameWith(lie));
+      expect(decoded.kind, `ERROR_NAME declaring ${String(lie)} bytes`).toBe('malformed');
+      if (decoded.kind !== 'malformed') continue;
+      expect(decoded.problem).toContain('header field array');
+      expect(decoded.problem).not.toContain('SECRET');
+      // ⚠ **`overran`, not `account for`** — the two diagnoses are the region's two rules, and
+      // which one fires is the difference between refusing the READ and noticing afterwards
+      // that the cursor ended somewhere impossible. Bounded only by the frame, the body's
+      // bytes are decoded into `errorName` and only the cursor's final position gives it away;
+      // bounded by the field array, the read never happens.
+      expect(decoded.problem).toContain('overran');
+    }
+  });
+
+  test('⚠ a STRING whose NUL terminator falls outside the region is refused BEFORE the read, not after', () => {
+    // `Reader.string`/`Reader.signature` ask for `length + 1` — the `+ 1` is what checks the
+    // terminator is inside the region rather than one byte past its end. 12b's adversarial
+    // reverted both to `need(length)` with the whole suite green (`R40`/`R41`), and the
+    // exhaustive corruption sweep structurally cannot reach them: every truncation it builds is
+    // SHORTER than `byteLength`, so it is answered `incomplete` before a reader is entered.
+    //
+    // ⚠ The revert is no longer a silent misparse — rule 3 catches the cursor landing one past
+    // the region — so what this pins is WHICH rule refuses it, which is the sentence a person
+    // reads in an `errors[]` entry. Refusing the read is "overran"; noticing afterwards is "the
+    // message body declared N bytes and its values account for N+1".
+    const decoded = decodeMessage(returnFrame('s', [...le32(3), 0x6f, 0x6e, 0x65]));
+    expect(decoded.kind).toBe('malformed');
+    if (decoded.kind !== 'malformed') return;
+    expect(decoded.problem).toContain('overran');
+  });
+
+  test('⚠ a SIGNATURE whose NUL terminator falls outside the region is refused the same way', () => {
+    // `Reader.signature`'s length is one byte rather than four, which is why it needs its own
+    // row here: the same `+ 1`, the same revert (`R41`), the same refusal.
+    const decoded = decodeMessage(returnFrame('g', [1, 0x73]));
+    expect(decoded.kind).toBe('malformed');
+    if (decoded.kind !== 'malformed') return;
+    expect(decoded.problem).toContain('overran');
+  });
+
+  test.each([
+    ['y', 1], ['g', 1], ['v', 1],
+    ['n', 2], ['q', 2],
+    ['b', 4], ['i', 4], ['u', 4], ['h', 4], ['s', 4], ['o', 4],
+    ['x', 8], ['t', 8], ['d', 8],
+  ])('⚠ the D-Bus alignment table is the specification’s — `%s` is %i-aligned', (sig, boundary) => {
+    // ⚠ A TABLE, asserted as a table, because its rows cannot be observed one at a time.
+    // `alignmentOf` is reached from exactly one place — the padding after an array's length —
+    // and the cursor there is always 4-aligned already, so `v`'s 1 and `s`'s 4 produce
+    // identical bytes for every frame this codec can be handed. 12b's adversarial changed
+    // `case 'v'` from 1 to 4 — a specification violation — and all 3634 tests stayed green
+    // (`R33`). The two rows that DO show through a decode have their own frames above (`ab`
+    // is 4-aligned because a D-Bus boolean is a uint32; `at` is 8-aligned).
+    expect(alignmentOf(sig)).toBe(boundary);
+  });
+});
+
+describe('⚠⚠ 12b-TEST — every single-byte corruption of the captured `Environment` frame', () => {
+  /*
+   * ⚠ EXHAUSTIVE AND DETERMINISTIC, not random. Entropy in a test makes a failure that
+   * cannot be reproduced from the file alone, and this project has a rule about clocks and
+   * random sources for exactly that reason. Every byte of the real frame is replaced by each
+   * of five values chosen to hit the codec's edges — `0x00`, `0x01`, `0x7f`, `0xff` and the
+   * ASCII `a` that is also D-Bus's array type character — which is 5 × the frame length
+   * decodes, all of them of a message that IS entirely present.
+   *
+   * Two properties, and the second is the one 12b's array guard is about:
+   *
+   *  1. `decodeMessage` is TOTAL. It never throws, whatever the bytes say.
+   *  2. It never answers `incomplete` about a buffer that already holds every byte the
+   *     message's own header claimed — that answer means "wait", and waiting cannot help.
+   */
+  const CORRUPTIONS = [0x00, 0x01, 0x7f, 0xff, 0x61] as const;
+
+  test.each([
+    ['instance 0', CAPTURED_DBUS_ENVIRONMENT_REPLY],
+    ['instance 1', CAPTURED_DBUS_ENVIRONMENT_REPLY_INSTANCE_1],
+    ['the EMPTY environment', CAPTURED_DBUS_EMPTY_ENVIRONMENT_REPLY],
+  ])('⚠ every one-byte corruption of the %s frame is total, and never asks to wait', (_name, hex) => {
+    const original = bytes(hex);
+    let decodes = 0;
+    for (let at = 0; at < original.length; at += 1) {
+      for (const value of CORRUPTIONS) {
+        if (original[at] === value) continue;
+        const frame = Uint8Array.from(original);
+        frame[at] = value;
+        const decoded = decodeMessage(frame);
+        decodes += 1;
+        expect(['incomplete', 'malformed', 'message'], `byte ${String(at)} = ${String(value)}`).toContain(
+          decoded.kind,
+        );
+        if (decoded.kind !== 'incomplete') continue;
+        // `incomplete` is only honest while the buffer really is short of what the header
+        // declared. Recomputing that here rather than trusting the decoder is the point.
+        const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
+        const le = frame[0] === DBUS_LITTLE_ENDIAN;
+        const fields = view.getUint32(12, le);
+        const declared = Math.ceil((DBUS_HEADER_BYTES + fields) / 8) * 8 + view.getUint32(4, le);
+        expect(declared, `byte ${String(at)} = ${String(value)} said "read more" about a whole message`).toBeGreaterThan(
+          frame.length,
+        );
+      }
+    }
+    expect(decodes).toBeGreaterThan(300);
+
+    /*
+     * ⚠⚠ 12b-RECONCILE — **THE SECOND ARM, and it is the one that reaches the finding.** Every
+     * corruption above is decoded again with an honest COPY of the frame behind it, which is the
+     * arrangement a stream really produces: the captured `Hello` reply is two messages in one
+     * 262-byte read. The first arm cannot see an inflated length at all — the bytes it would
+     * claim do not exist, so `decodeMessage` answers `incomplete`, honestly, and the loop moves
+     * on. With a second message behind it the lie becomes reachable, and 12b's adversarial had
+     * to EXCLUDE 60 such corruptions from its differential sweep for exactly that reason.
+     *
+     * The property is the invariant stated from outside: **framing must not damage the next
+     * message.** If a corrupted frame still decodes, advancing by the `byteLength` it reports —
+     * which is precisely what `Conversation.message()` does — must leave the copy behind it
+     * intact. Before the region invariant, one flipped byte at offset 4 reported 191 bytes for a
+     * 96-byte reply and the 95 bytes it swallowed were the next reply's.
+     */
+    let framed = 0;
+    for (let at = 0; at < original.length; at += 1) {
+      for (const value of CORRUPTIONS) {
+        if (original[at] === value) continue;
+        const stream = new Uint8Array(original.length * 2);
+        stream.set(original);
+        stream.set(original, original.length);
+        stream[at] = value;
+        const decoded = decodeMessage(stream);
+        framed += 1;
+        expect(['incomplete', 'malformed', 'message'], `byte ${String(at)} = ${String(value)}, padded`).toContain(
+          decoded.kind,
+        );
+        if (decoded.kind !== 'message') continue;
+        const rest = decodeMessage(stream.subarray(decoded.message.byteLength));
+        expect(
+          rest.kind,
+          `byte ${String(at)} = ${String(value)}: advancing by the reported byteLength ate the next message`,
+        ).toBe('message');
+      }
+    }
+    expect(framed).toBe(decodes);
+  });
+});
+
+describe('⚠⚠ 12b-TEST — where the widening really stops, and what it costs', () => {
+  test('⚠ an empty array whose element PADDING is missing is malformed, not an empty list', () => {
+    // The empty-array case at its sharpest. `at`'s element is 8-aligned, so four bytes of
+    // padding must follow the length even though no element follows the padding; a frame that
+    // ends at the length field has not sent them. `as` — the only array this dashboard reads —
+    // cannot show this, because a 4-aligned element needs no padding after a 4-byte length.
+    expect(decodeMessage(returnFrame('at', [...le32(0)])).kind).toBe('malformed');
+    expect(decodeMessage(returnFrame('at', [...le32(0), 0, 0, 0, 0])).kind).toBe('message');
+  });
+
+  test('⚠ `a` followed by a character that is not a type at all is malformed', () => {
+    // `alignmentOf`'s `default`, which is a different branch from `Reader.basic`'s: the
+    // element type is rejected before a single element byte is read.
+    expect(decodeMessage(returnFrame('az', [...le32(0)])).kind).toBe('malformed');
+  });
+
+  test('⚠⚠ `av` DECODES, and an array of arrays is therefore reachable — through a VARIANT', () => {
+    // ⚠ The module doc says the widening is `a` plus "ONE basic type", and `aas` is refused.
+    // Both are true and neither is the whole boundary: `v` is a CONTAINER that `Reader.basic`
+    // handles, so `av` is accepted, and each variant inside carries its own signature — which
+    // may be `as`. That is an array of arrays by another name, and it is SAFE for the reason
+    // `aas` is not: a variant states its own type on the wire, so nothing is guessed and the
+    // reader cannot desynchronise. Pinned here so that a later reader meeting `av` does not
+    // "fix" it into a throw, and so the doc's claim is not mistaken for the code's.
+    const inner = [2, 0x61, 0x73, 0, ...le32(0)]; // a variant holding an empty `as`
+    const decoded = decodeMessage(returnFrame('av', [...le32(inner.length), ...inner]));
+    expect(decoded.kind).toBe('message');
+    if (decoded.kind !== 'message') return;
+    expect(decoded.message.body).toEqual([[[]]]);
+    // …and the form that WOULD have to be guessed is still refused.
+    expect(decodeMessage(returnFrame('aas', [...le32(0)])).kind).toBe('malformed');
+  });
+
+  test('⚠ a VARIANT nested thousands deep is refused rather than thrown', () => {
+    // `Reader.basic('v')` recurses, and a signature costs three bytes per level, so a legal
+    // 2^27-byte message can nest deeper than any JavaScript stack. The requirement is not that
+    // it decode — it is that `decodeMessage` stay TOTAL, because `Conversation.message()`
+    // turns a thrown error into the end of the whole conversation and every unit's
+    // `ActiveState` goes blank rather than one reply failing.
+    const body: number[] = [];
+    for (let i = 0; i < 20_000; i += 1) body.push(1, 0x76, 0);
+    body.push(1, 0x79, 0, 0x2a);
+    expect(() => decodeMessage(returnFrame('v', body))).not.toThrow();
+    expect(decodeMessage(returnFrame('v', body)).kind).toBe('malformed');
+  });
+
+  test('⚠ a shallow nest of VARIANTs decodes to the value at the bottom', () => {
+    // The positive companion: the refusal above must be the DEPTH, not variants-in-variants
+    // being broken. Three levels, ending in a `y`.
+    const decoded = decodeMessage(returnFrame('v', [1, 0x76, 0, 1, 0x76, 0, 1, 0x79, 0, 0x2a]));
+    expect(decoded.kind).toBe('message');
+    if (decoded.kind !== 'message') return;
+    expect(decoded.message.body).toEqual([42]);
   });
 });

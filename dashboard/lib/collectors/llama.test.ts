@@ -18,6 +18,7 @@ import {
   parseInstanceIndex,
   parseLlamaEnv,
   parseModelsBody,
+  parseVisibleDevices,
 } from './llama';
 import {
   CAPTURED_LLAMA_ENV_0,
@@ -92,6 +93,64 @@ describe('instance discovery — §3.4’s "never hard-coded"', () => {
     ['1 .env', null],
     ['1.0.env', null],
   ])('parseInstanceIndex(%j) is %j', (filename, expected) => {
+    expect(parseInstanceIndex(filename)).toBe(expected);
+  });
+
+  /*
+   * ⚠⚠ 12b-TEST — **§7.9: what discovery accepts and rejects TODAY, established rather than
+   * argued.** `serving-mode.sh` writes `/etc/llama-server/split.env` and installs
+   * `llama-split.service`, so the one arrangement §6.2's inverted join was built FOR cannot
+   * be discovered on this box at all. The tests below do not change that — the shape is an
+   * owner's ruling (§3.4 would have to say how a non-numeric instance is discovered and what
+   * its `instance` identity is, and §6.4 fixes condition subjects as bare integers). They
+   * pin the facts the ruling needs under it, so the next reader does not have to re-derive
+   * them from two files and a shell script.
+   *
+   * Confirmed read-only on the live box 2026-09-17: `/etc/llama-server/` holds `0.env` and
+   * `1.env` and nothing else, so discovery is at its accepting case today.
+   */
+  test('⚠ §7.9 — `split.env`, the file `serving-mode.sh` writes, is REJECTED and REPORTED', () => {
+    // Not silently ignored: it ends in `.env` and sits in the directory §3.4 says holds
+    // instances, so it is a claim about an instance that could not be read — which is the
+    // `llama-env` problem below. And not accepted either: the split process is therefore
+    // invisible to the dashboard, which is the gap §7.9 records.
+    expect(parseInstanceIndex('split.env')).toBeNull();
+    const found = discoverInstances(['0.env', '1.env', 'split.env']);
+    // ⚠ And what the panel therefore shows in split mode: the per-card env files are not
+    // deleted by a mode switch, so `serving[]` carries instances 0 and 1 — honest about them
+    // — while the process actually serving the box appears nowhere at all.
+    expect(found.value).toEqual([0, 1]);
+    expect(found.problems).toHaveLength(1);
+    expect(found.problems[0]).toContain('split.env');
+  });
+
+  test.each([
+    ['0.env', 0],
+    ['7.env', 7],
+    ['123.env', 123],
+    ['split.env', null],
+    ['SPLIT.env', null],
+    ['split.ENV', null],
+    ['llama-split.env', null],
+    ['0-split.env', null],
+    ['split0.env', null],
+    ['0.split.env', null],
+  ])('§7.9 — discovery accepts a BARE non-negative integer stem and nothing else: %j -> %j', (
+    filename,
+    expected,
+  ) => {
+    // The whole acceptance rule in one table, for the owner's ruling to read. Everything §3.4
+    // rejects is rejected for the same reason `01.env` is (below): §6.4 fixes the condition
+    // subject as a bare integer, and a second spelling would either collide with an existing
+    // subject or produce one §6.4 has no form for. `llama-split.service` is neither
+    // `unit:llama-server@<i>.service` nor `health:<i>`, which is the other half of what a
+    // ruling has to settle.
+    //
+    // ⚠ **Deliberately NOT ⚠-marked, and the ledger is why.** Step 5's red-test ledger found
+    // it inert on its first run and the harness's own rule says the answer is to drop the
+    // mark rather than invent a mutation for it: there is no plausible wrong implementation
+    // that accepts `split` as an integer stem, so this table restates the boundary rather
+    // than guarding it. The guard is `05-L1` plus the test above, both of which bite.
     expect(parseInstanceIndex(filename)).toBe(expected);
   });
 
@@ -290,5 +349,107 @@ describe('/v1/models', () => {
 
   test('an empty body does not throw', () => {
     expect(parseModelsBody('').value).toBeNull();
+  });
+});
+
+describe('⚠⚠ 12b — §3.4’s `gpus`: a unit’s Environment= directives → the cards it serves', () => {
+  test('⚠ the box as it stands: the template’s %i, ALREADY EXPANDED by systemd', () => {
+    // Read from the live bus 2026-09-17: `llama-server@0.service` answers
+    // `CUDA_VISIBLE_DEVICES=0` and `@1` answers `=1`. That the two differ is the whole
+    // point — this is the wire saying which card each instance serves, where before the
+    // dashboard assumed it from the index.
+    expect(parseVisibleDevices(['CUDA_VISIBLE_DEVICES=0']).value).toEqual([0]);
+    expect(parseVisibleDevices(['CUDA_VISIBLE_DEVICES=1']).value).toEqual([1]);
+    expect(parseVisibleDevices(['CUDA_VISIBLE_DEVICES=0']).problems).toEqual([]);
+  });
+
+  test('⚠ the split unit: one process across both cards', () => {
+    // `SERVING-MODES.md` §2 — `llama-split.service` carries `CUDA_VISIBLE_DEVICES=0,1`.
+    const parsed = parseVisibleDevices(['CUDA_VISIBLE_DEVICES=0,1']);
+    expect(parsed.value).toEqual([0, 1]);
+    expect(parsed.problems).toEqual([]);
+  });
+
+  test('⚠ other Environment= entries are ignored, and only the key §3.4 names is read', () => {
+    const parsed = parseVisibleDevices(['LC_ALL=C', 'CUDA_VISIBLE_DEVICES=1', 'GGML_CUDA_NO_PINNED=1']);
+    expect(parsed.value).toEqual([1]);
+  });
+
+  test('⚠ the LAST assignment wins, which is what the running process actually sees', () => {
+    // systemd's own rule for repeated `Environment=` lines, and the same rule `parseLlamaEnv`
+    // applies to the env file. Taking the first would report a card the process cannot see.
+    expect(parseVisibleDevices(['CUDA_VISIBLE_DEVICES=0', 'CUDA_VISIBLE_DEVICES=1']).value).toEqual([1]);
+  });
+
+  test('⚠ an empty assignment is `[]` — a value, never null', () => {
+    // `CUDA_VISIBLE_DEVICES=` is how CUDA is told no device is visible. The unit exists and
+    // the property was read; the answer is "this instance serves no card". §3.1's `null` ≠
+    // `[]` discipline, one level down — collapsing it would report a failed read.
+    const parsed = parseVisibleDevices(['CUDA_VISIBLE_DEVICES=']);
+    expect(parsed.value).toEqual([]);
+    expect(parsed.value).not.toBeNull();
+    expect(parsed.problems).toEqual([]);
+  });
+
+  test('⚠ no assignment at all is `null` WITH a problem — an em dash always has an entry', () => {
+    // Not `[]`: a unit that never pins devices is not a unit that pins none of them. The
+    // problem is what `collectServing` turns into the `dbus` entry beside the em dash.
+    const parsed = parseVisibleDevices(['LC_ALL=C']);
+    expect(parsed.value).toBeNull();
+    expect(parsed.problems).toHaveLength(1);
+    expect(parsed.problems[0]).toContain('CUDA_VISIBLE_DEVICES');
+  });
+
+  test('⚠ an empty environment is `null` with a problem, not `[]`', () => {
+    // The shape `gpu-fan-control.service` really answers (captured). For a unit that is
+    // supposed to pin cards, "no such directive" is the same news as for any other unit.
+    expect(parseVisibleDevices([]).value).toBeNull();
+  });
+
+  test.each([
+    ['a CUDA UUID', 'GPU-3f2bd0e1-0000-0000-0000-000000000000'],
+    ['a MIG identifier', 'MIG-GPU-3f2b/1/0'],
+    ['a half-parseable list', '0,GPU-3f2b'],
+    ['a non-canonical index', '01'],
+    ['a signed index', '+1'],
+    ['a negative index', '-1'],
+    ['a fractional index', '0.5'],
+    ['an empty member', '0,,1'],
+  ])('⚠ the WHOLE list is null, never a partial one, for %s', (_name, value) => {
+    // Both UUID and MIG forms are legal for CUDA and neither is a card index this dashboard
+    // can join on. Returning the indices we DID understand would put a card under "served by
+    // instance N" on the strength of a list we admit we could not read — §3.4's `null` is
+    // exactly that state. `01`/`+1` follow `parseInstanceIndex`: two spellings of one card
+    // would be two answers to "which instance lists me".
+    const parsed = parseVisibleDevices([`CUDA_VISIBLE_DEVICES=${value}`]);
+    expect(parsed.value).toBeNull();
+    expect(parsed.problems).toHaveLength(1);
+  });
+
+  test('⚠ whitespace around an index is tolerated; the value itself still parses strictly', () => {
+    expect(parseVisibleDevices(['CUDA_VISIBLE_DEVICES= 0 , 1 ']).value).toEqual([0, 1]);
+  });
+
+  test('⚠ the list is sorted and de-duplicated, and a repeat is REPORTED rather than counted', () => {
+    // `1,0` and `0,1` are the same set of cards — the ordering only remaps device numbers
+    // inside the process, which nothing here renders or joins on. A repeat is not a card.
+    const reversed = parseVisibleDevices(['CUDA_VISIBLE_DEVICES=1,0']);
+    expect(reversed.value).toEqual([0, 1]);
+    expect(reversed.problems).toEqual([]);
+    const repeated = parseVisibleDevices(['CUDA_VISIBLE_DEVICES=1,1']);
+    expect(repeated.value).toEqual([1]);
+    expect(repeated.problems).toHaveLength(1);
+  });
+
+  test('⚠ an entry with no `=` at all, and one whose key is empty, are not assignments', () => {
+    expect(parseVisibleDevices(['CUDA_VISIBLE_DEVICES']).value).toBeNull();
+    expect(parseVisibleDevices(['=0']).value).toBeNull();
+  });
+
+  test('⚠ a key that merely CONTAINS the name is not the name', () => {
+    // `indexOf('CUDA_VISIBLE_DEVICES')` would match `MY_CUDA_VISIBLE_DEVICES_BACKUP=0,1`
+    // and hand a card list to an instance from a variable nothing reads.
+    expect(parseVisibleDevices(['MY_CUDA_VISIBLE_DEVICES_BACKUP=0,1']).value).toBeNull();
+    expect(parseVisibleDevices(['CUDA_VISIBLE_DEVICES_OLD=0,1']).value).toBeNull();
   });
 });

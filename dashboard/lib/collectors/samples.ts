@@ -1245,6 +1245,53 @@ export const CAPTURED_DBUS_GET_UNIT_REPLY =
   '6f000007017300040000003a312e33000000003b0000002f6f72672f667265656465736b746f702f73797374656d64312f756e69742f' +
   '6c6c616d615f32647365727665725f3430305f32657365727669636500';
 
+/**
+ * ⚠⚠ 12b — `Properties.Get(Service, Environment)` on **`llama-server@0.service`**, captured
+ * from this box's live system bus on **2026-09-17**, read-only (`GetUnit` then
+ * `Properties.Get`; never `LoadUnit`).
+ *
+ * A `VARIANT` holding `as`, holding one string: **`CUDA_VISIBLE_DEVICES=0`**. This is §3.4's
+ * `gpus` at its source, and it is the frame that proves the claim the whole inverted join
+ * rests on — the unit template's `%i` really has been expanded by systemd before the property
+ * is read, so instance 0 says card 0 *on the wire* rather than by our arithmetic.
+ *
+ * Reading the body from the hex, since every byte of it is load-bearing:
+ * `02 61 73 00` is the variant's signature (length 2, `as`, NUL); `1b000000` is the array's
+ * byte count, **27**; `16000000` is the string's length, 22; then the 22 characters and a NUL.
+ * 4 + 22 + 1 = 27, so the count is the array's bytes and not its element count — the exact
+ * confusion `Reader.array` is written against.
+ */
+export const CAPTURED_DBUS_ENVIRONMENT_REPLY =
+  '6c02010123000000c2bc00002d000000050175000300000006017300060000003a312e3530300000080167000176000007017300' +
+  '040000003a312e3300000000026173001b00000016000000435544415f56495349424c455f444556494345533d3000';
+
+/**
+ * ⚠ 12b — the same call on **`llama-server@1.service`**, same capture.
+ * `CUDA_VISIBLE_DEVICES=1`.
+ *
+ * Both instances are kept because a fixture whose two subjects are identical cannot
+ * discriminate between them (HANDOVER §0.6): with only instance 0's frame, a collector that
+ * asked about the wrong unit, or that handed every row the first answer it got, would score
+ * green on the one arrangement this box has ever run.
+ */
+export const CAPTURED_DBUS_ENVIRONMENT_REPLY_INSTANCE_1 =
+  '6c02010123000000f0bc00002d000000050175000300000006017300060000003a312e3530310000080167000176000007017300' +
+  '040000003a312e3300000000026173001b00000016000000435544415f56495349424c455f444556494345533d3100';
+
+/**
+ * ⚠ 12b — the same call on **`gpu-fan-control.service`**, same capture: a unit with no
+ * `Environment=` directive at all, whose property is therefore an **EMPTY `as`**.
+ *
+ * Body is eight bytes — `02 61 73 00` then `00 00 00 00` — and the four zeros are the array's
+ * length, reached only because the reader pads to the element alignment **after** the length
+ * even when there is nothing to read. It is the empty-container case no frame in this file
+ * previously held, and it is the shape `Reader.array` gets wrong if that padding is made
+ * conditional on there being an element.
+ */
+export const CAPTURED_DBUS_EMPTY_ENVIRONMENT_REPLY =
+  '6c0201010800000037bd00002d000000050175000300000006017300060000003a312e3530320000080167000176000007017300' +
+  '040000003a312e33000000000261730000000000';
+
 /** `Properties.Get(Unit, ActiveState)` → a `VARIANT` holding the string `active`. */
 export const CAPTURED_DBUS_ACTIVE_STATE_REPLY =
   '6c0201010f000000803b00002d000000050175000300000006017300060000003a312e3130320000080167000176000007017300' +

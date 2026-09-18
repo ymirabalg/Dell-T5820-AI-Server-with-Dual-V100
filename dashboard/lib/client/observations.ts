@@ -70,7 +70,14 @@ import {
   severityUnitState,
   severityVram,
 } from '../severity';
-import type { CoolingChannels, ErrorSource, Rpm, TelemetryError, TelemetrySnapshot } from '../types';
+import type {
+  CoolingChannels,
+  ErrorSource,
+  Rpm,
+  ServingInstance,
+  TelemetryError,
+  TelemetrySnapshot,
+} from '../types';
 import { FAN_SERVICE_UNIT, servingUnitName } from '../units';
 
 /**
@@ -352,6 +359,125 @@ export const errorsForPanel = (
   panel: Panel,
 ): readonly TelemetryError[] =>
   snapshot.errors.filter((error) => panelsForSource(error.source).includes(panel));
+
+// ---------------------------------------------------------------------------
+// ⚠⚠ §6.2's INVERTED GPU↔instance join (ruled 2026-09-15, built 12b)
+// ---------------------------------------------------------------------------
+
+/**
+ * What a GPU card can say about who serves it.
+ *
+ * ### Why the old join had to go, in one paragraph
+ *
+ * `gpu.index === serving.instance` was **not a fact about this system**. It is a coincidence
+ * of the one serving arrangement that has ever run here: `llama-server@.service` pins
+ * instance N to card N with `CUDA_VISIBLE_DEVICES=%i`, and **nothing on §4's wire ever said
+ * so** — §6.2 admitted it in its own words, *"a fact about the deployment that the dashboard
+ * cannot verify"*. A second arrangement does not break that join; it reveals there was never
+ * one. So §3.4's `gpus` carries the declaration and the question runs the other way: **a card
+ * asks which instance lists it.**
+ *
+ * ### The four answers, and why none of them is the others
+ *
+ * | variant | reached when | the card renders |
+ * |---|---|---|
+ * | `declared` | some instance's `gpus` contains this index | *served by instance N* when it lists this card alone, *served jointly with GPU M* when it lists more |
+ * | `indexed` | **no** instance in the snapshot carries the key | §3.4's fallback: *served by instance `index`*, byte-identical to what shipped before this file changed |
+ * | `unknown` | every list was consulted, none claims this card, and at least one is `null` | invariant 1 — an em dash. The `dbus` entry that blanked it is on the SERVING panel, beside the row it names |
+ * | `unserved` | every list was read and none of them names this card | not a gap: §6.5's *"absent from a collection that was read … the subject has left, and that is an answer"*, one level down |
+ *
+ * ⚠ **An em dash for `declared` would be a LIE** (§6.2 says so in as many words): the reading
+ * is not missing, it is different. That is the whole reason `unknown` and `unserved` are
+ * separate variants rather than one `null`.
+ *
+ * ⚠ **`unserved` is the case a mis-pinned instance produces**, and producing it visibly is the
+ * point of the inversion: an instance pinned to the wrong card now shows the WRONG CARD
+ * rather than being invisible.
+ */
+export type ServedBy =
+  | {
+      readonly kind: 'declared';
+      readonly instance: ServingInstance;
+      /** The OTHER cards this instance lists. `[]` when it serves this card alone. */
+      readonly alongside: readonly number[];
+    }
+  | { readonly kind: 'indexed'; readonly instance: ServingInstance | null }
+  | { readonly kind: 'unknown' }
+  | { readonly kind: 'unserved' };
+
+/**
+ * Whether an instance carries §3.4's `gpus` key at all — the ONE test that separates an older
+ * server from a current one reporting a failure.
+ *
+ * ⚠ `Object.hasOwn`, never `instance.gpus === undefined`. HANDOVER §0.5 records the same
+ * choice for `TelemetryError.instance`: the two differ the moment anything in this project
+ * spreads a row (`{ ...instance, gpus: undefined }` is a present key), and `wire.ts` omits the
+ * key rather than setting it for exactly that reason.
+ */
+const declaresGpus = (instance: ServingInstance): boolean => Object.hasOwn(instance, 'gpus');
+
+/**
+ * §6.2's join, inverted: which instance lists this card.
+ *
+ * ⚠ **The fallback is chosen by the SNAPSHOT, not by the row.** `indexed` is returned only
+ * when *no* instance carries the key, because "this server does not publish `gpus`" is a
+ * property of the server and a snapshot in which some rows declare and others do not is not
+ * something `collectServing` can produce — it fills the field for every row it emits. Deciding
+ * per row instead would let one unreadable unit silently re-enable the index join for its own
+ * card, which is the coincidence this whole change exists to stop relying on.
+ *
+ * ⚠ **`serving: null` is `indexed` with no instance**, which renders exactly as it does
+ * today: *served by instance N* with an em dash for the model. *"Which instances exist is
+ * unknown"* cannot be turned into a claim about cards, and the `llama-env` entry explaining it
+ * already sits on the SERVING panel — the same place this card's model has always borrowed its
+ * explanation from.
+ *
+ * ⚠ **The first claimant wins, in `serving[]`'s own ascending order.** Two instances listing
+ * one card is a real state during a bad mode switch (systemd's `Conflicts=` is what normally
+ * prevents it), and §3.4 says nothing about it; the card names the lower instance rather than
+ * inventing a rendering. Recorded as a spec silence in `12b-build.md`.
+ */
+export const servedBy = (
+  serving: readonly ServingInstance[] | null,
+  index: number,
+): ServedBy => {
+  if (serving === null) return { kind: 'indexed', instance: null };
+  if (!serving.some(declaresGpus)) {
+    return { kind: 'indexed', instance: serving.find((s) => s.instance === index) ?? null };
+  }
+  for (const instance of serving) {
+    const gpus = instance.gpus;
+    if (gpus != null && gpus.includes(index)) {
+      return { kind: 'declared', instance, alongside: gpus.filter((g) => g !== index) };
+    }
+  }
+  return serving.some((s) => declaresGpus(s) && s.gpus === null)
+    ? { kind: 'unknown' }
+    : { kind: 'unserved' };
+};
+
+/**
+ * §3.4's `gpus` as the SERVING row's own words — *which cards does this process span*.
+ *
+ * | `gpus` | returns |
+ * |---|---|
+ * | absent (`undefined`) | `null` — render nothing at all, so an older server's row is byte-identical to what it was |
+ * | `null` | `—` (invariant 1; the `dbus` entry is already on the row, carried by `errors[].instance`) |
+ * | `[]` | `no GPUs` — the unit declares `CUDA_VISIBLE_DEVICES=`, which is an answer |
+ * | `[0]` | `GPU 0` |
+ * | `[0, 1]` | `GPUs 0, 1` |
+ *
+ * ⚠ The singular/plural split is not decoration: `GPU 0` and `GPUs 0, 1` are the two
+ * arrangements this box can be in, and a row that read `GPUs 0` for the ordinary case would
+ * make the interesting one harder to spot at a glance across a room, which is §6.1's whole
+ * premise.
+ */
+export const servedCards = (gpus: readonly number[] | null | undefined): string | null => {
+  if (gpus === undefined) return null;
+  if (gpus === null) return EM_DASH;
+  if (gpus.length === 0) return 'no GPUs';
+  return gpus.length === 1 ? `GPU ${String(gpus[0])}` : `GPUs ${gpus.join(', ')}`;
+};
 
 /** §6.3's three-valued safety checks render `yes` / `no` / `—`, never `true` / `false`. */
 const yesNo = (value: boolean | null): string => (value === null ? EM_DASH : value ? 'yes' : 'no');

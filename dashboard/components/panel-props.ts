@@ -19,7 +19,10 @@
  * its own prop names still fails `tsc`.
  *
  * ⚠ **The full `RuntimeState`, deliberately, not a pre-sliced subset.** Computing a panel's
- * slice IS its body's domain logic — the GPU↔instance join (`gpu.index === serving.instance`),
+ * slice IS its body's domain logic — the GPU↔instance join (§6.2's INVERTED one since
+ * 2026-09-15: a card asks which instance lists it in that instance's own `gpus`, through
+ * `servedBy`; `gpu.index === serving.instance` survives only as §3.4's fallback for a server
+ * that sends no `gpus` at all),
  * COOLING's channel-5 reasoning, SAFETY's `errorsForPanel` join — and all of it belongs to 10b.
  * The panel-body rules that bind on top of this type (HANDOVER §6): read `state.displayed`,
  * never `conditionsFrom`; a cell's colour is `lib/severity.ts` on the current reading, never

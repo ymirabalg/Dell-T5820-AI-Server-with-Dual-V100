@@ -1,10 +1,15 @@
-# Handover — after **12a**. **The first production failure is closed AND VISIBLE: every takeover branch says why, the header stops claiming health over a blind collector, and `check` asks the only question that could have caught it. The loop's own lesson is smaller and sharper — a PASS that prints no number is a claim, and a number transcribed from a failed run is not evidence. 11b's closing state is kept at §0.0.3, step 11's at §0.0.2, step 10's at §0.0.1.**
+# Handover — after **12b**. **§6.2's GPU↔instance join is inverted: an instance declares the cards it serves and a card asks which instance lists it — and the dashboard still cannot state the mode on the real box, for two different reasons (§0.0). The loop's own lesson is the sharper half: a bounds check that is not stated as an invariant will be re-found as a symptom, once per phase. 12a's closing state is kept at §0.0.4, 11b's at §0.0.3, step 11's at §0.0.2, step 10's at §0.0.1.**
 
-**Rewritten 2026-09-15 by 12a's reconciliation.** §0.0 and the new **§0.15** are 12a's; §0.0.3,
-§0.13 and §0.14 are 11b's and step 11's, kept in full; §0.0.1 and §0.1–§0.12 are step 10's,
-unchanged and still the inheritance for anything that touches `lib/`, `app/` or `components/`.
-**12a is the first item driven by a real failure in production rather than by the queue**, and the
-first to change the two BROWSER measurement harnesses — which no ledger could see until this loop.
+**Rewritten 2026-09-17 by 12b's reconciliation.** §0.0 and the new **§0.16** are 12b's; §0.0.4 and
+§0.15 are 12a's, kept in full; §0.0.3, §0.13 and §0.14 are 11b's and step 11's; §0.0.1 and
+§0.1–§0.12 are step 10's, unchanged and still the inheritance for anything that touches `lib/`,
+`app/` or `components/`. **12b is the first item to change the D-Bus codec since step 5**, and the
+first whose governing finding was a rule that had been written down in one function and applied
+nowhere else.
+
+**Previously rewritten 2026-09-15 by 12a's reconciliation.** **12a is the first item driven by a
+real failure in production rather than by the queue**, and the first to change the two BROWSER
+measurement harnesses — which no ledger could see until that loop.
 
 **Previously rewritten 2026-09-11 by 11b's reconciliation**, on top of step 11's. **11b touched
 `lib/auth/` for the first time since step 7** — the credentials the deployment carries are now
@@ -21,7 +26,52 @@ whole inheritance: the next phase's agents get clean context and read it as fact
 
 ---
 
-## 0.0 ⚠⚠ READ THIS FIRST — **12a. Is the production failure of 2026-09-14 visible now? YES — and the measurement that says so had to be repaired before it could say anything.**
+## 0.0 ⚠⚠ READ THIS FIRST — **12b. Can the dashboard state the serving mode on the real box? NOT YET, and for two different reasons — and the loop's own lesson is sharper than either: a bounds check that is not stated as an invariant will be re-found as a symptom, once per phase.**
+
+**The question this loop has to answer in one line:** §6.2's GPU↔instance join was a coincidence of
+the one arrangement this box has ever run, `SERVING-MODES.md` adds a second, and 12b inverted the
+join so that **an instance declares the cards it serves and a card asks which instance lists it**.
+
+| | |
+|---|---|
+| **Can the box's page state the mode today?** | **No — the running container predates the field.** `LIVE_BOX_SERVING_WIRE` is the body it really sends and it has six keys and no `gpus`, so every card renders §3.4's fallback: *served by instance N*, by the index join, correct here **by coincidence**. It becomes the real answer on the first poll after a rebuild, and measurement 19 is a pixel record of that page |
+| **And after a redeploy?** | **For every arrangement except the one `serving-mode.sh` writes.** Per-GPU, cross-pinned and one-process-across-both (`CUDA_VISIBLE_DEVICES=0,1`) all render from the unit's own environment. **Split mode does not**: §7.9's `split.env` is rejected by discovery, so the panel would show instances 0 and 1 — both inactive — and the process actually serving the box would appear **nowhere**, with one `llama-env` problem naming `split.env`. That is `12b-Q2`, and its full cost is now enumerated (§9 of the reconciliation) |
+| ⚠⚠ **And the finding that governed the loop** | **One bug, three phases, three names for it.** The build gave `Reader.array` a rule in its own body; the test phase found two symptoms and bounded both readers at the frame; the adversarial found that **nothing bounded the frame** — `decodeMessage` never checked that what it read accounted for the `byteLength` it was handed. Measured on the real captured `GetUnit` reply: **one flipped byte at offset 4 yields a well-formed message declaring 191 bytes instead of 96**, and `Conversation.message()` then discards 95 bytes of the next reply — `active` in 2 ms becomes `null` and *"timed out after 300 ms"*. The fix is **one statement with three callers**, `Reader.region`, and **two checks were deleted** rather than a third added |
+| **What else was closed?** | A header field could decode `errorName` out of the BODY's bytes (same fix); a `SIGNAL` carrying our `REPLY_SERIAL` was accepted as a reply and produced a fabricated `active` **with `errors: []`**; **all five of the adversarial's one-line reverts**, three of them inside the codec the test phase had just fuzzed; the frozen live-box fixture's authenticity, which was asserted nowhere; and the two join gaps the cross-pinned fixture did not reach (`test-support.ts`, and the browser harness, which now has a cross-pinned **measurement 21**) |
+| **Is it measured?** | `pnpm verify` **exit 0 — 108 files, 3662 tests** (was 108 / 3634); the three harnesses **exit 0 — step 05 167 mutations / 164 ⚠, step 08 192 / 243, step 10 344 / 354**, zero anchors moved or ambiguous, zero `DID NOT BITE`; `measure-breakpoints.mjs` **exit 0 — 102 passed, 0 failed, 0 blocked** (was 95: **measurement 21** is new and was probed by BREAKING it first — exit 1, `FAIL 21` — before the passing run was taken); `check-density.mjs` **ALL PASS**. ⚠ **Three harness runs returned 1 first and every one was the harness working**: one moved anchor, and twice a ⚠ test whose only reddening mutation this loop's own fixes had revoked (§0.16). Exit codes with their commands: `12b-reconciliation.md` §7 |
+| **What is still open?** | The box, as ever. **Nothing in this loop ran against a container, a unit or a real GPU**, and this phase did not contact `192.168.4.71` at all. §0.0.4's three, §0.0.3's five and §0.0.2's seven are still owed, and 12b adds three (below). The deployment has not been re-done since the 2026-09-14 outage |
+
+### ⚠ What 12b adds to the box-side list
+
+1. ⚠⚠ **That a REDEPLOYED container actually publishes `gpus`.** The `Environment` property was read
+   from the box's own system bus by 12b's build, over SSH — never from inside a container, which is
+   where the collector will run and where §2.2's socket is a bind mount.
+2. ⚠ **That `split.env` and `llama-split.service` are really what a mode switch leaves behind.**
+   Both were read from `serving-mode.sh`'s source, not observed after a switch.
+3. **Whether `dbus-daemon`'s default system policy can deliver a foreign `METHOD_CALL` or directed
+   `SIGNAL` carrying our `REPLY_SERIAL` at all** (12b-A4). The client no longer accepts one; whether
+   one can arrive is unproven in both directions and needs traffic on the live box.
+
+### ⚠⚠ The three things a later loop must not undo
+
+1. **`Reader.region` is the ONLY statement of the bounds rule** (`lib/collectors/dbus-wire.ts`).
+   Its three rules are three mutations (`12b-W18`, `12b-W24`, `12b-W20`), and `Reader.array` has no
+   bounds check of its own any more. ⚠ **If you find yourself adding one beside it, you are patching
+   a symptom** — ask what declared the number you are checking and give that thing a region.
+2. **The corruption sweep's SECOND ARM** — every single-byte corruption decoded again with an honest
+   copy of the frame behind it, asserting that advancing by the reported `byteLength` leaves the next
+   message intact. The first arm **cannot see an inflated length at all**: the bytes it would claim do
+   not exist, so the decode is `incomplete` and honest. Delete the second arm and the whole class
+   goes back to being unreachable by that test — which is how it survived a phase that fuzzed the
+   file exhaustively.
+3. **The cross-pinned fixtures are the DEFAULT subject of every test whose subject is the join**, in
+   jsdom (`servingCrossPinned`) and now in the browser (**measurement 21**). On `servingPerGpu` every
+   wrong implementation renders correctly, and that coincidence has now reappeared three times: in
+   the build's mutations, in the panel tests, and in the browser harness.
+
+---
+
+## 0.0.4 — 12a's closing state, kept in FULL and unchanged by 12b. **Is the production failure of 2026-09-14 visible now? YES — and the measurement that says so had to be repaired before it could say anything.**
 
 **The question this loop has to answer in one line:** on 2026-09-14 a `systemd daemon-reload`
 revoked the container's GPU device access, `nvidia-smi` failed inside it, `errors[]` carried
@@ -1474,6 +1524,103 @@ note says a branch cannot be reached by any fixture, that sentence is the work i
 
 ---
 
+## 0.16 ⚠ NEW — what 12b found, and the eight rules to carry out of it
+
+### ⚠⚠ THE RULE — **a bounds check that is not stated as an invariant will be re-found as a symptom, once per phase**
+
+One bug, three phases, three different names for it. 12b's **build** gave `Reader.array` a rule in
+its own body — *the elements must account for exactly the declared bytes* — and gave it to nothing
+else. 12b's **test** phase found two symptoms (a length inside a complete message answered
+`incomplete`; a header field read into the next message) and fixed both *where they were found*,
+correctly, with a mutation each. 12b's **adversarial** then found that the message's own
+`byteLength` was never reconciled against what was read — and one flipped byte in a real captured
+reply turned a 2 ms `active` into `null` and *"timed out after 300 ms"*.
+
+The fix was not a third check. It was **one statement with three callers**: `Reader.region(what,
+declared, read)` says *(1) a region must fit the one that declared it, (2) nothing inside may read
+past its end, (3) its values must account for exactly its bytes*, and the array, the header field
+array and the message body are all regions. **Two checks were deleted** in the process — the
+array's own copies of rules 1 and 3.
+
+⚠ The signal, stated so it can be recognised early: **if you are adding a bounds check beside two
+others, you are patching a symptom.** Ask what declared the number you are checking, and give that
+thing the rule.
+
+### ⚠⚠ When the invariant lands, the SYMPTOM's mutations go inert — check them, do not keep them
+
+`12b-W24` (*the header-field reader is built on the whole BUFFER*) and `12b-W25` (*the body reader
+too*) were the test phase's own mutations for its own fix, and both stopped biting the moment the
+regions existed: `region` re-bounds the reads whichever buffer the reader was constructed on.
+Measured by applying both original mutations to the fixed code and watching every test stay green.
+Both ids were re-aimed at the rules that do refuse it now. **A mutation that survives its own
+subject's generalisation certifies nothing, and the harness cannot tell you that** — it reports
+`DID NOT BITE`, which reads like a missing test.
+
+### ⚠⚠ A correctness fix REVOKES coverage, and a test that compares two FIXTURES has whatever differs as its subject
+
+Both harnesses that this loop changed returned 1 on the ledger, and both were right.
+
+- **Step 05.** Three ⚠ tests in `dbus-wire.test.ts` had been scoring covered on `05-W3` (*a VARIANT
+  decodes to its own type name*) — a mutation of the **SIGNATURE header field**, which has nothing
+  to do with any of their subjects. It reddened them by making a body decode to something; the
+  region invariant's rule 3 refuses those bodies now, so the accident stopped and the marks were
+  left with no mutation. Two got one that expresses what their own names say (`12b-W29`, `12b-W30`);
+  the third had **no plausible wrong implementation** — three candidates were written and measured —
+  and lost its ⚠ per the harness's own second hypothesis.
+- **Step 10.** `⚠ absent-from-the-enumeration and present-with-every-reading-null do not render
+  alike` lost `10b-GP4`, because it compared **two different snapshots** and the fixture change gave
+  them a second difference. Repaired by varying ONE field of ONE base.
+
+⚠ **A ⚠ mark says *some* mutation reddens this test, never *the right one*.** Expect a correctness
+fix to cost coverage somewhere, read the ledger's complaint as a question about the test's own
+subject, and **never compare two fixtures when you mean to compare one field**.
+
+### ⚠ A table whose rows cannot be observed ONE AT A TIME has to be asserted as a table
+
+`alignmentOf`'s `case 'v': return 1` is the D-Bus specification, and changing it to `4` kept all
+3634 tests green — not for want of a frame, but because the only caller is always 4-aligned
+already, so `1` and `4` produce identical bytes for **every frame this codec can be handed**. The
+answer is not a cleverer frame; it is to export the function and assert the whole table against the
+specification, with the reason in its doc.
+
+### ⚠ `exactOptionalPropertyTypes` decides WHERE a present-but-`undefined` key can come from
+
+`Object.hasOwn(instance, 'gpus')` versus `instance.gpus !== undefined` was argued at length in two
+doc comments and asserted nowhere, and the argument named a shape TypeScript refuses to compile in
+this tree (`{ ...row, gpus: undefined }` against `gpus?: …`). The real route is the **wire**, where
+`parseSnapshot` takes `unknown` — so the load-bearing guard is `wire.ts`'s and `observations.ts`'s
+is the second line. Both are now asserted, and each test names the other.
+
+### ⚠ A fixture whose value is that it is EVIDENCE needs an assertion protecting the evidence
+
+`LIVE_BOX_SERVING_WIRE`'s whole claim is that it was captured from the box rather than written, and
+the proof was one number (`ctx: 163840`) that occurred in exactly three places in the tree: a doc
+comment and the fixture twice. Regenerating it on a dev box kept the suite green. The six-key guard
+beside it reads the **parser's output**, not the fixture's bytes, so it could not see a changed
+reading at all.
+
+### ⚠ A coincidence removed in one harness reappears in the next one over
+
+12b's build found three of its own mutations inert because `servingPerGpu` has instance N on card N;
+the test phase answered it with a cross-pinned FIXTURE. The same coincidence was still sitting in
+the BROWSER harness — `measure-breakpoints.mjs` builds `gpus: [i.instance]`, so measurement 19's
+three text expectations hold for a client that ignores §3.4 entirely. Measurement **21** is the
+cross-pinned page; 19 stays as the pixel record of the box.
+
+⚠ And a smaller one of the same shape: a fixture that OMITS an optional key is making a claim about
+the **server**, not about the reading. `allReadingsNull` — *"current server, nothing readable"* —
+had no `gpus` key, so every panel test built on it rendered *served by instance 0*, a claim about
+who serves the card, under a name that says nothing is readable.
+
+### ⚠ PROCESS — a guard that grades another file by EXACT COUNT can be broken by quoting its own term
+
+`measurement-harness.test.ts` counts `present.gpu0NotBlank && present.gpu1NotBlank` exactly once in
+`measure-breakpoints.mjs`. It caught this loop twice in five minutes: once for reformatting that
+conjunction across lines, and once for QUOTING it in the comment written to explain why it must stay
+on one line. Both times it was right.
+
+---
+
 ## 1. How to run anything
 
 `pnpm` is installed through corepack into a directory that is **not** on this machine's
@@ -1552,23 +1699,31 @@ wrote it. See §5.4. When a change touches anything that consumes entropy or a c
 
 ### The deliberate-regression harnesses — **TEN**. Run the nine after any change in `lib/`, `app/` or `components/`; run the tenth after any change to the four packaging artefacts
 
-⚠ **Counts below re-derived 2026-09-08 by 10b-S-G's reconciliation**, by importing each
-`regressions.py` and reading `len(REGRESSIONS)` — not copied forward. Step 10's covers 10a's
-shell **and** 10b's nine panel bodies; `components/panels/*.test.*` files belong to this
-harness's `LEDGER_FILES` and to no other (ledger ownership follows the FILE, §5.2 rule 6).
+⚠ **Counts below re-derived 2026-09-17 by 12b's reconciliation**, the same way 10b-S-G's did it —
+by importing each `regressions.py` and reading `len(REGRESSIONS)`, never by `grep -c`, which the
+id-prefix guard's own literal inflates by one. **They had gone stale by 117 across three harnesses**
+(05, 08 and 10 all grew through 12b and neither the build nor the test phase updated this block).
+Step 10's covers 10a's shell **and** 10b's nine panel bodies; `components/panels/*.test.*` files
+belong to this harness's `LEDGER_FILES` and to no other (ledger ownership follows the FILE, §5.2
+rule 6).
 
 ```bash
 python3 pipeline/steps/02-format-severity/regressions.py                    #  66 mutations + ledger
 python3 pipeline/steps/03-collectors-gpu-host/regressions.py                #  73 mutations + ledger
 python3 pipeline/steps/04-collector-cooling/regressions.py                  #  94 mutations + ledger
-python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 130 mutations + ledger
+python3 pipeline/steps/05-collectors-serving-storage-safety/regressions.py  # 167 mutations + ledger
 python3 pipeline/steps/06-telemetry-route/regressions.py                    #  63 mutations + ledger
 python3 pipeline/steps/07-auth-login/regressions.py                         # 158 mutations + ledger
-python3 pipeline/steps/08-client-runtime/regressions.py                     # 174 mutations + ledger
+python3 pipeline/steps/08-client-runtime/regressions.py                     # 192 mutations + ledger
 python3 pipeline/steps/09-ui-primitives/regressions.py                      # 153 mutations + ledger
-python3 pipeline/steps/10-panels-assembly/regressions.py                    # 299 mutations + ledger
-python3 pipeline/steps/11-packaging/regressions.py                         # 181 mutations + ledger
+python3 pipeline/steps/10-panels-assembly/regressions.py                    # 344 mutations + ledger
+python3 pipeline/steps/11-packaging/regressions.py                          # 203 mutations + ledger
 ```
+
+**1513 mutations across the ten, 1513 unique ids, zero cross-harness collisions** (checked the same
+way, 2026-09-17). ⚠ 12b added **12** and **re-aimed seven** — `05-D3`, `12b-W17`, `W18`, `W20`, `W23`,
+`W24` and `W25` all had their anchors moved by the region invariant, and two of them (`W24`, `W25`)
+had to be re-aimed rather than kept: their original defects went inert. §0.16.
 
 ⚠⚠ **11b CHANGED TWO OF THEM, and both counts above are 11b's own.** Step 11's harness went
 **165 → 181** (+16: the four whole-file rules and the corpus that found them, the directory row,
@@ -1595,10 +1750,11 @@ harness's `LEDGER_FILES` and in no other. ⚠ **Nothing under `lib/`, `app/` or 
 touched by step 11**, which is why its reconciliation did not re-run the other nine — `git status`
 is the evidence, and it is in `steps/11-packaging/reconciliation.md` §8.
 
-⚠ **Counts re-derived 2026-09-10 by 10h's reconciliation**, by importing each `regressions.py` —
+⚠ **Superseded by the block above, 2026-09-17 — kept for what it records about step 11's share.**
+Counts re-derived 2026-09-10 by 10h's reconciliation, by importing each `regressions.py` —
 never by `grep -c`, which the id-prefix guard's own literal inflates by one. **1180 across the
-nine, 1180 unique, zero cross-harness collisions.** ⚠ **Step 11's harness adds 130 with the
-`11-` prefix — 1310 across the ten** (52 written by step 11's build and test phases, **+78 by its
+nine, 1180 unique, zero cross-harness collisions** (**1513 across the ten today**). ⚠ **Step 11's
+harness added 130 with the `11-` prefix — 1310 across the ten at that date** (52 written by step 11's build and test phases, **+78 by its
 reconciliation**, which is the adversarial's own sweep re-aimed at the reconciled tree so that the
 measurement of the hole is the harness that keeps it shut).
 
@@ -2725,20 +2881,33 @@ top of `lib/guardrails.test.ts` — not by a text assertion.
 
 ---
 
-## 8. Spec gaps and open owner questions — ⚠⚠ **12a raises five, and `12a-Q2` is a line of `SPEC.md` §9 that 12a has made false**; step 11's three (`11-Q1`…`11-Q3`) were RULED on 2026-09-11 and are BUILT by 11b; 11b's five are wording; 10h's six; 10g's four still open; 10f's one; 10e's eight
+## 8. Spec gaps and open owner questions — ⚠⚠ **12b raises SIX, two of them ⚠⚠: `12b-Q1` is a line of `SPEC.md` §6.2 that states the RETIRED join as the rule, and `12b-Q2` is §7.9's ruling with its full cost now enumerated under it**; 12a's five stand (`12a-Q2` is the other false sentence); step 11's three (`11-Q1`…`11-Q3`) were RULED on 2026-09-11 and are BUILT by 11b; 11b's five are wording; 10h's six; 10g's four still open; 10f's one; 10e's eight
 
 ⚠ This table has now been **stale five times** (92 % before step 5, 100 % before step 6, again
 before step 7, again in step 8, and again in Q2). **Every time, in the safe direction: entries
 carried as open that the spec had already answered.** Re-check every row against the spec text
 before trusting it. Invariant 7 stands: if the spec is silent, **report it — do not assume**.
 
-**Open, with owners — THIRTY-SEVEN rows: ⚠⚠ 12a's five (`12a-Q1`/`Q2`/`Q9`/`Q10`/`Q11`, below —
+**Open, with owners — FORTY-THREE rows: ⚠⚠ 12b's six (`12b-Q1`…`12b-Q6`, below), 12a's five (`12a-Q1`/`Q2`/`Q9`/`Q10`/`Q11`, below —
 `12a-Q2` is the only row in this whole table that names a sentence in `SPEC.md` which is FALSE
 rather than absent), 11b's five (`11b-Q1`…`11b-Q5`, below — step 11's three are
 RULED AND BUILT and their rows are kept only for the reasoning), 10h's six, 10g's four, 10f's one still-open (`10f-Q6`;
 `10f-Q1`…`Q5` were ruled by the owner and BUILT by 10g), 10e's eight still-open ones (`10e-Q4`…`Q11`
 — `10e-Q1`/`Q3`/`Q12`/`Q13` were built by 10f and `10e-Q2` by 10g), Q2's two, 10a's four, 10b's
 three still-open ones, and 10b-S-G's four. S11/G5's rendering residue is CLOSED.**
+
+### ⚠⚠ NEW — 12b's six, 2026-09-17. **One is a line of `SPEC.md` that is FALSE as written — the second such row in this table — and one is a ruling whose full cost is now enumerated.**
+
+Full statements in `steps/12-deploy/12b-reconciliation.md` §8 and §9.
+
+| # | Gap | What stands today | Owner |
+|---|---|---|---|
+| **12b-Q1** ⚠⚠ | **`SPEC.md:1196` still states the RETIRED join as the rule**: §6.2's GPU-card bullet says the model is *"joined from the serving data by instance index"*. It sits ABOVE the `⚠⚠ THE JOIN IS INVERTED` marker at `:1217`, so the marker does not cover it, and it contradicts §3.4's table and §6.2's own inversion paragraph. Like `12a-Q2`, the sentence is false rather than absent | The code, the tests and both panels implement the inverted join; only the bullet disagrees. **A replacement sentence is written out in `12b-reconciliation.md` §8.1** | **owner / parent** |
+| **12b-Q2** ⚠⚠ | **§7.9 — `split.env` is REJECTED by discovery**, so the arrangement `serving-mode.sh` creates cannot be rendered at all: the panel shows instances 0 and 1, both inactive, the process actually serving the box appears nowhere, and one `llama-env` problem names `split.env` | Unchanged, deliberately. **The full cost of admitting a non-integer identity is now enumerated** — four layers, one of them free, two genuine design decisions (`servingUnitName` stops being a template; the numeric sort has no string equivalent that keeps `0,1,2,10`), and a **deploy-ordering constraint no previous contract change has had**: `wire.ts` refuses the WHOLE snapshot, not the row. `12b-reconciliation.md` §9 | **owner** |
+| **12b-Q3** ⚠ | **`unserved` is a definite verdict minted from an ABSENT key** (12b-A9), and **`serving: []` names instances the snapshot says do not exist** (12b-A10). §6.5 says a verdict of failure may be minted only from an answer; both print a claim where a gap would be honest | Both are pinned by tests that argue them, and `serving: []` is byte-identical to what `f6f3101` renders. The third option the adversarial names — keep the snapshot-level decision, render `unknown` rather than `unserved` — changes a live page, which is why this phase did not take it | **owner** |
+| **12b-Q4** ⚠ | **§7.8 — two instances listing the SAME card is still silent**, and a `gpus` naming a card that does not exist (`[5]`) is reported nowhere: the SERVING row says `GPU 5` and both real cards say *served by no instance* | The wire enforces non-negative integers and nothing else; the collector cannot produce these, the wire can. Two processes on one card is an OOM waiting to happen and the dashboard can now SEE it | **owner** |
+| **12b-Q5** | **The GPU card's `unknown` em dash is explained on ANOTHER panel** — `panelsForSource('dbus')` is `['cooling','serving','safety']`, and adding `'gpu'` would change what the live box renders today | Pinned by a test asserting both halves since the test phase, so widening the fan-out is a visible change rather than a silent one. Still a compromise | **owner** |
+| **12b-Q6** | **§7.1's two owed sentences are still owed**: §2.2's mount table says the socket is for `ActiveState` alone, and §3.4's `gpus` row does not name the `Environment` property it is read from. Both are statements of fact about code that exists and is tested | Proposed wording for both in `12b-reconciliation.md` §8.2 | **owner**, two sentences |
 
 ### ⚠⚠ NEW — 12a's five, 2026-09-15. **One of them is a line in `SPEC.md` that is now FALSE as written, and it is the only row here that is not merely a silence.**
 

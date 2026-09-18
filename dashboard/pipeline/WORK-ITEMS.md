@@ -863,3 +863,24 @@ over `displaySeverity`, **with one refusal on top: a `normal` reduction paints a
 why: the row as first written was **measured false in production** — a source that cannot be read
 produces no condition, so it contributed nothing to a reduction over conditions, and the header
 read `● all healthy` while the box had lost sight of both GPUs.
+
+**Ruled 2026-09-17 (12b):** `SPEC.md:1196` rewritten — the GPU card's model is found by asking which
+`serving[]` instance lists this card in its own `gpus`, **never** by matching the card's index
+against the instance number; the old sentence stated the coincidence as the rule. §2.2's D-Bus row
+and §3.4's `gpus` row now name `Service.Environment` as the source, on the same connection and
+object path as `ActiveState`.
+
+⚠ **Parent's correction to 12b's reconciliation, §9.** It reports `gpu-panel.tsx:153` as a site that
+"never consults `serving[]`". **That is overstated.** The line sits inside `case 'indexed'`, and
+`servedBy` returns `indexed` only when `serving` is `null` or **no** instance declares a `gpus` —
+i.e. the older-server fallback §3.4 specifies, where the card's index is the correct answer and the
+only one available. The call `servedBy(snapshot?.serving ?? null, index)` does consult `serving[]`.
+What survives of the finding is narrower and still worth keeping: that branch would keep compiling
+if `gpus`'s type changed, so it is not protected by the type system — which is an argument for the
+fixture, not evidence of a wrong join.
+
+**Ruled 2026-09-17 → loop 12c.** (1) **Instance ids become strings** and discovery accepts named
+instances, so split mode can be rendered at all; `servingUnitName` becomes a mapping and the
+ordering must be specified rather than inherited from a sort. (2) **`wire.ts` refuses the row, not
+the snapshot** — which is what invariant 5 already said; whole-snapshot refusal made a contract
+mismatch look like a dead dashboard.

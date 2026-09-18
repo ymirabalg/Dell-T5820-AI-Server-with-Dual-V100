@@ -162,6 +162,88 @@ export const parseLlamaEnv = (text: string): ParseResult<LlamaEnv> => {
   };
 };
 
+/** The environment key §3.4's `gpus` is read from. Spelled once. */
+export const CUDA_VISIBLE_DEVICES = 'CUDA_VISIBLE_DEVICES';
+
+/**
+ * A unit's `Environment=` directives → §3.4's `gpus`.
+ *
+ * The input is exactly what `org.freedesktop.systemd1.Service`'s `Environment` property
+ * answers: `KEY=VALUE` strings, already specifier-expanded, so `llama-server@0.service` says
+ * `CUDA_VISIBLE_DEVICES=0` and the split unit says `CUDA_VISIBLE_DEVICES=0,1`.
+ *
+ * | input | value | `problems` |
+ * |---|---|---|
+ * | `['CUDA_VISIBLE_DEVICES=0']` | `[0]` | — |
+ * | `['CUDA_VISIBLE_DEVICES=1,0']` | `[0, 1]` | — (see the ordering note) |
+ * | `['CUDA_VISIBLE_DEVICES=']` | `[]` | — |
+ * | no such key | `null` | **yes** |
+ * | `CUDA_VISIBLE_DEVICES=GPU-3f2b…` | `null` | **yes** |
+ *
+ * ⚠ **The LAST assignment wins**, matching what systemd itself does with repeated
+ * `Environment=` lines and therefore what the running process actually sees — the same rule
+ * {@link parseLlamaEnv}'s `assignments` already applies to the env file.
+ *
+ * ⚠ **An unparseable entry makes the WHOLE list `null`, never a partial one.** `nvidia-smi`'s
+ * UUID form (`CUDA_VISIBLE_DEVICES=GPU-3f2b…`) and MIG identifiers are both legal for CUDA and
+ * neither is a card index this dashboard can join on; returning the indices we *did*
+ * understand would put a card under "served by instance N" on the strength of a list we
+ * admit we could not read. §3.4's `null` is exactly that state, and it renders an em dash
+ * with the entry beside it.
+ *
+ * ⚠ **`[]` is a value, not a failure.** `CUDA_VISIBLE_DEVICES=` is how CUDA is told *no
+ * device is visible*; the unit exists, the property was read, and the answer is "this
+ * instance serves no card". §3.1's `null` ≠ `[]` discipline, at the level below it.
+ *
+ * ⚠ **Sorted ascending and de-duplicated, and that discards something on purpose.**
+ * `CUDA_VISIBLE_DEVICES=1,0` makes the process see card 1 as its *device 0* — an ordering the
+ * dashboard neither renders nor joins on, since §6.2 asks only *which cards does this
+ * instance serve*. Sorting makes `1,0` and `0,1` one rendering instead of two, and a repeated
+ * index is reported rather than counted twice.
+ */
+export const parseVisibleDevices = (environment: readonly string[]): ParseResult<number[] | null> => {
+  const problems: string[] = [];
+  let raw: string | null = null;
+  for (const entry of environment) {
+    const at = entry.indexOf('=');
+    if (at <= 0) continue;
+    if (entry.slice(0, at) !== CUDA_VISIBLE_DEVICES) continue;
+    raw = entry.slice(at + 1);
+  }
+  if (raw === null) {
+    return {
+      value: null,
+      problems: [`the unit declares no \`${CUDA_VISIBLE_DEVICES}=\`, so which cards it serves is unknown`],
+    };
+  }
+  if (raw.trim() === '') return { value: [], problems };
+
+  // ⚠ Named `cards`, not `found`: `discoverInstances` above has a `found` of its own and the
+  // two functions end in the same line of code. One mutation anchor in step 5's harness
+  // (`05-L2`) matched both the moment this function was written, and an anchor that matches
+  // twice is a mutation that silently tests whichever site comes first.
+  const cards = new Set<number>();
+  for (const piece of raw.split(',')) {
+    const text = piece.trim();
+    const index = parseIntegerStrict(text);
+    // ⚠ Canonical decimal only, exactly as `parseInstanceIndex` insists: `01` and `+1` are
+    // refused rather than read as 1, because this value is compared against `Gpu.index` and
+    // two spellings of one card would be two answers to "which instance lists me".
+    if (index === null || index < 0 || String(index) !== text) {
+      return {
+        value: null,
+        problems: [
+          `\`${CUDA_VISIBLE_DEVICES}=${raw}\` is not a list of card indices ` +
+            `(\`${text}\` is not one), so which cards this instance serves cannot be read`,
+        ],
+      };
+    }
+    if (cards.has(index)) problems.push(`\`${CUDA_VISIBLE_DEVICES}=${raw}\` names card ${text} more than once`);
+    cards.add(index);
+  }
+  return { value: [...cards].sort((a, b) => a - b), problems };
+};
+
 /**
  * HTTP status → §3.7's `HealthState`.
  *

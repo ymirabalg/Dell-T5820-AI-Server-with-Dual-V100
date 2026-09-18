@@ -1,8 +1,19 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 
-import { everythingZero, servingInstances, servingIdentityOnly, servingPopulated } from '@/lib/fixtures';
-import type { TelemetrySnapshot } from '@/lib/types';
+import {
+  LIVE_BOX_SERVING_WIRE,
+  everythingZero,
+  servingCrossPinned,
+  servingGpusUnreadableSnapshot,
+  servingInstances,
+  servingIdentityOnly,
+  servingPerGpu,
+  servingPopulated,
+  servingSplit,
+} from '@/lib/fixtures';
+import { parseSnapshot } from '@/lib/client/wire';
+import type { ServingInstance, TelemetrySnapshot } from '@/lib/types';
 
 import { ServingPanel } from './serving-panel';
 import { allReadingsNull, displayedConditionOf, emptyState, stateWith, valueCells } from './test-support';
@@ -318,5 +329,127 @@ describe('⚠ invariant 1, across EVERY reading on this panel', () => {
     expect(html).toContain('— · ctx —');
     expect(html).toContain('health —');
     expect(html).not.toMatch(/ctx [0-9]/);
+  });
+});
+
+describe('⚠⚠ 12b — the row names the cards it spans (§6.2)', () => {
+  const render = (serving: readonly ServingInstance[] | null, errors: TelemetrySnapshot['errors'] = []): string =>
+    renderToStaticMarkup(
+      <ServingPanel
+        state={stateWith({ ...everythingZero, serving, errors })}
+        nowMs={0}
+        panelId="serving"
+      />,
+    );
+
+  test('⚠ SHAPE 1 of 4 — `gpus: [N]`: one row per process, each naming its own card', () => {
+    // ⚠⚠ 12b-TEST — **the DEFAULT subject is the cross-pinned fixture, where the instance
+    // number and the card number disagree.** On `servingPerGpu` (instance N on card N, which
+    // is what this box runs) this assertion is satisfied by three different wrong
+    // implementations — naming the card from `gpus`, from `instance`, or from the row's
+    // position — and 12b's build measured exactly that: `12b-SP3`, `SP4` and `SP5` all render
+    // `GPU 0` for instance 0, so none of them could redden this test. The per-GPU arrangement
+    // is asserted too, second, because it is the one the box is actually in.
+    const crossed = render(servingCrossPinned);
+    expect(crossed).toContain(':8080 · GPU 1');
+    expect(crossed).toContain(':8081 · GPU 0');
+    expect(crossed).not.toContain(':8080 · GPU 0');
+
+    const perGpu = render(servingPerGpu);
+    expect(perGpu).toContain(':8080 · GPU 0');
+    expect(perGpu).toContain(':8081 · GPU 1');
+  });
+
+  test('⚠ SHAPE 2 of 4 — `gpus: [0,1]`: ONE row spanning both cards, plural', () => {
+    // ⚠ And the mode is read from the ARRAY, never from the row count: this snapshot has one
+    // row because one process is serving, and a snapshot with one row because the other
+    // card's unit failed would say `GPU 0`, not `GPUs 0, 1`.
+    const html = render(servingSplit);
+    expect(html).toContain(':8080 · GPUs 0, 1');
+    expect(html).not.toContain('llama-server@1');
+    const failedSibling = render([{ ...(servingPerGpu[0] as ServingInstance), gpus: [0] }]);
+    expect(failedSibling).toContain(':8080 · GPU 0');
+    expect(failedSibling).not.toContain('GPUs');
+  });
+
+  test('⚠ SHAPE 3 of 4 — `gpus: null`: an em dash, with the `dbus` entry already on the row', () => {
+    // §3.7: "an alarm with no explanation beside it is not actionable". The entry carries
+    // `instance: 0`, so it lands on this row structurally rather than by reading its text.
+    const html = render(servingGpusUnreadableSnapshot.serving, servingGpusUnreadableSnapshot.errors);
+    expect(html).toContain(':8080 · —');
+    expect(html).toContain('AccessDenied');
+  });
+
+  test('⚠ SHAPE 4 of 4 — ABSENT: nothing extra at all, and the row is what it was', () => {
+    // §3.4's fallback, on the panel. An em dash here would report a failed reading on a box
+    // that is simply running the container it was given.
+    const html = render(servingInstances);
+    expect(html).toContain(':8080');
+    expect(html).not.toContain('GPU');
+    expect(html).not.toContain(':8080 · ');
+  });
+
+  test('⚠⚠ ABSENT and `[N]` differ ONLY by the cards — nothing else on the row moves', () => {
+    // The additivity claim, rendered on this panel: the two fixtures differ in one key, so
+    // the two renders must differ only where that key is shown.
+    const declared = render(servingPerGpu);
+    const older = render(servingInstances);
+    expect(declared).not.toBe(older);
+    expect(declared.replace(' · GPU 0', '').replace(' · GPU 1', '')).toBe(older);
+  });
+
+  test('⚠⚠ 12b-TEST — the four shapes are four different TEXTS, not four different markups', () => {
+    // ⚠ §3.4 forbids collapsing `null` and absent, and a difference that exists only in an
+    // attribute or a class is not a difference a person reading the screen — or a screen
+    // reader reading it aloud — can act on. So the comparison here is on the rendered TEXT
+    // with every tag removed, which is what the accessibility tree carries.
+    const textOf = (serving: readonly ServingInstance[] | null, errors: TelemetrySnapshot['errors'] = []): string =>
+      render(serving, errors).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    const one = textOf([{ ...(servingPerGpu[0] as ServingInstance), gpus: [0] }]);
+    const both = textOf([{ ...(servingPerGpu[0] as ServingInstance), gpus: [0, 1] }]);
+    const unreadable = textOf(servingGpusUnreadableSnapshot.serving, servingGpusUnreadableSnapshot.errors);
+    const absent = textOf([servingInstances[0] as ServingInstance]);
+    expect(new Set([one, both, unreadable, absent]).size).toBe(4);
+    // ⚠ And the pair §3.4 names, stated directly rather than inferred from the set size: the
+    // em dash is IN the text of the failed read and the text of the older server has nothing
+    // where the cards would be.
+    expect(unreadable).toContain(':8080 · —');
+    // ⚠ Scoped to the port, not to the whole panel: the row's VALUE column legitimately
+    // carries both a `·` (between model and ctx) and an em dash (a null reading), so a
+    // panel-wide assertion would be a test naming one property while checking another.
+    expect(absent).not.toContain(':8080 ·');
+    expect(one).toContain(':8080 · GPU 0');
+  });
+
+  test('⚠ an instance declaring NO card says so — `[]` is an answer, not a gap', () => {
+    // `CUDA_VISIBLE_DEVICES=` is how CUDA is told no device is visible. It must not read as
+    // an em dash, which says the property could not be read.
+    const html = render([{ ...(servingPerGpu[0] as ServingInstance), gpus: [] }]);
+    expect(html).toContain(':8080 · no GPUs');
+    expect(html).not.toContain(':8080 · —');
+  });
+
+  test('⚠⚠ the DEPLOYED server’s own bytes render exactly as they do today', () => {
+    // `LIVE_BOX_SERVING_WIRE` is the PRE-CHANGE collector's output on the box's real env
+    // files and `/v1/models` bodies, taken through the same validator a browser uses. The
+    // row must carry the port and no card text at all.
+    const wire = parseSnapshot({
+      ...(JSON.parse(JSON.stringify(everythingZero)) as Record<string, unknown>),
+      serving: JSON.parse(LIVE_BOX_SERVING_WIRE) as unknown,
+    });
+    expect(wire).not.toBeNull();
+    const html = renderToStaticMarkup(
+      <ServingPanel state={stateWith(wire?.snapshot as TelemetrySnapshot)} nowMs={0} panelId="serving" />,
+    );
+    expect(html).toContain(':8080');
+    expect(html).toContain(':8081');
+    expect(html).not.toContain('GPU');
+    // ⚠ The port span carries NOTHING after it. (The row's value column does show `—`, for
+    // `unitState`: the capture had no bus to ask systemd. That is a different cell, and
+    // asserting the absence of every em dash on the panel would have been a test naming one
+    // property while checking another.)
+    expect(html).not.toContain(':8080 · ');
+    expect(html).not.toContain(':8081 · ');
   });
 });

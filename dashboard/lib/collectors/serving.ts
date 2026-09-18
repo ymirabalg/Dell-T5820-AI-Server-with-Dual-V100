@@ -10,7 +10,7 @@
  * | source | blanks | reached when |
  * |---|---|---|
  * | `llama-env` | `port`, `ctx` — and therefore `health` and `model` | the directory or an env file would not read, or a value would not parse |
- * | `dbus` | `unitState` | tagged inside {@link collectUnitStates}, never here |
+ * | `dbus` | `unitState`, and since 12b `gpus` | the unit conversation is tagged inside {@link collectUnitStates}; ⚠ **the `gpus` half is tagged HERE**, because the environment comes back as raw `KEY=VALUE` strings and only this file knows they were asked for on behalf of §3.4's `gpus` column |
  * | `llama-health` | `health` | `/health` refused, reset, timed out, or answered something other than 200/503 |
  * | `llama-models` | `model` | `/v1/models` answered 200 with a body that is not a model list |
  *
@@ -55,6 +55,7 @@ import {
   modelsUrl,
   parseLlamaEnv,
   parseModelsBody,
+  parseVisibleDevices,
 } from './llama';
 import type { LlamaEnv } from './llama';
 import { nodeIo } from './io';
@@ -330,6 +331,10 @@ export const collectServing = async ({
       paths,
       units: instances.map(servingUnitName),
       unitInstances,
+      // ⚠ 12b — §3.4's `gpus`. The same units, on the same connection, one more property
+      // each. `collectSafety` asks about `gpu-fan-control.service` and passes nothing here,
+      // so the fan service's conversation is unchanged.
+      environmentUnits: instances.map(servingUnitName),
       timeoutMs: dbusTimeoutMs,
     }),
     Promise.all(
@@ -348,6 +353,34 @@ export const collectServing = async ({
     ),
   ]);
 
+  // ⚠ 12b — §3.4's `gpus`, decided here because this is the layer that knows both which unit
+  // name is which instance AND what was read about it. Three outcomes, all of them `null` on
+  // the wire but only two of them silent:
+  //
+  //  * the environment was read and parsed        -> the indices, no entry;
+  //  * the environment was read and does not name  -> `null`, WITH a `dbus` entry naming the
+  //    a parseable `CUDA_VISIBLE_DEVICES`             unit (invariant 1: an em dash always
+  //                                                   has an entry behind it);
+  //  * the environment could not be read at all    -> `null`, and NO new entry — the failure
+  //                                                   that stopped it already filed one
+  //                                                   against this same unit and instance
+  //                                                   inside `collectUnitStates`, and §6.5's
+  //                                                   "one fact, stated once" governs.
+  //
+  // ⚠ The entries it can produce are collected separately and appended with the rest of the
+  // `dbus` family BELOW, never pushed from inside the `map`: §4 pins `errors[]`'s order and
+  // `events.ts` reads the LAST message per source, so a `dbus` sentence emitted in the middle
+  // of the per-instance `llama-*` block would re-order the list for every consumer.
+  const gpuProblems: TelemetryError[] = [];
+  const gpusFor = (instance: number): readonly number[] | null => {
+    const unit = servingUnitName(instance);
+    const environment = units.environments.get(unit);
+    if (environment === undefined || environment === null) return null;
+    const parsed = parseVisibleDevices(environment);
+    gpuProblems.push(...tag('dbus', parsed.problems.map((p) => `${unit}: ${p}`), instance));
+    return parsed.value;
+  };
+
   const serving: ServingInstance[] = rows.map(({ instance, env, probed }) => ({
     instance,
     port: env.port,
@@ -356,9 +389,11 @@ export const collectServing = async ({
     model: probed.model,
     ctx: env.ctx,
     health: probed.health,
+    gpus: gpusFor(instance),
   }));
 
   for (const row of rows) errors.push(...row.errors);
   errors.push(...units.errors);
+  errors.push(...gpuProblems);
   return { serving, errors };
 };

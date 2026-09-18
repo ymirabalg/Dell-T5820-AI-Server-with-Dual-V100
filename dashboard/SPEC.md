@@ -121,7 +121,7 @@ Every one of these is read-only. The container runs as a non-root user.
 | CPU / RAM / load | `--pid host` + `/proc` via host namespace | `/proc/stat`, `/proc/meminfo`, `/proc/loadavg`, `/proc/net/dev` |
 | CPU temperature | `/sys/class/hwmon` → `coretemp` | `Package id 0`; see §3.2 on why not `temp1` from `dell_smm` |
 | Disk usage | `-v /:/host/root:ro -v /home:/host/home:ro` | `statvfs` on the mount points |
-| systemd unit state | `-v /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro` | Query `ActiveState` over D-Bus. Read-only and unprivileged — no `systemctl` shelling out, no root |
+| systemd unit state | `-v /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro` | Query `ActiveState` **and `Service.Environment`** over D-Bus — §3.4's `gpus` is read on the same connection and the same object path, which is why no unit file is mounted and `systemctl` is still forbidden. Read-only and unprivileged — no `systemctl` shelling out, no root |
 | Serving instances | `-v /etc/llama-server:/etc/llama-server:ro` | §3.4 enumerates `<i>.env` for `PORT=` and `CTX=`. **Without it every poll yields `serving: null`** and the SERVING panel reads "could not enumerate instances" on a perfectly healthy box |
 | ufw enforcement | `-v /etc/ufw/ufw.conf:/etc/ufw/ufw.conf:ro` | Reads `ENABLED=`. `ufw status` needs root; `ufw.conf` does not. Same fallback `serve-llm.sh`'s `ufw_enforcing()` already uses |
 | DKMS / kernel state | `-v /lib/modules:/lib/modules:ro` | Presence of `updates/dkms/dell-smm-hwmon.ko*` for the running kernel |
@@ -402,6 +402,51 @@ RPM, SMM nominal max 5100. Engage at ≥ 55 °C, release at ≤ 51 °C, `HIGH_DW
 | `port` | `/etc/llama-server/<i>.env` (`PORT=`) — **the file only**; the unit's `EnvironmentFile` *is* that file on this box | none |
 
 | `ctx` | same env file (`CTX=`) | none |
+| `gpus` | ⚠ **NEW 2026-09-15** — the unit's own `CUDA_VISIBLE_DEVICES`, read from **`org.freedesktop.systemd1.Service`'s `Environment` property over the §2.2 socket** (systemd has already expanded `%i` there, so the claim is on the wire rather than in our arithmetic), parsed to indices: `%i` → `[N]`, the split unit → `[0, 1]`. `readonly number[] \| null` | none |
+
+⚠⚠ **TWO RULINGS, 2026-09-17, both of which change §4's contract — loop 12c.**
+
+**1. Instance ids are STRINGS; discovery accepts named instances.** `discoverInstances` requires a
+bare-integer filename, so `serving-mode.sh`'s `split.env` is rejected outright and split mode
+**cannot be rendered at all**, which was discovered only after 12b shipped the join it needed.
+Ruled: accept named instances across discovery, ordering, unit naming and React keys. ⚠ **Two
+things stop being free and must be built deliberately, not inherited**: `servingUnitName` becomes a
+**mapping** rather than a template (`split.env` → `llama-split.service`, not
+`llama-server@split.service`) and **every wrong answer there is silent**; and the numeric sort that
+orders `0, 1, 2, 10` correctly has **no string equivalent** — which matters because `serving[]`'s
+order is what *first claimant wins* means in §6.2's join. Specify the order; do not let it fall out
+of a default sort.
+
+**2. `wire.ts` refuses the ROW, not the whole snapshot.** Today one invalid `serving[]` entry
+blanks the entire dashboard, so a box switched to split mode before its dashboard is redeployed
+shows nothing at all. Ruled: drop the offending row, render the rest, and file an `errors[]` entry
+naming it. ⚠ **This is not a relaxation — it is what invariant 5 already says**: *a failed reading
+is a partial snapshot plus an `errors[]` entry, never a 500*. Whole-snapshot refusal was the
+stricter reading and it made a contract mismatch look like a dead dashboard. The entry must name
+**which** row and **why**, and a row dropped this way must never be counted as a healthy instance
+by §9's aggregate.
+
+⚠⚠ **`gpus` IS WHAT THE JOIN READS, and an ABSENT one is not an unknown — settled 2026-09-15.**
+An instance declares the cards it serves and a card asks which instance lists it (§6.2). Three
+values, three meanings, and the third is the one that needs stating:
+
+| `gpus` | means | renders |
+|---|---|---|
+| `[N]` | this instance serves card N alone | *served by instance N* |
+| `[0, 1]` | one process across both | *served jointly with GPU M* on each card |
+| `null` | the unit's `CUDA_VISIBLE_DEVICES` could not be read | invariant 1: an em dash, and the `errors[]` entry says why |
+| **absent from the snapshot** | **the SERVER predates this field** | **fall back to `gpu.index === serving.instance`, silently** |
+
+⚠ **The fallback is correct rather than a compromise, and the reason is worth keeping**: a server
+old enough not to publish `gpus` is a server that **cannot be in split mode** — split mode arrives
+with the same deployment that adds the field. So on such a server the index join is not an
+assumption, it is the only arrangement that exists. **This is the one case where falling back is
+more honest than saying "unknown"**, and it means the dashboard does not regress on a box that has
+not been redeployed. It is also self-retiring: the day the box is redeployed, the field appears.
+
+⚠ **`null` and absent must NOT be collapsed.** `null` is a unit that exists and could not be read —
+a real failure, with an em dash and an entry. Absent is an older contract. §3.1's `null` ≠ `[]`
+discipline, one level up.
 
 ⚠ **`model` is RENDERED AS ITS FILENAME — ruled 2026-09-10 (10g-A1).** `/v1/models` returns
 `data[0].id`, which is llama.cpp's `-m` argument: **the full weights path** unless `ALIAS` is set
@@ -1170,7 +1215,11 @@ whose `name` failed to parse does not lose its subtitle; it shows what it has.
 
 **GPU card ×2** — temperature as the dominant figure with a 30-minute trace behind it,
 power against the 250 W cap, VRAM as a bar with absolute MiB, utilisation, SM clock, and
-the model currently served on that card (joined from the serving data by instance index).
+the model currently served on that card — ⚠ **found by asking which `serving[]` instance lists
+this card in its own `gpus` (§3.4), never by matching the card's index against the instance
+number.** This sentence used to say *"joined from the serving data by instance index"*, which was
+the coincidence, not the rule; §6.2's inverted-join paragraph governs, and the index is read in
+exactly one case — a server too old to publish `gpus`, which cannot be running split mode.
 Throttle reasons appear only when something other than `0x4` is active; the normal power
 cap is not news and must not be styled as a warning. ⚠ **Nor as a verdict** — owner's ruling
 2026-09-09 (10e-Q3): when another bit makes the line notable, `0x4` is listed beside it as a

@@ -13,6 +13,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  LIVE_BOX_SERVING_WIRE,
   everythingZero,
   nothingReadable,
   pwm5NodeAbsent,
@@ -422,5 +423,132 @@ describe('a reading of the wrong type is refused', () => {
   test('one malformed GPU refuses the whole snapshot rather than dropping a card', () => {
     const gpus = body(everythingZero)['gpus'] as Record<string, unknown>[];
     expect(parseSnapshot(withField('gpus', [...gpus, { index: 1 }]))).toBeNull();
+  });
+});
+
+describe('⚠⚠ 12b — §3.4’s `gpus` is ADDITIVE, proven against the body the live box really sends', () => {
+  /** The frozen bytes, spliced into an otherwise-valid snapshot. */
+  const withLiveBoxServing = (): Record<string, unknown> => ({
+    ...body(everythingZero),
+    serving: JSON.parse(LIVE_BOX_SERVING_WIRE) as unknown,
+  });
+
+  test('⚠ the DEPLOYED server’s own serving[] validates — six keys, and `gpus` is not among them', () => {
+    // Not a fixture written to match this change: `LIVE_BOX_SERVING_WIRE` is the PRE-CHANGE
+    // collector's output, run on the box's real `0.env`/`1.env` and its real `/v1/models`
+    // bodies (2026-09-17). If `gpus` were spelled `readonly number[] | null` — required, like
+    // every other member of this contract — this exact body would be REFUSED, and the running
+    // container would go dark on the first poll after a client-only deploy.
+    const parsed = parseSnapshot(withLiveBoxServing());
+    expect(parsed).not.toBeNull();
+    const rows = parsed?.snapshot.serving ?? [];
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(Object.keys(row).sort()).toEqual(['ctx', 'health', 'instance', 'model', 'port', 'unitState']);
+    }
+  });
+
+  test('⚠⚠ 12b-RECONCILE — the FIXTURE’S OWN BYTES are the evidence, and this is what asserts them', () => {
+    /*
+     * ⚠ `LIVE_BOX_SERVING_WIRE`'s whole claim is that it was CAPTURED rather than written, and
+     * `lib/fixtures.ts` states the proof in prose: *"that is why the context is 163840 … those
+     * are the box's values on the day, not this repo's older 131072 fixtures."* Before this
+     * test, `163840` occurred in exactly three places in the tree — that sentence and the
+     * fixture twice. **No test asserted it** (12b-A6). Regenerating the fixture from a dev box
+     * (`ctx: 131072`), renaming the model or moving the ports left all 3634 tests green, and
+     * the one asset in this tree whose value is that it is evidence had nothing protecting the
+     * evidence.
+     *
+     * ⚠ And the six-key guard beside it is about the PARSER'S OUTPUT — an object
+     * `servingInstanceOf` builds itself — so it constrains `gpus` and nothing else. This one
+     * reads the fixture's own parsed bytes, which is where a seventh key or a changed reading
+     * would appear.
+     */
+    const rows = JSON.parse(LIVE_BOX_SERVING_WIRE) as Record<string, unknown>[];
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(Object.keys(row).sort()).toEqual(['ctx', 'health', 'instance', 'model', 'port', 'unitState']);
+      // The box on 2026-09-17: `/etc/llama-server/<i>.env` says `CTX=163840` and
+      // `ALIAS=qwen3.6-27b`, and `:8080/v1/models` answers with that same id. Every other
+      // serving fixture in this tree carries 131072, which is what makes this number evidence.
+      expect(row['ctx']).toBe(163840);
+      expect(row['model']).toBe('qwen3.6-27b');
+      expect(row['unitState']).toBeNull();
+      expect(row['health']).toBe('ok');
+    }
+    expect(rows.map((row) => row['instance'])).toEqual([0, 1]);
+    expect(rows.map((row) => row['port'])).toEqual([8080, 8081]);
+  });
+
+  test('⚠⚠ 12b-RECONCILE — a PRESENT `gpus` key whose value is `undefined` refuses the row, never reads as absent', () => {
+    // ⚠ `optionalCardList` asks `Object.hasOwn`, not `source[key] === undefined`, and 12b's
+    // adversarial reverted it with the whole suite green (`R2`). The two answers are opposite:
+    // `hasOwn` says the row declared something unreadable — which is not one of §3.4's three
+    // values, so the row is refused like a bad `port` — while `=== undefined` says the server
+    // has never heard of the field and hands that snapshot the index-join fallback.
+    // JSON cannot carry `undefined`, so this shape reaches `parseSnapshot` only from a
+    // JavaScript caller — which is exactly what `app/api/telemetry`'s own tests and every
+    // spread in this project are.
+    const rows = JSON.parse(LIVE_BOX_SERVING_WIRE) as Record<string, unknown>[];
+    const withPresentUndefined = rows.map((row) => ({ ...row, gpus: undefined }));
+    expect(Object.hasOwn(withPresentUndefined[0] ?? {}, 'gpus')).toBe(true);
+    expect(parseSnapshot({ ...body(everythingZero), serving: withPresentUndefined })).toBeNull();
+    // …while the same rows with the key truly absent validate, which is the fixture above.
+    expect(parseSnapshot({ ...body(everythingZero), serving: rows })).not.toBeNull();
+  });
+
+  test('⚠ the validated rows carry NO `gpus` key — absence survives validation, never becoming null', () => {
+    // The one-character mistake this test exists for. `field(value,'gpus') ?? null` reads a
+    // missing key as `null`, which §3.4 says is a FAILED READ — an em dash and an `errors[]`
+    // entry — on a server that is behaving perfectly. `Object.hasOwn` is what `servedBy`
+    // reads, so a present-but-undefined key would also send this snapshot down the
+    // new-server path and lose the index-join fallback.
+    const rows = parseSnapshot(withLiveBoxServing())?.snapshot.serving ?? [];
+    for (const row of rows) {
+      expect(Object.hasOwn(row, 'gpus')).toBe(false);
+      expect(row.gpus).toBeUndefined();
+    }
+  });
+
+  test.each([
+    ['one card', [0], [0]],
+    ['the other card', [1], [1]],
+    ['both cards, split mode', [0, 1], [0, 1]],
+    ['no card at all — CUDA_VISIBLE_DEVICES=', [], []],
+  ])('⚠ a `gpus` of %s survives the wire exactly', (_name, sent, expected) => {
+    const rows = body(servingPopulated)['serving'] as Record<string, unknown>[];
+    const first = { ...(rows[0] as Record<string, unknown>), gpus: sent };
+    const parsed = parseSnapshot({ ...body(servingPopulated), serving: [first, rows[1]] });
+    expect(parsed?.snapshot.serving?.[0]?.gpus).toEqual(expected);
+  });
+
+  test('⚠ `gpus: null` is PRESERVED as null and is not the same outcome as an absent key', () => {
+    // §3.4: "`null` and absent must NOT be collapsed." `null` is a unit that exists and could
+    // not be read; absent is an older contract. This is the only test in the file that asserts
+    // two different wire shapes produce two different — not merely non-crashing — results.
+    const rows = body(servingPopulated)['serving'] as Record<string, unknown>[];
+    const declaredNull = { ...(rows[0] as Record<string, unknown>), gpus: null };
+    const parsed = parseSnapshot({ ...body(servingPopulated), serving: [declaredNull] });
+    const row = parsed?.snapshot.serving?.[0];
+    expect(row?.gpus).toBeNull();
+    expect(Object.hasOwn(row ?? {}, 'gpus')).toBe(true);
+  });
+
+  test.each([
+    ['a string', '0,1'],
+    ['a number', 0],
+    ['an object', { 0: true }],
+    ['a member that is not a number', [0, '1']],
+    ['a fractional member', [0.5]],
+    ['a negative member', [-1]],
+    ['a null member', [null]],
+  ])('⚠ a `gpus` of %s refuses the whole snapshot', (_name, sent) => {
+    // Refusing the SNAPSHOT, not silently dropping the member: a card missing from an
+    // otherwise plausible list would render as "no instance serves this card", which is a
+    // claim rather than a gap. `-1` and `0.5` are in the list because `integer()` alone
+    // accepts both and neither can ever equal a `Gpu.index`.
+    const rows = body(servingPopulated)['serving'] as Record<string, unknown>[];
+    const bad = { ...(rows[0] as Record<string, unknown>), gpus: sent };
+    expect(parseSnapshot({ ...body(servingPopulated), serving: [bad] })).toBeNull();
   });
 });

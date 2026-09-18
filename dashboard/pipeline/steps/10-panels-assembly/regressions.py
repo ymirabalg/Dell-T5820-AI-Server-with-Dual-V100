@@ -315,6 +315,11 @@ STATUS_ROW_SRC = "components/panels/status-row.tsx"
 CONDITION_LOOKUP_SRC = "components/panels/condition-lookup.ts"
 EVENT_SENTENCE_SRC = "components/panels/event-sentence.ts"
 GPU_PANEL_SRC = "components/panels/gpu-panel.tsx"
+# ⚠ 12b — step 8's module, mutated from HERE for `10c-GP4` alone: §6.2's join moved into
+# `servedBy` and the GPU card no longer looks an instance up at all, so the positional-lookup
+# defect that mutation is about now lives in this file. Ledger ownership follows the TEST
+# file (§5.2 rule 6), and that is unchanged — the GPU card's own test still asserts it.
+OBSERVATIONS_SRC = "lib/client/observations.ts"
 CPU_PANEL_SRC = "components/panels/cpu-panel.tsx"
 MEMORY_PANEL_SRC = "components/panels/memory-panel.tsx"
 COOLING_PANEL_SRC = "components/panels/cooling-panel.tsx"
@@ -1343,9 +1348,9 @@ REGRESSIONS = [
     # already caught; only the POSITIONAL variant escaped, and it escaped because every
     # two-card fixture in the project was dense, in order and — A10 — identical card to card.
     ("10c-GP4 the §6.2 GPU↔instance join becomes array-POSITION lookup, printing another card's model",
-     GPU_PANEL_SRC,
-     "  snapshot?.serving?.find((s) => s.instance === index) ?? null;",
-     "  snapshot?.serving?.[index] ?? null;",
+     OBSERVATIONS_SRC,
+     "    return { kind: 'indexed', instance: serving.find((s) => s.instance === index) ?? null };",
+     "    return { kind: 'indexed', instance: serving[index] ?? null };",
      [GPU_PANEL_TEST]),
     ("10c-GP5 the card lookup becomes array-POSITION, so a sparse gpus[] renders GPU 1's die titled GPU 0",
      GPU_PANEL_SRC,
@@ -2378,18 +2383,18 @@ REGRESSIONS = [
      [SERVING_PANEL_TEST]),
     ("10h-GP1 the GPU card renders the model RAW in its strip, so a path is +17.9 px on the row that sets §6.1's first term",
      GPU_PANEL_SRC,
-     "                v: formatModelName(instance?.model ?? null),",
-     "                v: formatText(instance?.model ?? null),",
+     "        v: formatModelName(served.instance?.model ?? null),",
+     "        v: formatText(served.instance?.model ?? null),",
      [GPU_PANEL_TEST]),
     ("10h-GP2 the GPU card shortens the model and keeps NOTHING — the raw reading is off the page entirely",
      GPU_PANEL_SRC,
-     "                title: instance?.model ?? null,",
-     "                title: null,",
+     "        title: served.instance?.model ?? null,",
+     "        title: null,",
      [GPU_PANEL_TEST]),
     ("10h-GP3 a card with no matching instance is given an EMPTY title, so an em-dash cell offers a tooltip that says nothing",
      GPU_PANEL_SRC,
-     "                title: instance?.model ?? null,",
-     "                title: instance?.model ?? '',",
+     "        title: served.instance?.model ?? null,",
+     "        title: served.instance?.model ?? '',",
      [GPU_PANEL_TEST]),
 
     # ========================================== 12a — §6.2's ruling of 2026-09-14
@@ -2557,6 +2562,146 @@ REGRESSIONS = [
      ".statusText {",
      ".status[data-mode='paused'],\n.status[data-mode='stale'] {\n  background: var(--nodata), var(--surface-2);\n}\n\n.statusText {",
      [UNSATISFIABLE_CSS_TEST]),
+
+    # ============================== 12b — §6.2's inverted join, at the two panels that render it
+    # ⚠ Every one of these is a rendering the OLD join produced and the ruling forbids. The
+    # first is the whole change in one line: under `gpu.index === serving.instance` the label
+    # took the CARD's number, which is right exactly while the arrangement is one process per
+    # card and silently wrong the moment it is not.
+    ("12b-GP7 the served-by label takes the CARD's index again, so a mis-pinned instance is invisible",
+     GPU_PANEL_SRC,
+     "            ? `served by instance ${String(served.instance.instance)}`",
+     "            ? `served by instance ${String(index)}`",
+     [GPU_PANEL_TEST]),
+    ("12b-GP8 a jointly-served card falls back to the instance form, and the arrangement disappears",
+     GPU_PANEL_SRC,
+     "          served.alongside.length === 0",
+     "          served.alongside.length >= 0",
+     [GPU_PANEL_TEST]),
+    ("12b-GP9 a jointly-served card renders an EM DASH — §6.2's named lie",
+     GPU_PANEL_SRC,
+     """        v: formatModelName(served.instance.model),
+        title: served.instance.model,
+      };
+    case 'unknown':""",
+     """        v: served.alongside.length === 0 ? formatModelName(served.instance.model) : EM_DASH,
+        title: served.instance.model,
+      };
+    case 'unknown':""",
+     [GPU_PANEL_TEST]),
+    ("12b-GP10 an UNREADABLE card list reads `no instance` — a claim made on a reading we do not have",
+     GPU_PANEL_SRC,
+     "      return { k: 'served by', v: EM_DASH, title: null };",
+     "      return { k: 'served by', v: 'no instance', title: null };",
+     [GPU_PANEL_TEST]),
+    ("12b-GP11 a card nothing serves reads an em dash, conflating `we looked` with `we could not`",
+     GPU_PANEL_SRC,
+     "      return { k: 'served by', v: 'no instance', title: null };",
+     "      return { k: 'served by', v: EM_DASH, title: null };",
+     [GPU_PANEL_TEST]),
+    ("12b-GP12 the older-server fallback is dropped, so the live box's own snapshot loses its model",
+     GPU_PANEL_SRC,
+     """    case 'indexed':
+      return {
+        k: `served by instance ${String(index)}`,
+        v: formatModelName(served.instance?.model ?? null),
+        title: served.instance?.model ?? null,
+      };""",
+     """    case 'indexed':
+      return { k: 'served by', v: 'no instance', title: null };""",
+     [GPU_PANEL_TEST]),
+    ("12b-GP13 the joint case keeps no title, so the raw reading leaves the page",
+     GPU_PANEL_SRC,
+     """            : `served jointly with ${servedCards(served.alongside) ?? EM_DASH}`,
+        v: formatModelName(served.instance.model),
+        title: served.instance.model,""",
+     """            : `served jointly with ${servedCards(served.alongside) ?? EM_DASH}`,
+        v: formatModelName(served.instance.model),
+        title: null,""",
+     [GPU_PANEL_TEST]),
+
+    ("12b-SP3 the SERVING row always appends a card separator, so an older server's row grows a dot",
+     SERVING_PANEL_SRC,
+     "      secondaryLabel={cards === null ? `:${formatPort(instance.port)}` : `:${formatPort(instance.port)} \u00b7 ${cards}`}",
+     "      secondaryLabel={`:${formatPort(instance.port)} \u00b7 ${cards ?? ''}`}",
+     [SERVING_PANEL_TEST]),
+    ("12b-SP4 an ABSENT card list is coerced to null, so a healthy older server shows a failed read",
+     SERVING_PANEL_SRC,
+     "  const cards = servedCards(instance.gpus);",
+     "  const cards = servedCards(instance.gpus ?? null);",
+     [SERVING_PANEL_TEST]),
+    ("12b-SP5 the row names cards from its own instance number rather than from `gpus`",
+     SERVING_PANEL_SRC,
+     "  const cards = servedCards(instance.gpus);",
+     "  const cards = servedCards([instance.instance]);",
+     [SERVING_PANEL_TEST]),
+
+    # ⚠ Added after the first run: `12b-SP3`/`SP4`/`SP5` all render `GPU 0` for instance 0,
+    # so NONE of them could redden the per-GPU shape — the same coincidence the whole loop is
+    # about, reappearing in the mutations. This one is in `lib/client/observations.ts` (step
+    # 8's module) because that is where the singular/plural decision lives; the ledger file is
+    # the SERVING panel's test, which is where the rendering is asserted (§5.2 rule 6).
+    ("12b-SP6 the SERVING row renders `GPUs 0` for one card, so the joint arrangement stops standing out",
+     OBSERVATIONS_SRC,
+     "  return gpus.length === 1 ? `GPU ${String(gpus[0])}` : `GPUs ${gpus.join(', ')}`;",
+     "  return `GPUs ${gpus.join(', ')}`;",
+     [SERVING_PANEL_TEST]),
+
+    # ⚠ The browser records themselves, through the one file in the tree that can see them
+    # (12a's `measurement-harness.test.ts`). Each deletes one conjunct of measurement 19/20.
+    ("12b-MH12 the REDEPLOYED page is never rendered, so the harness grades only the pre-12b form",
+     MEASURE_BREAKPOINTS_SRC,
+     "    fabrication.mode = 'declared';\n",
+     "",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12b-MH13 SPLIT MODE goes back to being drawn by no fixture in either harness",
+     MEASURE_BREAKPOINTS_SRC,
+     "    fabrication.mode = 'split';\n",
+     "",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12b-MH14 the em-dash-on-a-served-card term goes, and a fit measurement cannot see that failure",
+     MEASURE_BREAKPOINTS_SRC,
+     "present.gpu0NotBlank && present.gpu1NotBlank",
+     "true",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12b-MH15 measurements 19 and 20 lose their precondition and grade the fallback page",
+     MEASURE_BREAKPOINTS_SRC,
+     "        gpu0Says: textOf('gpu0').includes(gpu0Phrase),\n",
+     "",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12b-MH16 the SERVING half of §6.2's ruling stops being graded in a browser",
+     MEASURE_BREAKPOINTS_SRC,
+     "        servingSays: textOf('serving').includes(servingPhrase),\n",
+     "",
+     [MEASUREMENT_HARNESS_TEST]),
+
+    # ⚠⚠ 12b-RECONCILE (12b-A7) — measurement 21 is the browser page where the instance number
+    # and the card number DISAGREE. Measurement 19 is the box's own arrangement, so its three
+    # text expectations hold for a client that ignores `gpus` entirely: the coincidence the
+    # whole loop is about, reappearing one harness over from where the fixtures fixed it.
+    ("12b-MH17 the cross-pinned page is never drawn, so no browser record can tell the two joins apart",
+     MEASURE_BREAKPOINTS_SRC,
+     "    fabrication.mode = 'cross-pinned';\n",
+     "",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12b-MH18 the card may carry the WRONG instance's model as long as the label reads right",
+     MEASURE_BREAKPOINTS_SRC,
+     "present.gpu0Lacks && present.gpu1Lacks",
+     "true",
+     [MEASUREMENT_HARNESS_TEST]),
+
+    # ⚠⚠ 12b-RECONCILE (12b-A8) — `allReadingsNull` is the panel suite's "current server,
+    # nothing readable" snapshot and its rows carried no `gpus` KEY, so `servedBy` read the
+    # whole snapshot as an OLDER SERVER and every card built on it claimed `served by instance
+    # N`. The fixture is the defect; the mutation is the fixture as it stood.
+    ("12b-GP14 the nothing-readable snapshot omits the `gpus` key, so its cards claim an instance",
+     "components/panels/test-support.ts",
+     """  health: null,
+  gpus: null,
+});""",
+     """  health: null,
+});""",
+     [GPU_PANEL_TEST]),
 ]
 
 # ---------------------------------------------------------------------------
@@ -2584,10 +2729,17 @@ def _assert_unique_ids() -> None:
     #    plus §6.4's `+N more` and §3.4's filename rendering) — same instruction, same reasoning.
     # ⚠ `12a-` added by 12a (the first production failure: §6.2's "a collector that cannot
     #   read must be visible at a glance") — same instruction, same reasoning.
-    bad_prefix = sorted(k for k in seen if not k.startswith(("10a-", "10b-", "10c-", "10e-", "10f-", "10g-", "10h-", "12a-")))
+    # ⚠ `12b-` added by 12b (§6.2's INVERTED join: an instance declares the cards it serves
+    #   and a card asks which instance lists it) — same instruction, same reasoning.
+    bad_prefix = sorted(
+        k
+        for k in seen
+        if not k.startswith(("10a-", "10b-", "10c-", "10e-", "10f-", "10g-", "10h-", "12a-", "12b-"))
+    )
     if bad_prefix:
         raise SystemExit(
-            f"!!! mutation ids must carry the creating step's prefix (10a-/10b-/10c-/10e-/10f-/10g-/10h-/12a-): {', '.join(bad_prefix)}"
+            "!!! mutation ids must carry the creating step's prefix "
+            f"(10a-/10b-/10c-/10e-/10f-/10g-/10h-/12a-/12b-): {', '.join(bad_prefix)}"
         )
 
 
