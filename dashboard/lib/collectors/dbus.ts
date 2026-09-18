@@ -488,7 +488,7 @@ export interface CollectUnitStatesOptions {
    * instance it is about **structurally**, from the exact value the caller already used to
    * build the unit name, never by re-reading the message this file writes.
    */
-  readonly unitInstances?: ReadonlyMap<string, number>;
+  readonly unitInstances?: ReadonlyMap<string, string>;
   /**
    * ⚠ 12b — which of {@link units} should ALSO have their {@link ENVIRONMENT_PROPERTY} read,
    * for §3.4's `gpus`.

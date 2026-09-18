@@ -224,11 +224,44 @@ describe('⚠ §6.5 — a stale SAFETY row shows BOTH facts, and its last value'
         {
           source: 'dbus',
           message: 'llama-server@1.service: NoSuchUnit: systemd has no record',
-          instance: 1,
+          instance: '1',
         },
       ],
     };
     const html = renderToStaticMarkup(<SafetyPanel state={stateWith(snapshot)} nowMs={0} panelId="safety" />);
     expect(html).not.toContain('llama-server@1.service');
+  });
+});
+
+/**
+ * ⚠⚠ **12c/TEST — the same fifth consequence, on the third panel `dbus` reaches.**
+ *
+ * See `cooling-panel.test.tsx`'s block of the same name. SAFETY has its own copy of 10b-S-G's
+ * `e.instance === undefined` filter, so the rule needs its own assertion here: one mutation
+ * cannot redden a test in a file it is not checked against, and a rule stated in two modules
+ * needs an assertion in each.
+ */
+describe('⚠⚠ 12c/TEST — a SERVING instance’s unit-name miss never lands on the SAFETY rows', () => {
+  const missSentence =
+    'no systemd unit is known for instance `default` (`default.env` in /etc/llama-server), ' +
+    'so its unit state and the cards it serves were not read';
+
+  test('⚠⚠ the miss sentence is absent from SAFETY, because the entry names an instance', () => {
+    const withMiss: TelemetrySnapshot = {
+      ...everythingZero,
+      errors: [{ source: 'dbus', message: missSentence, instance: 'default' }],
+    };
+    const html = renderToStaticMarkup(<SafetyPanel state={stateWith(withMiss)} nowMs={0} panelId="safety" />);
+    expect(html).not.toContain('no systemd unit is known');
+    expect(html).not.toContain('default.env');
+  });
+
+  test('⚠⚠ a `dbus` entry with NO instance still explains the fan service row here', () => {
+    const busWide: TelemetrySnapshot = {
+      ...everythingZero,
+      errors: [{ source: 'dbus', message: 'connect ENOENT /run/dbus/system_bus_socket' }],
+    };
+    const html = renderToStaticMarkup(<SafetyPanel state={stateWith(busWide)} nowMs={0} panelId="safety" />);
+    expect(html).toContain('system_bus_socket');
   });
 });

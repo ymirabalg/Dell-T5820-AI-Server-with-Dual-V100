@@ -17,6 +17,7 @@ import type { TelemetryError, TelemetrySnapshot, UnitState } from '../types';
 import { MAX_EVENTS, observeEvents, observeStaleness, startEventLog } from './events';
 import type { EventState, LogEntry } from './events';
 import { conditionsFrom, enumerationsRead } from './observations';
+import { servingEnumeration } from './wire';
 
 /** One session: the condition state and the log, stepped by (snapshot, wall clock). */
 class Session {
@@ -33,7 +34,11 @@ class Session {
   poll(snapshot: TelemetrySnapshot, nowMs: number, afterGap = false): readonly LogEntry[] {
     const before = this.events.entries;
     const result = observePoll(this.conditions, conditionsFrom(snapshot), this.standing, nowMs, {
-      enumerationsRead: enumerationsRead(snapshot),
+      // ⚠ 12c/RECONCILE — stated, not defaulted. The old signature let this read
+      // `enumerationsRead(snapshot)`, which silently asserted *the serving enumeration was
+      // read* (`12c-A5`); the argument is required now, so a harness that had not been updated
+      // is a compile error rather than a retirement.
+      enumerationsRead: enumerationsRead(snapshot, servingEnumeration(snapshot.serving, 0)),
       afterGap,
     });
     this.conditions = result.state;
@@ -660,5 +665,95 @@ describe('⚠ §6.7: which errors[] message reaches the log', () => {
       (e) => e.kind === 'source-lost',
     );
     expect(lost[0]?.detail).toBe('skipped: an earlier call has not returned');
+  });
+});
+
+/**
+ * ⚠⚠ **12c/RECONCILE (`12c-A2`) — an already-lost source was ABSORBING the next real failure
+ * of the same source.**
+ *
+ * Two mechanisms key on *presence of a source* rather than on the event: `failingSourceCount`
+ * (§9's header count, which counts distinct §3.7 sources) and this log's per-source presence
+ * debounce. 12c gave `dbus` a **permanently present** entry — the unit-name miss, filed on
+ * every poll for as long as an unrecognised `*.env` sits in `/etc/llama-server` — and measured:
+ *
+ * ```
+ * quiet box, the bus dies               -> ["source-lost dbus"]
+ * a stray backup.env, then the bus dies -> ["source-lost dbus"] at the MISS's edge, t=10s
+ *                                          the OUTAGE at t=20s logged NOTHING
+ * ```
+ *
+ * A genuine D-Bus outage changed no number, no word, no colour and wrote no line. The edge is
+ * still the edge; what is debounced now includes **what a lost source says**, which is §6.7's
+ * own requirement of this text: *"A skipped call and a failed call must not read alike … it is
+ * the only signal that a source is wedged rather than merely broken."*
+ *
+ * ⚠ The header half is NOT changed, and that is a decision rather than an omission: §9's count
+ * is of *sources unread*, which is exactly what it says and what the owner ratified in 12a. It
+ * is recorded as an owner question in `12c-reconciliation.md` instead.
+ */
+describe('⚠⚠ 12c/RECONCILE — a source that is already lost can still report a NEW failure', () => {
+  const miss: TelemetryError = {
+    source: 'dbus',
+    message: 'no systemd unit is known for instance `backup`',
+    instance: 'backup',
+  };
+  const outage: TelemetryError = { source: 'dbus', message: '/run/systemd/private: ECONNREFUSED' };
+
+  test('⚠⚠ a real bus outage is logged even though the unit-name miss already lost the source', () => {
+    const session = new Session();
+    session.poll(everythingZero, 0);
+    // The stray `.env` alone: one entry, every poll, forever. It logs its own edge at 12s.
+    session.poll(withErrors([miss]), 1_000);
+    const first = session.poll(withErrors([miss]), 12_000).filter((e) => e.kind === 'source-lost');
+    expect(first.map((e) => e.source)).toEqual(['dbus']);
+    // …and it does not log again while nothing else changes, which is the property the
+    // presence debounce exists for and which this fix must not spend.
+    for (let i = 2; i <= 6; i += 1) {
+      expect(session.poll(withErrors([miss]), i * 12_000).filter((e) => e.kind === 'source-lost')).toEqual([]);
+    }
+    // Now the bus really dies. ⚠ The outage entry is filed BEFORE the miss (the collector's own
+    // entry precedes the lookup's), so the LAST message is the miss in both snapshots — keying
+    // on the last message alone would still log nothing here.
+    const second = session
+      .poll(withErrors([outage, miss]), 7 * 12_000)
+      .filter((e) => e.kind === 'source-lost');
+    expect(second).toHaveLength(1);
+    expect(second[0]).toMatchObject({ source: 'dbus', severity: 'watch', from: 'lost', to: 'lost' });
+    // …and the sentence an operator reads names the outage, not the stray file.
+    expect(second[0]?.detail).toBe('/run/systemd/private: ECONNREFUSED');
+  });
+
+  test('⚠⚠ …and the same failure repeated still logs ONCE — the debounce is not spent', () => {
+    // The anti-vacuity half. A fix that logged on every poll of a lost source would pass the
+    // test above and turn §6.4's log into a per-poll transcript, which is the exact thing
+    // §6.7's edge rule exists to prevent.
+    const session = new Session();
+    session.poll(everythingZero, 0);
+    session.poll(withErrors([outage, miss]), 1_000);
+    expect(
+      session.poll(withErrors([outage, miss]), 12_000).filter((e) => e.kind === 'source-lost'),
+    ).toHaveLength(1);
+    for (let i = 2; i <= 8; i += 1) {
+      expect(
+        session.poll(withErrors([outage, miss]), i * 12_000).filter((e) => e.kind === 'source-lost'),
+      ).toEqual([]);
+    }
+    // ⚠ And a source whose entries merely REORDER between polls is the same set — no line.
+    expect(
+      session.poll(withErrors([miss, outage]), 9 * 12_000).filter((e) => e.kind === 'source-lost'),
+    ).toEqual([]);
+  });
+
+  test('⚠ recovery is still ONE line however many messages preceded it', () => {
+    // The mark for an answering source is the band alone, so a source that was lost with three
+    // distinct messages recovers with one `source-recovered`, not three.
+    const session = new Session();
+    session.poll(withErrors([outage, miss]), 0);
+    expect(session.poll(withErrors([outage, miss]), 11_000).filter((e) => e.kind === 'source-lost')).toHaveLength(1);
+    expect(session.poll(everythingZero, 12_000)).toEqual([]);
+    const back = session.poll(everythingZero, 23_000).filter((e) => e.kind === 'source-recovered');
+    expect(back).toHaveLength(1);
+    expect(back[0]).toMatchObject({ from: 'lost', to: 'answering' });
   });
 });

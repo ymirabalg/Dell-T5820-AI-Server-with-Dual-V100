@@ -42,6 +42,17 @@ import type { DbusIo, DbusStream } from './dbus';
 import { DBUS_MESSAGE_TYPE, decodeMessage } from './dbus-wire';
 import { CAPTURED_DBUS_ACTIVE_STATE_REPLY, CAPTURED_DBUS_AUTH_OK } from './samples';
 
+/**
+ * ⚠ 12c — `servingUnitName` is a MAPPING and answers `string | null`. Every identity this file
+ * uses is numeric, so it always answers; the throw is here so a future identity that does NOT
+ * map fails the test loudly instead of quietly becoming `'null'` in a unit name.
+ */
+const unitFor = (instance: string): string => {
+  const unit = servingUnitName(instance);
+  if (unit === null) throw new Error(`no unit name for \`${instance}\``);
+  return unit;
+};
+
 const ENCODER = new TextEncoder();
 
 const bytes = (hex: string): Uint8Array =>
@@ -396,7 +407,7 @@ describe('asUnitState — §3.7’s closed vocabulary', () => {
 describe('collectUnitStates', () => {
   test('reads ActiveState for every unit over one connection', async () => {
     const bus = fakeBus({ units: liveBox });
-    const units = [servingUnitName(0), servingUnitName(1), FAN_SERVICE_UNIT];
+    const units = [unitFor('0'), unitFor('1'), FAN_SERVICE_UNIT];
     const { states, errors } = await collectUnitStates({ dbus: bus.dbus, units });
     expect(errors).toEqual([]);
     expect([...states]).toEqual([
@@ -535,7 +546,7 @@ describe('collectUnitStates', () => {
     });
     const { states, errors } = await collectUnitStates({
       dbus: bus.dbus,
-      units: [servingUnitName(0), servingUnitName(1)],
+      units: [unitFor('0'), unitFor('1')],
     });
     expect(states.get('llama-server@0.service')).toBe('active');
     expect(states.get('llama-server@1.service')).toBe('inactive');
@@ -551,17 +562,17 @@ describe('collectUnitStates', () => {
         },
       });
       const unitInstances = new Map([
-        [servingUnitName(0), 0],
-        [servingUnitName(1), 1],
+        [unitFor('0'), '0'],
+        [unitFor('1'), '1'],
       ]);
       const { errors } = await collectUnitStates({
         dbus: bus.dbus,
-        units: [servingUnitName(0), servingUnitName(1)],
+        units: [unitFor('0'), unitFor('1')],
         unitInstances,
       });
       expect(errors).toHaveLength(1);
       expect(errors[0]?.message).toContain('llama-server@1.service');
-      expect(errors[0]?.instance).toBe(1);
+      expect(errors[0]?.instance).toBe('1');
     });
 
     test('a unit absent from `unitInstances` — e.g. the fan service — carries no instance', async () => {
@@ -570,14 +581,14 @@ describe('collectUnitStates', () => {
       });
       const { errors } = await collectUnitStates({
         dbus: bus.dbus,
-        units: [servingUnitName(1), FAN_SERVICE_UNIT],
-        unitInstances: new Map([[servingUnitName(1), 1]]),
+        units: [unitFor('1'), FAN_SERVICE_UNIT],
+        unitInstances: new Map([[unitFor('1'), '1']]),
       });
       expect(errors).toHaveLength(2);
       const fanError = errors.find((e) => e.message.includes(FAN_SERVICE_UNIT));
       const instanceError = errors.find((e) => e.message.includes('llama-server@1.service'));
       expect(fanError?.instance).toBeUndefined();
-      expect(instanceError?.instance).toBe(1);
+      expect(instanceError?.instance).toBe('1');
     });
 
     test('a bus-wide connect failure carries no instance even when `unitInstances` is given', async () => {
@@ -587,10 +598,10 @@ describe('collectUnitStates', () => {
       const bus = fakeBus({ connectError: refused });
       const { errors } = await collectUnitStates({
         dbus: bus.dbus,
-        units: [servingUnitName(0), servingUnitName(1)],
+        units: [unitFor('0'), unitFor('1')],
         unitInstances: new Map([
-          [servingUnitName(0), 0],
-          [servingUnitName(1), 1],
+          [unitFor('0'), '0'],
+          [unitFor('1'), '1'],
         ]),
       });
       expect(errors).toHaveLength(1);
@@ -606,7 +617,7 @@ describe('collectUnitStates', () => {
       code: 'ENOENT',
     });
     const bus = fakeBus({ connectError: refused });
-    const units = [servingUnitName(0), servingUnitName(1), FAN_SERVICE_UNIT];
+    const units = [unitFor('0'), unitFor('1'), FAN_SERVICE_UNIT];
     const { states, errors } = await collectUnitStates({ dbus: bus.dbus, units });
     expect(units.map((u) => states.get(u))).toEqual([null, null, null]);
     expect(errors).toHaveLength(1);
@@ -618,7 +629,7 @@ describe('collectUnitStates', () => {
     // `states.get(name)` must not conflate "not asked for" with "asked for and unknown":
     // both would render an em dash, for different reasons and with different fixes.
     const bus = fakeBus({ connectError: new Error('nope') });
-    const units = [servingUnitName(0), FAN_SERVICE_UNIT];
+    const units = [unitFor('0'), FAN_SERVICE_UNIT];
     const { states } = await collectUnitStates({ dbus: bus.dbus, units });
     expect([...states.keys()]).toEqual(units);
     expect(states.has('llama-server@9.service')).toBe(false);
@@ -768,8 +779,8 @@ describe('collectUnitStates', () => {
   });
 
   test('the unit name for an instance is §6.4’s join key, derived from the index', () => {
-    expect(servingUnitName(0)).toBe('llama-server@0.service');
-    expect(servingUnitName(12)).toBe('llama-server@12.service');
+    expect(servingUnitName('0')).toBe('llama-server@0.service');
+    expect(servingUnitName('12')).toBe('llama-server@12.service');
     expect(FAN_SERVICE_UNIT).toBe('gpu-fan-control.service');
     expect(SYSTEMD_MANAGER_IFACE).toBe('org.freedesktop.systemd1.Manager');
   });
@@ -886,7 +897,7 @@ describe('⚠⚠ 12b — the `Environment` read: §3.4’s `gpus` at its source'
     // answers UnknownProperty. And the ORDER matters — the unit state is the reading every
     // panel needs, so if the conversation's budget runs out it is the second read that is
     // lost, not the first.
-    const unit = servingUnitName(0);
+    const unit = unitFor('0');
     const bus = fakeBus({
       units: { [unit]: { kind: 'state', state: 'active', environment: ['CUDA_VISIBLE_DEVICES=0'] } },
     });
@@ -910,7 +921,7 @@ describe('⚠⚠ 12b — the `Environment` read: §3.4’s `gpus` at its source'
   });
 
   test('⚠ two instances get two DIFFERENT environments — not one answer reused', async () => {
-    const units = [servingUnitName(0), servingUnitName(1)];
+    const units = [unitFor('0'), unitFor('1')];
     const bus = fakeBus({
       units: {
         [units[0] as string]: { kind: 'state', state: 'active', environment: ['CUDA_VISIBLE_DEVICES=0'] },
@@ -925,7 +936,7 @@ describe('⚠⚠ 12b — the `Environment` read: §3.4’s `gpus` at its source'
   test('⚠ an EMPTY environment is `[]`, never `null` — the unit answered', async () => {
     // What `gpu-fan-control.service` really returns (captured). `null` here would mean "the
     // property could not be read" about a property that was read perfectly.
-    const unit = servingUnitName(0);
+    const unit = unitFor('0');
     const bus = fakeBus({ units: { [unit]: { kind: 'state', state: 'active', environment: [] } } });
     const collection = await collectUnitStates({ dbus: bus.dbus, units: [unit], environmentUnits: [unit] });
     expect(collection.environments.get(unit)).toEqual([]);
@@ -934,13 +945,13 @@ describe('⚠⚠ 12b — the `Environment` read: §3.4’s `gpus` at its source'
   });
 
   test('⚠ an ERROR reply leaves it null, files ONE entry, and does not disturb ActiveState', async () => {
-    const unit = servingUnitName(1);
+    const unit = unitFor('1');
     const bus = fakeBus({ units: { [unit]: { kind: 'state', state: 'active', environment: 'error' } } });
     const collection = await collectUnitStates({
       dbus: bus.dbus,
       units: [unit],
       environmentUnits: [unit],
-      unitInstances: new Map([[unit, 1]]),
+      unitInstances: new Map([[unit, '1']]),
     });
     // §6.5: a failed reading blanks the figure it explains and nothing else.
     expect(collection.states.get(unit)).toBe('active');
@@ -950,14 +961,14 @@ describe('⚠⚠ 12b — the `Environment` read: §3.4’s `gpus` at its source'
     expect(collection.errors[0]?.message).toContain(ENVIRONMENT_PROPERTY);
     // 10b-S-G: attached structurally from the map the caller built, never read back out of
     // the message — so this entry lands on instance 1's SERVING row and no other.
-    expect(collection.errors[0]?.instance).toBe(1);
+    expect(collection.errors[0]?.instance).toBe('1');
   });
 
   test('⚠ a reply that is not a list of strings is null WITH an entry, not an empty list', async () => {
     // Distinct from an empty environment, which IS a value. This branch is a well-formed
     // reply whose body is not `as` — a different systemd, a fake, a desynchronised read —
     // and reporting it as "this unit declares nothing" would be a claim, not a gap.
-    const unit = servingUnitName(0);
+    const unit = unitFor('0');
     const bus = fakeBus({ units: { [unit]: { kind: 'state', state: 'active', environment: 'not-a-list' } } });
     const collection = await collectUnitStates({ dbus: bus.dbus, units: [unit], environmentUnits: [unit] });
     expect(collection.environments.get(unit)).toBeNull();
@@ -971,7 +982,7 @@ describe('⚠⚠ 12b — the `Environment` read: §3.4’s `gpus` at its source'
     // "is it a list?" would hand `parseVisibleDevices` a list of numbers, where reading a
     // `KEY=VALUE` out of each entry would throw from a collector whose contract is that it
     // does not. A `v` wrapping `au` is the shortest frame that reaches that check.
-    const unit = servingUnitName(0);
+    const unit = unitFor('0');
     const bus = fakeBus({ units: { [unit]: { kind: 'state', state: 'active', environment: 'not-strings' } } });
     const collection = await collectUnitStates({ dbus: bus.dbus, units: [unit], environmentUnits: [unit] });
     expect(collection.environments.get(unit)).toBeNull();
@@ -982,7 +993,7 @@ describe('⚠⚠ 12b — the `Environment` read: §3.4’s `gpus` at its source'
   test('⚠ a unit systemd has never loaded gets NO second entry — one fact, stated once', async () => {
     // `NoSuchUnit` already files an entry naming the unit, and there is no object path to
     // read a property from. A second entry would put the same fault on the row twice.
-    const unit = servingUnitName(7);
+    const unit = unitFor('7');
     const bus = fakeBus({ units: { [unit]: { kind: 'no-such-unit' } } });
     const collection = await collectUnitStates({ dbus: bus.dbus, units: [unit], environmentUnits: [unit] });
     expect(collection.states.get(unit)).toBe(NO_SUCH_UNIT_STATE);
@@ -996,7 +1007,7 @@ describe('⚠⚠ 12b — the `Environment` read: §3.4’s `gpus` at its source'
     // The same promise `states` makes, and for the same reason: a caller doing
     // `environments.get(name)` must not have to tell "not asked for" from "asked for and
     // unknown", because §3.4 renders those two differently — absent is an older server.
-    const unit = servingUnitName(0);
+    const unit = unitFor('0');
     const bus = fakeBus({ connectError: new Error('connect ENOENT /run/dbus/system_bus_socket') });
     const collection = await collectUnitStates({ dbus: bus.dbus, units: [unit], environmentUnits: [unit] });
     expect([...collection.environments.keys()]).toEqual([unit]);
@@ -1008,12 +1019,12 @@ describe('⚠⚠ 12b — the `Environment` read: §3.4’s `gpus` at its source'
     // The object path a property read needs comes from that unit's own `GetUnit` reply, so
     // a unit nobody asked about could never be fetched — promising it a key would be a
     // `null` that says "could not be read" about a unit never looked at.
-    const unit = servingUnitName(0);
+    const unit = unitFor('0');
     const bus = fakeBus({ units: { [unit]: { kind: 'state', state: 'active' } } });
     const collection = await collectUnitStates({
       dbus: bus.dbus,
       units: [unit],
-      environmentUnits: [unit, servingUnitName(3)],
+      environmentUnits: [unit, unitFor('3')],
     });
     expect([...collection.environments.keys()]).toEqual([unit]);
   });

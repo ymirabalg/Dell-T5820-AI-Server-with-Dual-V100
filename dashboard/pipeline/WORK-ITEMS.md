@@ -884,3 +884,10 @@ instances, so split mode can be rendered at all; `servingUnitName` becomes a map
 ordering must be specified rather than inherited from a sort. (2) **`wire.ts` refuses the row, not
 the snapshot** — which is what invariant 5 already said; whole-snapshot refusal made a contract
 mismatch look like a dead dashboard.
+
+**Ruled 2026-09-18 (12c, `SPEC.md` §9 row 2).** Retirement requires that the **server** omitted the
+subject from a collection it could read. ⚠ **A row the CLIENT dropped is not retired** — §3.4's
+row-refusal ruling leaves `serving[]` shorter, which retirement read as "it has left the machine",
+and one malformed `port` was measured silently deleting a live `alarm` from the ledger, the dot and
+the count. Refused rows go **stale**; the `errors[]` entry naming the refusal says why. The ruling
+was right; this is the second-order consequence it needed.

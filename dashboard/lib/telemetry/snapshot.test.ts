@@ -264,7 +264,7 @@ describe('the assembled snapshot', () => {
   test('the instance order is passed through, not re-sorted', async () => {
     const ordered = [...servingInstances].reverse();
     const { snapshot } = await assemble({ serving: async () => ({ serving: ordered, errors: [] }) });
-    expect(snapshot.serving?.map((row) => row.instance)).toEqual([1, 0]);
+    expect(snapshot.serving?.map((row) => row.instance)).toEqual(['1', '0']);
   });
 });
 

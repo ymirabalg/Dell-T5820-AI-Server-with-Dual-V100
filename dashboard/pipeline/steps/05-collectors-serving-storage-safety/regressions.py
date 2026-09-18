@@ -446,16 +446,59 @@ REGRESSIONS = [
      DBUS),
 
     # ================================================== §3.4's pure parsers
-    ("05-L1 a non-canonical filename is accepted, so `01.env` and `1.env` share one subject",
-     LLAMA_SRC,
-     "  return String(value) === stem ? value : null;",
-     "  return value;",
+    # ⚠⚠ RE-AIMED by 12c. Both defects are unchanged; both anchors moved when §3.4's ruling of
+    # 2026-09-17 made the identity a STRING. `L1`'s canonicality rule is now one clause of
+    # `isInstanceId` in `lib/units.ts` (the ONE predicate both discovery and `wire.ts` apply),
+    # and `L2`'s numeric sort is now `compareInstances`, which has to be written out because a
+    # string sort cannot know `10` is ten. They stay in THIS harness, on the `05-F15`
+    # precedent: what they prove is that step 5's own discovery tests still bite on the rule.
+    ("05-L1 a non-canonical filename is accepted, so `01.env` and `1.env` become two rows",
+     UNITS_SRC,
+     "  return ALL_DIGITS.test(value) ? isNumericInstance(value) : true;",
+     "  return true;",
      LLAMA),
     ("05-L2 instances sort lexically, so a tenth card lands between 0 and 1",
      LLAMA_SRC,
-     "  return { value: [...found].sort((a, b) => a - b), problems };",
+     "  return { value: [...found].sort(compareInstances), problems };",
      "  return { value: [...found].sort(), problems };",
      LLAMA),
+    # ============================================ 12c — named instances (§3.4, 2026-09-17)
+    ("12c-L20 discovery admits any `.env` stem, so `a:b.env` becomes a colliding condition id",
+     LLAMA_SRC,
+     "  return isInstanceId(stem) ? stem : null;",
+     "  return stem;",
+     [LLAMA, SERVING]),
+    ("12c-L21 the unit name goes back to being a TEMPLATE, so `split` is asked about as `llama-server@split.service`",
+     UNITS_SRC,
+     "  if (isNumericInstance(instance)) return `llama-server@${instance}.service`;\n"
+     "  return Object.hasOwn(NAMED_UNITS, instance) ? (NAMED_UNITS[instance] as string) : null;",
+     "  return `llama-server@${instance}.service`;",
+     [LLAMA, SERVING]),
+    ("12c-S20 a unit-name MISS files no errors[] entry, so it reads as a stopped service",
+     SERVING_SRC,
+     "  const unitNameProblems: TelemetryError[] = unnamed.flatMap((instance) =>",
+     "  const unitNameProblems: TelemetryError[] = [];\n  void ((instance: string) =>",
+     SERVING),
+    ("12c-S21 an identity with no unit name is asked about under a guessed template name",
+     SERVING_SRC,
+     "    if (unit === null) unnamed.push(instance);\n    else named.push({ instance, unit });",
+     "    named.push({ instance, unit: unit ?? `llama-server@${instance}.service` });\n    void unnamed;",
+     SERVING),
+    ("12c-S22 the MISS entry loses its instance, so it lands under the rows instead of on one",
+     SERVING_SRC,
+     "      instance,\n    ),\n  );\n",
+     "    ),\n  );\n",
+     SERVING),
+    ("12c-S23 the MISS is filed as `llama-env`, blaming the env file that parsed perfectly",
+     SERVING_SRC,
+     "    tag(\n      'dbus',\n      [\n        `no systemd unit is known",
+     "    tag(\n      'llama-env',\n      [\n        `no systemd unit is known",
+     SERVING),
+    ("12c-S24 an unmappable identity takes its neighbour's unit state, read from the wrong map key",
+     SERVING_SRC,
+     "    return unit === null ? null : units.states.get(unit) ?? null;",
+     "    return unit === null ? ([...units.states.values()][0] ?? null) : units.states.get(unit) ?? null;",
+     SERVING),
     ("05-L3 discovery caps at the two cards this box has today — §3.4 forbids exactly this",
      LLAMA_SRC,
      "  for (const entry of entries) {\n    if (!entry.endsWith(LLAMA_ENV_SUFFIX)) continue;",
@@ -835,18 +878,22 @@ REGRESSIONS = [
      "      errors: [...healthErrors, ...tag('llama-models', [probeFailure(models, e)])],",
      "      errors: [...healthErrors, ...tag('llama-health', [probeFailure(models, e)])],",
      SERVING),
+    # ⚠ Re-aimed by 12c: the lookup moved into `unitStateFor`, because `servingUnitName` is a
+    # MAPPING now and an identity it cannot name has no unit state to read at all. Same defect.
     ("05-V6 unitState is taken positionally instead of by §6.4's derived join key",
      SERVING_SRC,
-     "    unitState: units.states.get(servingUnitName(instance)) ?? null,",
-     "    unitState: [...units.states.values()][0] ?? null,",
+     "    return unit === null ? null : units.states.get(unit) ?? null;",
+     "    return [...units.states.values()][0] ?? null;",
      SERVING),
     # ⚠ Re-aimed 2026-09-08 (10b-S-G build): the call grew a `unitInstances` argument (the
     # structural map `collectUnitStates` needs to attach `instance` to a per-unit `dbus`
     # entry). Same property under test — O9's single read must not widen to a second unit.
+    # ⚠ Re-aimed again by 12c: the unit list is built from the identities the MAPPING could
+    # name (`unitNames`) rather than from every discovered instance.
     ("05-V7 collectServing also reads gpu-fan-control — O9's single read becomes two",
      SERVING_SRC,
-     "      units: instances.map(servingUnitName),\n      unitInstances,",
-     "      units: [...instances.map(servingUnitName), 'gpu-fan-control.service'],\n      unitInstances,",
+     "      units: unitNames,\n      unitInstances,",
+     "      units: [...unitNames, 'gpu-fan-control.service'],\n      unitInstances,",
      SERVING),
     ("05-V8 env problems are filed against `llama-health`",
      SERVING_SRC,
@@ -1233,9 +1280,10 @@ REGRESSIONS = [
      "    if (environment === undefined || environment === null) return null;",
      "    if (environment === undefined) return null;\n    if (environment === null) {\n      const missing = parseVisibleDevices([]);\n      gpuProblems.push(...tag('dbus', missing.problems.map((p) => `${unit}: ${p}`), instance));\n      return missing.value;\n    }",
      SERVING),
+    # ⚠ Re-aimed by 12c — same defect, and the anchor moved with `unitNames`.
     ("12b-S11b the environment is never requested, so every instance reports `gpus: null`",
      SERVING_SRC,
-     "      environmentUnits: instances.map(servingUnitName),",
+     "      environmentUnits: unitNames,",
      "      environmentUnits: [],",
      SERVING),
     # ⚠ Added after the FIRST run of this harness reported five ⚠ tests no mutation reddens —

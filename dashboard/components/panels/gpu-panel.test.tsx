@@ -10,6 +10,7 @@ import {
   servingInstances,
   servingPerGpu,
   servingSplit,
+  servingTwoClaimants,
 } from '@/lib/fixtures';
 import { parseSnapshot } from '@/lib/client/wire';
 import { GPU_TEMP_ALARM_C, GPU_TEMP_WATCH_C } from '@/lib/severity';
@@ -18,7 +19,7 @@ import type { Gpu, ServingInstance, TelemetrySnapshot } from '@/lib/types';
 
 import { CHART_SIZE } from '../grid';
 import { GpuPanel } from './gpu-panel';
-import { BASE_MS, allReadingsNull, emptyState, ringOfSeries, stateOf, stateWith, valueCells } from './test-support';
+import { BASE_MS, allReadingsNull, emptyState, ringOfSeries, stateOf, stateWith, stateWithRefused, valueCells } from './test-support';
 import type { Gap } from '@/lib/client/gaps';
 
 /**
@@ -259,7 +260,7 @@ describe('⚠ §3.4’s FALLBACK — with no `gpus` on the wire, the card IS fou
       serving: [
         {
           ...servingInstances[0]!,
-          instance: 0,
+          instance: '0',
           model: '/home/yorman/models/Qwen3.6-27B-Q4_K_M.gguf',
         },
       ],
@@ -887,6 +888,59 @@ describe('⚠⚠ 12b — the join is INVERTED: a card asks which instance lists 
     expect(html).not.toContain('no instance');
   });
 
+  /**
+   * ⚠⚠ **12c/RECONCILE (`12c-A1`) — the loop's governing finding, at the panel that renders it.**
+   *
+   * Measured before the fix, three pages differing only in row 0's `port`:
+   *
+   * | snapshot | GPU 1's served-by strip |
+   * |---|---|
+   * | both rows valid | `served by instance 1 · gemma-4-31b` |
+   * | row 0 REFUSED for a bad `port` | **`served by · no instance`** |
+   * | instance 1 genuinely left the machine | `served by · no instance` — byte-identical |
+   *
+   * `no instance` is `servedBy`'s `unserved`, and this file's own comment on it reads *"every
+   * list was READ and none of them names this card"*. After a refusal that sentence is false,
+   * and §9's ratified wording says so in as many words. The honest answer — invariant 1's em
+   * dash — was one branch away and untaken.
+   */
+  test('⚠⚠ 12c/RECONCILE — a REFUSED row renders an em dash, never `no instance`', () => {
+    const refusedPage = (panelId: 'gpu0' | 'gpu1'): string =>
+      renderToStaticMarkup(
+        <GpuPanel state={stateWithRefused(twoCards([servingPerGpu[1] as ServingInstance]), 1)} nowMs={0} panelId={panelId} />,
+      );
+    const html = refusedPage('gpu0');
+    // ⚠ The whole finding in one assertion: the card must not claim that nothing serves it.
+    expect(html).not.toContain('no instance');
+    expect(html).toContain('served by<');
+    expect(rowContaining(html, 'served by')).toContain('—');
+
+    // ⚠ The anti-vacuity half, twice over. A fix that answered `unknown` for everything would
+    // pass the three lines above and would have blinded the panel instead of correcting it.
+    // (a) the row that IS here still names its instance — and its whole strip is byte-identical
+    //     to the one it renders when nothing was refused, because a refusal elsewhere in the
+    //     array is not a reason to blank a reading this client parsed;
+    expect(refusedPage('gpu1')).toContain('served by instance 1');
+    expect(rowContaining(refusedPage('gpu1'), 'served by instance 1')).toBe(
+      rowContaining(
+        renderToStaticMarkup(
+          <GpuPanel
+            state={stateWith(twoCards([servingPerGpu[1] as ServingInstance]))}
+            nowMs={0}
+            panelId="gpu1"
+          />,
+        ),
+        'served by instance 1',
+      ),
+    );
+    // (b) and the SAME rows with nothing refused still say `no instance` for card 0, which is
+    // the true claim on a complete list and the one a mis-pinned instance depends on.
+    const complete = renderToStaticMarkup(
+      <GpuPanel state={stateWith(twoCards([servingPerGpu[1] as ServingInstance]))} nowMs={0} panelId="gpu0" />,
+    );
+    expect(complete).toContain('no instance');
+  });
+
   test('⚠⚠ ABSENT and `[N]` render BYTE-IDENTICALLY — the additivity claim, rendered', () => {
     // The bar this loop was given: the live box's snapshot must render exactly as it does
     // today. `servingInstances` and `servingPerGpu` differ in exactly one key (asserted in
@@ -895,6 +949,32 @@ describe('⚠⚠ 12b — the join is INVERTED: a card asks which instance lists 
     for (const panelId of ['gpu0', 'gpu1'] as const) {
       expect(render(servingPerGpu, panelId)).toBe(render(servingInstances, panelId));
     }
+  });
+
+  test('⚠⚠ 12c — a NAMED instance reaches the card VERBATIM: `served by instance split`', () => {
+    // §6.2's label takes the INSTANCE's own identity, and since 12c that identity may be a
+    // name. ⚠ The subject is a NAMED instance serving ONE card — card 1 — so the card's own
+    // index would have produced `served by instance 1`, a label that passes every other test
+    // in this file. A `String(index)`, a `Number(instance)` or a template unit name all
+    // survive a numeric identity and all die here.
+    const named = [{ ...(servingSplit[0] as ServingInstance), gpus: [1] }];
+    const one = render(named, 'gpu1');
+    expect(one).toContain('served by instance split');
+    expect(one).not.toContain('served by instance 1');
+    expect(rowContaining(one, 'served by instance split')).toContain('gemma-4-31b');
+  });
+
+  test('⚠⚠ 12c — TWO instances claiming one card: the card names the LOWER, in either list order', () => {
+    // §3.4 is silent on two claimants, and `compareInstances` decides: a numbered instance
+    // beats every named one. ⚠ The fixture arrives WORST-FIRST (`split` is element 0), and the
+    // reversed list must render the same card — a join that took `serving[]`'s first claimant
+    // by position would print `served by instance split` on card 0 from one order and
+    // `served by instance 0` from the other, for the same machine.
+    const zero = render(servingTwoClaimants, 'gpu0');
+    expect(zero).toContain('served by instance 0');
+    expect(zero).toContain('qwen3.6-27b');
+    expect(zero).not.toContain('gemma-4-31b');
+    expect(render([...servingTwoClaimants].reverse(), 'gpu0')).toBe(zero);
   });
 
   test('⚠⚠ 12b-TEST — the four shapes are four different TEXTS on the card, not four markups', () => {

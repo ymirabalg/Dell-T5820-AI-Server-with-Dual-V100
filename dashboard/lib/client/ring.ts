@@ -70,7 +70,7 @@
  */
 
 import type { IsoTimestamp, TelemetrySnapshot } from '../types';
-import type { WireSnapshot } from './wire';
+import type { ServingEnumeration, WireSnapshot } from './wire';
 
 /**
  * §6.7's cap. **Above** 7200 = 2 h at 1 s, deliberately, not equal to it.
@@ -87,6 +87,22 @@ export interface Sample {
   /** `Date.parse(ts)` — the poll's **start** (§4), so an age computed from it over-states. */
   readonly tsMs: number;
   readonly snapshot: TelemetrySnapshot;
+  /**
+   * ⚠⚠ **12c/RECONCILE — `snapshot.serving` PLUS whether it is all of it, and this field is
+   * the seam `12c-A1` was found in.**
+   *
+   * `parseSnapshot` knows how many rows it refused; §9's ledger was given the number and the
+   * panels were not, because it stopped here — a `Sample` carried the snapshot and nothing
+   * else, so `GpuPanel` could only reach the shortened array and read it as *the server listed
+   * fewer instances*. That rendered a validation failure as **`served by · no instance`**, a
+   * positive claim, on the one panel §6.2's join writes.
+   *
+   * ⚠ It is **required**, and it is built in exactly one place ({@link appendSample}, from the
+   * {@link WireSnapshot} that has both halves). A future caller cannot forget it: there is no
+   * other constructor, and the rows are not reachable through this type without the answer to
+   * *was this complete?* riding alongside them.
+   */
+  readonly serving: ServingEnumeration;
 }
 
 /**
@@ -121,7 +137,12 @@ export const EMPTY_RING: SampleRing = { samples: [], heldTs: new Set<string>(), 
 export const appendSample = (ring: SampleRing, wire: WireSnapshot): SampleRing => {
   if (ring.heldTs.has(wire.snapshot.ts)) return ring;
 
-  const sample: Sample = { ts: wire.snapshot.ts, tsMs: wire.tsMs, snapshot: wire.snapshot };
+  const sample: Sample = {
+    ts: wire.snapshot.ts,
+    tsMs: wire.tsMs,
+    snapshot: wire.snapshot,
+    serving: wire.serving,
+  };
   const heldTs = new Set(ring.heldTs);
   heldTs.add(sample.ts);
   // Newest **by `ts`**: a snapshot stamped before one already held does not become the

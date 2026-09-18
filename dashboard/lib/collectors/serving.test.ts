@@ -280,8 +280,8 @@ describe('the live box', () => {
       // name: the fake answers the frame this box's bus really sends (`samples.ts`'s
       // `CAPTURED_DBUS_ENVIRONMENT_REPLY`), so the two happening to agree is the ARRANGEMENT
       // being per-GPU, which is what the wire now says rather than what we assumed.
-      { instance: 0, port: 8080, unitState: 'active', model: 'qwen3.6-27b', ctx: 131072, health: 'ok', gpus: [0] },
-      { instance: 1, port: 8081, unitState: 'active', model: 'qwen3.6-27b', ctx: 131072, health: 'ok', gpus: [1] },
+      { instance: '0', port: 8080, unitState: 'active', model: 'qwen3.6-27b', ctx: 131072, health: 'ok', gpus: [0] },
+      { instance: '1', port: 8081, unitState: 'active', model: 'qwen3.6-27b', ctx: 131072, health: 'ok', gpus: [1] },
     ]);
   });
 
@@ -313,7 +313,7 @@ describe('the live box', () => {
       dbus: fakeDbus({ 'llama-server@0.service': 'active', 'llama-server@1.service': 'active' }, asked),
       http: liveBox.http(),
     });
-    expect(asked).toEqual([servingUnitName(0), servingUnitName(1)]);
+    expect(asked).toEqual([servingUnitName('0'), servingUnitName('1')]);
     expect(asked).not.toContain(FAN_SERVICE_UNIT);
   });
 
@@ -345,7 +345,7 @@ describe('the live box', () => {
     expect(errors).toEqual([]);
     expect(serving).toHaveLength(3);
     expect(serving?.[2]).toEqual({
-      instance: 2,
+      instance: '2',
       port: 8082,
       unitState: 'active',
       model: 'gemma-4-12b',
@@ -382,7 +382,7 @@ describe('the canonical fixtures HANDOVER names as this step’s acceptance crit
     expect(errors[0]?.message).toContain('ECONNREFUSED');
     // 10b-S-G: attached structurally from the per-instance closure, not read back out of
     // the message this same failure already put "8081" into.
-    expect(errors[0]?.instance).toBe(1);
+    expect(errors[0]?.instance).toBe('1');
     expect(severityUnitState(serving?.[1]?.unitState ?? null)).toBe('alarm');
     expect(severityHealth(serving?.[1]?.health ?? null)).toBe('alarm');
     expect(severityHealth(serving?.[0]?.health ?? null)).toBe('normal');
@@ -401,7 +401,7 @@ describe('the canonical fixtures HANDOVER names as this step’s acceptance crit
       servingInstances.map((i) => ({ ...i, gpus: undefined })),
     );
     expect(servingPopulated.errors).toEqual([
-      { source: 'llama-health', message: 'connect ECONNREFUSED 127.0.0.1:8081', instance: 1 },
+      { source: 'llama-health', message: 'connect ECONNREFUSED 127.0.0.1:8081', instance: '1' },
     ]);
   });
 
@@ -479,7 +479,7 @@ describe('per-instance failures, and which source explains each blank', () => {
       http: fakeHttp({}, requested),
     });
     expect(serving?.[0]).toEqual({
-      instance: 0,
+      instance: '0',
       port: null,
       unitState: 'active',
       model: null,
@@ -638,7 +638,7 @@ describe('per-instance failures, and which source explains each blank', () => {
     expect(serving?.map((s) => s.unitState)).toEqual(['active', 'inactive']);
     expect(errors.map((e) => e.source)).toEqual(['dbus']);
     expect(errors[0]?.message).toContain('llama-server@1.service');
-    expect(errors[0]?.instance).toBe(1);
+    expect(errors[0]?.instance).toBe('1');
   });
 
   test('⚠ one instance down leaves the other completely unaffected (§6.5)', async () => {
@@ -651,7 +651,7 @@ describe('per-instance failures, and which source explains each blank', () => {
       }),
     });
     expect(serving?.[0]).toEqual({
-      instance: 0,
+      instance: '0',
       port: 8080,
       unitState: 'active',
       model: 'qwen3.6-27b',
@@ -830,7 +830,7 @@ describe('the budget is never evidence about a subject (§6.7)', () => {
     });
     expect(serving?.[0]?.health).toBe('unreachable');
     expect(serving?.[1]).toEqual({
-      instance: 1,
+      instance: '1',
       port: 8081,
       unitState: 'active',
       model: 'qwen3.6-27b',
@@ -843,7 +843,7 @@ describe('the budget is never evidence about a subject (§6.7)', () => {
     expect(errors[0]?.message).not.toContain('8081');
     // 10b-S-G: the entry is instance 0's own, structurally — not merely a message that
     // happens to say "8080" and not "8081".
-    expect(errors[0]?.instance).toBe(0);
+    expect(errors[0]?.instance).toBe('0');
   });
 });
 
@@ -888,13 +888,13 @@ describe('bounds and hygiene', () => {
     // prefixes the directory. Dropping the problems would lose the only signal that a file
     // in §3.4's discovery directory was ignored.
     const { serving, errors } = await collectServing({
-      io: fakeIo({ entries: ['0.env', 'default.env'], files: { [`${DIR}/0.env`]: CAPTURED_LLAMA_ENV_0 } }),
+      io: fakeIo({ entries: ['0.env', '01.env'], files: { [`${DIR}/0.env`]: CAPTURED_LLAMA_ENV_0 } }),
       dbus: fakeDbus({ 'llama-server@0.service': 'active' }),
       http: liveBox.http(),
     });
     expect(serving).toHaveLength(1);
     expect(errors.map((e) => e.source)).toEqual(['llama-env']);
-    expect(errors[0]?.message).toContain('default.env');
+    expect(errors[0]?.message).toContain('01.env');
     expect(errors[0]?.message).toContain(DIR);
   });
 
@@ -924,11 +924,11 @@ describe('bounds and hygiene', () => {
     expect(Object.hasOwn(listFailed.errors[0] ?? {}, 'instance')).toBe(false);
 
     const notAnInstance = await collectServing({
-      io: fakeIo({ entries: ['0.env', 'default.env'], files: { [`${DIR}/0.env`]: CAPTURED_LLAMA_ENV_0 } }),
+      io: fakeIo({ entries: ['0.env', '01.env'], files: { [`${DIR}/0.env`]: CAPTURED_LLAMA_ENV_0 } }),
       dbus: fakeDbus({ 'llama-server@0.service': 'active' }),
       http: liveBox.http(),
     });
-    const dirEntry = notAnInstance.errors.find((e) => e.message.includes('default.env'));
+    const dirEntry = notAnInstance.errors.find((e) => e.message.includes('01.env'));
     expect(dirEntry).toBeDefined();
     expect(Object.hasOwn(dirEntry ?? {}, 'instance')).toBe(false);
   });
@@ -1051,6 +1051,211 @@ describe('bounds and hygiene', () => {
   });
 });
 
+describe('⚠⚠ 12c — named instances, and the unit-name mapping that can MISS', () => {
+  test('⚠⚠ `split.env` is discovered and asked about under `llama-split.service`', async () => {
+    // The whole ruling, end to end. Until 12c `discoverInstances` refused this filename, so
+    // the process actually serving the box appeared NOWHERE — and the per-card env files
+    // survive a mode switch, so the panel confidently showed two inactive instances instead.
+    const asked: string[] = [];
+    const { serving, errors } = await collectServing({
+      io: fakeIo({ entries: ['split.env'], files: { [`${DIR}/split.env`]: CAPTURED_LLAMA_ENV_0 } }),
+      dbus: fakeDbus({ 'llama-split.service': 'active' }, asked, undefined, undefined, {
+        'llama-split.service': ['CUDA_VISIBLE_DEVICES=0,1'],
+      }),
+      http: fakeHttp({
+        'http://127.0.0.1:8080/health': ok('{"status":"ok"}'),
+        'http://127.0.0.1:8080/v1/models': ok(CAPTURED_MODELS_BODY),
+      }),
+    });
+    expect(errors).toEqual([]);
+    // ⚠ The unit ASKED ABOUT is the assertion that matters. A template would have asked about
+    // `llama-server@split.service`, systemd would have answered `inactive` without complaint,
+    // and every reading below would be the same shape with the wrong values in it.
+    expect(asked).toEqual(['llama-split.service']);
+    expect(serving).toEqual([
+      {
+        instance: 'split',
+        port: 8080,
+        unitState: 'active',
+        model: 'qwen3.6-27b',
+        ctx: 131072,
+        health: 'ok',
+        gpus: [0, 1],
+      },
+    ]);
+  });
+
+  test('⚠⚠ THE MISS IS LOUD — an identity with no unit name files a `dbus` entry NAMING it', async () => {
+    // `default.env` is a legal instance filename (§3.4's ruling) and there is no
+    // `llama-default.service` in `lib/units.ts`'s table. Everything that does not need a unit
+    // name is read normally; the two columns that do are `null`, and the entry says why.
+    //
+    // ⚠ Without the entry this row is INDISTINGUISHABLE from a stopped service: `unitState`
+    // `null` renders an em dash, `gpus` `null` renders an em dash, and nothing anywhere says
+    // the dashboard never asked. That is the silence the mapping exists to break.
+    const asked: string[] = [];
+    const { serving, errors } = await collectServing({
+      io: fakeIo({
+        entries: ['0.env', 'default.env'],
+        files: { [`${DIR}/0.env`]: CAPTURED_LLAMA_ENV_0, [`${DIR}/default.env`]: CAPTURED_LLAMA_ENV_1 },
+      }),
+      dbus: fakeDbus({ 'llama-server@0.service': 'active' }, asked, undefined, undefined, {
+        'llama-server@0.service': ['CUDA_VISIBLE_DEVICES=0'],
+      }),
+      http: fakeHttp({
+        'http://127.0.0.1:8080/health': ok('{"status":"ok"}'),
+        'http://127.0.0.1:8080/v1/models': ok(CAPTURED_MODELS_BODY),
+        'http://127.0.0.1:8081/health': ok('{"status":"ok"}'),
+        'http://127.0.0.1:8081/v1/models': ok(CAPTURED_MODELS_BODY),
+      }),
+    });
+    // ⚠ The unmappable instance is NOT asked about: there is no unit to ask about, and a
+    // guessed name gets a perfectly ordinary answer back.
+    expect(asked).toEqual(['llama-server@0.service']);
+    expect(serving).toHaveLength(2);
+    const unmapped = serving?.find((row) => row.instance === 'default');
+    expect(unmapped?.unitState).toBeNull();
+    expect(unmapped?.gpus).toBeNull();
+    // …and everything that did NOT need a unit name was read normally.
+    expect(unmapped?.port).toBe(8081);
+    expect(unmapped?.ctx).toBe(131072);
+    expect(unmapped?.health).toBe('ok');
+    expect(unmapped?.model).toBe('qwen3.6-27b');
+
+    const miss = errors.filter((e) => e.instance === 'default');
+    expect(miss).toHaveLength(1);
+    expect(miss[0]?.source).toBe('dbus');
+    expect(miss[0]?.message).toContain('`default`');
+    expect(miss[0]?.message).toContain('default.env');
+    expect(miss[0]?.message).toContain(DIR);
+    // ⚠ ONE entry, not two: `gpusFor` must not file a second `dbus` sentence about the same
+    // fact (§6.5, "one fact, stated once").
+    expect(errors.filter((e) => e.instance === 'default')).toHaveLength(1);
+  });
+
+  test('⚠ the OTHER instance is completely unaffected by a neighbour the mapping cannot name', async () => {
+    // §6.5's structural requirement, applied to the new failure: an unmappable identity must
+    // not cost the instances beside it their unit state or their cards.
+    const { serving, errors } = await collectServing({
+      io: fakeIo({
+        entries: ['0.env', 'default.env'],
+        files: { [`${DIR}/0.env`]: CAPTURED_LLAMA_ENV_0, [`${DIR}/default.env`]: CAPTURED_LLAMA_ENV_1 },
+      }),
+      dbus: fakeDbus({ 'llama-server@0.service': 'active' }, undefined, undefined, undefined, {
+        'llama-server@0.service': ['CUDA_VISIBLE_DEVICES=1'],
+      }),
+      http: fakeHttp({
+        'http://127.0.0.1:8080/health': ok('{"status":"ok"}'),
+        'http://127.0.0.1:8080/v1/models': ok(CAPTURED_MODELS_BODY),
+        'http://127.0.0.1:8081/health': ok('{"status":"ok"}'),
+        'http://127.0.0.1:8081/v1/models': ok(CAPTURED_MODELS_BODY),
+      }),
+    });
+    const numbered = serving?.find((row) => row.instance === '0');
+    expect(numbered?.unitState).toBe('active');
+    // ⚠ `[1]` and not `[0]`: the fixture makes the identity and the card DISAGREE, so a
+    // reading taken from the instance number instead of the unit would still say `[0]`.
+    expect(numbered?.gpus).toEqual([1]);
+    expect(errors.filter((e) => e.instance === '0')).toEqual([]);
+  });
+
+  test('⚠⚠ THE SILENT WRONG ANSWER, scripted: the guessed unit EXISTS and is still not asked about', () => {
+    // ⚠⚠ The fixture the whole mapping exists for, and the one the other tests cannot be.
+    // Everywhere else the bus is scripted WITHOUT `llama-server@default.service`, so a guessing
+    // implementation gets `NoSuchUnit` back and files a `dbus` error — loud by accident. Here
+    // the fabricated name is scripted as a real, ordinary unit: `inactive`, with a
+    // `CUDA_VISIBLE_DEVICES` of its own. A template would now produce a row that is plausible
+    // in every cell — a stopped service serving card 0 — with nothing anywhere saying the
+    // dashboard asked about a unit that has never existed.
+    //
+    // ⚠ So this asserts the READINGS as well as `asked`: `unitState` and `gpus` must be `null`
+    // even though a perfectly good answer for the guessed name was available to be taken.
+    const asked: string[] = [];
+    return collectServing({
+      io: fakeIo({
+        entries: ['default.env'],
+        files: { [`${DIR}/default.env`]: CAPTURED_LLAMA_ENV_0 },
+      }),
+      dbus: fakeDbus(
+        { 'llama-server@default.service': 'inactive', 'llama-default.service': 'active' },
+        asked,
+        undefined,
+        undefined,
+        {
+          'llama-server@default.service': ['CUDA_VISIBLE_DEVICES=0'],
+          'llama-default.service': ['CUDA_VISIBLE_DEVICES=1'],
+        },
+      ),
+      http: fakeHttp({
+        'http://127.0.0.1:8080/health': ok('{"status":"ok"}'),
+        'http://127.0.0.1:8080/v1/models': ok(CAPTURED_MODELS_BODY),
+      }),
+    }).then(({ serving, errors }) => {
+      // Nothing was asked about at all — there is no unit name to ask about.
+      expect(asked).toEqual([]);
+      expect(serving).toHaveLength(1);
+      expect(serving?.[0]?.instance).toBe('default');
+      expect(serving?.[0]?.unitState).toBeNull();
+      expect(serving?.[0]?.gpus).toBeNull();
+      // ⚠ `'inactive'` and `[0]` are the answers a guess would have produced. Asserting them
+      // ABSENT is the half that discriminates: `null` and a guessed value are both "not
+      // active", and only one of them is a reading.
+      expect(serving?.[0]?.unitState).not.toBe('inactive');
+      expect(serving?.[0]?.gpus).not.toEqual([0]);
+      // …and the one entry that says why.
+      expect(errors).toHaveLength(1);
+      expect(errors[0]?.source).toBe('dbus');
+      expect(errors[0]?.instance).toBe('default');
+    });
+  });
+
+  test('⚠ the miss is APPENDED after the bus’s own entries, so last-per-source still reads the bus', () => {
+    // §4 pins `errors[]`'s order and `events.ts` folds by source taking the LAST message. The
+    // miss and a genuine bus failure are both `dbus`, so their relative order decides which
+    // sentence the event log quotes. `collectServing` pushes `units.errors` first and the
+    // unit-name problems after — asserted here rather than left to the order of two `push`
+    // statements, because swapping them is a one-line edit that changes what an operator reads
+    // and breaks no other test.
+    return collectServing({
+      io: fakeIo({
+        entries: ['0.env', 'default.env'],
+        files: { [`${DIR}/0.env`]: CAPTURED_LLAMA_ENV_0, [`${DIR}/default.env`]: CAPTURED_LLAMA_ENV_1 },
+      }),
+      // `llama-server@0.service` is NOT on this bus, so the unit conversation files its own
+      // `dbus` entry — a real failure, beside the lookup miss.
+      dbus: fakeDbus({}),
+      http: fakeHttp({}),
+    }).then(({ errors }) => {
+      const dbusEntries = errors.filter((e) => e.source === 'dbus');
+      expect(dbusEntries.length).toBeGreaterThanOrEqual(2);
+      expect(dbusEntries[0]?.instance).toBe('0');
+      expect(dbusEntries.at(-1)?.instance).toBe('default');
+      expect(dbusEntries.at(-1)?.message).toContain('no systemd unit is known');
+    });
+  });
+
+  test('⚠⚠ the rows come back in `compareInstances` order whatever order the DIRECTORY listed', () => {
+    // Asserted through the collector rather than through the comparator, because the order of
+    // `serving[]` is what *first claimant wins* means downstream and `readDir` promises
+    // nothing about its own order.
+    const listings = [
+      ['split.env', '10.env', '0.env', '2.env'],
+      ['0.env', '2.env', '10.env', 'split.env'],
+      ['2.env', 'split.env', '0.env', '10.env'],
+    ];
+    return Promise.all(
+      listings.map(async (entries) => {
+        const { serving } = await collectServing({
+          io: fakeIo({ entries, files: {} }),
+          dbus: fakeDbus({}),
+          http: fakeHttp({}),
+        });
+        expect(serving?.map((row) => row.instance)).toEqual(['0', '2', '10', 'split']);
+      }),
+    );
+  });
+});
+
 describe('⚠⚠ 12b — §3.4’s `gpus`: the instance declares the cards it serves', () => {
   test('⚠ SPLIT MODE: one process, both cards, and the wire says so', async () => {
     // `SERVING-MODES.md` §2 — one unit with `CUDA_VISIBLE_DEVICES=0,1`. Under the join this
@@ -1091,7 +1296,7 @@ describe('⚠⚠ 12b — §3.4’s `gpus`: the instance declares the cards it se
     expect(serving?.[0]?.gpus).toBeNull();
     expect(errors).toHaveLength(1);
     expect(errors[0]?.source).toBe('dbus');
-    expect(errors[0]?.instance).toBe(0);
+    expect(errors[0]?.instance).toBe('0');
     expect(errors[0]?.message).toContain('llama-server@0.service');
     expect(errors[0]?.message).toContain('CUDA_VISIBLE_DEVICES');
   });
@@ -1151,7 +1356,7 @@ describe('⚠⚠ 12b — §3.4’s `gpus`: the instance declares the cards it se
         'http://127.0.0.1:8080/v1/models': ok(CAPTURED_MODELS_BODY),
       }),
     });
-    expect(serving?.[0]?.instance).toBe(0);
+    expect(serving?.[0]?.instance).toBe('0');
     expect(serving?.[0]?.gpus).toEqual([1]);
   });
 });

@@ -7,7 +7,7 @@ import { DEFAULT_CADENCE_SECONDS, DEFAULT_WINDOW_MINUTES } from '@/lib/client/pr
 import { EMPTY_RING, appendSample } from '@/lib/client/ring';
 import type { RuntimeState, TelemetryRuntime } from '@/lib/client/runtime';
 import { ERROR_SOURCES } from '@/lib/client/wire';
-import { everythingZero, servingInstances } from '@/lib/fixtures';
+import { everythingZero, servingInstances, wireRead } from '@/lib/fixtures';
 import { celsius, isoTimestamp, mhz, mib, percent, throttleMask, watts } from '@/lib/types';
 import type { ErrorSource, Gpu, TelemetrySnapshot } from '@/lib/types';
 
@@ -123,15 +123,18 @@ const marker = (source: ErrorSource): string => `MARKER-${source}-could-not-be-r
 
 const stateFor = (shape: string, source: ErrorSource): RuntimeState => ({
   preferences: { cadenceSeconds: DEFAULT_CADENCE_SECONDS, windowMinutes: DEFAULT_WINDOW_MINUTES },
-  ring: appendSample(EMPTY_RING, {
-    snapshot: {
-      ...everythingZero,
-      ts: isoTimestamp(new Date(BASE_MS).toISOString()),
-      ...SHAPES[shape],
-      errors: [{ source, message: marker(source) }],
-    },
-    tsMs: BASE_MS,
-  }),
+  ring: appendSample(
+    EMPTY_RING,
+    wireRead(
+      {
+        ...everythingZero,
+        ts: isoTimestamp(new Date(BASE_MS).toISOString()),
+        ...SHAPES[shape],
+        errors: [{ source, message: marker(source) }],
+      },
+      BASE_MS,
+    ),
+  ),
   conditions: EMPTY_CONDITION_STATE,
   displayed: [],
   events: startEventLog(BASE_MS),
@@ -217,7 +220,8 @@ describe('⚠⚠ 12a — every collector that cannot read says so, across every 
     // defect as one that never accused it — an operator learns the clause means nothing.
     const ringOf = (...snapshots: readonly TelemetrySnapshot[]) =>
       snapshots.reduce(
-        (ring, snapshot, i) => appendSample(ring, { snapshot, tsMs: BASE_MS + i * 5_000 }),
+        (ring, snapshot, i) =>
+          appendSample(ring, wireRead(snapshot, BASE_MS + i * 5_000)),
         EMPTY_RING,
       );
     const at = (i: number, errors: TelemetrySnapshot['errors']): TelemetrySnapshot => ({
@@ -245,15 +249,18 @@ describe('⚠⚠ 12a — every collector that cannot read says so, across every 
     handle = {
       state: {
         ...stateFor('healthy', 'dbus'),
-        ring: appendSample(EMPTY_RING, {
-          snapshot: {
-            ...everythingZero,
-            ts: isoTimestamp(new Date(BASE_MS).toISOString()),
-            ...SHAPES.healthy,
-            errors: [],
-          },
-          tsMs: BASE_MS,
-        }),
+        ring: appendSample(
+          EMPTY_RING,
+          wireRead(
+            {
+              ...everythingZero,
+              ts: isoTimestamp(new Date(BASE_MS).toISOString()),
+              ...SHAPES.healthy,
+              errors: [],
+            },
+            BASE_MS,
+          ),
+        ),
       },
       runtime: {} as TelemetryRuntime,
     };
@@ -276,16 +283,19 @@ describe('⚠⚠ 12a — the production case, fabricated and rendered', () => {
     handle = {
       state: {
         ...stateFor('healthy', 'nvidia-smi'),
-        ring: appendSample(EMPTY_RING, {
-          snapshot: {
-            ...everythingZero,
-            ts: isoTimestamp(new Date(BASE_MS).toISOString()),
-            gpus,
-            serving: [...servingInstances],
-            errors: [{ source: 'nvidia-smi', message: NVIDIA }],
-          },
-          tsMs: BASE_MS,
-        }),
+        ring: appendSample(
+          EMPTY_RING,
+          wireRead(
+            {
+              ...everythingZero,
+              ts: isoTimestamp(new Date(BASE_MS).toISOString()),
+              gpus,
+              serving: [...servingInstances],
+              errors: [{ source: 'nvidia-smi', message: NVIDIA }],
+            },
+            BASE_MS,
+          ),
+        ),
       },
       runtime: {} as TelemetryRuntime,
     };

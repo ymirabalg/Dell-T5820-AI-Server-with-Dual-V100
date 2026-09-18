@@ -439,7 +439,7 @@ describe('⚠ §6.5 on a COOLING row — the stale rule has two halves and both 
         {
           source: 'dbus',
           message: 'llama-server@1.service: NoSuchUnit: systemd has no record',
-          instance: 1,
+          instance: '1',
         },
       ],
     };
@@ -505,5 +505,45 @@ describe('⚠ 10c1 — the chart/table toggle (Q2-S2), now shell-owned', () => {
       />,
     );
     expect(withHandler).toContain('show as table');
+  });
+});
+
+/**
+ * ⚠⚠ **12c/TEST — the fifth thing a unit-name MISS does: it is offered to this panel too.**
+ *
+ * `panelsForSource('dbus')` fans out to COOLING, SERVING and SAFETY, so the entry
+ * `collectServing` files for an identity it cannot map is handed to this panel by
+ * `errorsForPanel` (asserted in `lib/client/observations.test.ts`). The only thing that keeps
+ * it off the `fan service` row is 10b-S-G's `e.instance === undefined` filter — written for a
+ * different failure, and silently load-bearing for this one.
+ */
+describe('⚠⚠ 12c/TEST — a SERVING instance’s unit-name miss never lands on the fan-service row', () => {
+  const missSentence =
+    'no systemd unit is known for instance `default` (`default.env` in /etc/llama-server), ' +
+    'so its unit state and the cards it serves were not read';
+
+  const withMiss: TelemetrySnapshot = {
+    ...everythingZero,
+    errors: [{ source: 'dbus', message: missSentence, instance: 'default' }],
+  };
+
+  test('⚠⚠ the miss sentence is absent from COOLING, because the entry names an instance', () => {
+    // Without the filter this panel prints a sentence about `llama-server` beside a healthy
+    // `gpu-fan-control.service` — an explanation attached to a subject it is not about.
+    const html = renderToStaticMarkup(<CoolingPanel state={stateWith(withMiss)} nowMs={0} panelId="cooling" />);
+    expect(html).not.toContain('no systemd unit is known');
+    expect(html).not.toContain('default.env');
+  });
+
+  test('⚠⚠ a `dbus` entry with NO instance still reaches COOLING — the filter is not a blanket', () => {
+    // The anti-vacuity half, and the reason the test above is about `instance` rather than
+    // about `dbus`: a panel that dropped every `dbus` entry would pass the first assertion and
+    // would have lost the bus-wide failure this row exists to explain.
+    const busWide: TelemetrySnapshot = {
+      ...everythingZero,
+      errors: [{ source: 'dbus', message: 'connect ENOENT /run/dbus/system_bus_socket' }],
+    };
+    const html = renderToStaticMarkup(<CoolingPanel state={stateWith(busWide)} nowMs={0} panelId="cooling" />);
+    expect(html).toContain('system_bus_socket');
   });
 });

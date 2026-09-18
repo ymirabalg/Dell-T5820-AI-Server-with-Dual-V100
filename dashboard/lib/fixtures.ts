@@ -33,6 +33,10 @@ import {
   watts,
 } from './types';
 import type { Cooling, CoolingChannels, ServingInstance, TelemetrySnapshot } from './types';
+// ⚠ Test data only (see this file's header), so reaching into the client's wire types is
+// fine here and nowhere under `app/`: nothing that ships imports this module.
+import { servingEnumeration } from './client/wire';
+import type { ServingEnumeration, WireSnapshot } from './client/wire';
 
 /**
  * Every reading failed, *because the probe could not be performed at all*: there is no
@@ -229,7 +233,7 @@ export const pwm5Unreadable: TelemetrySnapshot = {
  */
 export const servingInstances: readonly ServingInstance[] = [
   {
-    instance: 0,
+    instance: '0',
     port: port(8080),
     unitState: 'active',
     model: 'qwen3.6-27b',
@@ -237,7 +241,7 @@ export const servingInstances: readonly ServingInstance[] = [
     health: 'ok',
   },
   {
-    instance: 1,
+    instance: '1',
     port: port(8081),
     unitState: 'failed',
     model: null,
@@ -258,7 +262,7 @@ export const servingInstances: readonly ServingInstance[] = [
 export const servingPopulated: TelemetrySnapshot = {
   ...everythingZero,
   serving: servingInstances,
-  errors: [{ source: 'llama-health', message: 'connect ECONNREFUSED 127.0.0.1:8081', instance: 1 }],
+  errors: [{ source: 'llama-health', message: 'connect ECONNREFUSED 127.0.0.1:8081', instance: '1' }],
 };
 
 /**
@@ -349,14 +353,23 @@ export const servingCrossPinned: readonly ServingInstance[] = [
  * ⚠⚠ 12b — **one process across both cards** (`SERVING-MODES.md` §4): a single instance whose
  * `gpus` is `[0, 1]`.
  *
- * One row on the SERVING panel and a *joint* line on both GPU cards. ⚠ The instance number is
- * deliberately **0**, so a panel that recovered the old join by accident would still print
- * "served by instance 0" on GPU 0 and would be caught only on GPU 1 — which is exactly the
- * card `serving-mode.sh`'s own caveat says the shipped dashboard gets wrong.
+ * One row on the SERVING panel and a *joint* line on both GPU cards.
+ *
+ * ⚠⚠ **12c — the identity is `'split'`, not `0`**, because that is what the box really
+ * produces: `serving-mode.sh` writes `/etc/llama-server/split.env`, so discovery yields the
+ * stem `split` and `servingUnitName` maps it to **`llama-split.service`**. Until 12c this
+ * fixture said `instance: 0`, which was the only identity the contract could express — and
+ * a fixture that cannot spell the arrangement it is named after cannot test it.
+ *
+ * ⚠ It is also the loop's **second** coincidence guard. 12b's lesson was that an instance
+ * number equal to a card index cannot tell a right join from a wrong one; a NUMERIC identity
+ * is the new coincidence available to be relied on by accident — `String(instance)`,
+ * `Number(instance)`, `instance === index` and a template unit name all keep working on one.
+ * On `'split'` every one of them fails loudly.
  */
 export const servingSplit: readonly ServingInstance[] = [
   {
-    instance: 0,
+    instance: 'split',
     port: port(8080),
     unitState: 'active',
     model: 'gemma-4-31b',
@@ -386,7 +399,7 @@ export const servingGpusUnreadableSnapshot: TelemetrySnapshot = {
     {
       source: 'dbus',
       message: 'llama-server@0.service: Environment: org.freedesktop.DBus.Error.AccessDenied: no detail',
-      instance: 0,
+      instance: '0',
     },
   ],
 };
@@ -399,7 +412,7 @@ export const servingGpusUnreadableSnapshot: TelemetrySnapshot = {
  * what makes it the fixture that proves §3.4's nullability across the wire.
  */
 export const servingIdentityOnly: ServingInstance = {
-  instance: 2,
+  instance: '2',
   port: null,
   unitState: null,
   model: null,
@@ -411,3 +424,106 @@ export const servingIdentityOnly: ServingInstance = {
   // field" about a server that has.
   gpus: null,
 };
+
+/**
+ * ⚠⚠ **12c — an identity discovery ACCEPTS and `servingUnitName` cannot MAP.**
+ *
+ * `default.env` is a legal instance filename under §3.4's 2026-09-17 ruling — it has exactly
+ * the shape of `split.env` — and there is no unit called `llama-default.service` in
+ * `lib/units.ts`'s table. So the row exists, its env file was read (`port` and `ctx` are
+ * there), its endpoints answered (`health`, `model`), and the two columns that need a unit
+ * name are `null`.
+ *
+ * ⚠ **This is the fixture that proves the miss is LOUD.** Every wrong answer at the mapping is
+ * otherwise silent: `llama-server@default.service` does not exist, systemd would answer
+ * `inactive` about it perfectly happily, and the row would read as a stopped service rather
+ * than as a lookup that failed. {@link servingUnmappedSnapshot} carries the `errors[]` entry
+ * `collectServing` files, which is the only thing on the page that says which of the two it is.
+ */
+export const servingUnmapped: readonly ServingInstance[] = [
+  {
+    instance: 'default',
+    port: port(8082),
+    unitState: null,
+    model: 'qwen3.6-27b',
+    ctx: tokens(131072),
+    health: 'ok',
+    gpus: null,
+  },
+];
+
+/** {@link servingUnmapped} beside one ordinary instance, with the entry that explains the miss. */
+export const servingUnmappedSnapshot: TelemetrySnapshot = {
+  ...everythingZero,
+  serving: [{ ...(servingInstances[0] as ServingInstance), gpus: [1] }, ...servingUnmapped],
+  errors: [
+    {
+      source: 'dbus',
+      message:
+        'no systemd unit is known for instance `default` (`default.env` in /etc/llama-server), ' +
+        'so its unit state and the cards it serves were not read',
+      instance: 'default',
+    },
+  ],
+};
+
+/**
+ * ⚠⚠ **12c — TWO instances claiming ONE card, listed WORST-FIRST.**
+ *
+ * `split` lists cards 0 and 1; instance `0` lists card 0 as well. Only systemd's `Conflicts=`
+ * normally prevents this (`SERVING-MODES.md` §2), and a half-finished mode switch is exactly
+ * where it appears. §3.4 says nothing about which one a card should name, so `servedBy` names
+ * the lower under `compareInstances` — **`0`, a numbered instance, which sorts before every
+ * named one.**
+ *
+ * ⚠ **The array is deliberately in the OPPOSITE order to the answer**: `split` is element 0.
+ * A join that took `serving[]`'s first claimant by position would name `split` for card 0, and
+ * would agree with the rule on any fixture that happened to arrive sorted — which every fixture
+ * in this file does, because the collector sorts. The determinism test reverses this array and
+ * requires the same answer out of both.
+ *
+ * ⚠ Card **1** is claimed by `split` alone, so the same fixture also proves the winner is
+ * chosen per card rather than once per snapshot.
+ */
+export const servingTwoClaimants: readonly ServingInstance[] = [
+  { ...(servingSplit[0] as ServingInstance), model: 'gemma-4-31b' },
+  { ...(servingInstances[0] as ServingInstance), gpus: [0] },
+];
+
+
+// ---------------------------------------------------------------------------------------
+// ⚠⚠ 12c/RECONCILE — building a `WireSnapshot` by hand, with its completeness STATED
+// ---------------------------------------------------------------------------------------
+
+/**
+ * A {@link WireSnapshot} for a body this client read in full — the shape every fixture above
+ * describes.
+ *
+ * ⚠ **The name carries the fact, so no test states it as a bare `0`.** `WireSnapshot.serving`
+ * is a {@link ServingEnumeration}: *the rows, and whether they are all of them*. Nine
+ * hand-built wire snapshots used to carry `servingRowsRefused: 0`, which is the right value
+ * spelled as a number nobody reads; `wireRead` says it, and {@link wireRefused} is the only
+ * other way to build one.
+ *
+ * ⚠ `rows` comes from the snapshot itself, so a fixture cannot describe an enumeration that
+ * disagrees with the array the panels render from.
+ */
+export const wireRead = (snapshot: TelemetrySnapshot, tsMs: number): WireSnapshot => ({
+  snapshot,
+  tsMs,
+  serving: servingEnumeration(snapshot.serving, 0),
+});
+
+/**
+ * A {@link WireSnapshot} whose `serving[]` is SHORTER than what the server sent, because
+ * `parseSnapshot` refused `refused` of its rows.
+ *
+ * ⚠ This is the state §9 must not read as *the instances left the machine* and §6.2's join
+ * must not read as *nobody serves this card* — `12c-A1`, and the reason the completeness is
+ * part of the value rather than an argument beside it.
+ */
+export const wireRefused = (
+  snapshot: TelemetrySnapshot,
+  tsMs: number,
+  refused: number,
+): WireSnapshot => ({ snapshot, tsMs, serving: servingEnumeration(snapshot.serving, refused) });

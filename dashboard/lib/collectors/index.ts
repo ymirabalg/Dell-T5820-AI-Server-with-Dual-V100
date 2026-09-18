@@ -178,7 +178,7 @@ export {
   healthFromStatus,
   healthUrl,
   modelsUrl,
-  parseInstanceIndex,
+  parseInstanceId,
   parseLlamaEnv,
   parseModelsBody,
 } from './llama';

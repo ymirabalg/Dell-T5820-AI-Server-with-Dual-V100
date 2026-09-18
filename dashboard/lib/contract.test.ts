@@ -220,7 +220,7 @@ describe('the wire format', () => {
   test('a serving instance known only by its identity crosses the wire intact', () => {
     const wire = roundTrip(servingIdentityOnly);
 
-    expect((wire as { instance: unknown }).instance).toBe(2);
+    expect((wire as { instance: unknown }).instance).toBe('2');
     for (const path of SERVING_NULLABLE_PATHS) {
       const { parent, key } = resolve(wire, path);
       expect(key in parent, `serving.${path} is missing from the JSON`).toBe(true);
@@ -289,7 +289,7 @@ describe('the wire format', () => {
   test('⚠ errors[].instance crosses the wire as a present key when set, and an ABSENT key when not', () => {
     const withInstance = roundTrip(servingPopulated) as TelemetrySnapshot;
     expect(withInstance.errors).toHaveLength(1);
-    expect(withInstance.errors[0]?.instance).toBe(1);
+    expect(withInstance.errors[0]?.instance).toBe('1');
     expect(Object.hasOwn(withInstance.errors[0] as object, 'instance')).toBe(true);
 
     // `nothingReadable`'s one entry (`dell-smm`) names no instance — it is collector-wide,

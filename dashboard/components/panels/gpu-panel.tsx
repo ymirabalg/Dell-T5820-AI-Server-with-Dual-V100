@@ -69,6 +69,8 @@ import { decodeThrottleMask } from '@/lib/throttle';
 import { errorsForPanel, servedBy, servedCards } from '@/lib/client/observations';
 import { traceFor } from '@/lib/client/series';
 import { latestSample } from '@/lib/client/runtime';
+import type { Sample } from '@/lib/client/ring';
+import { SERVING_NOT_POLLED } from '@/lib/client/wire';
 import {
   EM_DASH,
   formatCelsius,
@@ -129,7 +131,7 @@ const gpuAt = (snapshot: TelemetrySnapshot | null, index: number): Gpu | null =>
  * | `gpus` | `k` | `v` |
  * |---|---|---|
  * | absent | `served by instance <this card's index>` | the model, as today |
- * | `[N]` | `served by instance N` — **the INSTANCE's number, not the card's** | the model |
+ * | `[N]` | `served by instance N` — **the INSTANCE's own identity, not the card's index** (12c: it may be a name, `served by instance split`) | the model |
  * | `[0, 1]` | `served jointly with GPU M` | the model |
  * | `null` | `served by` | `—` |
  * | read, unclaimed | `served by` | `no instance` |
@@ -143,10 +145,16 @@ const gpuAt = (snapshot: TelemetrySnapshot | null, index: number): Gpu | null =>
  * not missing, it is different."*
  */
 const servedItem = (
-  snapshot: TelemetrySnapshot | null,
+  sample: Sample | null,
   index: number,
 ): { readonly k: string; readonly v: string; readonly title: string | null } => {
-  const served = servedBy(snapshot?.serving ?? null, index);
+  // ⚠⚠ 12c/RECONCILE (`12c-A1`) — the SAMPLE, not `snapshot.serving`. The join is handed
+  // §4's list together with whether it is all of it, because a shortened array means two
+  // different things and this cell renders a claim either way. Before this, a row refused by
+  // `wire.ts` for a bad `port` reached here as a plain shorter array and the card printed
+  // `served by · no instance` — *we looked, and nobody claims it* — for a row that was
+  // never read. `Sample.serving` is where that fact was being dropped.
+  const served = servedBy(sample?.serving ?? SERVING_NOT_POLLED, index);
   switch (served.kind) {
     case 'indexed':
       return {
@@ -158,7 +166,7 @@ const servedItem = (
       return {
         k:
           served.alongside.length === 0
-            ? `served by instance ${String(served.instance.instance)}`
+            ? `served by instance ${served.instance.instance}`
             : `served jointly with ${servedCards(served.alongside) ?? EM_DASH}`,
         v: formatModelName(served.instance.model),
         title: served.instance.model,
@@ -188,9 +196,10 @@ const TEMP_DOMAIN = { min: 30, max: 90 };
 
 export function GpuPanel({ state, panelId, view = 'chart', onToggleView }: GpuPanelProps) {
   const index: 0 | 1 = panelId === 'gpu0' ? 0 : 1;
-  const snapshot = latestSample(state)?.snapshot ?? null;
+  const sample = latestSample(state);
+  const snapshot = sample?.snapshot ?? null;
   const gpu = gpuAt(snapshot, index);
-  const served = servedItem(snapshot, index);
+  const served = servedItem(sample, index);
   // ⚠ §3.1's *retired* case, at the panel (10b-reconcile, adversarial F7). `gpus` was READ and
   // this card is not in it — the card has left the machine, which §6.5 calls an answer — and
   // that is a different fact from "the card is here and every reading failed". Without this

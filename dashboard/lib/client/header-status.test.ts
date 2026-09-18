@@ -220,7 +220,7 @@ describe('⚠⚠ 12a — failingSourceCount is a count of SOURCES, and never of 
           { source: 'nvidia-smi', message: 'nvidia-smi: exited 255' },
           { source: 'dbus', message: '/run/dbus/system_bus_socket: read ECONNRESET' },
           { source: 'dbus', message: '/run/dbus/system_bus_socket: read ECONNRESET' },
-          { source: 'llama-env', message: '1.env: no MODEL', instance: 1 },
+          { source: 'llama-env', message: '1.env: no MODEL', instance: '1' },
         ]),
       ),
     ).toBe(3);
@@ -451,5 +451,57 @@ describe('12a — the status text is an UNBOUNDED string in a band whose height 
     ).reduce((a, b) => (b.length > a.length ? b : a), '');
     expect(longest).toBe('paused · 999 alarms · 18 sources unread');
     expect(longest.length).toBeLessThanOrEqual(45);
+  });
+});
+
+/**
+ * ⚠⚠ **12c/TEST — what §3.4's two rulings of 2026-09-17 cost the header, priced here.**
+ *
+ * Both new failure modes file an `errors[]` entry, so both reach this function — and
+ * `failingSourceCount` counts §3.7 SOURCES, not entries. That makes the header's behaviour
+ * under them worth stating rather than inferring:
+ *
+ * - a unit-name MISS is a `dbus` entry filed **on every poll for as long as the file exists**;
+ * - a wire-REFUSED row is an `llama-env` entry, filed by the client itself.
+ */
+describe('⚠⚠ 12c/TEST — what a mapping miss and a refused row do to §9’s header line', () => {
+  const withErrors = (errors: readonly TelemetryError[]): TelemetrySnapshot => ({ ...everythingZero, errors });
+
+  test('⚠⚠ ONE unmappable `*.env` keeps the header out of `all healthy`, indefinitely', () => {
+    // The consequence nobody costed. An operator who leaves a `backup.env` beside `0.env` gets
+    // a loud row — which is the ruling working — and also loses the header's health claim on
+    // every poll from then on, indistinguishably from a real D-Bus outage. Correct, and worth
+    // knowing before it is met on the box.
+    const miss = withErrors([
+      {
+        source: 'dbus',
+        message: 'no systemd unit is known for instance `default` (`default.env` in /etc/llama-server), ' +
+          'so its unit state and the cards it serves were not read',
+        instance: 'default',
+      },
+    ]);
+    expect(failingSourceCount(miss)).toBe(1);
+    expect(aggregateStatus('live', 0, BANDED, failingSourceCount(miss)).text).not.toContain('all healthy');
+    // ⚠ `all healthy` is REPLACED rather than appended to, so what is left is the clause alone.
+    expect(aggregateStatus('live', 0, BANDED, failingSourceCount(miss)).text).toBe('1 source unread');
+  });
+
+  test('⚠⚠ a REFUSED row is `>= 1`, not an increment — a second entry from one source adds nothing', () => {
+    // ⚠ The build's §2.2 reads *"a clean snapshot scores 0, a snapshot with one dropped row
+    // scores 1"*, which is true only when the server filed nothing itself. `llama-env` is
+    // already §3.4's source for the server's own env problems, so on a box that has one, a
+    // dropped row moves the count by **zero**. The header is still not `all healthy` — the
+    // count was already non-zero — and that is what the claim rests on. A future reader
+    // tempted to display "N problems" from this number needs to know it is a source count.
+    const serverAlready = withErrors([
+      { source: 'llama-env', message: '/etc/llama-server/2.env: ENOENT' },
+    ]);
+    expect(failingSourceCount(serverAlready)).toBe(1);
+    const plusRefusal = withErrors([
+      { source: 'llama-env', message: '/etc/llama-server/2.env: ENOENT' },
+      { source: 'llama-env', message: 'serving[1] was dropped: `port` did not validate' },
+    ]);
+    expect(failingSourceCount(plusRefusal)).toBe(1);
+    expect(aggregateStatus('live', 0, BANDED, failingSourceCount(plusRefusal)).text).not.toContain('all healthy');
   });
 });

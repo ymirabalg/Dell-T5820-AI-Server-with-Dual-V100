@@ -521,7 +521,16 @@ export class TelemetryRuntime {
       conditionsFrom(wire.snapshot),
       standing,
       nowMs,
-      { enumerationsRead: enumerationsRead(wire.snapshot), afterGap },
+      // ⚠⚠ 12c — `wire.serving` is passed, and it is load-bearing. A `serving[]` row this
+      // client REFUSED is a row it did not read, so the enumeration is incomplete and §9 must
+      // not retire the subjects missing from it. Without it a row dropped for a bad `port`
+      // retires that instance's conditions at `normal` — *it has left the machine* — and a live
+      // alarm on it leaves the banner and the count. See `enumerationsRead`'s doc.
+      //
+      // ⚠ 12c/RECONCILE — it is the same VALUE the ring hands `servedBy` one panel over, not a
+      // second reading of the same fact. The argument is required and has no default, so a
+      // caller cannot silently assert "the enumeration was read" by omitting it (`12c-A5`).
+      { enumerationsRead: enumerationsRead(wire.snapshot, wire.serving), afterGap },
     );
 
     this.applyMode({

@@ -26,7 +26,50 @@ whole inheritance: the next phase's agents get clean context and read it as fact
 
 ---
 
-## 0.0 ⚠⚠ READ THIS FIRST — **12b. Can the dashboard state the serving mode on the real box? NOT YET, and for two different reasons — and the loop's own lesson is sharper than either: a bounds check that is not stated as an invariant will be re-found as a symptom, once per phase.**
+## 0.0 ⚠⚠ READ THIS FIRST — **12c. Can a row this client REFUSED still erase a reading anywhere? NO — and the loop's own lesson is that a shortened array means two different things, which it had to learn twice, one panel apart.**
+
+**The question this loop has to answer in one line:** §3.4's second ruling of 2026-09-17 lets
+`wire.ts` drop one invalid `serving[]` row and render the rest — so `serving[]` can now be shorter
+than what the server sent, and *shorter* already meant **the server listed fewer instances**. Every
+reader of that array had to be told which.
+
+| | |
+|---|---|
+| ⚠⚠ **Can a refused row still erase a reading anywhere?** | **No, and both readers were found the hard way.** §9's ledger was the first: a row dropped for a bad `port` was **retired** — *it has left the machine* — which deleted a live `alarm` from the ledger, the dot and the count at severity `normal`. The TEST phase fixed that and the owner ratified the sentence into §9. §6.2's **join** was the second, found by the adversarial one panel over: the GPU card said **`served by · no instance`**, a positive claim, under a comment reading *"every list was READ and none of them names this card"* — **byte-identical** to the strip an instance that really left produces. Both are closed; §2 of `12c-reconciliation.md` has the seven rendered outcomes before and after |
+| ⚠⚠ **And it was closed at the SEAM, not the call site** | `Sample` carried the snapshot and nothing else, so a panel could only ever see a short array — the fact stopped one layer before the reader that needed it. §4's `serving[]` is not handed out as an array any more: `ServingEnumeration` (`none` / `partial` / `all`) rides on `WireSnapshot` and on `Sample`, has one constructor that demands the refusal count, and is what **both** `servedBy` and `enumerationsRead` take. A caller holding only the rows gets a compile error. ⚠ The same change deleted the unsafe default that had reintroduced the bug on the ledger side (`12c-A5`) |
+| **What else was closed?** | The event log could not escalate: a permanently-present `dbus` entry (the unit-name miss) meant a **real bus outage wrote no line at all** — it now debounces *what a lost source says*, and names the message that is new. `compareInstances` was not a total order (two 16-digit identities compared EQUAL; 400-digit ones gave `NaN`) and has no `Number()` left in it. `assertPortFree` **failed open on the exact occupant it exists to catch** and now asks whether the port is BOUND. And **all six of the adversarial's green reverts**, two of them provably dead guards that were deleted and replaced by an asserted invariant plus a mutation |
+| **Is it measured?** | `pnpm verify` **exit 0 — 109 files, 3810 tests, `Type Errors no errors`** (109 / 3786 after the test phase). **The five harnesses it touches, run SERIALLY and derived rather than inherited: 03 · 06 · 08 · 10 · 05 — final runs exit 0 at 73 / 63 / 230 / 357 / 174 mutations**, zero anchors moved or ambiguous, zero `DID NOT BITE`, zero `NO MUTATION REDDENS`, every ⚠ test red under at least one mutation. `measure-breakpoints.mjs` **102 passed, 0 failed, 0 blocked**; `check-density.mjs` **ALL PASS**. ⚠ **Three runs returned 1 first and all three were the harness working**: twice a ⚠ test of this phase's own with no wrong implementation — both the ANTI-VACUITY half of its own fix — and once `DID NOT BITE: 05-I3`, which is **`12c-D1`**, not this loop's. Exit codes with their commands: `12c-reconciliation.md` §9 |
+| **What is still open?** | **`12c-A6`: one refused row still freezes retirement for every OTHER instance** for as long as it lasts. That is §9's own ratified unbounded staleness reached through a new door, and narrowing it (retire the instances whose identity we DID read) is a §9 ruling — `12c-Q2`, with proposed wording. `12c-A10`'s SERVING headline needs panel copy (`12c-Q5`). **24 ⚠ marks across five harnesses have a wall-clock measurement for a verdict** and are deferred with an owner. And the box, as ever: **nothing in this loop ran against a container, a unit or a real GPU**, and this phase did not contact `192.168.4.71` at all |
+
+### ⚠ What 12c adds to the box-side list
+
+1. ⚠⚠ **Whether anything on the live box would produce a refused row today.** The whole ruling is
+   about a client meeting a server it disagrees with, and `12c-build.md` §6 Q8 — *is client/server
+   skew possible on this deployment at all?* — is still the owner's. §4 says one image, 12b's
+   fixture doc says client-only deploys happen; both cannot be the whole truth.
+2. ⚠ **That an unrecognised `*.env` really does what the header says it does.** A stray
+   `backup.env` takes the page out of `all healthy` on every poll until it is removed, and the
+   event log now logs a second failure of `dbus` behind it. Both are measured in jsdom only.
+3. **That `split.env` and `llama-split.service` are what a mode switch leaves behind** (carried
+   from 12b, still unobserved).
+
+### ⚠⚠ The three things a later loop must not undo
+
+1. **`ServingEnumeration` is the only way `serving[]` reaches a reader**, and `Sample.serving` is
+   required. ⚠ **If you find yourself adding a second parameter so one call site can know whether
+   the list was complete, you are patching a symptom** — the value already answers it, and the
+   compile error you are working around is the design working.
+2. **`servedBy`'s rule: an incomplete list may only produce a POSITIVE answer.** Both directions are
+   pinned, and the second is the one a careless fix loses — `unserved` must SURVIVE for a list that
+   really was read in full, or a mis-pinned instance goes invisible again and the whole inversion
+   buys nothing. `12c-R5` and `12c-R12` are the two mutations that say so.
+3. **The dead guards stay deleted.** `|| value < 0` and `endsWith('.service') ? … : unit` could not
+   fail, and each is now an invariant with a mutation behind it (`12c-R9`, `12c-R8`). Re-adding
+   either puts the rule back in two places, one of them unchecked.
+
+---
+
+## 0.0.5 — 12b's closing state, kept in FULL and unchanged by 12c. **Can the dashboard state the serving mode on the real box? NOT YET, and for two different reasons — and the loop's own lesson is sharper than either: a bounds check that is not stated as an invariant will be re-found as a symptom, once per phase.**
 
 **The question this loop has to answer in one line:** §6.2's GPU↔instance join was a coincidence of
 the one arrangement this box has ever run, `SERVING-MODES.md` adds a second, and 12b inverted the
@@ -1621,6 +1664,93 @@ on one line. Both times it was right.
 
 ---
 
+## 0.17 ⚠ NEW — what 12c found, and the seven rules to carry out of it
+
+### ⚠⚠ THE RULE — **a shortened array means two different things, and every reader of one must be told which**
+
+12c earned this **twice, in two phases, on one array.** §3.4's second ruling lets `wire.ts` drop an
+invalid `serving[]` row and render the rest, so `serving[]` can now be shorter than what the server
+sent — and *shorter* already meant something else: **the server listed fewer instances.**
+
+- The **test** phase found the first reader. §9 reads a subject's absence from an enumeration that
+  was read as **retired** — *it has left the machine* — so a row refused for a bad `port` deleted a
+  live `alarm` from the ledger, the dot and the count, at severity `normal`. It routed a count to
+  that reader and the owner ratified the sentence: *"the collection was read successfully and the
+  client discarded part of it, which is not the same as the server not reporting it."*
+- The **adversarial** found the second, one panel over, under a comment asserting the opposite.
+  §6.2's join was still handed the bare array, so the same refusal rendered the GPU card as
+  **`served by · no instance`** — `unserved`, defined in `gpu-panel.tsx` as *"every list was READ
+  and none of them names this card"* — **byte-identical** to the strip an instance that genuinely
+  left the machine produces.
+
+⚠ **The fix is not a second argument.** A count passed at one call site is a rule stated at a call
+site, which is 12b's defect verbatim (§0.16) and was refused here for the same reason. §4's
+`serving[]` is not handed out as an array any more: `ServingEnumeration` is `{ read: 'none' }`,
+`{ read: 'partial', rows, refused }` or `{ read: 'all', rows }`, it rides on `WireSnapshot` and on
+`Sample` — **which is where the fact was being dropped, not where it was being read** — and both
+readers take the same value. A caller holding only the rows gets a compile error, not a wrong page.
+
+⚠ The signal, so it can be recognised early: **when a collection can be truncated by the reader as
+well as by the writer, the truncation is part of the VALUE.** If you find yourself deciding which
+call sites need to know, you have already lost one.
+
+### ⚠⚠ A default that reintroduces a closed bug is worse than no default
+
+The count arrived as `enumerationsRead(snapshot, servingRowsRefused = 0)`, whose doc claimed it
+defaulted the safe way *"by analogy with `PollOptions.enumerationsRead`"*. The analogy is inverted:
+that option defaults to the **empty set**, which retires nothing, while `0` asserts *the enumeration
+WAS read* — so a caller that had not been updated reproduced the exact defect the argument closes.
+⚠ **Not theoretical:** removing the default made the compiler name a live caller immediately
+(`events.test.ts`'s own harness), which a `0` had been silently answering for.
+
+### ⚠⚠ A guard that CANNOT FAIL is not protection — it is an unchecked second statement of a rule
+
+Two of 12c's six green reverts were **provably dead**: `|| value < 0` beside `Number.isSafeInteger`
+(canonicality already refuses every negative, because `String()` prefixes a `-`) and
+`unit.endsWith('.service') ? … : unit` (every value the mapping produces ends in `.service`). Both
+were deleted rather than pinned, and each was replaced by **an asserted invariant plus a mutation**
+— which is strictly more than the guard claimed and, unlike the guard, can fail. The cost of
+leaving one is not the line: it is that a reader asking *"are negatives handled here?"* stops at it.
+
+### ⚠ A comparator's claims about itself must hold for every input the GRAMMAR admits
+
+`compareInstances` documented *"two different identities never compare equal"* and *"exactly one
+ordering, independent of the order they arrived in"*. `isInstanceId` admits a canonical decimal of
+**any length**, and `Number(a) - Number(b)` gives `0` for two distinct 16-digit identities and
+`NaN` for two 400-digit ones — the first sends the join to array position (the **wrong model** on a
+card), the second leaves `Array.prototype.sort` implementation-defined. **A 24-permutation proof
+cannot see either**, because a set of round numbers and word-shaped names can produce neither. Test
+the comparator against the grammar's edges, not against the fixtures' middle.
+
+### ⚠⚠ Grading a CALL SITE says nothing about the BODY
+
+`measurement-harness.test.ts` asserted the text `await assertPortFree(PORT);` in both browser
+harnesses — and the function it names could be short-circuited to `{}` with 3686 tests still
+passing. Worse, the real body **failed open on the exact occupant it exists to catch**: it read any
+`fetch` rejection as *nothing is listening*, while the occupant is a `next dev` that holds the port
+and does not answer for many seconds. A text guard on a call proves the call is still written; it
+is not coverage of what the call does. ⚠ The fix also names the shape: **ask the question you
+actually mean.** *Is this port held* is a TCP connect, not an HTTP deadline.
+
+### ⚠ A finding about flaky evidence must not itself rest on an unrepeatable measurement
+
+12c's adversarial reported `ring.test.ts`/`series.test.ts` at **2.3–4.3 s** against vitest's 5 s
+default — a near-miss with 0.75 s of headroom — and neither the parent nor this phase could
+reproduce it within an order of magnitude. The underlying concern is real (**24 ⚠ marks across five
+harnesses have a wall-clock measurement for a verdict**), and it is now recorded with figures taken
+under three stated loads. **Say what else was running**, or the number is not a measurement.
+
+### ⚠ The harness finds the anti-vacuity half you forgot, but only if you let it finish
+
+Step 08's ledger reported exactly one ⚠ test inert, and it was right: the three mutations written
+for `12c-A1` all act on answers reached **after** the claimant search, so none of them could blank a
+row that was found — the test asserting *a refusal elsewhere must not blank a row this client read*
+had no wrong implementation. The mutation it wanted is the **over-broad fix**, the one a careless
+reading of A1 produces: completeness checked at the top, `unknown` for everything. ⚠ Every
+correction has two directions, and the second one is the one your own fix makes you blind to.
+
+---
+
 ## 1. How to run anything
 
 `pnpm` is installed through corepack into a directory that is **not** on this machine's
@@ -1654,6 +1784,18 @@ selects Node 26 against a manifest that says `<25.0.0`. The export above fixes i
 and 8 added no native module and no dependency**, so `NODE_MODULE_VERSION` no longer decides
 anything — the pin now matters only for behavioural drift. `.nvmrc` and `.node-version` both
 say `24`, and `lib/guardrails.test.ts` asserts the three files agree.
+
+### ⚠ The totals, as of 12c's reconciliation (2026-09-18)
+
+| | |
+|---|---|
+| `pnpm verify` | **exit 0 — 109 files, 3810 tests, `Type Errors no errors`** (108 / 3662 at `cb8a3c7`; 109 / 3743 after 12c's build; 109 / 3786 after its test phase) |
+| mutation ledgers | **1571 across the ten harnesses, 1571 unique ids, zero cross-harness collisions** — derived by importing each `regressions.py` and reading `len(REGRESSIONS)`, never by `grep -c`. 1513 at `cb8a3c7`: the build wrote 35, the test phase 6, the reconciliation 17 |
+| the five harnesses 12c touches | 03 · 05 · 06 · 08 · 10 — **derived** by intersecting every `LEDGER_FILES` with `git status`, not taken from a handoff. 02, 04, 07, 09 and 11 intersect empty |
+| browser | `measure-breakpoints.mjs` **102 passed, 0 failed, 0 blocked**; `check-density.mjs` **ALL PASS** |
+
+⚠ These go stale on the next item that adds a test or a mutation. **Each command's own printed
+line is the authority**, and `12c-reconciliation.md` §9 carries the exit codes with their commands.
 
 Toolchain: pnpm 12.3.4 (pinned by `packageManager`), TypeScript 7.0.2 (the native Go
 compiler), Vitest 5.0.0, Next 16.3.4, React 19.2.8. **Eight dependencies, all pinned exactly,
@@ -2881,14 +3023,26 @@ top of `lib/guardrails.test.ts` — not by a text assertion.
 
 ---
 
-## 8. Spec gaps and open owner questions — ⚠⚠ **12b raises SIX, two of them ⚠⚠: `12b-Q1` is a line of `SPEC.md` §6.2 that states the RETIRED join as the rule, and `12b-Q2` is §7.9's ruling with its full cost now enumerated under it**; 12a's five stand (`12a-Q2` is the other false sentence); step 11's three (`11-Q1`…`11-Q3`) were RULED on 2026-09-11 and are BUILT by 11b; 11b's five are wording; 10h's six; 10g's four still open; 10f's one; 10e's eight
+## 8. Spec gaps and open owner questions — ⚠⚠ **12c raises SIX, two of them ⚠⚠: `12c-Q1` is what a GPU card may SAY when the serving list was read in part, and `12c-Q2` asks whether an enumeration may be read in PART at all for §9's purposes**; 12b's six stand (`12b-Q1` is a line of `SPEC.md` §6.2 that states the RETIRED join as the rule); 12a's five (`12a-Q2` is the other false sentence); step 11's three (`11-Q1`…`11-Q3`) were RULED on 2026-09-11 and are BUILT by 11b; 11b's five are wording; 10h's six; 10g's four still open; 10f's one; 10e's eight
+
+### ⚠⚠ NEW — 12c's six, 2026-09-18. **Both ⚠⚠ rows came out of one array that can now be shortened by the READER as well as by the writer.**
+
+| id | question | what was BUILT, and the wording proposed |
+|---|---|---|
+| ⚠⚠ **`12c-Q1`** | **What does a GPU card say when the serving list was read in PART?** §6.2 gives the card four answers and no wording for *we could not read the whole list*. | Built as **invariant 1's em dash** (`servedBy` → `unknown`), because an incomplete list cannot support `unserved`'s positive claim — *"every list was READ and none of them names this card"* — which is the sentence §9's 2026-09-18 amendment rejects one layer down. ⚠ It now renders **identically** to *an instance whose `gpus` could not be read*; what tells them apart is the `errors[]` entry, and both land on the SERVING panel. Proposed for §6.2: *"A card whose serving list this client could not read in full shows the em dash, like any reading it could not take; the `errors[]` entry naming the refusal is on the SERVING panel."* The alternative is a FIFTH `ServedBy` variant with its own copy, which is a rendering ruling |
+| ⚠⚠ **`12c-Q2`** | **May an enumeration be read in PART for §9's purposes?** Today one refused row suppresses the WHOLE serving enumeration, so an instance that genuinely left the machine can never retire — and if its last band was `alarm` it pins the banner and the count for as long as the malformed row lasts (`12c-A6`). | Built as **all-or-nothing, deliberately**: a row may have been refused *for its `instance`*, and the client then has no identity to exclude. ⚠ **But when the refused row's own `instance` validates** — a bad `port`, a bad `health`, anything but the identity — the client DOES know which subject it missed, and could retire the rest. That needs §9 wording (*"an enumeration read in part retires the subjects it did read about; only the ones it could not identify keep their conditions"*) **and** a per-subject exclusion in `observePoll`, whose blast radius is the conditions layer. Not built; it is a ruling, not an implementation detail. ⚠ Note the *"forever"* half is §9's own ratified unbounded staleness (`lib/conditions.ts`: *"An expiry would be a clock that silently turns an alarm green"*), reached through a new door |
+| `12c-Q3` | **Should a CLIENT-MINTED `errors[]` entry have its own `ErrorSource`?** §3.7's vocabulary is closed and names no client- or lookup-level source, and 12c added two entries that are not claims about the box: the wire refusal and the unit-name miss. | Built as `llama-env` and `dbus` respectively, each argued from the columns it blanks; the first is now **pinned by a test** (`12c-A4` — it had none, and `'ufw'` moved the note to SAFETY with 3686 tests green). ⚠ What the shared slot costs is `12c-A2`: a permanently-present entry occupies that source's presence, so a real failure of the same source escalates nothing in the header. A nineteenth source would close both and is a contract change |
+| `12c-Q4` | **Does §9's header count SOURCES or FAILURES?** A stray `backup.env` plus a dead D-Bus socket reads **`1 source unread`**, and always will. | Ratified as **sources** in 12a's §9 row, and left alone: *"one source we cannot read"* is literally true. ⚠ The asymmetry is now deliberate — after `12c-A2`'s fix **the event log escalates and the count does not**. If the count should escalate too, it needs a second projection, not a change to this one |
+| `12c-Q5` | **What does the SERVING panel's headline say when EVERY row was refused?** It reads *"no llama-server instances discovered"* — a positive claim, and *discovered* is the server's word for something the server did do. | Not built: it is panel copy nobody has ruled on. The refusal notes do render underneath, so it is not silent. ⚠ The seam makes it a one-line change the day there is wording (`state.serving.read === 'partial'` is reachable from the panel now) |
+| `12c-Q6` | **Should the wire REFUSE a duplicate identity inside one `serving[]`?** §3's number bridge reads `0` and `"0"` as one identity, so a server sending both yields two rows with the same `instance` — two SERVING rows under one React key, and one `health:0` condition for two processes. | Not built. The **tie it produces is now pinned** (`12c-R7`: the first row wins, and `compareInstances` is total so a tie can only mean *the same identity twice*). Whether the rows should be refused, merged or left as they are is §3.4's call |
+
 
 ⚠ This table has now been **stale five times** (92 % before step 5, 100 % before step 6, again
 before step 7, again in step 8, and again in Q2). **Every time, in the safe direction: entries
 carried as open that the spec had already answered.** Re-check every row against the spec text
 before trusting it. Invariant 7 stands: if the spec is silent, **report it — do not assume**.
 
-**Open, with owners — FORTY-THREE rows: ⚠⚠ 12b's six (`12b-Q1`…`12b-Q6`, below), 12a's five (`12a-Q1`/`Q2`/`Q9`/`Q10`/`Q11`, below —
+**Open, with owners — FORTY-NINE rows: ⚠⚠ 12c's six (`12c-Q1`…`12c-Q6`, above), ⚠⚠ 12b's six (`12b-Q1`…`12b-Q6`, below), 12a's five (`12a-Q1`/`Q2`/`Q9`/`Q10`/`Q11`, below —
 `12a-Q2` is the only row in this whole table that names a sentence in `SPEC.md` which is FALSE
 rather than absent), 11b's five (`11b-Q1`…`11b-Q5`, below — step 11's three are
 RULED AND BUILT and their rows are kept only for the reasoning), 10h's six, 10g's four, 10f's one still-open (`10f-Q6`;
@@ -3161,6 +3315,12 @@ S35, S40–S48, plus S1–S13, G1–G6, C1–C5, F5 from steps 2–5. **Declined
 
 ## 9. Deferred work, with owners
 
+### ⚠⚠ NEW — 12c's one, 2026-09-18. **24 ⚠ marks across five harnesses have a WALL-CLOCK MEASUREMENT for a verdict.**
+
+| # | Gap | What stands today | Owner |
+|---|---|---|---|
+| **12c-D1** ⚠⚠ | **A ledger whose verdict depends on machine load is evidence that sometimes is not there.** Censused across all ten harnesses by importing each `regressions.py` and reading its `LEDGER_FILES`: **24 ⚠-marked tests decide their verdict with a real-clock delta plus a bound, or a real sleep** — step 03 (3, `io.test.ts`), step 04 (5, `cooling.test.ts` / `deadline.test.ts`), **step 05 (12**, `dbus` / `http` / `io` / `serving` / `storage`), step 06 (2, `source.test.ts`), step 07 (2, `handler.test.ts` / `scrypt.test.ts`). The measured instance is step 05's `05-I2` (*"`nodeIo.run` goes back to `execFile`'s own `timeout:` — inert against a child that ignores SIGTERM"*): applied twice back to back on the same tree it reddened **2 tests on one run and 3 on the next**, and inside a full 174-mutation run neither. ⚠ The direction is the silent one — the **unmutated** bound is robust (305 ms idle → 308 ms under 3× oversubscription), so the flake lives in the MUTANT, and a timeout-driven red **certifies a ⚠ mark for a reason that has nothing to do with the source under mutation**. A `NO MUTATION REDDENS` complaint is loud; a ⚠ mark certified by a timeout is not | Nothing changed. ⚠ **The adversarial's second claim — that `lib/client/ring.test.ts` / `series.test.ts` run 2.3–4.3 s against vitest's 5 s default — is NOT reproducible** and must not be quoted; re-measured under three stated loads in `12c-reconciliation.md` §7, where the same tests are an order of magnitude clear of the bound. The census is a static count and is sound; the near-miss is not. `io.test.ts` is in **two** ledgers (03 and 05) and both carry a mutation of the same defect, so step 03's *"identical to 12b's columns"* check also rests on a load-dependent number | **owner**, then the steps that own those bounds (3, 4, 5, 6, 7) |
+
 ⚠ **Two new documents, both 2026-09-07:**
 
 - **`pipeline/WORK-ITEMS.md`** — the steps 1–8 sweep: what it found, an adversarial review of
@@ -3360,7 +3520,22 @@ dashboard-frontend   5769522    [origin/dashboard-frontend]   PUSHED. ⚠ THE WO
                                 10f is the last commit; 10e is 8ad8b9c
 ```
 
-⚠⚠ **SUPERSEDED — 11b leaves the tree dirty on purpose, on `dc4aad1`** (2026-09-11; the block
+⚠⚠ **SUPERSEDED — 12c leaves the tree dirty on purpose, on `cb8a3c7`** (2026-09-18; the blocks
+below are kept for the branch facts, which still hold). Modified by loop 12c's four phases:
+`lib/types.ts`, `lib/types.test-d.ts`, `lib/units.ts`, `lib/fixtures.ts`,
+`lib/collectors/{llama,serving,dbus,errors,index}.ts` and their tests, `lib/contract.test.ts`,
+`lib/telemetry/snapshot.test.ts`, `lib/client/{wire,observations,runtime,ring,events,series,header-status}.*`,
+`components/panels/{gpu-panel,serving-panel,test-support,panel-chart,cooling-panel,safety-panel}.*`,
+`app/{collector-visibility,dashboard-shell}.test.tsx`, `measurement-harness.test.ts`,
+`scripts/api.probe.ts`, `pipeline/steps/{05,08,10}/regressions.py`,
+`pipeline/steps/10-panels-assembly/{measure-breakpoints.mjs,server-log.mjs,mocks/measure-arrangements.mjs}`,
+this file and `WORK-ITEMS.md`, plus the owner's `SPEC.md` §9 amendment of 02:29:55.
+**Untracked:** `lib/units.test.ts`, `pipeline/steps/12-deploy/12c-{build,test,adversarial,reconciliation}.md`
+and `pipeline/handoffs/12c-*.md`. ⚠ **Nothing under `Dockerfile`, `.dockerignore`, `systemd/` or
+`dashboard.sh` is 12c's** — if `git status` shows one, it is a stranded harness mutation, not an
+intended edit. No `.env`; `next-env.d.ts` byte-identical. **A phase agent stages nothing.**
+
+⚠ **SUPERSEDED — 11b leaves the tree dirty on purpose, on `dc4aad1`** (2026-09-11; the block
 below is 10g's and is kept for the branch facts, which still hold). Modified by loop 11b's four
 phases: `dashboard.sh`, `systemd/ai-dashboard.service`, `packaging.test.ts`, `proxy.ts`,
 `proxy.test.ts`, `lib/auth/{authorize,handler,config}.ts` and their tests,

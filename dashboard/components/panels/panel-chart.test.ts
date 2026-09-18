@@ -7,7 +7,7 @@ import type { WindowMinutes } from '@/lib/client/prefs';
 import { EMPTY_RING, appendSample } from '@/lib/client/ring';
 import type { SampleRing } from '@/lib/client/ring';
 import type { RuntimeState } from '@/lib/client/runtime';
-import { everythingZero } from '@/lib/fixtures';
+import { everythingZero, wireRead } from '@/lib/fixtures';
 import { isoTimestamp } from '@/lib/types';
 
 import { chartDomainOf, formatTimeOfDayMs } from './panel-chart';
@@ -15,10 +15,10 @@ import { chartDomainOf, formatTimeOfDayMs } from './panel-chart';
 const BASE_MS = Date.UTC(2026, 8, 6, 14, 0, 0, 0);
 
 const ringAt = (ms: number): SampleRing =>
-  appendSample(EMPTY_RING, {
-    snapshot: { ...everythingZero, ts: isoTimestamp(new Date(ms).toISOString()) },
-    tsMs: ms,
-  });
+  appendSample(
+    EMPTY_RING,
+    wireRead({ ...everythingZero, ts: isoTimestamp(new Date(ms).toISOString()) }, ms),
+  );
 
 const stateOf = (ring: SampleRing, windowMinutes: WindowMinutes = 30): RuntimeState => ({
   preferences: { cadenceSeconds: DEFAULT_CADENCE_SECONDS, windowMinutes },

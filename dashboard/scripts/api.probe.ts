@@ -50,6 +50,7 @@ import {
 } from '@/lib/format';
 import { decodeThrottleMask } from '@/lib/throttle';
 import type { TelemetrySnapshot } from '@/lib/types';
+import { servingUnitLabel } from '@/lib/units';
 
 const HOST = process.env['PROBE_HOST'] ?? 'ai-server';
 const URL = process.env['PROBE_URL'] ?? 'http://127.0.0.1:8090/api/telemetry';
@@ -138,7 +139,10 @@ describe('the live API', () => {
     for (const i of s.serving ?? []) {
       const cards = servedCards(i.gpus);
       row(
-        `llama-server@${i.instance}`,
+        // ⚠ 12c — `servingUnitLabel`, not a template. The identity may be a NAME (`split`), and
+        // `llama-server@split` is a unit that does not exist; the probe prints what the box
+        // actually runs, from the same mapping the panel renders.
+        servingUnitLabel(i.instance),
         `:${formatPort(i.port)}  ${formatText(i.unitState)}${cards === null ? '' : `  ${cards}`}`,
         `${formatText(i.model)}   ctx ${formatTokens(i.ctx)}   health ${formatText(i.health)}`,
       );

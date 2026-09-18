@@ -16,9 +16,15 @@
  * ⚠ **The mode is never inferred from the number of rows.** One row can equally mean one
  * card's service failed; the cards come from the arrays themselves and nowhere else.
  *
- * §6.4 fixes the join key between an instance and its unit as `llama-server@<i>.service`
- * (`lib/units.ts`'s `servingUnitName`), derived from the index rather than matched by string —
- * this file reuses that function rather than building the name a second time.
+ * ### ⚠⚠ 12c — the identity is a STRING and the unit name is a MAPPING that can miss
+ *
+ * §6.4 fixed the join key as `llama-server@<i>.service`; §3.4's ruling of 2026-09-17 makes it
+ * `lib/units.ts`'s `servingUnitName`, a mapping — `split` is served by `llama-split.service`,
+ * not `llama-server@split.service`, and an identity the mapping does not know gets `null`.
+ * This file reuses that function rather than building any name a second time, and it renders a
+ * miss as the bare identity rather than inventing a unit that does not exist. The loud half —
+ * one `errors[]` entry per poll naming the instance — is `collectServing`'s, and it arrives on
+ * this row through `errors[].instance` like every other per-instance entry.
  *
  * Instances are compacted into ONE row each rather than a separate row per fact, matching
  * §6.2's own phrasing ("one row per discovered instance") and this panel's "compact list"
@@ -66,7 +72,7 @@ import { latestSample } from '@/lib/client/runtime';
 import { formatModelName, formatPort, formatText, formatTokens } from '@/lib/format';
 import { severityHealth, severityUnitState, worstSeverity } from '@/lib/severity';
 import type { ServingInstance, TelemetryError, TelemetrySnapshot } from '@/lib/types';
-import { servingUnitName } from '@/lib/units';
+import { servingUnitLabel, servingUnitName } from '@/lib/units';
 
 import { PanelShell } from '../panel-shell';
 import type { PanelProps } from '../panel-props';
@@ -80,8 +86,8 @@ import styles from './serving-panel.module.css';
 /**
  * Whether one `errors[]` entry is about this instance (10b-S-G) — the STRUCTURAL join,
  * comparing `TelemetryError.instance` to `ServingInstance.instance` directly. §4 fixes
- * `instance` as the same non-null integer identity on both sides, so this is an equality
- * check and nothing else: no message text is read, so a collector rewording a message cannot
+ * `instance` as the same non-null identity on both sides — ⚠ a **string** since 12c — so this
+ * is an equality check and nothing else: no message text is read, so a collector rewording a message cannot
  * silently move it to the wrong row or drop it to none.
  */
 const namesInstance = (error: TelemetryError, instance: ServingInstance): boolean =>
@@ -101,15 +107,25 @@ const instanceRow = (
   // and those are two different facts (§3.4 forbids collapsing them).
   const cards = servedCards(instance.gpus);
 
-  const unitCondition = findDisplayed(displayed, conditionId('unit', servingUnitName(instance.instance)));
-  const healthCondition = findDisplayed(displayed, conditionId('health', String(instance.instance)));
+  // ⚠⚠ 12c — `servingUnitName` MISSES for an identity it cannot map, and a miss has no `unit:`
+  // condition at all (`observations.ts` does not push one). `findDisplayed` is not asked for
+  // one in that case; asking with a fabricated id would quietly find nothing and look the same
+  // as a healthy unit, which is the silence this whole mapping exists to break.
+  const unit = servingUnitName(instance.instance);
+  const unitCondition = unit === null ? undefined : findDisplayed(displayed, conditionId('unit', unit));
+  const healthCondition = findDisplayed(displayed, conditionId('health', instance.instance));
   const age = staleAgeNote(unitCondition, nowMs) ?? staleAgeNote(healthCondition, nowMs);
 
   return (
     <StatusRow
       panel="serving"
       key={instance.instance}
-      label={`llama-server@${instance.instance}`}
+      // ⚠⚠ 12c — the LABEL is the unit name without `.service` (`lib/units.ts`'s
+      // `servingUnitLabel`), so `0` still reads `llama-server@0` and `split` reads
+      // `llama-split` — the unit that actually serves it. An identity with no unit name
+      // renders BARE rather than as `llama-server@<id>`: 12b's survey named the alternative's
+      // cost exactly, *"four operator-facing strings would NAME A UNIT THAT DOES NOT EXIST"*.
+      label={servingUnitLabel(instance.instance)}
       // ⚠⚠ 12b — §6.2: *"The SERVING panel shows one row per process, naming the cards it
       // spans."* The cards go in `secondaryLabel`, beside the port, because both answer
       // *where is this process* — identity, not measurement — and because that slot wraps

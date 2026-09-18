@@ -11,6 +11,8 @@ import {
   servingPerGpu,
   servingPopulated,
   servingSplit,
+  servingUnmapped,
+  servingUnmappedSnapshot,
 } from '@/lib/fixtures';
 import { parseSnapshot } from '@/lib/client/wire';
 import type { ServingInstance, TelemetrySnapshot } from '@/lib/types';
@@ -155,7 +157,7 @@ describe("⚠ §6.5 — an instance's row carries ITS reason, and no other insta
     const snapshot: TelemetrySnapshot = {
       ...everythingZero,
       serving: servingInstances,
-      errors: [{ source: 'llama-health', message: 'the model failed to answer in time', instance: 1 }],
+      errors: [{ source: 'llama-health', message: 'the model failed to answer in time', instance: '1' }],
     };
     const html = renderToStaticMarkup(<ServingPanel state={stateWith(snapshot)} nowMs={0} panelId="serving" />);
     expect(rowContaining(html, 'llama-server@0')).not.toContain('the model failed to answer in time');
@@ -169,8 +171,8 @@ describe("⚠ §6.5 — an instance's row carries ITS reason, and no other insta
       ...everythingZero,
       serving: servingInstances,
       errors: [
-        { source: 'dbus', message: 'NoSuchUnit llama-server@1.service', instance: 1 },
-        { source: 'llama-health', message: 'connect ECONNREFUSED 127.0.0.1:8081', instance: 1 },
+        { source: 'dbus', message: 'NoSuchUnit llama-server@1.service', instance: '1' },
+        { source: 'llama-health', message: 'connect ECONNREFUSED 127.0.0.1:8081', instance: '1' },
       ],
     };
     const html = renderToStaticMarkup(<ServingPanel state={stateWith(snapshot)} nowMs={0} panelId="serving" />);
@@ -219,8 +221,8 @@ describe("⚠ §6.5 — an instance's row carries ITS reason, and no other insta
       ...everythingZero,
       serving: servingInstances,
       errors: [
-        { source: 'llama-health', message: 'the probe never answered', instance: 0 },
-        { source: 'llama-env', message: '/etc/llama-server/5.env: ENOENT', instance: 5 },
+        { source: 'llama-health', message: 'the probe never answered', instance: '0' },
+        { source: 'llama-env', message: '/etc/llama-server/5.env: ENOENT', instance: '5' },
       ],
     };
     const html = renderToStaticMarkup(<ServingPanel state={stateWith(snapshot)} nowMs={0} panelId="serving" />);
@@ -241,7 +243,7 @@ describe("⚠ §6.5 — an instance's row carries ITS reason, and no other insta
       const snapshot: TelemetrySnapshot = {
         ...everythingZero,
         serving,
-        errors: [{ source: 'llama-env', message: '/etc/llama-server: EACCES', instance: 1 }],
+        errors: [{ source: 'llama-env', message: '/etc/llama-server: EACCES', instance: '1' }],
       };
       const html = renderToStaticMarkup(<ServingPanel state={stateWith(snapshot)} nowMs={0} panelId="serving" />);
       expect(occurrences(html, '/etc/llama-server: EACCES')).toBe(1);
@@ -451,5 +453,130 @@ describe('⚠⚠ 12b — the row names the cards it spans (§6.2)', () => {
     // property while checking another.)
     expect(html).not.toContain(':8080 · ');
     expect(html).not.toContain(':8081 · ');
+  });
+});
+
+describe('⚠⚠ 12c — a NAMED instance, and the unit-name mapping made visible', () => {
+  const render = (snapshot: TelemetrySnapshot): string =>
+    renderToStaticMarkup(<ServingPanel state={stateWith(snapshot)} nowMs={0} panelId="serving" />);
+
+  const rowContaining = (html: string, needle: string): string => {
+    const at = html.indexOf(needle);
+    expect(at).toBeGreaterThan(-1);
+    return html.slice(html.lastIndexOf('<div', at), html.indexOf('</div>', at));
+  };
+  const occurrences = (html: string, needle: string): number => html.split(needle).length - 1;
+
+  test('⚠⚠ THE SPLIT ROW — labelled `llama-split`, the unit that actually serves it', () => {
+    // The render §3.4's first ruling exists for. Until 12c this page could not be produced at
+    // ALL: discovery rejected `split.env`, so `serving[]` carried instances 0 and 1 — both
+    // inactive — and the process serving the box appeared nowhere.
+    //
+    // ⚠ `llama-server@split` is asserted ABSENT, not merely "the right label is present".
+    // Both can be true at once, and the wrong one is what a template produces.
+    const html = render({ ...everythingZero, serving: servingSplit });
+    expect(html).toContain('llama-split');
+    expect(html).not.toContain('llama-server@split');
+    expect(html).toContain(':8080 · GPUs 0, 1');
+    expect(html).toContain('gemma-4-31b');
+  });
+
+  test('⚠⚠ THE MAPPING MISS — the row is labelled by its bare identity, never by a unit that does not exist', () => {
+    // `default.env` is a legal instance filename and `lib/units.ts` has no unit for it. The
+    // label is `default`, full stop — 12b's survey named the cost of the alternative exactly:
+    // "four operator-facing strings would NAME A UNIT THAT DOES NOT EXIST."
+    const html = render(servingUnmappedSnapshot);
+    expect(html).toContain('>default<');
+    expect(html).not.toContain('llama-server@default');
+    expect(html).not.toContain('llama-default');
+  });
+
+  test('⚠⚠ THE MISS IS LOUD ON THE PAGE — the `dbus` entry sits on that row and no other', () => {
+    // Without this the row is indistinguishable from a stopped service: both em dashes, no
+    // explanation. §6.5: "an alarm with no explanation beside it is not actionable."
+    const html = render(servingUnmappedSnapshot);
+    expect(rowContaining(html, '>default<')).toContain('no systemd unit is known for instance');
+    expect(rowContaining(html, 'llama-server@0')).not.toContain('no systemd unit is known');
+    expect(occurrences(html, 'no systemd unit is known for instance')).toBe(1);
+  });
+
+  test('⚠ the unmappable row still shows everything that did NOT need a unit name', () => {
+    // §6.5's rule at row granularity: a failed reading blanks the figure it explains and
+    // nothing else. The port, model, context and health all came from places that never
+    // needed a unit name.
+    const row = rowContaining(render(servingUnmappedSnapshot), '>default<');
+    expect(row).toContain(':8082');
+    expect(row).toContain('qwen3.6-27b');
+    expect(row).toContain('131,072');
+    expect(row).toContain('health ok');
+  });
+
+  test('⚠⚠ 12c — the row never picks up a condition keyed on a unit name the system cannot PRODUCE', () => {
+    // ⚠ The step-10 ledger reported `12c-SP21` DID NOT BITE, and it was right: asking
+    // `findDisplayed` for `unit:llama-server@default.service` finds nothing today, because
+    // `conditionsFrom` never mints that id — so a fabricated lookup key and the correct
+    // `undefined` are indistinguishable on any fixture where `displayed` comes from our own
+    // projection. This supplies `displayed` DIRECTLY, which is what the prop's type allows,
+    // and the fabricated id is the only thing in it.
+    //
+    // The rule: an identity with no unit name has no `unit:` condition, so its row must show
+    // no unit-derived stale age. A lookup under a guessed name would show one — a *last read*
+    // note sourced from a unit that has never existed.
+    const displayed = [
+      displayedConditionOf({
+        kind: 'unit',
+        subject: 'llama-server@default.service',
+        id: 'unit:llama-server@default.service',
+        label: 'llama-server@default.service',
+        value: 'active',
+        severity: 'normal',
+        displaySeverity: 'normal',
+        stale: true,
+        lastSeenMs: 0,
+      }),
+    ];
+    const state = stateWith(servingUnmappedSnapshot, { displayed });
+    const html = renderToStaticMarkup(<ServingPanel state={state} nowMs={372_000} panelId="serving" />);
+    expect(html).not.toContain('last read 6:12 ago');
+  });
+
+  test('⚠⚠ 12c — the health condition is looked up by the IDENTITY, not by anything else on the row', () => {
+    // `12c-SP22` did not bite either: nothing asserted that the `health:` note reaches the row
+    // at all, so a lookup keyed on the port (or on the array position, or on a stringified
+    // anything) was indistinguishable from the right one. ⚠ The subject is a NAMED instance,
+    // because for `0` the identity and half the plausible wrong keys still coincide.
+    const displayed = [
+      displayedConditionOf({
+        kind: 'health',
+        subject: 'split',
+        id: 'health:split',
+        label: 'llama-split /health',
+        value: 'ok',
+        severity: 'normal',
+        displaySeverity: 'normal',
+        stale: true,
+        lastSeenMs: 0,
+      }),
+    ];
+    const state = stateWith({ ...everythingZero, serving: servingSplit }, { displayed });
+    const html = renderToStaticMarkup(<ServingPanel state={state} nowMs={372_000} panelId="serving" />);
+    expect(rowContaining(html, '>llama-split<')).toContain('last read 6:12 ago');
+  });
+
+  test('⚠ a NAMED identity is a valid React key and a valid `errors[]` join — the row is not duplicated or orphaned', () => {
+    // The identity is the React key and the `error.instance === instance.instance` join. A
+    // key collision would duplicate or drop a row; a join that stringified one side and not
+    // the other would orphan the entry into `PanelNotes` under the rows.
+    const html = render({
+      ...everythingZero,
+      serving: [...servingSplit, ...servingUnmapped],
+      errors: [{ source: 'llama-health', message: 'the split process never answered', instance: 'split' }],
+    });
+    // ⚠ `>llama-split<`, the rendered TEXT: `StatusRow` also puts the label in a `title`, so
+    // a bare `toContain` count would be 2 for one row and would read as a duplicate.
+    expect(occurrences(html, '>llama-split<')).toBe(1);
+    expect(rowContaining(html, '>llama-split<')).toContain('the split process never answered');
+    expect(rowContaining(html, '>default<')).not.toContain('the split process never answered');
+    expect(occurrences(html, '>default<')).toBe(1);
   });
 });

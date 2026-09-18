@@ -13,6 +13,7 @@ import { describe, expect, test } from 'vitest';
 import { CONDITION_KINDS, EMPTY_CONDITION_STATE, observePoll, standingIdsFrom } from '../conditions';
 import type { ConditionObservation } from '../conditions';
 import {
+  LIVE_BOX_SERVING_WIRE,
   everythingZero,
   nothingReadable,
   servingGpusUnreadable,
@@ -20,6 +21,8 @@ import {
   servingPerGpu,
   servingPopulated,
   servingSplit,
+  servingTwoClaimants,
+  servingUnmapped,
 } from '../fixtures';
 import { EM_DASH } from '../format';
 import { FAN_SERVICE_UNIT } from '../units';
@@ -27,6 +30,18 @@ import { celsius, gib, mib, pwm, rpm, throttleMask } from '../types';
 import type { ErrorSource, Gpu, ServingInstance, TelemetryError, TelemetrySnapshot } from '../types';
 import { GPU_ENUMERATION, SERVING_ENUMERATION, VALUE_IS_A_BAND, conditionSource, conditionsFrom, enumerationsRead, errorsForPanel, servedBy, servedCards } from './observations';
 import type { Panel } from './observations';
+import { parseSnapshot, servingEnumeration } from './wire';
+import { wireBodyOf } from './fake-env';
+
+/**
+ * ⚠⚠ 12c/RECONCILE — `servedBy` takes a {@link ServingEnumeration}, never a bare array, so
+ * every call below has to say whether the list is all of it. These two helpers are the two
+ * answers; there is no third, and no default.
+ */
+const allRead = (rows: readonly ServingInstance[] | null) => servingEnumeration(rows, 0);
+/** …and the state `12c-A1` was found in: the server sent more rows than these. */
+const partlyRead = (rows: readonly ServingInstance[], refused: number) =>
+  servingEnumeration(rows, refused);
 
 const card = everythingZero.gpus?.[0];
 if (card === undefined) throw new Error('the everythingZero fixture lost its GPU');
@@ -197,6 +212,53 @@ describe('⚠ O12: a reading with no §6.3 band produces no condition', () => {
     expect(idsOf(unprobed).filter((id) => id.startsWith('health:'))).toEqual([]);
   });
 
+  test('⚠⚠ 12c — a NAMED instance’s condition ids: `health:split` and `unit:llama-split.service`', () => {
+    // §6.4's subject IS the identity, verbatim, and the `unit:` id comes from the MAPPING.
+    // ⚠ `unit:llama-server@split.service` is the wrong answer a template produces, and it is
+    // asserted absent rather than merely "the right one is present": both can be true at once
+    // if something pushes two conditions for one instance.
+    const split: TelemetrySnapshot = { ...servingPopulated, serving: servingSplit };
+    const ids = idsOf(split).filter((id) => id.startsWith('health:') || id.startsWith('unit:llama'));
+    expect(ids).toEqual(['unit:llama-split.service', 'health:split']);
+    expect(ids).not.toContain('unit:llama-server@split.service');
+  });
+
+  test('⚠⚠ 12c — an identity the mapping cannot name gets its `health:` row and NO `unit:` row', () => {
+    // A `unit:` condition for `llama-server@default.service` would be a §6.3 row — and a
+    // `STANDING`-suppressible id — against a unit that has never existed. The instance is not
+    // dropped either: `health:default` is a real reading of a real process.
+    //
+    // ⚠⚠ **`unitState` is `'failed'` here, and the fixture would be INERT without it.** The
+    // collector leaves an unmappable instance's `unitState` `null`, and O12 already drops a
+    // condition with no band — so on the collector's own output this test passes whether the
+    // mapping is consulted or not, and the step-8 ledger reported exactly that (`12c-OB12`
+    // DID NOT BITE). A server whose row carries a state we cannot name a unit for is reachable
+    // over the wire, and it is the only shape that makes the rule observable: the client must
+    // not invent a condition id for a unit it cannot name, whatever the row says.
+    const unmapped: TelemetrySnapshot = {
+      ...servingPopulated,
+      serving: servingUnmapped.map((i) => ({ ...i, unitState: 'failed' as const })),
+    };
+    // ⚠ `unit:gpu-fan-control.service` is §9's two-panel reading and is nothing to do with
+    // this rule, so the filter is `unit:llama` — narrow enough to exclude it and wide enough
+    // to catch any fabricated `llama-*` unit, which is what the mutation would produce.
+    const ids = idsOf(unmapped).filter((id) => id.startsWith('health:') || id.startsWith('unit:llama'));
+    expect(ids).toEqual(['health:default']);
+    expect(idsOf(unmapped).some((id) => id.includes('default.service'))).toBe(false);
+  });
+
+  test('⚠⚠ 12c — the health condition’s LABEL is the unit’s own name, not a template over the identity', () => {
+    // §6.4's banner and the event log both read this label. ⚠ It is asserted on a NAMED
+    // instance because that is the only place the two spellings differ: for `0` both produce
+    // `llama-server@0 /health`, which is why a numeric fixture cannot discriminate them.
+    const split: TelemetrySnapshot = { ...servingPopulated, serving: servingSplit };
+    expect(find(split, 'health:split')?.label).toBe('llama-split /health');
+    expect(find(split, 'health:split')?.label).not.toContain('llama-server@');
+    // …and the numbered case is unchanged, which is the half a rewrite would break silently.
+    const perGpu: TelemetrySnapshot = { ...servingPopulated, serving: servingInstances };
+    expect(find(perGpu, 'health:0')?.label).toBe('llama-server@0 /health');
+  });
+
   test('⚠ the fan5 engaged row is absent in EC auto, where it would alarm on a healthy box', () => {
     const ecAuto: TelemetrySnapshot = {
       ...loaded,
@@ -332,17 +394,33 @@ describe('⚠ which enumerations a poll could read', () => {
    * goes with it. Getting this backwards turns the header green at the moment the dashboard
    * loses the ability to look.
    */
+  const read = (snapshot: TelemetrySnapshot) => enumerationsRead(snapshot, allRead(snapshot.serving));
+
   test('⚠ null is not [] — an unread collection retires nothing', () => {
-    expect([...enumerationsRead({ ...loaded, gpus: null, serving: null })]).toEqual([]);
-    expect([...enumerationsRead({ ...loaded, gpus: [], serving: [] })].sort()).toEqual([
+    expect([...read({ ...loaded, gpus: null, serving: null })]).toEqual([]);
+    expect([...read({ ...loaded, gpus: [], serving: [] })].sort()).toEqual([
       GPU_ENUMERATION,
       SERVING_ENUMERATION,
     ]);
   });
 
   test('each collection is reported independently', () => {
-    expect([...enumerationsRead({ ...loaded, gpus: null })]).toEqual([SERVING_ENUMERATION]);
-    expect([...enumerationsRead({ ...loaded, serving: null })]).toEqual([GPU_ENUMERATION]);
+    expect([...read({ ...loaded, gpus: null })]).toEqual([SERVING_ENUMERATION]);
+    expect([...read({ ...loaded, serving: null })]).toEqual([GPU_ENUMERATION]);
+  });
+
+  test('⚠⚠ a REFUSED row is not a read enumeration, and there is no default that says it is', () => {
+    // ⚠ `12c-A5`: this argument arrived as `servingRowsRefused = 0`, and `0` means *the
+    // enumeration WAS read*. A caller that had not been updated therefore retired an instance
+    // for a validation failure — the exact defect the argument exists to close, reintroduced by
+    // its own default. It is required now, and it is the same VALUE `servedBy` takes, so the
+    // ledger and the join cannot be told different things about one array.
+    const rows = loaded.serving ?? [];
+    expect([...enumerationsRead(loaded, partlyRead(rows, 1))]).toEqual([GPU_ENUMERATION]);
+    expect([...enumerationsRead(loaded, allRead(rows))].sort()).toEqual([
+      GPU_ENUMERATION,
+      SERVING_ENUMERATION,
+    ]);
   });
 
   /*
@@ -575,23 +653,36 @@ describe('⚠⚠ 12b — the INVERTED join: a card asks which instance lists it'
     // §3.4's ruling, and the reason it is correct rather than a compromise: a server old
     // enough not to publish the field cannot be in split mode, because split mode arrives
     // with the same deployment that adds it. `servingInstances` is that server's shape.
-    const zero = servedBy(servingInstances, 0);
+    const zero = servedBy(allRead(servingInstances), 0);
     expect(zero.kind).toBe('indexed');
-    expect(zero.kind === 'indexed' ? zero.instance?.instance : null).toBe(0);
-    const one = servedBy(servingInstances, 1);
-    expect(one.kind === 'indexed' ? one.instance?.instance : null).toBe(1);
+    expect(zero.kind === 'indexed' ? zero.instance?.instance : null).toBe('0');
+    const one = servedBy(allRead(servingInstances), 1);
+    expect(one.kind === 'indexed' ? one.instance?.instance : null).toBe('1');
+  });
+
+  test('⚠⚠ 12c — the index fallback joins by IDENTITY, never by the row’s position in serving[]', () => {
+    // ⚠ Every fixture in this project is dense and in order, so `serving[index]` and
+    // `find(s => s.instance === String(index))` agree on all of them — the coincidence 12b
+    // named, one layer down from the one it fixed. Here `0.env` is absent (a `set-model`
+    // rollback mid-write, a `.bak` in the scanned directory), so `serving[]` carries instance
+    // `1` ALONE: positionally that row is index 0, and by identity it is card 1's.
+    const sparse = [servingInstances[1] as ServingInstance];
+    const zero = servedBy(allRead(sparse), 0);
+    expect(zero.kind === 'indexed' ? zero.instance : undefined).toBeNull();
+    const one = servedBy(allRead(sparse), 1);
+    expect(one.kind === 'indexed' ? one.instance?.instance : null).toBe('1');
   });
 
   test('⚠ `serving: null` is `indexed` with NO instance — unknown cannot become a claim', () => {
     // "Which instances exist is unknown" says nothing about cards, and the `llama-env` entry
     // that explains it already sits on the SERVING panel.
-    expect(servedBy(null, 0)).toEqual({ kind: 'indexed', instance: null });
+    expect(servedBy(allRead(null), 0)).toEqual({ kind: 'indexed', instance: null });
   });
 
   test('⚠ per-GPU mode gives today’s answer FOR A REASON: instance N declares card N', () => {
-    const zero = servedBy(servingPerGpu, 0);
+    const zero = servedBy(allRead(servingPerGpu), 0);
     expect(zero.kind).toBe('declared');
-    expect(zero.kind === 'declared' ? zero.instance.instance : null).toBe(0);
+    expect(zero.kind === 'declared' ? zero.instance.instance : null).toBe('0');
     expect(zero.kind === 'declared' ? zero.alongside : null).toEqual([]);
   });
 
@@ -599,11 +690,42 @@ describe('⚠⚠ 12b — the INVERTED join: a card asks which instance lists it'
     // The arrangement the old join had no answer for. `alongside` is what the GPU card
     // renders as "served jointly with GPU M", and it excludes the asking card — a list that
     // included it would make GPU 0 say it is served jointly with itself.
-    const zero = servedBy(servingSplit, 0);
-    const one = servedBy(servingSplit, 1);
+    const zero = servedBy(allRead(servingSplit), 0);
+    const one = servedBy(allRead(servingSplit), 1);
     expect(zero.kind === 'declared' ? zero.alongside : null).toEqual([1]);
     expect(one.kind === 'declared' ? one.alongside : null).toEqual([0]);
-    expect(one.kind === 'declared' ? one.instance.instance : null).toBe(0);
+    // ⚠⚠ 12c — `'split'`, not `0`. The fixture now carries the identity the box really
+    // produces, and a NUMERIC identity was the loop's second coincidence: `String(instance)`,
+    // `Number(instance)` and a template unit name all keep working on one.
+    expect(one.kind === 'declared' ? one.instance.instance : null).toBe('split');
+  });
+
+  test('⚠⚠ 12c — TWO instances claiming ONE card resolve to the LOWER identity, in any list order', () => {
+    // §3.4 says nothing about two claimants, and it is a real state during a half-finished
+    // mode switch — systemd's `Conflicts=` is what normally prevents it. The rule is
+    // `compareInstances`: a numbered instance beats every named one, so card 0 names `0`.
+    //
+    // ⚠⚠ **The fixture arrives in the OPPOSITE order to the answer** (`split` is element 0),
+    // and this is asserted BOTH ways round. A join that took `serving[]`'s first claimant by
+    // position would answer `split` here and would agree with the rule on every other fixture
+    // in this project, because the collector sorts before the wire ever sees them.
+    const forwards = servedBy(allRead(servingTwoClaimants), 0);
+    const backwards = servedBy(allRead([...servingTwoClaimants].reverse()), 0);
+    expect(forwards.kind).toBe('declared');
+    expect(forwards.kind === 'declared' ? forwards.instance.instance : null).toBe('0');
+    expect(backwards).toEqual(forwards);
+    // ⚠ And the model comes with it, which is the failure §6.2 names: the WRONG model on a
+    // card rather than a missing one.
+    expect(forwards.kind === 'declared' ? forwards.instance.model : null).toBe('qwen3.6-27b');
+  });
+
+  test('⚠⚠ 12c — the winner is chosen PER CARD, not once per snapshot', () => {
+    // Card 1 is claimed by `split` alone, on the same fixture whose card 0 goes to `0`. A
+    // reduction that picked one winner for the whole snapshot would give card 1 to instance
+    // `0`, which does not list it.
+    const one = servedBy(allRead(servingTwoClaimants), 1);
+    expect(one.kind === 'declared' ? one.instance.instance : null).toBe('split');
+    expect(one.kind === 'declared' ? one.alongside : null).toEqual([0]);
   });
 
   test('⚠ a MIS-PINNED instance names the card it really serves, not the card its number implies', () => {
@@ -611,20 +733,20 @@ describe('⚠⚠ 12b — the INVERTED join: a card asks which instance lists it'
     // `gpu.index === serving.instance` this was invisible; now GPU 1 says instance 0 and GPU
     // 0 says nothing serves it.
     const misPinned = [{ ...(servingPerGpu[0] as ServingInstance), gpus: [1] }];
-    expect(servedBy(misPinned, 1).kind).toBe('declared');
-    expect(servedBy(misPinned, 0).kind).toBe('unserved');
+    expect(servedBy(allRead(misPinned), 1).kind).toBe('declared');
+    expect(servedBy(allRead(misPinned), 0).kind).toBe('unserved');
   });
 
   test('⚠ every list READ and none naming this card is `unserved`, which is NOT `unknown`', () => {
     // §6.5's retired-vs-stale distinction one level down: we looked, and nobody claims it.
     // An em dash here would say "we could not look", which is a different fact.
-    expect(servedBy(servingPerGpu, 7).kind).toBe('unserved');
+    expect(servedBy(allRead(servingPerGpu), 7).kind).toBe('unserved');
   });
 
   test('⚠ a `gpus` that could not be READ makes the card `unknown`, even for a card nobody claims', () => {
     // Invariant 1. The instance whose list is null might be the one serving this card, so
     // asserting "nothing serves it" would be a claim made on a reading we do not have.
-    expect(servedBy(servingGpusUnreadable, 1).kind).toBe('unknown');
+    expect(servedBy(allRead(servingGpusUnreadable), 1).kind).toBe('unknown');
   });
 
   test('⚠ a claimed card beats an unreadable sibling — `unknown` is the LAST resort', () => {
@@ -634,8 +756,8 @@ describe('⚠⚠ 12b — the INVERTED join: a card asks which instance lists it'
       { ...(servingPerGpu[0] as ServingInstance), gpus: [0] },
       { ...(servingPerGpu[1] as ServingInstance), gpus: null },
     ];
-    expect(servedBy(mixed, 0).kind).toBe('declared');
-    expect(servedBy(mixed, 1).kind).toBe('unknown');
+    expect(servedBy(allRead(mixed), 0).kind).toBe('declared');
+    expect(servedBy(allRead(mixed), 1).kind).toBe('unknown');
   });
 
   test('⚠ the fallback is chosen by the SNAPSHOT, not per row', () => {
@@ -644,14 +766,14 @@ describe('⚠⚠ 12b — the INVERTED join: a card asks which instance lists it'
     // coincidence this change exists to stop relying on. (`collectServing` cannot produce a
     // mixed snapshot; this is the defence, and it is why `some(declaresGpus)` is the test.)
     const mixed = [servingInstances[0] as ServingInstance, { ...(servingInstances[1] as ServingInstance), gpus: [1] }];
-    expect(servedBy(mixed, 0).kind).toBe('unserved');
-    expect(servedBy(mixed, 1).kind).toBe('declared');
+    expect(servedBy(allRead(mixed), 0).kind).toBe('unserved');
+    expect(servedBy(allRead(mixed), 1).kind).toBe('declared');
   });
 
   test('⚠ an instance declaring `[]` claims nothing, and does not make other cards unknown', () => {
     // `CUDA_VISIBLE_DEVICES=` is an answer, so the snapshot was fully read: `unserved`.
     const none = [{ ...(servingPerGpu[0] as ServingInstance), gpus: [] }];
-    expect(servedBy(none, 0).kind).toBe('unserved');
+    expect(servedBy(allRead(none), 0).kind).toBe('unserved');
   });
 
   test('⚠⚠ 12b-TEST — the `unknown` em dash is explained on SERVING, NOT on the GPU card', () => {
@@ -669,11 +791,11 @@ describe('⚠⚠ 12b — the INVERTED join: a card asks which instance lists it'
         {
           source: 'dbus',
           message: 'llama-server@0.service: Environment: org.freedesktop.DBus.Error.AccessDenied: no detail',
-          instance: 0,
+          instance: '0',
         },
       ],
     };
-    expect(servedBy(snapshot.serving, 0).kind).toBe('unknown');
+    expect(servedBy(allRead(snapshot.serving), 0).kind).toBe('unknown');
     expect(errorsForPanel(snapshot, 'gpu')).toEqual([]);
     expect(errorsForPanel(snapshot, 'serving')).toHaveLength(1);
     expect(errorsForPanel(snapshot, 'serving')[0]?.message).toContain('Environment');
@@ -704,19 +826,134 @@ describe('⚠⚠ 12b — the INVERTED join: a card asks which instance lists it'
     // character away from turning the row into an older server's instead (see that test).
     const spread = { ...(servingPerGpu[0] as ServingInstance), gpus: undefined } as unknown as ServingInstance;
     expect(Object.hasOwn(spread, 'gpus')).toBe(true);
-    expect(servedBy([spread], 0)).toEqual({ kind: 'unserved' });
+    expect(servedBy(allRead([spread]), 0)).toEqual({ kind: 'unserved' });
 
     // …and the same snapshot with the key genuinely ABSENT is the older-server path, which is
     // the answer the spread must not be allowed to borrow.
     const absent = servingInstances[0] as ServingInstance;
     expect(Object.hasOwn(absent, 'gpus')).toBe(false);
-    expect(servedBy([absent], 0)).toEqual({ kind: 'indexed', instance: absent });
+    expect(servedBy(allRead([absent]), 0)).toEqual({ kind: 'indexed', instance: absent });
   });
 
   test('⚠ `serving: []` is `indexed` with no instance — not `unserved`', () => {
     // No instance carries the key because there is no instance, so this is the older-server
     // path by construction, and it renders exactly what an empty `serving` renders today.
-    expect(servedBy([], 0)).toEqual({ kind: 'indexed', instance: null });
+    expect(servedBy(allRead([]), 0)).toEqual({ kind: 'indexed', instance: null });
+  });
+});
+
+/**
+ * ⚠⚠ **12c/RECONCILE (`12c-A1`) — a list this client SHORTENED cannot support a negative
+ * answer.**
+ *
+ * The loop's governing finding, and it is §9's ratified sentence applied one panel over:
+ * *"The collection was read successfully and the client discarded part of it, which is not the
+ * same as the server not reporting it."* §9 got that rule on 2026-09-18; `servedBy` was still
+ * being handed `snapshot.serving` with nothing to say the array had been cut, so a row refused
+ * for a bad `port` rendered the GPU card as `served by · no instance` — `unserved`, which
+ * `gpu-panel.tsx` defines in its own comment as *"every list was READ and none of them names
+ * this card … we looked, and nobody claims it"*. Measured, that strip was byte-identical to
+ * the one an instance that genuinely left the machine produces.
+ *
+ * The rule is stated on `servedBy`: **an incomplete list may only produce a POSITIVE answer.**
+ * Every test below is one half of it, and the `allRead` twin beside each is what stops the fix
+ * from being "always answer `unknown`".
+ */
+describe('⚠⚠ 12c/RECONCILE — a REFUSED row cannot make the card say `no instance`', () => {
+  const perGpu = [...servingPerGpu];
+
+  test('⚠⚠ an unclaimed card on a PARTIAL list is `unknown`, and on a COMPLETE one is `unserved`', () => {
+    // ⚠ The pair is the test. `unserved` is a positive claim and must survive for a list that
+    // really was read in full, or the fix has traded one wrong answer for another — a page
+    // that can never say "nobody serves this card" cannot show a mis-pinned instance either,
+    // which is the property the inversion was built for.
+    const claimedElsewhere = [{ ...(perGpu[0] as ServingInstance), gpus: [1] }];
+    expect(servedBy(allRead(claimedElsewhere), 0).kind).toBe('unserved');
+    expect(servedBy(partlyRead(claimedElsewhere, 1), 0).kind).toBe('unknown');
+  });
+
+  test('⚠⚠ a row that IS here still wins on a partial list — the refusal blanks nothing it did read', () => {
+    // The other direction, and the reason the rule is "no NEGATIVE answer" rather than "no
+    // answer". A refusal elsewhere in the array is not a reason to drop a model this client
+    // parsed: that would put an em dash on a card whose instance is right there.
+    const declared = servedBy(partlyRead(perGpu, 1), 0);
+    expect(declared.kind).toBe('declared');
+    expect(declared.kind === 'declared' ? declared.instance.instance : null).toBe('0');
+    expect(declared.kind === 'declared' ? declared.instance.model : null).toBe(
+      (perGpu[0] as ServingInstance).model,
+    );
+  });
+
+  test('⚠⚠ the old-server INDEX fallback cannot invent an instance out of a partial list', () => {
+    // `12c-build.md` §6 Q7's new path, which the build recorded and left open: a snapshot whose
+    // ONLY row was refused arrives as an empty array, no row carries `gpus`, and the fallback
+    // printed `served by instance 0` — naming an instance for a row that had just been thrown
+    // away. Q7's own case (a genuinely empty list on a pre-`gpus` server) is `allRead` and is
+    // asserted beside it, unchanged.
+    expect(servedBy(partlyRead([], 1), 0)).toEqual({ kind: 'unknown' });
+    expect(servedBy(allRead([]), 0)).toEqual({ kind: 'indexed', instance: null });
+    // ⚠ …but a row the client DID read still answers by index: it is a positive match on a row
+    // that is here, and an old server's index join is the only arrangement that exists on it.
+    const older = [servingInstances[0] as ServingInstance];
+    expect(servedBy(partlyRead(older, 1), 0)).toEqual({ kind: 'indexed', instance: older[0] });
+    expect(servedBy(partlyRead(older, 1), 1).kind).toBe('unknown');
+  });
+
+  test('⚠ `serving: null` is unchanged — `unread` is not the same state as `partial`', () => {
+    // Three states, not two. `none` keeps 12b's rendering (*served by instance N* with an em
+    // dash for the model, explained by the `llama-env` entry already on the SERVING panel);
+    // `partial` is the new one. Collapsing them would change what the live box renders for a
+    // failure that has nothing to do with this loop.
+    expect(servedBy(allRead(null), 0)).toEqual({ kind: 'indexed', instance: null });
+    expect(servedBy(allRead(null), 1)).toEqual({ kind: 'indexed', instance: null });
+  });
+
+  test('⚠⚠ two rows carrying ONE identity tie, and the tie keeps the FIRST — the `< 0` in the reduce', () => {
+    // ⚠ `12c-A11` #3: reverting the claimant reduce's `< 0` to `<= 0` left the whole suite
+    // green, because no fixture could produce a tie. This one can, and it needs no contrivance
+    // — §3's number bridge admits `0` and `"0"` as two spellings of ONE identity, so a server
+    // that sends both puts two rows with the same `instance` into one array (`12c-A9`).
+    // `compareInstances` is a total order on distinct identities (asserted in `units.test.ts`),
+    // so a tie means *the same identity twice* and array order is the only remaining tiebreak.
+    // `<= 0` would hand the card the LAST row's model instead of the first's.
+    const body = (serving: unknown) => ({
+      ...(wireBodyOf(everythingZero) as Record<string, unknown>),
+      serving,
+    });
+    const row = (instance: unknown, model: string, port: number) => ({
+      instance,
+      port,
+      unitState: 'active',
+      model,
+      ctx: 131072,
+      health: 'ok',
+      gpus: [0],
+    });
+    const parsed = parseSnapshot(body([row(0, 'first-spelling', 8080), row('0', 'second-spelling', 8081)]));
+    expect(parsed?.snapshot.serving?.map((r) => r.instance)).toEqual(['0', '0']);
+    expect(parsed?.serving.read).toBe('all');
+    const answer = servedBy(parsed!.serving, 0);
+    expect(answer.kind === 'declared' ? answer.instance.model : null).toBe('first-spelling');
+  });
+
+  test('⚠⚠ end to end through `parseSnapshot`: one bad `port` no longer says `no instance`', () => {
+    // ⚠ The measurement the finding was made with, as a test: the ONLY thing that varies is
+    // row 0's `port`, and before this the two snapshots gave card 1 the same `unserved` — a
+    // dropped row and a departed instance were indistinguishable on the card.
+    const rows = JSON.parse(LIVE_BOX_SERVING_WIRE) as Record<string, unknown>[];
+    const withGpus = rows.map((row, i) => ({ ...row, gpus: [i] }));
+    const body = (serving: unknown) => ({
+      ...(wireBodyOf(everythingZero) as Record<string, unknown>),
+      serving,
+    });
+
+    const clean = parseSnapshot(body(withGpus));
+    expect(servedBy(clean!.serving, 1).kind).toBe('declared');
+
+    const broken = parseSnapshot(body([{ ...(withGpus[0] as object), port: 'nope' }, withGpus[1]]));
+    expect(broken!.serving.read).toBe('partial');
+    expect(servedBy(broken!.serving, 1).kind).toBe('declared'); // row 1 is here and claims it
+    expect(servedBy(broken!.serving, 0).kind).toBe('unknown'); // row 0 was refused, not absent
   });
 });
 
@@ -740,4 +977,131 @@ describe('⚠⚠ 12b — `servedCards`: §3.4’s four shapes as the SERVING row
     expect(servedCards(undefined)).toBeNull();
     expect(servedCards(null)).not.toBe(servedCards(undefined));
   });
+});
+
+/**
+ * ⚠⚠ **12c/TEST — `servedBy` is a function of the SET, proven over EVERY permutation.**
+ *
+ * The build asserts `servingTwoClaimants` and its reverse agree. Two orders agreeing is not the
+ * property: a join that read `serving[1]` rather than `serving[0]` would agree on a two-element
+ * reversal as well, and the rule §6.2's inverted join actually needs is that **no arrangement
+ * of the same rows can move a model onto another card**. That is a claim about all of them, and
+ * with four rows there are twenty-four.
+ *
+ * ⚠ The fixture is built so that every plausible wrong rule gives a DIFFERENT answer on at
+ * least one card:
+ *
+ * | card | claimants | winner | what it kills |
+ * |---|---|---|---|
+ * | 0 | `10`, `2` | **`2`** | a lexical order over numbers — `'10' < '2'` |
+ * | 1 | `2`, `split` | **`2`** | names sorted in with numbers, and `Number('split')` |
+ * | 2 | `split`, `01` | **`01`** | `Number()` on either side; `01` is a NAME here, and it is the lower one |
+ *
+ * ⚠ `01` is on purpose. It is numeric-LOOKING and not canonical, so `isNumericInstance` calls it
+ * a name and it sorts among the names by code point — `'0' < 's'`, so it beats `split`. An
+ * implementation that reached for `Number(a) - Number(b)` anywhere gets `1 - NaN` and a
+ * comparator that returns `NaN`, which `Array.sort` and this `reduce` both read as "not less
+ * than" — silently, and differently depending on which pairs get compared.
+ */
+describe('⚠⚠ 12c/TEST — the join does not depend on array POSITION, over every permutation', () => {
+  const claimants: readonly ServingInstance[] = [
+    { ...(servingInstances[0] as ServingInstance), instance: '10', gpus: [0] },
+    { ...(servingInstances[0] as ServingInstance), instance: '2', gpus: [0, 1], model: 'qwen-two' },
+    { ...(servingInstances[0] as ServingInstance), instance: 'split', gpus: [1, 2], model: 'gemma-split' },
+    { ...(servingInstances[0] as ServingInstance), instance: '01', gpus: [2], model: 'padded' },
+  ];
+
+  /** Every ordering of the four rows — 24 of them, generated rather than listed. */
+  const permutations = <T>(items: readonly T[]): T[][] =>
+    items.length <= 1
+      ? [[...items]]
+      : items.flatMap((item, i) =>
+          permutations([...items.slice(0, i), ...items.slice(i + 1)]).map((rest) => [item, ...rest]),
+        );
+
+  const orders = permutations(claimants);
+
+  // ⚠ NOT ⚠-marked: nothing in `lib/` can falsify it. It is this block's anti-vacuity term —
+  // a generator that returned `[items]` would make every assertion below a restatement of the
+  // single canonical order — and a ⚠ the ledger can never redden is a claim with no evidence.
+  test('the generator really produces all 24 DISTINCT orders', () => {
+    expect(orders).toHaveLength(24);
+    expect(new Set(orders.map((o) => o.map((r) => r.instance).join(','))).size).toBe(24);
+  });
+
+  test.each([
+    ['card 0, where a lexical order over numbers would answer `10`', 0, '2', [1]],
+    ['card 1, where sorting names in with numbers would answer `split`', 1, '2', [0]],
+    ['card 2, where any `Number()` would answer `split`', 2, '01', []],
+  // ⚠ The `%s` is LAST, not first. Step 8's ledger splits a `test.each` name at the placeholder
+  // to get a matchable prefix, so `⚠⚠ %s: …` leaves the key `⚠⚠` — two characters, matching
+  // every ⚠⚠ FAIL line in the run and therefore certifying nothing. The harness caught it:
+  // `UNMATCHABLE LEDGER KEYS … ledger key '⚠⚠' (2 chars)`.
+  ])('⚠⚠ EVERY one of the 24 orders gives the same instance — %s', (_name, index, winner, alongside) => {
+    for (const order of orders) {
+      const answer = servedBy(allRead(order), index);
+      expect(answer.kind).toBe('declared');
+      expect(answer.kind === 'declared' ? answer.instance.instance : null).toBe(winner);
+      // ⚠ The model travels with the winner, which is §6.2's named failure: the WRONG model on
+      // a card rather than a missing one. Asserting the identity alone would miss a join that
+      // picked the right row and rendered a neighbour's reading.
+      expect(answer.kind === 'declared' ? answer.instance.model : null).toBe(
+        claimants.find((c) => c.instance === winner)?.model,
+      );
+      expect(answer.kind === 'declared' ? answer.alongside : null).toEqual(alongside);
+    }
+  });
+
+  test('⚠⚠ the whole ANSWER is identical across all 24 orders, field for field', () => {
+    // The permutation loop above asserts three chosen facts; this asserts there is nothing
+    // else in the result that moved. `toEqual` over the full `ServedBy` for every card and
+    // every order — 72 comparisons — against the canonical order's own answer.
+    for (const index of [0, 1, 2]) {
+      const expected = servedBy(allRead([...claimants]), index);
+      for (const order of orders) expect(servedBy(allRead(order), index)).toEqual(expected);
+    }
+  });
+
+  test('⚠ a card NO ONE claims is `unserved` in every order, not the lowest instance anyway', () => {
+    // The reduce starts at `null` and a `filter` that matched nothing must stay nothing. A
+    // winner chosen before the claim was checked would hand card 3 to instance `2`.
+    for (const order of orders) expect(servedBy(allRead(order), 3).kind).toBe('unserved');
+  });
+});
+
+/**
+ * ⚠⚠ **12c/TEST — the unit-name MISS, and the fifth thing it does.**
+ *
+ * The build lists four: the unit is not asked about, an `errors[]` entry names the instance,
+ * `unitState`/`gpus` are `null`, and no `unit:` condition is minted. The fifth is what the entry
+ * does once it is on the wire — `dbus` is a THREE-panel source (`panelsForSource` →
+ * `['cooling', 'serving', 'safety']`), so a serving-layer lookup failure is offered to COOLING
+ * and SAFETY as well, and the only thing that keeps it off them is that it carries an
+ * `instance`. That is 10b-S-G's filter, written for a different failure, silently load-bearing
+ * for this one.
+ */
+describe('⚠⚠ 12c/TEST — a mapping miss reaches THREE panels, and one field is why it shows on one', () => {
+  const missEntry: TelemetryError = {
+    source: 'dbus',
+    message:
+      'no systemd unit is known for instance `default` (`default.env` in /etc/llama-server), ' +
+      'so its unit state and the cards it serves were not read',
+    instance: 'default',
+  };
+  const missed: TelemetrySnapshot = {
+    ...servingPopulated,
+    serving: servingUnmapped,
+    errors: [missEntry],
+  };
+
+  test('⚠⚠ `errorsForPanel` offers the miss to COOLING and SAFETY too — the fan-out is real', () => {
+    // Asserted so the panel tests' premise is on the record rather than assumed. §3.7's `dbus`
+    // genuinely blanks a figure on all three panels, so the routing is right; what makes the
+    // miss land on one panel is the entry's `instance`, not the routing.
+    expect(errorsForPanel(missed, 'serving')).toEqual([missEntry]);
+    expect(errorsForPanel(missed, 'cooling')).toEqual([missEntry]);
+    expect(errorsForPanel(missed, 'safety')).toEqual([missEntry]);
+  });
+
+
 });

@@ -177,13 +177,60 @@ const TERMS: readonly Term[] = [
   // ---- 12a-A3's fix: the spawned server's own words -------------------------------------
   {
     file: BREAKPOINTS,
-    text: "import { attachServerLog, waitWithServerOutput } from './server-log.mjs';",
+    text: "import { assertPortFree, assertServerAlive, attachServerLog, waitWithServerOutput } from './server-log.mjs';",
     why: "the spawned `next dev`'s stdout/stderr go back to being piped and never read: a startup failure names the PORT again instead of the cause, and a chatty server can fill the pipe and hang the run",
   },
   {
     file: ARRANGEMENTS,
-    text: "import { attachServerLog, waitWithServerOutput } from '../server-log.mjs';",
+    text: "import { assertPortFree, assertServerAlive, attachServerLog, waitWithServerOutput } from '../server-log.mjs';",
     why: 'the same, in the density/arrangement harness — the two scripts failed identically and must be diagnosed identically',
+  },
+  // ---- 12c/TEST: the harness measures the server it SPAWNED, or it measures nothing --------
+  //
+  // ⚠⚠ Both terms are on BOTH scripts, because the defect is in the shape they share: a fixed
+  // port plus a readiness test that accepts any answer under 500 cannot tell the spawned server
+  // from one that was already there. Reproduced — a second `next dev` on :39173 and the run
+  // dies with `POST /api/session 401`, fifteen seconds later, on a selector, with `EADDRINUSE`
+  // in a log nothing prints.
+  {
+    file: BREAKPOINTS,
+    text: 'await assertPortFree(PORT);',
+    why: 'the breakpoint harness goes back to measuring whatever already holds :39173 — logging in with an ephemeral password that process never had, and reporting the 401 as a missing grid',
+  },
+  {
+    file: ARRANGEMENTS,
+    text: 'await assertPortFree(PORT);',
+    why: 'the same hole in the density harness, on its own port — and a guard removed from one of these two scripts and left in the other is this project’s recurring shape',
+  },
+  {
+    file: BREAKPOINTS,
+    text: 'assertServerAlive(server, serverLog, PORT);',
+    why: 'the liveness half goes, so a process that binds the port in the window AFTER the preflight and BEFORE the spawn is measured silently — the preflight alone is a check, not a guarantee',
+  },
+  {
+    file: ARRANGEMENTS,
+    text: 'assertServerAlive(server, serverLog, PORT);',
+    why: 'the same, in the density harness',
+  },
+  {
+    file: BREAKPOINTS,
+    text: "if (res.url().includes('/api/session')) sessionAnswers.push(",
+    why: "the login's own answer stops being recorded, so a 401, a 429 and a genuinely broken page all report as `the grid never appeared` — which is how 12c-build §8.3 came to record an unexplained flake",
+  },
+  // ⚠⚠ 12c/TEST — the LEAK half of the same flake. A `route.fetch()` rejection is an unhandled
+  // promise rejection inside a Playwright handler: it escapes `main`'s try/finally, so the run
+  // dies with `next-env.d.ts` rewritten and a `next dev` still bound to the fixed port. The next
+  // run then meets an occupied port, which is the 401 above. Measured on 2026-09-18 —
+  // `route.fetch: read ECONNRESET` took the whole script down and `lsof` showed the survivors.
+  {
+    file: BREAKPOINTS,
+    text: 'response = await route.fetch();',
+    why: 'the fabrication route goes back to letting a transient network error kill the process outside every cleanup path — leaking the spawned server onto the fixed port and poisoning the NEXT run with a 401',
+  },
+  {
+    file: ARRANGEMENTS,
+    text: 'response = await route.fetch();',
+    why: 'the same, in the density harness — both scripts leak onto their own fixed port the same way',
   },
   {
     file: SERVER_LOG,
@@ -278,6 +325,17 @@ const TERMS: readonly Term[] = [
     text: 'present.gpu0Lacks && present.gpu1Lacks',
     why: 'measurement 21 stops checking that each card carries the model of the instance that LISTS it — the right label with the WRONG model beside it is \u00a76.2\u2019s own complaint, and asserting that the label is present does not exclude it',
   },
+  // ---- 12c: the NAMED instance -------------------------------------------------------------
+  {
+    file: BREAKPOINTS,
+    text: "instance: 'split',",
+    why: '12b\u2019s lesson, one loop on: a NUMERIC instance identity is the new coincidence available to be relied on by accident \u2014 `String(instance)`, `Number(instance)` and a template unit name all survive one. With the split fixture back on `0`, no page in EITHER browser harness carries a non-numeric identity, and the SERVING row\u2019s `llama-split` label is drawn nowhere',
+  },
+  {
+    file: BREAKPOINTS,
+    text: 'instance: String(i.instance),',
+    why: 'measurement 19 \u2014 the page the box becomes on its next REBUILD \u2014 goes back to spelling \u00a73.4\u2019s identity as a JSON number, so the browser stops rendering the post-12c contract at all and only the live box\u2019s older spelling is ever drawn',
+  },
   // ---- the login itself (12a-A9 #11) ------------------------------------------------------
   {
     file: BREAKPOINTS,
@@ -331,5 +389,135 @@ describe('⚠⚠ 12a — the browser harnesses’ load-bearing terms, which noth
     expect([0, 1], `grep failed: ${found.stderr}`).toContain(found.status);
     const offenders = (found.stdout ?? '').split('\n').filter((l) => l !== '');
     expect(offenders).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// ⚠⚠ 12c/RECONCILE (`12c-A7`) — the two port guards, BEHAVIOURALLY
+// ---------------------------------------------------------------------------------------
+
+/**
+ * ⚠⚠ **Both guards' BODIES were unreachable by any test, and one of them failed open.**
+ *
+ * The adversarial short-circuited each function to a no-op in a byte copy of the tree and
+ * re-ran the whole suite: **108 files / 3686 tests passed, exit 0**, twice. `TERMS` above
+ * grades the CALL SITES — `await assertPortFree(PORT);` — and the `server-log.mjs` module only
+ * for `lines.shift()`, so the code that decides whether a port is occupied was graded by
+ * nothing at all. And `assertPortFree` read *any* `fetch` rejection as "nothing is listening",
+ * which is exactly wrong for the occupant it exists to catch: a `next dev` leaked by a crashed
+ * previous run holds the port for many seconds before it answers `/login` — the harness's own
+ * `waitForServer` allows 60 000 ms for that same URL.
+ *
+ * ### Why these run in a CHILD NODE PROCESS
+ *
+ * The same argument this file already makes for the credential shim: *"it is a plain `.cjs`
+ * preload, so a real `node --require` answers the question directly and there is no reason to
+ * accept a proxy for it."* `server-log.mjs` is plain ESM JavaScript outside `tsconfig`'s
+ * program, and the question — *does a real listening socket make this function throw* — is
+ * answered by a real listening socket, not by a mock of one.
+ *
+ * ⚠ Each case passes a short `answerDeadlineMs`, which changes only how long the FAILURE
+ * MESSAGE waits for an HTTP status. The verdict is the TCP connect, and it is immediate; no
+ * assertion here is a wall-clock measurement (`12c-A3`'s family).
+ */
+describe('⚠⚠ 12c/RECONCILE — the browser harnesses’ port guards, run against real sockets', () => {
+  /** Run one ESM snippet in a real node process; `out` is stdout+stderr, `status` its exit. */
+  const inNode = (code: string): { status: number; out: string } => {
+    try {
+      const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], {
+        cwd: projectRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return { status: 0, out };
+    } catch (e) {
+      const err = e as { status?: number; stdout?: string; stderr?: string };
+      return { status: err.status ?? 1, out: `${err.stdout ?? ''}${err.stderr ?? ''}` };
+    }
+  };
+
+  const IMPORT = `import { assertPortFree, assertServerAlive } from ${JSON.stringify(SERVER_LOG)};`;
+
+  test('⚠ a port NOTHING is listening on passes — or every case below is vacuous', () => {
+    // ⚠ The anti-vacuity term, and it is not decoration: a guard that threw unconditionally
+    // would satisfy the two occupancy tests and make every harness run impossible.
+    const { status, out } = inNode(`
+      ${IMPORT}
+      import { createServer } from 'node:net';
+      const probe = createServer();
+      await new Promise((r) => probe.listen(0, '127.0.0.1', r));
+      const port = probe.address().port;
+      await new Promise((r) => probe.close(r));       // …and now it is free
+      await assertPortFree(port, 100);
+      console.log('FREE');
+    `);
+    expect(out).toContain('FREE');
+    expect(status).toBe(0);
+  });
+
+  test('⚠⚠ a port BOUND BUT SILENT is refused — the fail-open, closed', () => {
+    // ⚠⚠ THE FINDING. A raw TCP listener that accepts and never answers is a `next dev` still
+    // compiling `/login`, and the old `fetch`-with-a-2s-timeout guard RETURNED for it: the
+    // harness would spawn, lose the bind with `EADDRINUSE`, and measure the other process's
+    // page with this run's password — reported fifteen seconds later as "the grid never
+    // appeared". Measured against the real module: a competing `listen()` got `EADDRINUSE` at
+    // the moment the guard declared the port free.
+    const { status, out } = inNode(`
+      ${IMPORT}
+      import { createServer } from 'node:net';
+      const held = createServer(() => {});           // accepts, answers nothing, ever
+      await new Promise((r) => held.listen(0, '127.0.0.1', r));
+      const port = held.address().port;
+      try { await assertPortFree(port, 100); console.log('RETURNED'); }
+      catch (e) { console.log('THREW:' + e.message.split('\\n')[0]); }
+      process.exit(0);
+    `);
+    expect(out).not.toContain('RETURNED');
+    expect(out).toContain('THREW:');
+    expect(out).toContain('ALREADY HELD');
+    expect(status).toBe(0);
+  });
+
+  test('⚠ an occupant that DOES answer is refused too, and the message names its status and `lsof`', () => {
+    const { out } = inNode(`
+      ${IMPORT}
+      import { createServer } from 'node:http';
+      const srv = createServer((_req, res) => { res.writeHead(200); res.end('hi'); });
+      await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+      const port = srv.address().port;
+      try { await assertPortFree(port, 2000); console.log('RETURNED'); }
+      catch (e) { console.log('THREW:' + e.message.replaceAll('\\n', ' | ')); }
+      process.exit(0);
+    `);
+    expect(out).not.toContain('RETURNED');
+    expect(out).toContain('HTTP 200');
+    // ⚠ The guard's own error message has always named the authoritative check; now the code
+    // uses one too, and the operator is told how to find the process.
+    expect(out).toContain('lsof -nP -iTCP:');
+  });
+
+  test('⚠⚠ `assertServerAlive` passes a live child and refuses a dead one, printing what it said', () => {
+    // The second line of defence: `assertPortFree` runs BEFORE the spawn, so anything binding
+    // in between slips past it. Both directions are asserted — a guard that always threw would
+    // fail every harness run, and one that never threw is the no-op the adversarial reverted
+    // it to with the whole suite still green.
+    const { out } = inNode(`
+      ${IMPORT}
+      const log = { tail: () => '  [err] Error: listen EADDRINUSE: address already in use :::39173' };
+      assertServerAlive({ exitCode: null, signalCode: null }, log, 39173);
+      console.log('ALIVE-OK');
+      try { assertServerAlive({ exitCode: 1, signalCode: null }, log, 39173); console.log('DEAD-RETURNED'); }
+      catch (e) { console.log('DEAD-THREW:' + e.message.replaceAll('\\n', ' | ')); }
+      try { assertServerAlive({ exitCode: null, signalCode: 'SIGKILL' }, log, 39173); console.log('KILLED-RETURNED'); }
+      catch { console.log('KILLED-THREW'); }
+    `);
+    expect(out).toContain('ALIVE-OK');
+    expect(out).not.toContain('DEAD-RETURNED');
+    expect(out).not.toContain('KILLED-RETURNED');
+    expect(out).toContain('KILLED-THREW');
+    // ⚠ The log tail is in the message, which is the entire reason this guard exists: the
+    // cause (`EADDRINUSE`) is already written in a log the harness prints only when
+    // `waitForServer` fails — and in this failure mode `waitForServer` SUCCEEDS.
+    expect(out).toContain('EADDRINUSE');
   });
 });

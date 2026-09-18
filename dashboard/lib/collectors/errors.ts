@@ -44,7 +44,7 @@ import type { ErrorSource, TelemetryError } from '../types';
 export const tag = (
   source: ErrorSource,
   messages: readonly string[],
-  instance?: number,
+  instance?: string,
 ): TelemetryError[] =>
   messages.map((message) => (instance === undefined ? { source, message } : { source, message, instance }));
 

@@ -10,7 +10,7 @@ import { DEFAULT_CADENCE_SECONDS, DEFAULT_WINDOW_MINUTES } from '@/lib/client/pr
 import { EMPTY_RING, appendSample } from '@/lib/client/ring';
 import type { SampleRing } from '@/lib/client/ring';
 import type { RuntimeState, TelemetryRuntime } from '@/lib/client/runtime';
-import { everythingZero } from '@/lib/fixtures';
+import { everythingZero, wireRead } from '@/lib/fixtures';
 import { celsius, isoTimestamp, mhz, mib, percent, watts } from '@/lib/types';
 import type { TelemetrySnapshot } from '@/lib/types';
 
@@ -48,10 +48,13 @@ const BASE_MS = Date.UTC(2026, 8, 6, 14, 0, 0, 0);
 
 /** A ring holding one sample at `BASE_MS`, so `ageMs` has something to measure from. */
 const ringWithSample = (over: Partial<TelemetrySnapshot> = {}): SampleRing =>
-  appendSample(EMPTY_RING, {
-    snapshot: { ...everythingZero, ts: isoTimestamp(new Date(BASE_MS).toISOString()), ...over },
-    tsMs: BASE_MS,
-  });
+  appendSample(
+    EMPTY_RING,
+    wireRead(
+      { ...everythingZero, ts: isoTimestamp(new Date(BASE_MS).toISOString()), ...over },
+      BASE_MS,
+    ),
+  );
 
 /** A whole `RuntimeState`, written out rather than partially cast — `series.test.ts`'s
  *  precedent, for its reason: a field added to the contract must be confronted here. */
@@ -751,7 +754,7 @@ describe('⚠ 10f-A6 — every bounded well on the page announces a DIFFERENT na
           ],
           // A real instance row, so SERVING renders rows rather than its takeover branch.
           serving: [
-            { instance: 0, port: null, unitState: null, model: null, ctx: null, health: null },
+            { instance: '0', port: null, unitState: null, model: null, ctx: null, health: null },
           ],
         }),
       }),

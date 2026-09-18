@@ -10,7 +10,7 @@
  * | source | blanks | reached when |
  * |---|---|---|
  * | `llama-env` | `port`, `ctx` — and therefore `health` and `model` | the directory or an env file would not read, or a value would not parse |
- * | `dbus` | `unitState`, and since 12b `gpus` | the unit conversation is tagged inside {@link collectUnitStates}; ⚠ **the `gpus` half is tagged HERE**, because the environment comes back as raw `KEY=VALUE` strings and only this file knows they were asked for on behalf of §3.4's `gpus` column |
+ * | `dbus` | `unitState`, and since 12b `gpus` | the unit conversation is tagged inside {@link collectUnitStates}; ⚠ **the `gpus` half is tagged HERE**, because the environment comes back as raw `KEY=VALUE` strings and only this file knows they were asked for on behalf of §3.4's `gpus` column; ⚠⚠ **and since 12c, so is a unit-name MISS** — an identity `servingUnitName` cannot map blanks those same two columns without any bus call happening at all |
  * | `llama-health` | `health` | `/health` refused, reset, timed out, or answered something other than 200/503 |
  * | `llama-models` | `model` | `/v1/models` answered 200 with a body that is not a model list |
  *
@@ -157,9 +157,12 @@ const readEnv = async (
   io: CollectorIo,
   within: Within,
   dir: string,
-  instance: number,
+  instance: string,
 ): Promise<{ env: LlamaEnv; errors: TelemetryError[] }> => {
-  const path = `${dir}/${String(instance)}${LLAMA_ENV_SUFFIX}`;
+  // ⚠ 12c — the identity IS the filename stem, so the path is rebuilt from it verbatim.
+  // `parseInstanceId` accepted this stem out of this same directory listing, and
+  // `INSTANCE_ID` admits no `/` and no `.`, so this cannot address a file outside `dir`.
+  const path = `${dir}/${instance}${LLAMA_ENV_SUFFIX}`;
   let text: string;
   try {
     text = await within(() => io.readFile(path));
@@ -323,18 +326,53 @@ export const collectServing = async ({
   // one place that builds the map `collectUnitStates` needs to attach `instance`
   // structurally to a per-unit `dbus` entry, rather than `collectUnitStates` (or anything
   // downstream) re-deriving it from `servingUnitName`'s own text.
-  const unitInstances = new Map(instances.map((instance) => [servingUnitName(instance), instance]));
+  //
+  // ⚠⚠ 12c — `servingUnitName` is a MAPPING now, and it can MISS. An identity it cannot name
+  // is NOT asked about: there is no unit to ask about, and inventing
+  // `llama-server@<identity>.service` would get a perfectly ordinary `inactive` back from
+  // systemd for a unit that has never existed. That is the silent wrong answer this whole
+  // mapping exists to refuse, so the miss is collected and reported instead.
+  const named: { readonly instance: string; readonly unit: string }[] = [];
+  const unnamed: string[] = [];
+  for (const instance of instances) {
+    const unit = servingUnitName(instance);
+    if (unit === null) unnamed.push(instance);
+    else named.push({ instance, unit });
+  }
+  const unitInstances = new Map(named.map(({ instance, unit }) => [unit, instance]));
+  const unitNames = named.map(({ unit }) => unit);
+
+  // ⚠⚠ 12c — **THE MISS, MADE LOUD.** One entry per unnamed instance per poll, attached to
+  // that instance's row so §6.5 puts it beside the two figures it blanks.
+  //
+  // ⚠ Filed against `dbus`, not `llama-env`, and the choice is about WHICH FIGURE the reader
+  // is being sent to look at. §3.4's table maps a source to the columns it blanks, and this
+  // failure blanks exactly `unitState` and `gpus` — `dbus`'s two — while `port`, `ctx`,
+  // `health` and `model` are all still read normally from an env file that parsed perfectly.
+  // Filing it under `llama-env` would point at the env file, which is the one thing here that
+  // is not wrong. ⚠ It is a stretch of §3.7's description of `dbus` (nothing failed ON the
+  // bus; we never asked), and that silence is recorded for the owner in `12c-build.md`.
+  const unitNameProblems: TelemetryError[] = unnamed.flatMap((instance) =>
+    tag(
+      'dbus',
+      [
+        `no systemd unit is known for instance \`${instance}\` (\`${instance}${LLAMA_ENV_SUFFIX}\` in ${dir}), ` +
+          'so its unit state and the cards it serves were not read',
+      ],
+      instance,
+    ),
+  );
 
   const [units, rows] = await Promise.all([
     collectUnitStates({
       dbus,
       paths,
-      units: instances.map(servingUnitName),
+      units: unitNames,
       unitInstances,
       // ⚠ 12b — §3.4's `gpus`. The same units, on the same connection, one more property
       // each. `collectSafety` asks about `gpu-fan-control.service` and passes nothing here,
       // so the fan service's conversation is unchanged.
-      environmentUnits: instances.map(servingUnitName),
+      environmentUnits: unitNames,
       timeoutMs: dbusTimeoutMs,
     }),
     Promise.all(
@@ -372,8 +410,12 @@ export const collectServing = async ({
   // `events.ts` reads the LAST message per source, so a `dbus` sentence emitted in the middle
   // of the per-instance `llama-*` block would re-order the list for every consumer.
   const gpuProblems: TelemetryError[] = [];
-  const gpusFor = (instance: number): readonly number[] | null => {
+  const gpusFor = (instance: string): readonly number[] | null => {
+    // ⚠ 12c — a miss is `null` WITHOUT a second entry: `unitNameProblems` above already filed
+    // one naming this instance, and §6.5's "one fact, stated once" governs — the same rule the
+    // third bullet below applies to a unit whose environment could not be read at all.
     const unit = servingUnitName(instance);
+    if (unit === null) return null;
     const environment = units.environments.get(unit);
     if (environment === undefined || environment === null) return null;
     const parsed = parseVisibleDevices(environment);
@@ -381,11 +423,19 @@ export const collectServing = async ({
     return parsed.value;
   };
 
+  const unitStateFor = (instance: string): ServingInstance['unitState'] => {
+    const unit = servingUnitName(instance);
+    return unit === null ? null : units.states.get(unit) ?? null;
+  };
+
   const serving: ServingInstance[] = rows.map(({ instance, env, probed }) => ({
     instance,
     port: env.port,
     // §6.4's join key, derived from the index. The two are never matched by string.
-    unitState: units.states.get(servingUnitName(instance)) ?? null,
+    // §6.4's join key, MAPPED from the identity (12c). The two are never matched by string,
+    // and an identity with no unit name gets `null` — never a state read from a unit that was
+    // guessed at.
+    unitState: unitStateFor(instance),
     model: probed.model,
     ctx: env.ctx,
     health: probed.health,
@@ -394,6 +444,7 @@ export const collectServing = async ({
 
   for (const row of rows) errors.push(...row.errors);
   errors.push(...units.errors);
+  errors.push(...unitNameProblems);
   errors.push(...gpuProblems);
   return { serving, errors };
 };

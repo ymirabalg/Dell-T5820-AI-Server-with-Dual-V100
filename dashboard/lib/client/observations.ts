@@ -78,7 +78,11 @@ import type {
   TelemetryError,
   TelemetrySnapshot,
 } from '../types';
-import { FAN_SERVICE_UNIT, servingUnitName } from '../units';
+import { FAN_SERVICE_UNIT, compareInstances, servingUnitLabel, servingUnitName } from '../units';
+// ⚠ Type-only, and the direction is one-way: `wire.ts` imports nothing from this module, so
+// the seam that produces a `ServingEnumeration` and the two functions that consume one cannot
+// become a cycle. `wire.ts` has no `node:` imports either — see its own header.
+import type { ServingEnumeration } from './wire';
 
 /**
  * §4's two enumerated collections, named once.
@@ -102,10 +106,41 @@ export const SERVING_ENUMERATION = 'serving';
  * `gpus: []` means *we enumerated and there are none*, so it is gone and the alarm goes with
  * it. §3.1 spends a paragraph on the distinction and §9 says "this is what it is for".
  */
-export const enumerationsRead = (snapshot: TelemetrySnapshot): ReadonlySet<string> => {
+export const enumerationsRead = (
+  snapshot: TelemetrySnapshot,
+  /**
+   * ⚠⚠ **12c — §4's `serving[]` as this client HAS it, and the enumeration is NOT read when
+   * part of it was refused.**
+   *
+   * §3.4's second ruling of 2026-09-17 drops an invalid `serving[]` row and renders the rest,
+   * so `serving[]` can now be **shorter than what the server sent**. A subject missing from an
+   * enumeration that was read is §9's *retired* — *it has left the machine* — and that verdict
+   * was being minted out of a validation failure: measured on `servingPopulated` with both rows
+   * refused, all four serving conditions retired at the ten-second debounce and the `alarm` on
+   * instance 1 left the ledger, the dot and the count with them.
+   *
+   * A refused row is *not read*, which is precisely what `serving: null` already means here, so
+   * the conditions go **stale** — keeping their band, still counted — instead. `wire.ts` carries
+   * the count structurally rather than leaving it to be recovered from a message.
+   *
+   * ⚠ **One refusal suppresses the WHOLE enumeration, and that is not laziness.** A refused row
+   * may have been refused *for its `instance`*, so there is no identity to exclude: the client
+   * cannot know which subjects it failed to read, only that it failed to read some.
+   *
+   * ⚠⚠ **REQUIRED, and 12c/RECONCILE is why.** It arrived as `servingRowsRefused = 0`, which
+   * defaults the **unsafe** way: `0` asserts *the enumeration WAS read*, so a call site that
+   * had not been updated retired an instance for a validation failure — the exact defect the
+   * argument exists to close (`12c-A5`). Its doc claimed the opposite by analogy with
+   * `PollOptions.enumerationsRead`, which defaults to the EMPTY set and therefore retires
+   * NOTHING; the two point in opposite directions. There is now no default to get wrong, and
+   * the value is a {@link ServingEnumeration} rather than a number so the same fact answers
+   * §6.2's join (`servedBy`) and this ledger from one place.
+   */
+  serving: ServingEnumeration,
+): ReadonlySet<string> => {
   const read = new Set<string>();
   if (snapshot.gpus !== null) read.add(GPU_ENUMERATION);
-  if (snapshot.serving !== null) read.add(SERVING_ENUMERATION);
+  if (serving.read === 'all') read.add(SERVING_ENUMERATION);
   return read;
 };
 
@@ -383,8 +418,16 @@ export const errorsForPanel = (
  * |---|---|---|
  * | `declared` | some instance's `gpus` contains this index | *served by instance N* when it lists this card alone, *served jointly with GPU M* when it lists more |
  * | `indexed` | **no** instance in the snapshot carries the key | §3.4's fallback: *served by instance `index`*, byte-identical to what shipped before this file changed |
- * | `unknown` | every list was consulted, none claims this card, and at least one is `null` | invariant 1 — an em dash. The `dbus` entry that blanked it is on the SERVING panel, beside the row it names |
- * | `unserved` | every list was read and none of them names this card | not a gap: §6.5's *"absent from a collection that was read … the subject has left, and that is an answer"*, one level down |
+ * | `unknown` | every list was consulted, none claims this card, and at least one is `null` — **or the list itself was incomplete** (12c/RECONCILE) | invariant 1 — an em dash. The entry that blanked it is on the SERVING panel: `dbus` beside the row it names, or the `llama-env` refusal under the rows |
+ * | `unserved` | every list was read **in full** and none of them names this card | not a gap: §6.5's *"absent from a collection that was read … the subject has left, and that is an answer"*, one level down |
+ *
+ * ⚠⚠ **`unknown` has TWO producers and one rendering, and that is correct rather than a
+ * conflation.** *An instance's `gpus` could not be read* and *a row of the list was refused*
+ * are different failures with the same honest answer — we could not read enough to say who
+ * serves this card — and §6.2 gives that answer one spelling, the em dash. What tells them
+ * apart is the `errors[]` entry, and both land on the SERVING panel, which is where this
+ * cell's explanation has always lived. Splitting them would need a fifth variant and new panel
+ * copy, which is a rendering ruling and is written up as an owner question instead.
  *
  * ⚠ **An em dash for `declared` would be a LIE** (§6.2 says so in as many words): the reading
  * is not missing, it is different. That is the whole reason `unknown` and `unserved` are
@@ -432,26 +475,79 @@ const declaresGpus = (instance: ServingInstance): boolean => Object.hasOwn(insta
  * already sits on the SERVING panel — the same place this card's model has always borrowed its
  * explanation from.
  *
- * ⚠ **The first claimant wins, in `serving[]`'s own ascending order.** Two instances listing
- * one card is a real state during a bad mode switch (systemd's `Conflicts=` is what normally
- * prevents it), and §3.4 says nothing about it; the card names the lower instance rather than
- * inventing a rendering. Recorded as a spec silence in `12b-build.md`.
+ * ⚠⚠ **The first claimant wins, and "first" is `compareInstances`' order rather than the
+ * array's** (12c). Two instances listing one card is a real state during a bad mode switch
+ * (systemd's `Conflicts=` is what normally prevents it), and §3.4 says nothing about it; the
+ * card names the lower instance rather than inventing a rendering. 12b said "`serving[]`'s own
+ * ascending order", which was the same thing only because the collector sorted it — this
+ * states the rule so the answer does not depend on the layout of the list. Still a spec
+ * silence; re-recorded in `12c-build.md`.
+ *
+ * ⚠⚠ **12c/RECONCILE — it takes a {@link ServingEnumeration}, not an array, and that is the
+ * fix for `12c-A1`.** A shortened array means two things — *the server listed fewer* and *we
+ * refused some of what it listed* — and this join was being handed the second as though it
+ * were the first. The rule, in one sentence:
+ *
+ * > **An incomplete list may only produce a POSITIVE answer.** `declared` and an `indexed`
+ * > that actually found its row rest on a row this client read; `unserved` ("we looked, and
+ * > nobody claims it") and an `indexed` with no instance are claims about rows that are not
+ * > here, and after a refusal we do not know what was in them. Both become `unknown` — §6.2's
+ * > em dash, invariant 1, the honest branch that already existed one line away.
+ *
+ * Measured before the change, three rendered pages differing only in row 1's `port`: a valid
+ * pair gave `served by instance 1 · gemma-4-31b`, a refused row gave **`served by · no
+ * instance`**, and an instance that had genuinely left the machine gave the same strip byte
+ * for byte. The ratified §9 sentence — *"the collection was read successfully and the client
+ * discarded part of it, which is not the same as the server not reporting it"* — now holds on
+ * this panel too.
+ *
+ * ⚠ It also closes the new path `12c-build.md` §6 Q7 flagged and left open: a snapshot whose
+ * ONLY row was refused arrives here as `read: 'partial'` with `rows: []`, and no longer falls
+ * through the old-server fallback to print `served by instance 0` for a row just dropped. Q7's
+ * own case — a genuinely empty or `null` `serving` on a pre-`gpus` server — is `read: 'all'`
+ * and `read: 'none'` respectively, and is untouched.
  */
-export const servedBy = (
-  serving: readonly ServingInstance[] | null,
-  index: number,
-): ServedBy => {
-  if (serving === null) return { kind: 'indexed', instance: null };
-  if (!serving.some(declaresGpus)) {
-    return { kind: 'indexed', instance: serving.find((s) => s.instance === index) ?? null };
+export const servedBy = (serving: ServingEnumeration, index: number): ServedBy => {
+  if (serving.read === 'none') return { kind: 'indexed', instance: null };
+  const rows = serving.rows;
+  // ⚠ Only `'all'` supports a negative claim. See the rule in this function's doc.
+  const complete = serving.read === 'all';
+  if (!rows.some(declaresGpus)) {
+    // ⚠ 12c — §3.4's fallback compares the card index to the identity as its CANONICAL
+    // DECIMAL STRING. A named instance can never match, which is right: a server old enough
+    // not to publish `gpus` is one whose discovery could not admit a named instance at all.
+    const matched = rows.find((s) => s.instance === String(index)) ?? null;
+    if (matched === null && !complete) return { kind: 'unknown' };
+    return { kind: 'indexed', instance: matched };
   }
-  for (const instance of serving) {
-    const gpus = instance.gpus;
-    if (gpus != null && gpus.includes(index)) {
-      return { kind: 'declared', instance, alongside: gpus.filter((g) => g !== index) };
-    }
+  // ⚠⚠ 12c — the claimant is chosen by `compareInstances`, NOT by position in `serving[]`.
+  //
+  // 12b wrote this as "the first claimant wins, in `serving[]`'s own ascending order", which
+  // was true only while the collector's own sort was the only thing that could produce the
+  // array. With identities as strings the order had to be specified anyway (`lib/units.ts`),
+  // and specifying it here as well costs one `reduce` and buys a property worth having: **the
+  // same rows in a different order give the same answer.** A snapshot re-ordered by a proxy, a
+  // future collector, or a hand-written fixture cannot silently move a model onto another
+  // card — which is §6.2's named failure mode for this join.
+  const claimants = rows.filter((s) => s.gpus != null && s.gpus.includes(index));
+  const winner = claimants.reduce<ServingInstance | null>(
+    // ⚠ Strictly `< 0`, so a TIE keeps the earlier element. Two rows can only tie by carrying
+    // the same identity, which `discoverInstances` cannot produce (it dedupes through a `Set`)
+    // and which `wire.ts` does not police; array order is consulted in that case and nowhere
+    // else, and it is the only remaining place this function reads the layout at all.
+    (best, s) => (best === null || compareInstances(s.instance, best.instance) < 0 ? s : best),
+    null,
+  );
+  if (winner !== null) {
+    const gpus = winner.gpus as readonly number[];
+    return { kind: 'declared', instance: winner, alongside: gpus.filter((g) => g !== index) };
   }
-  return serving.some((s) => declaresGpus(s) && s.gpus === null)
+  // ⚠⚠ `unserved` is a POSITIVE CLAIM — `gpu-panel.tsx` renders it as `no instance` and says so
+  // in its own comment: *"every list was READ and none of them names this card"*. It is
+  // available only when every row is here. A refusal makes it false, and the honest answer for
+  // "we could not read enough to say" is the one the next line already gives an unreadable
+  // `gpus`: invariant 1's em dash.
+  return !complete || rows.some((s) => declaresGpus(s) && s.gpus === null)
     ? { kind: 'unknown' }
     : { kind: 'unserved' };
 };
@@ -589,19 +685,29 @@ export const conditionsFrom = (snapshot: TelemetrySnapshot): readonly ConditionO
 
   // ---- Serving (§3.4). `serving: null` is "which instances exist is unknown", not none.
   for (const instance of snapshot.serving ?? []) {
+    // ⚠⚠ 12c — `servingUnitName` is a MAPPING and it can MISS, so there is not always a
+    // `unit:` condition to push. An identity with no unit name has no unit whose `ActiveState`
+    // could be banded, and minting `unit:llama-server@split.service` here would put a §6.3 row
+    // — and a `STANDING`-suppressible id — against a unit that has never existed.
+    // `collectServing` files the `errors[]` entry that says so; this loop stays silent rather
+    // than inventing a second, contradictory account of the same instance.
     const unit = servingUnitName(instance.instance);
-    push(
-      'unit',
-      unit,
-      unit,
-      formatText(instance.unitState),
-      severityUnitState(instance.unitState),
-      SERVING_ENUMERATION,
-    );
+    if (unit !== null) {
+      push(
+        'unit',
+        unit,
+        unit,
+        formatText(instance.unitState),
+        severityUnitState(instance.unitState),
+        SERVING_ENUMERATION,
+      );
+    }
     push(
       'health',
-      String(instance.instance),
-      `llama-server@${instance.instance} /health`,
+      // §6.4's subject IS the identity, verbatim — `health:0`, `health:split`. ⚠ `String()` is
+      // gone: it used to convert a number and would now silently accept anything.
+      instance.instance,
+      `${servingUnitLabel(instance.instance)} /health`,
       formatText(instance.health),
       severityHealth(instance.health),
       SERVING_ENUMERATION,

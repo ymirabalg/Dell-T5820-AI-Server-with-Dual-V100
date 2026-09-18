@@ -76,7 +76,7 @@ import { chromium } from 'playwright-core';
 // ⚠⚠ 12a/RECONCILE (`12a-A3`) — the spawned server's own stdout/stderr, drained and printed on
 // a startup failure. One module, imported by BOTH harnesses, rather than two copies of a
 // diagnosis (`12a-A4`'s lesson, applied to the fix for `12a-A3`).
-import { attachServerLog, waitWithServerOutput } from './server-log.mjs';
+import { assertPortFree, assertServerAlive, attachServerLog, waitWithServerOutput } from './server-log.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
 const PORT = 39173; // an unlikely-to-collide, fixed port for this one-shot script
@@ -709,7 +709,12 @@ const fixtureNoGpus = () => {
  */
 const fixtureDeclared = () => {
   const box = fixtureBox();
-  return { ...box, serving: box.serving.map((i) => ({ ...i, gpus: [i.instance] })) };
+  // ⚠⚠ 12c — the identity is a STRING here and a NUMBER in `fixtureBox`, deliberately. This
+  // fixture is the REDEPLOYED server, which spells §3.4's identity as a string; `fixtureBox`
+  // is the container running on the box today, which spells it as a JSON number. Both must
+  // render, and that pair is the compatibility claim measured in a real browser rather than
+  // only in jsdom.
+  return { ...box, serving: box.serving.map((i) => ({ ...i, instance: String(i.instance), gpus: [i.instance] })) };
 };
 
 /**
@@ -734,8 +739,8 @@ const fixtureCrossPinned = () => {
   return {
     ...box,
     serving: [
-      { ...box.serving[0], model: 'qwen3.6-27b', gpus: [1] },
-      { ...box.serving[1], model: 'gemma-4-12b', gpus: [0] },
+      { ...box.serving[0], instance: '0', model: 'qwen3.6-27b', gpus: [1] },
+      { ...box.serving[1], instance: '1', model: 'gemma-4-12b', gpus: [0] },
     ],
   };
 };
@@ -760,7 +765,11 @@ const fixtureSplit = () => {
     ...box,
     serving: [
       {
-        instance: 0,
+        // ⚠⚠ 12c — `'split'`, the identity `serving-mode.sh` really produces (`split.env`), and
+        // the unit behind it is `llama-split.service` rather than any `llama-server@…`. Until
+        // this loop the contract could not express it, so this fixture said `instance: 0` —
+        // a fixture that could not spell the arrangement it is named after.
+        instance: 'split',
         port: 8080,
         unitState: 'active',
         model: 'gemma-4-31B-it-Q4_K_M.gguf',
@@ -1059,7 +1068,29 @@ const fabrication = { mode: 'gpus-only', alarms: 2 };
 
 async function installGpuFabrication(page) {
   await page.route('**/api/telemetry**', async (route) => {
-    const response = await route.fetch();
+    // ⚠⚠ 12c/TEST — `route.fetch()` REJECTS on a transient network error, and a rejection here
+    // escapes `main`'s try/finally entirely: it is an unhandled promise rejection inside a
+    // Playwright event handler, so Node kills the process, `next-env.d.ts` is never restored and
+    // `process.kill(-server.pid)` never runs — leaving a `next dev` bound to :39173.
+    //
+    // ⚠ That leak is the FIRST HALF of this harness's own flake. The stray server survives; the
+    // NEXT run's `next dev` loses the bind with EADDRINUSE; `waitForServer` succeeds against the
+    // stray; the login posts this run's ephemeral password to the previous run's hash; and the
+    // harness dies fifteen seconds later on `[data-slot="gpu0"]` having logged `POST
+    // /api/session 401`. Run, crash, leak; next run, 401; kill the stray, next run passes.
+    // **Measured here on 2026-09-18**: `route.fetch: read ECONNRESET` took the whole script down
+    // and left pids bound to the port, which `lsof` then showed.
+    //
+    // `route.abort()` makes it what it really is — one failed poll, which §6.7 is built to
+    // absorb — instead of the end of the run.
+    let response;
+    try {
+      response = await route.fetch();
+    } catch (e) {
+      console.warn(`⚠ /api/telemetry could not be fetched for fabrication (${e.message}); aborting this poll.`);
+      await route.abort().catch(() => {});
+      return;
+    }
     if (response.status() !== 200) {
       await route.fulfill({ response });
       return;
@@ -2266,6 +2297,13 @@ async function main() {
   const nextEnvPath = path.join(ROOT, 'next-env.d.ts');
   const nextEnvBefore = readFileSync(nextEnvPath, 'utf8');
 
+  // ⚠⚠ 12c/TEST — BEFORE the spawn. `next dev` does not shift port; it dies with EADDRINUSE,
+  // and `waitForServer` below would then succeed against whatever was already there and log in
+  // with a password that process has never heard of. Reproduced: `POST /api/session 401` and a
+  // fifteen-second death on a selector, with the real cause in a log nothing prints. See
+  // `assertPortFree`'s own doc.
+  await assertPortFree(PORT);
+
   console.log(`Starting next dev on :${PORT} with an ephemeral credential pair (not written to disk)...`);
   // ⚠ `detached: true` so this spawns its OWN process group: `pnpm exec next dev` spawns
   // `next dev` as a grandchild, and a plain `server.kill()` only ever reached the `pnpm`
@@ -2300,11 +2338,23 @@ async function main() {
   let browser = null;
   try {
     await waitWithServerOutput(() => waitForServer(`http://localhost:${PORT}/login`, 60_000), serverLog);
+    // ⚠⚠ 12c/TEST — and AFTER it, because the check above races anything that binds the port in
+    // between. `waitForServer` accepts any answer under 500 from a fixed port; only this line
+    // says the thing that answered is the thing this run spawned.
+    assertServerAlive(server, serverLog, PORT);
 
     browser = await chromium.launch({ headless: true, executablePath: chromePath });
     const page = await browser.newPage();
     await installGpuFabrication(page);
 
+    // ⚠⚠ 12c/TEST — record what `/api/session` actually ANSWERED. The selector below is where
+    // this harness dies when the login fails, and "the grid never appeared" is a symptom shared
+    // by a 401, a 429 and a genuinely broken page. 12c-build §8.3 recorded a 401 here it could
+    // not explain; the next occurrence names itself instead of being read out of a server log.
+    const sessionAnswers = [];
+    page.on('response', (res) => {
+      if (res.url().includes('/api/session')) sessionAnswers.push(`${res.request().method()} ${res.status()}`);
+    });
     await page.goto(`http://localhost:${PORT}/login`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
     await page.fill('#password', PASSWORD);
     await page.click('button[type="submit"]');
@@ -2314,8 +2364,10 @@ async function main() {
     // unchanged; what is added is that its failure now carries the server's own words.
     await page.waitForSelector('[data-slot="gpu0"]', { timeout: 15_000 }).catch((e) => {
       console.error(
-        `\n⚠ Logged in and the grid never appeared. The server's own output — a 401 here means the` +
-          ` credentials the shim fakes did not reach it:\n${serverLog.tail()}\n`,
+        `\n⚠ Logged in and the grid never appeared. What /api/session answered: ` +
+          `${sessionAnswers.length === 0 ? 'NOTHING WAS OBSERVED — the form never posted' : sessionAnswers.join(', ')}.` +
+          ` A 401 means the credentials the shim fakes did not reach the server that answered.` +
+          ` The server's own output:\n${serverLog.tail()}\n`,
       );
       throw e;
     });

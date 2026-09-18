@@ -41,7 +41,7 @@ import { chromium } from 'playwright-core';
 import { ARRANGEMENTS } from './arrangements.mjs';
 // ⚠⚠ 12a/RECONCILE (`12a-A3`) — see that module: this script's `next dev` output was piped and
 // never read, so the shim's absence timed out naming a port instead of naming the cause.
-import { attachServerLog, waitWithServerOutput } from '../server-log.mjs';
+import { assertPortFree, assertServerAlive, attachServerLog, waitWithServerOutput } from '../server-log.mjs';
 
 const HERE = path.resolve(fileURLToPath(new URL('.', import.meta.url)));
 const ROOT = path.resolve(HERE, '../../../..');
@@ -192,7 +192,19 @@ const fabrication = { mode: FIXTURE, alarm: false };
 
 async function installFabrication(page) {
   await page.route('**/api/telemetry**', async (route) => {
-    const response = await route.fetch();
+    // ⚠⚠ 12c/TEST — the same guard `../measure-breakpoints.mjs` carries, and for the same
+    // measured reason: a rejection here is an unhandled promise rejection inside a Playwright
+    // handler, so it escapes `main`'s try/finally, kills the process, and leaks a `next dev`
+    // bound to this harness's fixed port — which then makes the NEXT run log in against the
+    // wrong server and get 401. See that file's comment for the reproduction.
+    let response;
+    try {
+      response = await route.fetch();
+    } catch (e) {
+      console.warn(`⚠ /api/telemetry could not be fetched for fabrication (${e.message}); aborting this poll.`);
+      await route.abort().catch(() => {});
+      return;
+    }
     if (response.status() !== 200) {
       await route.fulfill({ response });
       return;
@@ -446,6 +458,12 @@ async function main() {
   const nextEnvPath = path.join(ROOT, 'next-env.d.ts');
   const nextEnvBefore = readFileSync(nextEnvPath, 'utf8');
 
+  // ⚠⚠ 12c/TEST — the same guard `../measure-breakpoints.mjs` carries, for the same reason and
+  // on this harness's OWN port. A defect removed in one of these two scripts and left in the
+  // other is this project's recurring shape; the two fail identically and must be diagnosed
+  // identically. See `assertPortFree`'s doc for the reproduction.
+  await assertPortFree(PORT);
+
   console.log(`[10d] next dev on :${PORT}, fixture=${FIXTURE}`);
   const server = spawn('pnpm', ['exec', 'next', 'dev', '--port', String(PORT)], {
     cwd: ROOT,
@@ -472,6 +490,7 @@ async function main() {
   const report = { fixture: FIXTURE, arrangements: {}, extras: {} };
   try {
     await waitWithServerOutput(() => waitForServer(`http://localhost:${PORT}/login`, 90_000), serverLog);
+    assertServerAlive(server, serverLog, PORT);
     browser = await chromium.launch({ headless: true, executablePath: chromePath });
     const page = await browser.newPage();
     await installFabrication(page);

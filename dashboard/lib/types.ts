@@ -533,7 +533,26 @@ export type Ch5Mode = Cooling['ch5Mode'];
  * independently, which is the normal case when a unit is down but its env file is intact.
  */
 export interface ServingInstance {
-  readonly instance: number;
+  /**
+   * ⚠⚠ **12c — a STRING since 2026-09-17, and this is NOT an additive wire change.**
+   *
+   * §3.4's ruling: *"accept named instances across discovery, ordering, unit naming and React
+   * keys."* `serving-mode.sh` writes `/etc/llama-server/split.env`, and while this field was a
+   * `number` the discovery that feeds it **rejected that file outright** — so a box in split
+   * mode rendered the process serving it nowhere at all.
+   *
+   * The grammar is `lib/units.ts`'s {@link INSTANCE_ID}, enforced on both sides of the wire:
+   * the collector admits a filename with it, `wire.ts` admits a wire value with it. `'0'`,
+   * `'1'`, `'split'` — never `'0.env'`, `'01'`, `'a b'` or `''`.
+   *
+   * ⚠ **A numeric identity is its canonical decimal STRING**, so §6.4's `health:0` is
+   * unchanged and §3.4's index-join fallback compares `String(gpu.index)` to it.
+   *
+   * ⚠ **The unit name is a MAPPING of this value, never a template over it** —
+   * `lib/units.ts`'s `servingUnitName`, which returns `null` for an identity it cannot name.
+   * `split` is served by `llama-split.service`, not `llama-server@split.service`.
+   */
+  readonly instance: string;
   /** `PORT=` from the env file. */
   readonly port: Port | null;
   /** `ActiveState` of `llama-server@N.service`. */
@@ -752,7 +771,8 @@ export interface Safety {
 export interface TelemetryError {
   readonly source: ErrorSource;
   readonly message: string;
-  readonly instance?: number;
+  /** ⚠ 12c — a {@link ServingInstance.instance} identity, so a **string**: `'1'`, `'split'`. */
+  readonly instance?: string;
 }
 
 /**

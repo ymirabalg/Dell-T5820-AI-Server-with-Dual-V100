@@ -13,6 +13,7 @@
 
 import type { HealthState, Port, Tokens } from '../types';
 import { port, tokens } from '../types';
+import { compareInstances, isInstanceId } from '../units';
 import { lines, parseIntegerStrict, parseText } from './numbers';
 import { clean } from './result';
 import type { ParseResult } from './result';
@@ -33,44 +34,57 @@ export const healthUrl = (value: Port): string => `http://${LLAMA_PROBE_HOST}:${
 export const modelsUrl = (value: Port): string => `http://${LLAMA_PROBE_HOST}:${String(value)}/v1/models`;
 
 /**
- * `<i>.env` → `i`, or `null` for a filename that is not an instance.
+ * ⚠⚠ **12c — `<id>.env` → `id`, or `null` for a filename that is not an instance.**
  *
- * ⚠ Canonical decimal only. `01.env` and `+1.env` are rejected rather than read as 1,
- * because §6.4 fixes the condition subject as a **bare integer** (`health:1`) and two
- * filenames mapping to one subject would make two rows share one condition id — which §9
- * resolves by *deduplicating*, so one of the two instances would silently vanish from the
- * header count.
+ * The identity is now a **string**: `serving-mode.sh` writes `/etc/llama-server/split.env`,
+ * and the bare-integer rule this function used to enforce rejected it outright — so split mode
+ * could not be rendered at all, on any box, however healthy.
+ *
+ * The rule is {@link isInstanceId}, in `lib/units.ts` — **the same predicate `wire.ts` applies
+ * to a wire value**, so what a filename may say and what a server may say are one rule and not
+ * two that agree today. It refuses `0.env.bak.2026-09-04` (dots), `1 .env` (a space), `.env`
+ * (empty) and `01.env` (a non-canonical numeral) exactly as the integer rule did, and admits
+ * `split`.
  */
-export const parseInstanceIndex = (filename: string): number | null => {
+export const parseInstanceId = (filename: string): string | null => {
   if (!filename.endsWith(LLAMA_ENV_SUFFIX)) return null;
   const stem = filename.slice(0, -LLAMA_ENV_SUFFIX.length);
-  const value = parseIntegerStrict(stem);
-  if (value === null || value < 0) return null;
-  return String(value) === stem ? value : null;
+  return isInstanceId(stem) ? stem : null;
 };
 
 /**
- * A directory listing → the instances it declares, ascending.
+ * A directory listing → the instances it declares, **in {@link compareInstances}' order**.
  *
- * Sorted **numerically**, not by filename: a tenth card would list as `10.env` between
- * `0.env` and `1.env`, and §6.2's SERVING panel is one row per instance in an order a human
- * reads. Non-`.env` entries are ignored silently — they are not claims about an instance.
- * A `.env` file whose stem is *not* an instance index is reported, because it sits in the
- * directory §3.4 says holds instances and looks like one.
+ * ⚠⚠ **12c — the order is SPECIFIED, not inherited.** This function used to end in
+ * `sort((a, b) => a - b)`, which was quietly doing two jobs: presenting §6.2's rows in an
+ * order a human reads, and fixing which instance wins §6.2's join when two of them claim one
+ * card. A numeric subtraction has no string equivalent, so the rule is written out in
+ * `lib/units.ts` and imported — see {@link compareInstances} for the rule, and for why the
+ * result is a function of the SET of identities rather than of the listing order.
+ *
+ * Non-`.env` entries are ignored silently — they are not claims about an instance. A `.env`
+ * file whose stem is *not* a legal identity is reported, because it sits in the directory §3.4
+ * says holds instances and looks like one.
+ *
+ * ⚠ **`default.env` is now an INSTANCE, and that is the ruling rather than a regression.**
+ * `LLAMA_SERVER_ENTRIES_NOISY` asserted it rejected; §3.4's 2026-09-17 ruling accepts named
+ * instances and `default.env` has exactly the shape of `split.env`. It gets **no unit name**
+ * — `servingUnitName` returns `null` for it — which `collectServing` turns into a loud
+ * `errors[]` entry rather than a silent misread, which is the whole point of the mapping.
  */
-export const discoverInstances = (entries: readonly string[]): ParseResult<number[]> => {
+export const discoverInstances = (entries: readonly string[]): ParseResult<string[]> => {
   const problems: string[] = [];
-  const found = new Set<number>();
+  const found = new Set<string>();
   for (const entry of entries) {
     if (!entry.endsWith(LLAMA_ENV_SUFFIX)) continue;
-    const index = parseInstanceIndex(entry);
-    if (index === null) {
+    const id = parseInstanceId(entry);
+    if (id === null) {
       problems.push(`\`${entry}\` is not \`<instance>${LLAMA_ENV_SUFFIX}\` and was not treated as an instance`);
       continue;
     }
-    found.add(index);
+    found.add(id);
   }
-  return { value: [...found].sort((a, b) => a - b), problems };
+  return { value: [...found].sort(compareInstances), problems };
 };
 
 /** The two fields §3.4 takes from `/etc/llama-server/<i>.env`. */

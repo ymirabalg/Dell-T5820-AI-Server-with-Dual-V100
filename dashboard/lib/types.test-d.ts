@@ -401,7 +401,8 @@ describe('the field census', () => {
 
   test('every serving field', () => {
     type ServingFields = [
-      Assert<Equals<ServingInstance['instance'], number>>,
+      // ⚠⚠ 12c — a STRING. §3.4's ruling of 2026-09-17: `split.env` has no integer to be.
+      Assert<Equals<ServingInstance['instance'], string>>,
       Assert<Equals<ServingInstance['port'], Port | null>>,
       Assert<Equals<ServingInstance['unitState'], UnitState | null>>,
       Assert<Equals<ServingInstance['model'], string | null>>,
@@ -467,7 +468,7 @@ describe('the field census', () => {
       Assert<Equals<TelemetryError['source'], ErrorSource>>,
       Assert<Equals<TelemetryError['message'], string>>,
       // 10b-S-G. `| undefined`, never `| null` — see the dedicated optional-field census.
-      Assert<Equals<TelemetryError['instance'], number | undefined>>,
+      Assert<Equals<TelemetryError['instance'], string | undefined>>,
     ];
     expectTypeOf<SnapshotFields>().toBeArray();
   });

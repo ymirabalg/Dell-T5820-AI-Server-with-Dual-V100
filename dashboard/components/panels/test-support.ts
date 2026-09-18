@@ -15,7 +15,7 @@ import type { WindowMinutes } from '@/lib/client/prefs';
 import { EMPTY_RING, appendSample } from '@/lib/client/ring';
 import type { SampleRing } from '@/lib/client/ring';
 import type { RuntimeState } from '@/lib/client/runtime';
-import { nothingReadable } from '@/lib/fixtures';
+import { nothingReadable, wireRead, wireRefused } from '@/lib/fixtures';
 import { isoTimestamp } from '@/lib/types';
 import type { Gpu, ServingInstance, TelemetrySnapshot } from '@/lib/types';
 
@@ -23,10 +23,10 @@ export const BASE_MS = Date.UTC(2026, 8, 6, 14, 0, 0, 0);
 
 /** A ring holding exactly one accepted sample: `snapshot`, stamped at `ms`. */
 export const ringOf = (snapshot: TelemetrySnapshot, ms: number = BASE_MS): SampleRing =>
-  appendSample(EMPTY_RING, {
-    snapshot: { ...snapshot, ts: isoTimestamp(new Date(ms).toISOString()) },
-    tsMs: ms,
-  });
+  appendSample(
+    EMPTY_RING,
+    wireRead({ ...snapshot, ts: isoTimestamp(new Date(ms).toISOString()) }, ms),
+  );
 
 /**
  * ⚠ A ring holding SEVERAL accepted samples, stamped `stepMs` apart — the fixture a chart or
@@ -40,10 +40,13 @@ export const ringOfSeries = (
 ): SampleRing =>
   snapshots.reduce<SampleRing>(
     (ring, snapshot, i) =>
-      appendSample(ring, {
-        snapshot: { ...snapshot, ts: isoTimestamp(new Date(startMs + i * stepMs).toISOString()) },
-        tsMs: startMs + i * stepMs,
-      }),
+      appendSample(
+        ring,
+        wireRead(
+          { ...snapshot, ts: isoTimestamp(new Date(startMs + i * stepMs).toISOString()) },
+          startMs + i * stepMs,
+        ),
+      ),
     EMPTY_RING,
   );
 
@@ -82,6 +85,31 @@ export const emptyState = (overrides: StateOverrides = {}): RuntimeState => stat
 /** A `RuntimeState` carrying `snapshot` as its one and only sample. */
 export const stateWith = (snapshot: TelemetrySnapshot, overrides: StateOverrides = {}): RuntimeState =>
   stateOf(ringOf(snapshot), overrides);
+
+/**
+ * ⚠⚠ 12c/RECONCILE — a `RuntimeState` whose one sample carries a `serving[]` **shorter than
+ * what the server sent**, because `parseSnapshot` refused `refused` of its rows.
+ *
+ * This is the state `12c-A1` was found in, and it is expressible from a panel test only
+ * because `Sample` carries the enumeration: before this loop a refused row reached the panels
+ * as a plain short array and the GPU card read it as *the server listed fewer instances*.
+ */
+export const stateWithRefused = (
+  snapshot: TelemetrySnapshot,
+  refused: number,
+  overrides: StateOverrides = {},
+): RuntimeState =>
+  stateOf(
+    appendSample(
+      EMPTY_RING,
+      wireRefused(
+        { ...snapshot, ts: isoTimestamp(new Date(BASE_MS).toISOString()) },
+        BASE_MS,
+        refused,
+      ),
+    ),
+    overrides,
+  );
 
 const conditionDefaults: DisplayedCondition = {
   kind: 'fan5_absolute',
@@ -133,7 +161,7 @@ const gpuWithNoReadings = (index: number): Gpu => ({
  * readable. With the key it renders `served by —`, the branch 12b added for exactly this
  * reading. The two fixtures mean the same thing and must say it the same way.
  */
-const instanceWithNoReadings = (instance: number): ServingInstance => ({
+const instanceWithNoReadings = (instance: string): ServingInstance => ({
   instance,
   port: null,
   unitState: null,
@@ -195,6 +223,6 @@ export const valueCells = (html: string): string[] => [
 export const allReadingsNull: TelemetrySnapshot = {
   ...nothingReadable,
   gpus: [gpuWithNoReadings(0), gpuWithNoReadings(1)],
-  serving: [instanceWithNoReadings(0), instanceWithNoReadings(1)],
+  serving: [instanceWithNoReadings('0'), instanceWithNoReadings('1')],
   errors: [],
 };

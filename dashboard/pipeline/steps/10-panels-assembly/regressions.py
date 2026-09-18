@@ -1349,8 +1349,8 @@ REGRESSIONS = [
     # two-card fixture in the project was dense, in order and — A10 — identical card to card.
     ("10c-GP4 the §6.2 GPU↔instance join becomes array-POSITION lookup, printing another card's model",
      OBSERVATIONS_SRC,
-     "    return { kind: 'indexed', instance: serving.find((s) => s.instance === index) ?? null };",
-     "    return { kind: 'indexed', instance: serving[index] ?? null };",
+     "    const matched = rows.find((s) => s.instance === String(index)) ?? null;",
+     "    const matched = rows[index] ?? null;",
      [GPU_PANEL_TEST]),
     ("10c-GP5 the card lookup becomes array-POSITION, so a sparse gpus[] renders GPU 1's die titled GPU 0",
      GPU_PANEL_SRC,
@@ -2455,6 +2455,17 @@ REGRESSIONS = [
      "  snapshot === null ? 0 : new Set(snapshot.errors.map((e) => e.source)).size;",
      "  snapshot === null ? 1 : new Set(snapshot.errors.map((e) => e.source)).size;",
      [HEADER_STATUS_TEST]),
+    # ⚠⚠ 12c/TEST. The wrong implementation this one is about is a real temptation rather than a
+    # straw man: every PANEL in this project filters `e.instance === undefined` (10b-S-G), so
+    # "an entry that names a row is already shown on that row, don't count it again" is the
+    # reasoning a careful reader would import here. It is wrong — §9's count is whole-machine
+    # and deliberately blind to which panel an entry reaches — and under it a unit-name MISS,
+    # which is the ONLY entry 12c's first ruling can produce, stops reaching the header at all.
+    ("12c-T06 the header's failing-source count skips entries that name a row, so a unit-name miss never reaches it",
+     HEADER_STATUS_SRC,
+     "  snapshot === null ? 0 : new Set(snapshot.errors.map((e) => e.source)).size;",
+     "  snapshot === null ? 0 : new Set(snapshot.errors.filter((e) => e.instance === undefined).map((e) => e.source)).size;",
+     [HEADER_STATUS_TEST]),
     ("12a-HS8 the clause stops being omitted at zero, so a healthy page reads `0 sources unread` — §9's rule the alarm count already has",
      HEADER_STATUS_SRC,
      "  const failing = failingSources > 0 && !MODES_WITHOUT_THE_CLAUSE.includes(mode);",
@@ -2531,14 +2542,20 @@ REGRESSIONS = [
      "the reason is IN the bounded well',\n    present.gpu0Takeover &&\n      present.gpu1Takeover &&\n      present.gpu0ReasonInWell &&\n      present.gpu1ReasonInWell &&\n      present.gpu0RoomyWells === 1 &&",
      "the reason is IN the bounded well',\n    present.gpu0Takeover &&\n      present.gpu1Takeover &&\n      present.gpu0ReasonInWell &&\n      present.gpu1ReasonInWell &&\n      present.gpu0RoomyWells >= 0 &&",
      [MEASUREMENT_HARNESS_TEST]),
+    # ⚠ MH8/MH9 re-aimed by 12c/TEST. Both defects are unchanged; both anchors moved when the
+    # import line grew `assertPortFree`/`assertServerAlive` (12c/TEST's port-collision guards).
+    # The replacement stubs all four names, so the mutation still removes exactly the server-log
+    # diagnosis these two entries are about and nothing else.
     ("12a-MH8 the spawned server's stderr is piped and never read again — a startup failure names the PORT, not the cause (`12a-A3`)",
      MEASURE_BREAKPOINTS_SRC,
-     "import { attachServerLog, waitWithServerOutput } from './server-log.mjs';",
+     "import { assertPortFree, assertServerAlive, attachServerLog, waitWithServerOutput } from './server-log.mjs';",
+     "const assertPortFree = async () => {};\nconst assertServerAlive = () => {};\n"
      "const attachServerLog = () => ({ tail: () => '' });\nconst waitWithServerOutput = (f) => f();",
      [MEASUREMENT_HARNESS_TEST]),
     ("12a-MH9 the density harness loses the same diagnosis — the two scripts failed identically and must be diagnosed identically",
      MEASURE_ARRANGEMENTS_SRC,
-     "import { attachServerLog, waitWithServerOutput } from '../server-log.mjs';",
+     "import { assertPortFree, assertServerAlive, attachServerLog, waitWithServerOutput } from '../server-log.mjs';",
+     "const assertPortFree = async () => {};\nconst assertServerAlive = () => {};\n"
      "const attachServerLog = () => ({ tail: () => '' });\nconst waitWithServerOutput = (f) => f();",
      [MEASUREMENT_HARNESS_TEST]),
     ("12a-MH10 the server-log ring is unbounded, trading a hang for a leak",
@@ -2568,9 +2585,13 @@ REGRESSIONS = [
     # first is the whole change in one line: under `gpu.index === serving.instance` the label
     # took the CARD's number, which is right exactly while the arrangement is one process per
     # card and silently wrong the moment it is not.
+    # ⚠ Re-aimed by 12c: the identity is a STRING, so the interpolation lost its `String()`.
+    # ⚠⚠ 12c wrote a SECOND mutation for this defect (`12c-GP20`) before the ledger pointed out
+    # that this one already existed and had merely moved. It was deleted rather than kept: two
+    # mutations for one defect inflate the count and prove nothing twice.
     ("12b-GP7 the served-by label takes the CARD's index again, so a mis-pinned instance is invisible",
      GPU_PANEL_SRC,
-     "            ? `served by instance ${String(served.instance.instance)}`",
+     "            ? `served by instance ${served.instance.instance}`",
      "            ? `served by instance ${String(index)}`",
      [GPU_PANEL_TEST]),
     ("12b-GP8 a jointly-served card falls back to the instance form, and the arrangement disappears",
@@ -2702,6 +2723,94 @@ REGRESSIONS = [
      """  health: null,
 });""",
      [GPU_PANEL_TEST]),
+
+    # ============================ 12c — named instances reach the two panels that name them
+    ("12c-SP20 the SERVING row label is built from a template, naming a unit that does not exist",
+     SERVING_PANEL_SRC,
+     "      label={servingUnitLabel(instance.instance)}",
+     "      label={`llama-server@${instance.instance}`}",
+     [SERVING_PANEL_TEST]),
+    ("12c-SP21 the row asks for a `unit:` condition under a FABRICATED unit name",
+     SERVING_PANEL_SRC,
+     "  const unitCondition = unit === null ? undefined : findDisplayed(displayed, conditionId('unit', unit));",
+     "  const unitCondition = findDisplayed(displayed, conditionId('unit', unit ?? `llama-server@${instance.instance}.service`));",
+     [SERVING_PANEL_TEST]),
+    ("12c-SP22 the health condition is looked up by a stringified index rather than by the identity",
+     SERVING_PANEL_SRC,
+     "  const healthCondition = findDisplayed(displayed, conditionId('health', instance.instance));",
+     "  const healthCondition = findDisplayed(displayed, conditionId('health', String(instance.port)));",
+     [SERVING_PANEL_TEST]),
+    # ⚠⚠ The step-10 ledger reported the two-claimant GPU-card test inert, and it was right:
+    # the mutation for this defect (`12c-OB10`) lives in STEP 8's harness and is checked against
+    # `observations.test.ts`, so nothing in THIS ledger could redden the panel's own assertion.
+    # Ledger ownership follows the TEST file (§5.2 rule 6), so step 10 needs its own entry
+    # against the same source — exactly the arrangement `10c-GP4` already uses for the join.
+    ("12c-GP21 the claimant is taken by ARRAY POSITION, so the CARD names whichever row came first",
+     OBSERVATIONS_SRC,
+     "    (best, s) => (best === null || compareInstances(s.instance, best.instance) < 0 ? s : best),",
+     "    (best, s) => best ?? s,",
+     [GPU_PANEL_TEST]),
+    ("12c-MH20 the split fixture goes back to a numeric identity, so no browser page carries a NAME",
+     MEASURE_BREAKPOINTS_SRC,
+     "        instance: 'split',",
+     "        instance: 0,",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12c-MH21 measurement 19 re-spells the identity as a number, so the post-12c contract is drawn nowhere",
+     MEASURE_BREAKPOINTS_SRC,
+     "instance: String(i.instance),",
+     "instance: i.instance,",
+     [MEASUREMENT_HARNESS_TEST]),
+
+    # ========================================= 12c/RECONCILE — the CARD, and the two port guards
+    #
+    # ⚠⚠ `12c-A1` at the panel that renders it. The mutation lives here as well as in step 8
+    # because ledger ownership follows the TEST file: `gpu-panel.test.tsx` is this harness's,
+    # and its assertion that a refused row renders an em dash rather than `no instance` needs a
+    # wrong implementation in THIS ledger to be worth anything (the same arrangement `12c-GP21`
+    # already uses one finding over).
+    ("12c-GP22 a wire-REFUSED serving row makes the CARD claim `no instance`, which is the retirement defect one panel over",
+     OBSERVATIONS_SRC,
+     "  return !complete || rows.some((s) => declaresGpus(s) && s.gpus === null)",
+     "  return rows.some((s) => declaresGpus(s) && s.gpus === null)",
+     [GPU_PANEL_TEST]),
+    # …and the panel's own half: the enumeration stops reaching the join, so the card is back to
+    # reading a shortened array as *the server listed fewer instances*.
+    ("12c-GP23 the GPU card joins on `snapshot.serving` again, throwing away whether the list was complete",
+     GPU_PANEL_SRC,
+     "  const served = servedBy(sample?.serving ?? SERVING_NOT_POLLED, index);",
+     "  const served = servedBy(\n    sample === null\n      ? SERVING_NOT_POLLED\n      : { read: 'all', rows: sample.snapshot.serving ?? [] },\n    index,\n  );",
+     [GPU_PANEL_TEST]),
+
+    # ⚠⚠ `12c-A7` — both guards' BODIES were graded by nothing: short-circuiting either to a
+    # no-op left 3686 tests passing. `measurement-harness.test.ts` now runs them against real
+    # sockets in a child node process, and these are the wrong implementations it exists to
+    # catch. The first is the FAIL-OPEN as it actually stood: a port that is bound but slow to
+    # answer — a `next dev` still compiling `/login`, i.e. the exact occupant this guard is for.
+    ("12c-MH22 a port that ACCEPTS a connection is reported FREE, so the harness measures whatever already holds it",
+     SERVER_LOG_SRC,
+     "      socket.once('connect', () => settle(true));",
+     "      socket.once('connect', () => settle(false));",
+     [MEASUREMENT_HARNESS_TEST]),
+    # ⚠⚠ Added after the step-10 ledger reported the FREE-PORT case inert, and it was right: MH22
+    # makes a held port look free, and nothing made a free port look held. That direction is not a
+    # nicety — a guard that refuses every port makes every harness run impossible, which is the
+    # failure mode a preflight is one line away from at all times. `error` on a loopback connect is
+    # a closed port answering RST, and reading it as an occupant is the plausible wrong version.
+    ("12c-MH25 a CONNECTION REFUSED is read as an occupant, so the preflight refuses a port nothing holds",
+     SERVER_LOG_SRC,
+     "      socket.once('error', () => settle(false));",
+     "      socket.once('error', () => settle(true));",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12c-MH23 `assertServerAlive` always passes, so a server that lost the bind is measured as though it were ours",
+     SERVER_LOG_SRC,
+     "  if (server.exitCode === null && server.signalCode === null) return;",
+     "  return;",
+     [MEASUREMENT_HARNESS_TEST]),
+    ("12c-MH24 a KILLED spawn counts as alive — only a non-zero exit is checked, and a signal is how a leaked run dies",
+     SERVER_LOG_SRC,
+     "  if (server.exitCode === null && server.signalCode === null) return;",
+     "  if (server.exitCode === null) return;",
+     [MEASUREMENT_HARNESS_TEST]),
 ]
 
 # ---------------------------------------------------------------------------
@@ -2731,15 +2840,20 @@ def _assert_unique_ids() -> None:
     #   read must be visible at a glance") — same instruction, same reasoning.
     # ⚠ `12b-` added by 12b (§6.2's INVERTED join: an instance declares the cards it serves
     #   and a card asks which instance lists it) — same instruction, same reasoning.
+    # ⚠ `12c-` added by 12c (§3.4's two rulings of 2026-09-17: instance ids become STRINGS and
+    #   discovery accepts named instances; and `wire.ts` refuses the ROW, not the snapshot)
+    #   — same instruction, same reasoning.
     bad_prefix = sorted(
         k
         for k in seen
-        if not k.startswith(("10a-", "10b-", "10c-", "10e-", "10f-", "10g-", "10h-", "12a-", "12b-"))
+        if not k.startswith(
+            ("10a-", "10b-", "10c-", "10e-", "10f-", "10g-", "10h-", "12a-", "12b-", "12c-")
+        )
     )
     if bad_prefix:
         raise SystemExit(
             "!!! mutation ids must carry the creating step's prefix "
-            f"(10a-/10b-/10c-/10e-/10f-/10g-/10h-/12a-/12b-): {', '.join(bad_prefix)}"
+            f"(10a-/10b-/10c-/10e-/10f-/10g-/10h-/12a-/12b-/12c-): {', '.join(bad_prefix)}"
         )
 
 

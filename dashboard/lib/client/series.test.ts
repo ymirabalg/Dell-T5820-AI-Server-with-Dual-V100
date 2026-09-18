@@ -14,7 +14,7 @@ import { describe, expect, test } from 'vitest';
 import { MAX_RENDERED_POINTS, decimateSeries, seriesFrom, traceFor } from './series';
 import type { SeriesPoint } from './series';
 import { EMPTY_CONDITION_STATE } from '../conditions';
-import { everythingZero } from '../fixtures';
+import { everythingZero, wireRead } from '../fixtures';
 import type { Gpu, TelemetrySnapshot } from '../types';
 import { celsius, isoTimestamp } from '../types';
 import { startEventLog } from './events';
@@ -144,7 +144,11 @@ describe('seriesFrom projects one reading per sample', () => {
     const ms = Date.UTC(2026, 8, 6, 14, 0, 0, 0) + secondsPastTheHour * 1000;
     const ts = isoTimestamp(new Date(ms).toISOString());
     const gpus: Gpu[] | null = tempC === null ? null : [{ ...card, tempC: celsius(tempC) }];
-    return { ts, tsMs: ms, snapshot: { ...everythingZero, ts, gpus } };
+    // ⚠ 12c/RECONCILE — built through `wireRead`, so this hand-made sample carries the same
+    // `serving` enumeration `appendSample` would give it. A `Sample` is not constructible
+    // without one, which is the point of `12c-A1`'s fix.
+    const wire = wireRead({ ...everythingZero, ts, gpus }, ms);
+    return { ts, tsMs: ms, snapshot: wire.snapshot, serving: wire.serving };
   };
 
   test('⚠ the point carries the sample’s own ts, so the axis is time and not index', () => {
@@ -178,7 +182,7 @@ const wireAt = (offsetMs: number, tempC: number | null): WireSnapshot => {
   const ms = BASE_MS + offsetMs;
   const ts = isoTimestamp(new Date(ms).toISOString());
   const gpus: Gpu[] | null = tempC === null ? null : [{ ...gpuCard, tempC: celsius(tempC) }];
-  return { snapshot: { ...everythingZero, ts, gpus }, tsMs: ms };
+  return wireRead({ ...everythingZero, ts, gpus }, ms);
 };
 
 /** `count` samples one second apart, the i-th carrying `temp(i)` on card 0. */

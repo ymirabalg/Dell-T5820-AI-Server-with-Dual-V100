@@ -66,6 +66,11 @@ import { VALUE_IS_A_BAND, conditionSource } from './observations';
 /** §6.7: "Event log holds 500 entries, newest first, then discards the oldest." */
 export const MAX_EVENTS = 500;
 
+/** Separates a source's band from what it was saying inside one `logged` mark (12c/RECONCILE).
+ *  `\u0000` cannot occur in an `errors[]` message this project produces, and a mark is never
+ *  rendered — it is the debounce's memory, not a string anyone reads. */
+const MARK_SEP = '\u0000';
+
 /** What produced an entry. */
 export type LogEntryKind =
   /** The session's first line. Nothing has been polled yet. */
@@ -396,8 +401,38 @@ export const observeEvents = (
   // so the last entry is the outer, more recent verdict. Inheriting whichever happened to be
   // first would let the message an operator reaches for the container over be chosen by a
   // concatenation order §4 explicitly declines to fix.
-  const present = new Map<ErrorSource, string>();
-  for (const error of errors) present.set(error.source, error.message);
+  //
+  // ⚠⚠ **12c/RECONCILE (`12c-A2`) — the messages are kept as a SET, not just the last one,
+  // because a source that is already lost was absorbing the next real failure of the same
+  // source.** Two mechanisms key on *presence of a source* rather than on the event: this
+  // debounce, and `failingSourceCount`. Measured on the unit-name miss, which is filed under
+  // `dbus` on **every poll, for as long as an unrecognised `*.env` exists**:
+  //
+  // ```
+  // quiet box, the bus dies    -> ["source-lost dbus"]
+  // a stray backup.env, then the bus dies -> ["source-lost dbus" at the MISS's own edge]
+  //                                          the outage ten seconds later logs NOTHING
+  // ```
+  //
+  // The band did not move — `dbus` was already lost — so `previousBand === band` swallowed it,
+  // and a genuine D-Bus outage changed no number, no word, no colour and wrote no line. The
+  // edge is still the edge; what is added is that **what a lost source SAYS is part of the
+  // state being debounced**, which is §6.7's own requirement of this text: *"A skipped call and
+  // a failed call must not read alike … it is the only signal that a source is wedged rather
+  // than merely broken."* A log that can never show the second sentence does not meet it.
+  //
+  // ⚠ The set, not the last message, and not a count. The miss is appended AFTER the bus's own
+  // entries, so the last message is the MISS in both snapshots above and keying on it would
+  // still log nothing. A count would miss a source whose one message changed. The set changes
+  // exactly when the collection of distinct things wrong with a source changes, and these
+  // messages are `${path}: ${reason}` — stable for a stable failure, so a wedged collector
+  // still logs one line and not one per poll.
+  const present = new Map<ErrorSource, string[]>();
+  for (const error of errors) {
+    const held = present.get(error.source);
+    if (held === undefined) present.set(error.source, [error.message]);
+    else if (!held.includes(error.message)) held.push(error.message);
+  }
   const sources = new Set<string>([...present.keys(), ...sourceHolds.keys()]);
   for (const source of sources) {
     const here = present.has(source as ErrorSource);
@@ -412,23 +447,57 @@ export const observeEvents = (
     sourceHolds.set(source, hold);
 
     const band = hold.confirmed ? 'lost' : 'answering';
+    const said = present.get(source as ErrorSource) ?? [];
     const key = `errors:${source}`;
-    const previousBand = logged.get(key);
-    if (previousBand === band) continue;
-    const first = previousBand === undefined;
-    logged.set(key, band);
+    const previousMark = logged.get(key);
+    const previousBand = previousMark?.split(MARK_SEP)[0];
+    /** What this source was saying at the last line logged about it. */
+    const saidBefore = previousBand === 'lost' ? (previousMark as string).split(MARK_SEP).slice(1) : [];
+    // ⚠ A lost source's mark carries WHAT it says; an answering one says nothing, so the mark
+    // is the band alone and a recovery is ONE line however many messages preceded it.
+    //
+    // ⚠ Three details, each of which was a failing test before it was a line of code:
+    //  - **sorted**, so the mark is a genuine SET — `errors[]`'s order is §4's concatenation
+    //    order and two collectors filing for one source can swap without anything changing;
+    //  - **only while `here`**, because a source that has left `errors[]` but is still inside
+    //    §6.4's ten seconds says nothing this poll, and reading that as "the set changed"
+    //    would log a second line on the way to a recovery;
+    //  - and the band is still the band: `lost -> lost` is not a transition, it is news.
+    const mark =
+      band === 'lost'
+        ? here
+          ? [band, ...[...said].sort()].join(MARK_SEP)
+          : previousBand === 'lost'
+            ? (previousMark as string)
+            : band
+        : band;
+    if (previousMark === mark) continue;
+    const first = previousMark === undefined;
+    logged.set(key, mark);
     if (first) continue;
+    // ⚠ The sentence names WHAT CHANGED. On the first edge nothing was said before, so this is
+    // §6.7's own rule unchanged — the last message per source, the outer verdict. On a second
+    // edge it is the newly-arrived message, which is the whole point: the miss that has been
+    // filed on every poll for a week must not be the sentence beside a bus outage.
+    const added = said.filter((message) => !saidBefore.includes(message));
+    const detail = (added.length > 0 ? added[added.length - 1] : said[said.length - 1]) ?? '';
+    // ⚠ A source that is lost and stays lost with a NEW message emits `lost → lost`: the band
+    // did not move and the line must not claim it did. `describeEvent` renders `source-lost` as
+    // "<source> stopped answering — <detail>" and reads neither band, so what an operator sees
+    // is the new sentence, which is the fact that changed.
 
     emit({
       atMs: nowMs,
       source,
+      // ⚠ A second failure of an already-lost source is `watch` like the first: it is news
+      // about a source that cannot be read, not a recovery.
       severity: hold.confirmed ? 'watch' : 'normal',
       id: null,
       label: source,
       kind: hold.confirmed ? 'source-lost' : 'source-recovered',
-      from: previousBand,
+      from: previousBand ?? null,
       to: band,
-      detail: present.get(source as ErrorSource) ?? '',
+      detail,
     });
   }
 

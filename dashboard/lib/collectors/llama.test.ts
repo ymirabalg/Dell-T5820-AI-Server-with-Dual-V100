@@ -15,11 +15,12 @@ import {
   healthFromStatus,
   healthUrl,
   modelsUrl,
-  parseInstanceIndex,
+  parseInstanceId,
   parseLlamaEnv,
   parseModelsBody,
   parseVisibleDevices,
 } from './llama';
+import { servingUnitName } from '../units';
 import {
   CAPTURED_LLAMA_ENV_0,
   CAPTURED_LLAMA_ENV_1,
@@ -45,43 +46,53 @@ import {
 
 describe('instance discovery — §3.4’s "never hard-coded"', () => {
   test('the live directory yields instances 0 and 1', () => {
-    expect(discoverInstances(CAPTURED_LLAMA_SERVER_ENTRIES)).toEqual({ value: [0, 1], problems: [] });
+    expect(discoverInstances(CAPTURED_LLAMA_SERVER_ENTRIES)).toEqual({ value: ['0', '1'], problems: [] });
   });
 
   test('⚠ a third card appears with no code change', () => {
     // §3.4 states this as a requirement, not an aspiration: "Today that is 0 and 1; a third
     // card must appear without a code change." This fixture is that acceptance test.
-    expect(discoverInstances(LLAMA_SERVER_ENTRIES_THIRD_CARD).value).toEqual([0, 1, 2]);
+    expect(discoverInstances(LLAMA_SERVER_ENTRIES_THIRD_CARD).value).toEqual(['0', '1', '2']);
   });
 
-  test('⚠ instances sort numerically, so a tenth card does not land between 0 and 1', () => {
+  test('⚠ numbered instances sort by VALUE, so a tenth card does not land between 0 and 1', () => {
     // Lexical order puts `10.env` second. §6.2's SERVING panel is one row per instance in
-    // an order a human reads down.
-    expect(discoverInstances(LLAMA_SERVER_ENTRIES_TENTH).value).toEqual([0, 2, 10]);
+    // an order a human reads down — and `compareInstances` is where that rule now lives,
+    // because a string sort has no way to know `10` is ten.
+    expect(discoverInstances(LLAMA_SERVER_ENTRIES_TENTH).value).toEqual(['0', '2', '10']);
   });
 
   test('an empty directory is an empty list, with nothing to report', () => {
     expect(discoverInstances([])).toEqual({ value: [], problems: [] });
   });
 
-  test('non-`.env` files are ignored silently; a `.env` that is not an instance is reported', () => {
+  test('⚠⚠ 12c — non-`.env` files are ignored silently; a `.env` that is not a legal IDENTITY is reported', () => {
     const found = discoverInstances(LLAMA_SERVER_ENTRIES_NOISY);
-    expect(found.value).toEqual([0, 1]);
+    // ⚠ **This assertion INVERTED on 2026-09-17 and that is the ruling.** `default.env` used
+    // to be the fixture's proof that a non-integer stem is rejected; §3.4 now accepts named
+    // instances, `default` is a legal identity, and the thing that makes it safe is that
+    // `servingUnitName('default')` MISSES loudly rather than guessing a unit name.
+    expect(found.value).toEqual(['0', '1', 'default']);
     // `README` and `0.env.bak.2026-09-04` do not end in `.env` and make no claim.
-    // `default.env` and `01.env` do, and are named.
-    expect(found.problems).toHaveLength(2);
-    expect(found.problems.join(' ')).toContain('default.env');
+    // `01.env` does, and is named — a digits-only stem must be canonical.
+    expect(found.problems).toHaveLength(1);
     expect(found.problems.join(' ')).toContain('01.env');
   });
 
   test('a duplicate filename cannot produce a duplicate instance', () => {
-    expect(discoverInstances(['1.env', '1.env']).value).toEqual([1]);
+    expect(discoverInstances(['1.env', '1.env']).value).toEqual(['1']);
   });
 
   test.each([
-    ['0.env', 0],
-    ['1.env', 1],
-    ['10.env', 10],
+    ['0.env', '0'],
+    ['1.env', '1'],
+    ['10.env', '10'],
+    // ⚠⚠ 12c — the file `serving-mode.sh` writes. This row is the ruling.
+    ['split.env', 'split'],
+    ['SPLIT.env', 'SPLIT'],
+    ['llama-split.env', 'llama-split'],
+    ['0-split.env', '0-split'],
+    ['split0.env', 'split0'],
     ['.env', null],
     ['01.env', null],
     ['+1.env', null],
@@ -89,77 +100,66 @@ describe('instance discovery — §3.4’s "never hard-coded"', () => {
     ['1.ENV', null],
     ['1env', null],
     ['1.env.bak', null],
-    ['x.env', null],
     ['1 .env', null],
     ['1.0.env', null],
-  ])('parseInstanceIndex(%j) is %j', (filename, expected) => {
-    expect(parseInstanceIndex(filename)).toBe(expected);
+    ['0.split.env', null],
+    ['a:b.env', null],
+    ['a@b.env', null],
+  ])('parseInstanceId(%j) is %j', (filename, expected) => {
+    expect(parseInstanceId(filename)).toBe(expected);
   });
 
   /*
-   * ⚠⚠ 12b-TEST — **§7.9: what discovery accepts and rejects TODAY, established rather than
-   * argued.** `serving-mode.sh` writes `/etc/llama-server/split.env` and installs
-   * `llama-split.service`, so the one arrangement §6.2's inverted join was built FOR cannot
-   * be discovered on this box at all. The tests below do not change that — the shape is an
-   * owner's ruling (§3.4 would have to say how a non-numeric instance is discovered and what
-   * its `instance` identity is, and §6.4 fixes condition subjects as bare integers). They
-   * pin the facts the ruling needs under it, so the next reader does not have to re-derive
-   * them from two files and a shell script.
-   *
-   * Confirmed read-only on the live box 2026-09-17: `/etc/llama-server/` holds `0.env` and
-   * `1.env` and nothing else, so discovery is at its accepting case today.
+   * ⚠⚠ 12c — **§3.4's ruling of 2026-09-17, built.** Until this loop `discoverInstances`
+   * required a bare-integer filename, so `serving-mode.sh`'s `split.env` was rejected outright
+   * and **split mode could not be rendered at all**: the per-card env files survive a mode
+   * switch, so the panel showed instances 0 and 1 — both inactive — while the process actually
+   * serving the box appeared nowhere. The tests below are the other side of that boundary.
    */
-  test('⚠ §7.9 — `split.env`, the file `serving-mode.sh` writes, is REJECTED and REPORTED', () => {
-    // Not silently ignored: it ends in `.env` and sits in the directory §3.4 says holds
-    // instances, so it is a claim about an instance that could not be read — which is the
-    // `llama-env` problem below. And not accepted either: the split process is therefore
-    // invisible to the dashboard, which is the gap §7.9 records.
-    expect(parseInstanceIndex('split.env')).toBeNull();
+  test('⚠⚠ 12c — `split.env` is DISCOVERED, and it maps to `llama-split.service`, not a template', () => {
+    expect(parseInstanceId('split.env')).toBe('split');
     const found = discoverInstances(['0.env', '1.env', 'split.env']);
-    // ⚠ And what the panel therefore shows in split mode: the per-card env files are not
-    // deleted by a mode switch, so `serving[]` carries instances 0 and 1 — honest about them
-    // — while the process actually serving the box appears nowhere at all.
-    expect(found.value).toEqual([0, 1]);
-    expect(found.problems).toHaveLength(1);
-    expect(found.problems[0]).toContain('split.env');
+    expect(found.value).toEqual(['0', '1', 'split']);
+    expect(found.problems).toEqual([]);
+    // ⚠ The half that is NOT free. A template would answer `llama-server@split.service`, and
+    // systemd would report that unit `inactive` without complaint — a stopped-looking row for
+    // a process that is up. `SERVING-MODES.md` §2: "not templated, one instance."
+    expect(servingUnitName('split')).toBe('llama-split.service');
+    expect(servingUnitName('0')).toBe('llama-server@0.service');
   });
 
-  test.each([
-    ['0.env', 0],
-    ['7.env', 7],
-    ['123.env', 123],
-    ['split.env', null],
-    ['SPLIT.env', null],
-    ['split.ENV', null],
-    ['llama-split.env', null],
-    ['0-split.env', null],
-    ['split0.env', null],
-    ['0.split.env', null],
-  ])('§7.9 — discovery accepts a BARE non-negative integer stem and nothing else: %j -> %j', (
-    filename,
-    expected,
-  ) => {
-    // The whole acceptance rule in one table, for the owner's ruling to read. Everything §3.4
-    // rejects is rejected for the same reason `01.env` is (below): §6.4 fixes the condition
-    // subject as a bare integer, and a second spelling would either collide with an existing
-    // subject or produce one §6.4 has no form for. `llama-split.service` is neither
-    // `unit:llama-server@<i>.service` nor `health:<i>`, which is the other half of what a
-    // ruling has to settle.
-    //
-    // ⚠ **Deliberately NOT ⚠-marked, and the ledger is why.** Step 5's red-test ledger found
-    // it inert on its first run and the harness's own rule says the answer is to drop the
-    // mark rather than invent a mutation for it: there is no plausible wrong implementation
-    // that accepts `split` as an integer stem, so this table restates the boundary rather
-    // than guarding it. The guard is `05-L1` plus the test above, both of which bite.
-    expect(parseInstanceIndex(filename)).toBe(expected);
+  test('⚠⚠ 12c — the ORDER is numbers-by-value first, then names by code point', () => {
+    // The rule in `lib/units.ts`, exercised through the function that applies it. `10` must
+    // still follow `2`, and every named instance must follow every numbered one however it
+    // spells itself — `abc` sorts before `split` and BOTH sort after `10`.
+    expect(discoverInstances(['split.env', '10.env', '0.env', 'abc.env', '2.env']).value).toEqual([
+      '0',
+      '2',
+      '10',
+      'abc',
+      'split',
+    ]);
   });
 
-  test('⚠ `01.env` is rejected rather than read as instance 1', () => {
-    // §6.4 fixes condition subjects as bare integers (`health:1`), and §9 deduplicates by
-    // condition id — so two filenames mapping to one subject would make one of the two
-    // instances silently vanish from the header's alarm count.
-    expect(parseInstanceIndex('01.env')).toBeNull();
-    expect(parseInstanceIndex('1.env')).toBe(1);
+  test('⚠⚠ 12c — the order is a function of the SET, not of the listing: two shuffles agree', () => {
+    // ⚠ This is the property `servedBy`'s "first claimant wins" rests on. `readDir` makes no
+    // promise about order, so an order inherited from the listing would make which instance a
+    // GPU card names depend on how the filesystem happened to answer.
+    const entries = ['split.env', '10.env', '0.env', 'abc.env', '2.env'];
+    const expected = ['0', '2', '10', 'abc', 'split'];
+    expect(discoverInstances(entries).value).toEqual(expected);
+    expect(discoverInstances([...entries].reverse()).value).toEqual(expected);
+    expect(discoverInstances(['abc.env', '0.env', 'split.env', '2.env', '10.env']).value).toEqual(expected);
+  });
+
+  test('⚠ a digits-only stem must be CANONICAL — `01.env` is rejected rather than read as `1` or as a name', () => {
+    // §6.4 fixes an index-shaped subject as a bare integer ("no padding, no prefix"), and
+    // `compareInstances` has no defensible place for a non-canonical numeral in an
+    // ascending-by-value run. ⚠ The third outcome is the one worth pinning: `01` must not fall
+    // through to the NAMED branch, where it would sort behind `split` and spell no unit name.
+    expect(parseInstanceId('01.env')).toBeNull();
+    expect(parseInstanceId('1.env')).toBe('1');
+    expect(discoverInstances(['01.env', '1.env']).value).toEqual(['1']);
   });
 });
 

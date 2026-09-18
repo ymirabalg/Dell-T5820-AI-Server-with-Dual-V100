@@ -104,6 +104,11 @@ RUNTIME = "lib/client/runtime.test.ts"
 GAPS = "lib/client/gaps.test.ts"
 MODE = "lib/client/mode.test.ts"
 GUARD8 = "lib/client/guardrails.test.ts"
+# ⚠⚠ 12c — NEW. `lib/units.ts` stopped being two constants (a grammar, a mapping that can miss,
+# and §6.2's ordering rule), so it has its own tests now. Ledger ownership follows the FILE
+# (HANDOVER §5.2 rule 6) and this harness has owned `lib/units.ts`'s mutations since step 8
+# created it, so its test file belongs here and in no other harness.
+UNITS = "lib/units.test.ts"
 
 # ---------------------------------------------------------------------------
 # ⚠ The per-mutation red-test ledger  (copied verbatim from steps 4–7; only
@@ -133,7 +138,7 @@ GUARD8 = "lib/client/guardrails.test.ts"
 # mutations `T1`–`T3`, which are listed below and must still exit 1 — the ledger just cannot
 # see them.
 LEDGER_FILES = [
-    PREFS, BACKOFF, RING, SERIES, WIRE, OBS, EVENTS, ENV, RUNTIME, GUARD8, GAPS, MODE,
+    PREFS, BACKOFF, RING, SERIES, WIRE, OBS, EVENTS, ENV, RUNTIME, GUARD8, GAPS, MODE, UNITS,
 ]
 
 # `test('…')`, `it('…')` and `test.each(…)('…')`, single- or double-quoted.
@@ -552,9 +557,11 @@ REGRESSIONS = [
      "  const cast = value as unknown as TelemetrySnapshot;\n  return { snapshot: cast, tsMs };\n"
      "  const snapshot: TelemetrySnapshot = {\n    ts: isoTimestamp(rawTs),",
      [WIRE, GUARD8]),
+    # ⚠ Re-aimed by 12c: `serving` is validated by `servingListOf` now (row-level refusal), so
+    # the coercion the defect describes lives on that function's `null` branch. Same property.
     ("08-W2 serving: null is coerced to [], so \"unknown\" becomes \"none configured\"",
-     WIRE_SRC, "  const serving = arrayOrNull(field(value, 'serving'), servingInstanceOf);",
-     "  const serving = arrayOrNull(field(value, 'serving'), servingInstanceOf) ?? [];", [WIRE]),
+     WIRE_SRC, "  if (value === null) return { rows: null, refusals: [] };",
+     "  if (value === null) return { rows: [], refusals: [] };", [WIRE]),
     ("08-W3 a missing key is read as a null reading, so a broken server looks like a quiet box",
      WIRE_SRC, "const numberOrNull = (value: unknown): Checked<number | null> => {\n  if (value === null) return null;",
      "const numberOrNull = (value: unknown): Checked<number | null> => {\n"
@@ -607,8 +614,8 @@ REGRESSIONS = [
     # snapshot from a real server passed off as an old, well-formed one.
     ("10b-W1 an invalid errors[].instance is silently treated as absent, not refused",
      WIRE_SRC,
-     "const optionalInteger = (source: Record<string, unknown>, key: string): number | typeof ABSENT | undefined =>\n  Object.hasOwn(source, key) ? integer(source[key]) : ABSENT;",
-     "const optionalInteger = (source: Record<string, unknown>, key: string): number | typeof ABSENT | undefined =>\n  Object.hasOwn(source, key) ? (integer(source[key]) ?? ABSENT) : ABSENT;",
+     "const optionalInstanceId = (source: Record<string, unknown>, key: string): string | typeof ABSENT | undefined =>\n  Object.hasOwn(source, key) ? instanceId(source[key]) : ABSENT;",
+     "const optionalInstanceId = (source: Record<string, unknown>, key: string): string | typeof ABSENT | undefined =>\n  Object.hasOwn(source, key) ? (instanceId(source[key]) ?? ABSENT) : ABSENT;",
      [WIRE]),
     ("08-W9 a load average of any length is accepted",
      WIRE_SRC, "  if (!Array.isArray(value) || value.length !== 3) return undefined;",
@@ -724,7 +731,7 @@ REGRESSIONS = [
      "        : stepBandHold(previous, here, nowMs, DEBOUNCE_MS);",
      [EVENTS]),
     ("08-E10 the errors[] message is dropped, so skipped and failed read alike",
-     EVENTS_SRC, "      detail: present.get(source as ErrorSource) ?? '',", "      detail: '',",
+     EVENTS_SRC, "      detail,\n    });", "      detail: '',\n    });",
      [EVENTS]),
     ("08-E11 seq never advances, so React keys collide and the order is unrecoverable",
      EVENTS_SRC, "    fresh.push({ ...entry, seq });\n    seq += 1;", "    fresh.push({ ...entry, seq });",
@@ -1142,8 +1149,8 @@ REGRESSIONS = [
 
     # ================================ lib/client/events.ts — §6.5's edges and §6.7's sources
     ("08-E14 the FIRST errors[] message per source wins, so the assembly's verdict is lost",
-     EVENTS_SRC, "  for (const error of errors) present.set(error.source, error.message);",
-     "  for (const error of errors)\n    if (!present.has(error.source)) present.set(error.source, error.message);",
+     EVENTS_SRC, "    else if (!held.includes(error.message)) held.push(error.message);",
+     "    else if (!held.includes(error.message)) held.unshift(error.message);",
      [EVENTS]),
     ("08-E15 the stale feed reads the retired list, so a condition we stopped seeing is never logged",
      EVENTS_SRC, "  for (const condition of poll.wentStale) {", "  for (const condition of poll.retired) {",
@@ -1159,10 +1166,14 @@ REGRESSIONS = [
     # ================== lib/client/observations.ts — which enumerations this snapshot READ
     # ⚠ `gpus: null` is "nvidia-smi failed", not "there are no cards". Treating it as a read
     # enumeration retires every card the moment the collector fails — F3's whole point.
+    # ⚠ Re-aimed by 12c/TEST. The defect is unchanged; the anchor moved when `enumerationsRead`
+    # gained `servingRowsRefused` (a refused `serving[]` row must not count as a read
+    # enumeration, or §9 retires the instance — see that function's doc). The `null` guard this
+    # mutation removes is the ORIGINAL one and is still exactly what the name says.
     ("08-O14 a null enumeration counts as read, so a failed nvidia-smi retires every card",
      OBS_SRC,
      "  if (snapshot.gpus !== null) read.add(GPU_ENUMERATION);\n"
-     "  if (snapshot.serving !== null) read.add(SERVING_ENUMERATION);",
+     "  if (serving.read === 'all') read.add(SERVING_ENUMERATION);",
      "  read.add(GPU_ENUMERATION);\n  read.add(SERVING_ENUMERATION);",
      [OBS, RUNTIME]),
 
@@ -1222,11 +1233,13 @@ REGRESSIONS = [
     ("08-N1 the fan service unit is renamed, so §3.6's check watches a unit that does not exist",
      UNITS_SRC, "export const FAN_SERVICE_UNIT = 'gpu-fan-control.service';",
      "export const FAN_SERVICE_UNIT = 'gpu-fan-control';", [OBS]),
+    # ⚠ RE-AIMED by 12c: the defect is unchanged and the anchor moved. `servingUnitName` became
+    # a MAPPING on 2026-09-17, so the `.service` suffix now lives on the template branch.
     ("08-N2 the join key loses .service, so the SERVING panel stops matching its units",
      UNITS_SRC,
-     "export const servingUnitName = (instance: number): string => `llama-server@${instance}.service`;",
-     "export const servingUnitName = (instance: number): string => `llama-server@${instance}`;",
-     [OBS]),
+     "  if (isNumericInstance(instance)) return `llama-server@${instance}.service`;",
+     "  if (isNumericInstance(instance)) return `llama-server@${instance}`;",
+     [OBS, UNITS]),
     ("08-N3 the client-safe module grows an import, and node:net goes into the browser bundle",
      UNITS_SRC,
      "/** `gpu-fan-control.service` — §3.3's `serviceState` and §3.6's `fanServiceState` (O9). */",
@@ -1268,8 +1281,8 @@ REGRESSIONS = [
      [WIRE, OBS]),
     ("12b-WR2 the validated row always CARRIES the key, so `Object.hasOwn` can never say absent",
      WIRE_SRC,
-     "  return gpus === ABSENT ? row : { ...row, gpus };",
-     "  return { ...row, gpus: gpus === ABSENT ? null : gpus };",
+     "  return { ok: true, row: gpus === ABSENT ? row : { ...row, gpus } };",
+     "  return { ok: true, row: { ...row, gpus: gpus === ABSENT ? null : gpus } };",
      [WIRE, OBS]),
     ("12b-WR3 a card index may be negative, so a value no `Gpu.index` can equal is accepted",
      WIRE_SRC,
@@ -1289,30 +1302,30 @@ REGRESSIONS = [
 
     ("12b-OB1 the index-join fallback is chosen per ROW, so one unreadable unit restores it",
      OBS_SRC,
-     "  if (!serving.some(declaresGpus)) {",
-     "  if (!serving.every(declaresGpus)) {",
+     "  if (!rows.some(declaresGpus)) {",
+     "  if (!rows.every(declaresGpus)) {",
      OBS),
     ("12b-OB2 `unserved` and `unknown` collapse — we-looked-and-nobody-claims-it becomes an em dash",
      OBS_SRC,
-     "  return serving.some((s) => declaresGpus(s) && s.gpus === null)",
-     "  return serving.some((s) => declaresGpus(s))",
+     "  return !complete || rows.some((s) => declaresGpus(s) && s.gpus === null)",
+     "  return !complete || rows.some((s) => declaresGpus(s))",
      OBS),
     ("12b-OB3 an unreadable `gpus` yields `unserved`, asserting nothing serves a card we cannot see",
      OBS_SRC,
-     """  return serving.some((s) => declaresGpus(s) && s.gpus === null)
+     """  return !complete || rows.some((s) => declaresGpus(s) && s.gpus === null)
     ? { kind: 'unknown' }
     : { kind: 'unserved' };""",
      "  return { kind: 'unserved' };",
      OBS),
     ("12b-OB4 `alongside` keeps the asking card, so GPU 0 is served jointly with itself",
      OBS_SRC,
-     "      return { kind: 'declared', instance, alongside: gpus.filter((g) => g !== index) };",
-     "      return { kind: 'declared', instance, alongside: [...gpus] };",
+     "    return { kind: 'declared', instance: winner, alongside: gpus.filter((g) => g !== index) };",
+     "    return { kind: 'declared', instance: winner, alongside: [...gpus] };",
      OBS),
     ("12b-OB5 `serving: null` becomes a claim about cards rather than the index-join fallback",
      OBS_SRC,
-     "  if (serving === null) return { kind: 'indexed', instance: null };",
-     "  if (serving === null) return { kind: 'unserved' };",
+     "  if (serving.read === 'none') return { kind: 'indexed', instance: null };",
+     "  if (serving.read === 'none') return { kind: 'unserved' };",
      OBS),
     ("12b-OB6 the declaration is read as `gpus !== undefined`, not as the key's own presence",
      OBS_SRC,
@@ -1334,10 +1347,12 @@ REGRESSIONS = [
      "  return gpus.length === 1 ? `GPU ${String(gpus[0])}` : `GPUs ${gpus.join(', ')}`;",
      "  return `GPUs ${gpus.join(', ')}`;",
      OBS),
+    # ⚠ Re-aimed by 12c: the loop became a `filter`, and the identity is a STRING — so the
+    # coincidence this mutation reinstates is now spelled `String(index)`. Same defect exactly.
     ("12b-OB10 the claimant is found by instance NUMBER again, reinstating the coincidence",
      OBS_SRC,
-     "    if (gpus != null && gpus.includes(index)) {",
-     "    if (gpus != null && instance.instance === index) {",
+     "  const claimants = rows.filter((s) => s.gpus != null && s.gpus.includes(index));",
+     "  const claimants = rows.filter((s) => s.gpus != null && s.instance === String(index));",
      OBS),
 
     # ================================================ 12b RECONCILE — three of the five reverts
@@ -1372,6 +1387,268 @@ REGRESSIONS = [
     "model": "qwen3.6-27b",
     "ctx": 131072,""",
      WIRE),
+
+    # ================================== 12c — named instances, and the row-level wire refusal
+    # ⚠ `lib/units.ts` grew from two constants into a contract (a grammar, a mapping that can
+    # miss, and §6.2's ordering rule), so `lib/units.test.ts` is new and in THIS harness's
+    # LEDGER_FILES — ledger ownership follows the FILE, and this harness has owned
+    # `lib/units.ts`'s mutations since step 8 created it.
+    ("12c-N10 `compareInstances` compares numbered instances LEXICALLY, so 10 lands between 0 and 2",
+     UNITS_SRC,
+     "  if (aNumeric && bNumeric) return a.length !== b.length ? a.length - b.length : byCodePoint(a, b);",
+     "  if (aNumeric && bNumeric) return byCodePoint(a, b);",
+     UNITS),
+    ("12c-N11 named instances sort BEFORE numbered ones, so `split` heads the SERVING panel",
+     UNITS_SRC,
+     "  if (aNumeric !== bNumeric) return aNumeric ? -1 : 1;",
+     "  if (aNumeric !== bNumeric) return aNumeric ? 1 : -1;",
+     UNITS),
+    # ⚠⚠ Added after the step-8 ledger reported the ANTISYMMETRIC test inert. Every other
+    # mutation on this comparator — lexical numbers, names first, tied names — happens to
+    # PRESERVE antisymmetry, so the property had a test and no wrong implementation to catch.
+    # This is the plausible one: the two-branch check written once and never mirrored, which
+    # makes `compare(a, b)` and `compare(b, a)` both say "a first" and hands `Array.sort` an
+    # order that depends on which pairs it happens to compare.
+    ("12c-N18 the numbered/named branch always puts its FIRST argument first — the comparator stops being antisymmetric",
+     UNITS_SRC,
+     "  if (aNumeric !== bNumeric) return aNumeric ? -1 : 1;",
+     "  if (aNumeric !== bNumeric) return -1;",
+     UNITS),
+    ("12c-N12 the comparator ties two different NAMED identities, so the join gets a coin flip",
+     UNITS_SRC,
+     "  return byCodePoint(a, b);\n};",
+     "  return 0;\n};",
+     UNITS),
+    ("12c-N13 `servingUnitName` answers a plausible name for an identity it does not know",
+     UNITS_SRC,
+     "  return Object.hasOwn(NAMED_UNITS, instance) ? (NAMED_UNITS[instance] as string) : null;",
+     "  return Object.hasOwn(NAMED_UNITS, instance) ? (NAMED_UNITS[instance] as string) : `llama-${instance}.service`;",
+     [UNITS, OBS]),
+    ("12c-N14 `split` is served by `llama-server@split.service`, the unit a template would build",
+     UNITS_SRC,
+     "  split: 'llama-split.service',",
+     "  split: 'llama-server@split.service',",
+     UNITS),
+    ("12c-N15 the row LABEL is spelled locally instead of derived from the unit name",
+     UNITS_SRC,
+     "  const unit = servingUnitName(instance);\n  if (unit === null) return instance;\n"
+     "  return unit.slice(0, -UNIT_SUFFIX.length);",
+     "  return `llama-server@${instance}`;",
+     [UNITS, OBS]),
+    ("12c-N16 the identity grammar drops canonicality, so `01` reads as a NAMED instance",
+     UNITS_SRC,
+     "  return ALL_DIGITS.test(value) ? isNumericInstance(value) : true;",
+     "  return true;",
+     [UNITS, WIRE]),
+    ("12c-N17 the identity grammar admits a colon, so an id can spell a second condition id",
+     UNITS_SRC,
+     "export const INSTANCE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;",
+     "export const INSTANCE_ID = /^[A-Za-z0-9][A-Za-z0-9_:-]*$/;",
+     [UNITS, WIRE]),
+
+    ("12c-WR10 one invalid serving row refuses the WHOLE snapshot again, blanking the dashboard",
+     WIRE_SRC,
+     "    if (checked.ok) rows.push(checked.row);\n    else refusals.push(`serving[${String(i)}] was dropped: ${checked.why}`);",
+     "    if (checked.ok) rows.push(checked.row);\n    else { rows.length = 0; refusals.push(`serving[${String(i)}] was dropped: ${checked.why}`); }",
+     WIRE),
+    ("12c-WR11 a dropped row is dropped SILENTLY, so the header can still read `all healthy`",
+     WIRE_SRC,
+     "    else refusals.push(`serving[${String(i)}] was dropped: ${checked.why}`);",
+     "    else void checked;",
+     WIRE),
+    ("12c-WR12 the refusal names the row's own `instance`, which may be the very thing that was wrong",
+     WIRE_SRC,
+     "    else refusals.push(`serving[${String(i)}] was dropped: ${checked.why}`);",
+     "    else refusals.push(`serving[${String((entry as {instance?: unknown})?.instance)}] was dropped: ${checked.why}`);",
+     WIRE),
+    ("12c-WR13 only the FIRST bad field is named, so a wholesale-wrong row reads like a one-field typo",
+     WIRE_SRC,
+     "    return { ok: false, why: `${bad.map(quoted).join(', ')} did not validate` };",
+     "    return { ok: false, why: `${quoted(bad[0] ?? '')} did not validate` };",
+     WIRE),
+    ("12c-WR14 the refusals are PREPENDED, re-ordering every entry the server sent",
+     WIRE_SRC,
+     "        : [...errors, ...serving.refusals.map((message) => ({ source: WIRE_REFUSAL_SOURCE, message }))],",
+     "        : [...serving.refusals.map((message) => ({ source: WIRE_REFUSAL_SOURCE, message })), ...errors],",
+     WIRE),
+    # ⚠ The `Array.isArray` guard is spelled twice in this file — `arrayOf` has one too — so the
+    # anchor carries the line above it. A mutation matching two sites tests whichever comes first.
+    ("12c-WR15 `serving` that is not an array is treated as an empty list rather than refused",
+     WIRE_SRC,
+     "  if (value === null) return { rows: null, refusals: [] };\n  if (!Array.isArray(value)) return undefined;",
+     "  if (value === null) return { rows: null, refusals: [] };\n  if (!Array.isArray(value)) return { rows: [], refusals: [] };",
+     WIRE),
+    ("12c-WR16 the wire admits any string as an identity, so `a:b` reaches §6.4's condition ids",
+     WIRE_SRC,
+     "  if (typeof value !== 'string' || !isInstanceId(value)) return undefined;",
+     "  if (typeof value !== 'string') return undefined;",
+     WIRE),
+    ("12c-WR17 a JSON-number identity is refused, so the LIVE BOX loses every row of every poll",
+     WIRE_SRC,
+     "    if (!Number.isSafeInteger(value)) return undefined;\n"
+     "    const spelled = String(value);\n"
+     "    return isNumericInstance(spelled) ? spelled : undefined;",
+     "    return undefined;",
+     WIRE),
+    ("12c-WR18 row-level leniency spreads to `errors[]`, hiding a failure report inside a failure report",
+     WIRE_SRC,
+     "  const errors = arrayOf(field(value, 'errors'), telemetryErrorOf);",
+     "  const errors = Array.isArray(field(value, 'errors'))\n"
+     "    ? (field(value, 'errors') as unknown[])\n"
+     "        .map(telemetryErrorOf)\n"
+     "        .filter((e): e is TelemetryError => e !== undefined)\n"
+     "    : undefined;",
+     WIRE),
+
+    ("12c-OB10 the first claimant is taken by ARRAY POSITION, so a re-ordered list moves a model",
+     OBS_SRC,
+     "    (best, s) => (best === null || compareInstances(s.instance, best.instance) < 0 ? s : best),",
+     "    (best, s) => best ?? s,",
+     OBS),
+    ("12c-OB11b the index fallback reads serving[] POSITIONALLY rather than by identity",
+     OBS_SRC,
+     "    const matched = rows.find((s) => s.instance === String(index)) ?? null;",
+     "    const matched = rows[index] ?? null;",
+     OBS),
+    ("12c-OB12 a `unit:` condition is pushed for an identity that has no unit, against a unit that never existed",
+     OBS_SRC,
+     "    const unit = servingUnitName(instance.instance);\n    if (unit !== null) {",
+     "    const unit = servingUnitName(instance.instance) ?? `llama-server@${instance.instance}.service`;\n    if (unit !== null) {",
+     OBS),
+    ("12c-OB13 the health condition's label is built from a template, naming a unit that does not exist",
+     OBS_SRC,
+     "      `${servingUnitLabel(instance.instance)} /health`,",
+     "      `llama-server@${instance.instance} /health`,",
+     OBS),
+
+    # ================================================ 12c/TEST — four written by the TEST phase
+    #
+    # ⚠ `12c-T03`/`12c-T04` are a PAIR, one per direction, because a single mutation of the
+    # refusal clause can only prove that *a* clause is there and never that it points the right
+    # way (HANDOVER §5). Suppressing the enumeration when nothing was refused is as wrong as
+    # failing to suppress it when something was, and the two are different sentences on the page:
+    # one loses §9's retirement for a box whose instances really did go away, the other retires
+    # an instance because a row failed validation.
+    ("12c-T01 compareInstances calls ANY digits-only identity numeric, so `01` and `1` compare EQUAL",
+     UNITS_SRC,
+     "  const aNumeric = isNumericInstance(a);\n  const bNumeric = isNumericInstance(b);",
+     "  const aNumeric = /^[0-9]+$/.test(a);\n  const bNumeric = /^[0-9]+$/.test(b);",
+     UNITS),
+    ("12c-T02 the count of wire-refused serving rows is thrown away, so nothing downstream can see one",
+     WIRE_SRC,
+     "  return { snapshot, tsMs, serving: servingEnumeration(serving.rows, serving.refusals.length) };",
+     "  return { snapshot, tsMs, serving: servingEnumeration(serving.rows, 0) };",
+     WIRE),
+    ("12c-T03 a refused serving row still counts as a READ enumeration, so §9 retires the instance",
+     OBS_SRC,
+     "  if (serving.read === 'all') read.add(SERVING_ENUMERATION);",
+     "  if (serving.read !== 'none') read.add(SERVING_ENUMERATION);",
+     WIRE),
+    ("12c-T05 numbers and names share ONE lexical fall-through, so the order is INTRANSITIVE and Array.sort's result depends on which pairs it compared",
+     UNITS_SRC,
+     "  if (aNumeric !== bNumeric) return aNumeric ? -1 : 1;\n  return byCodePoint(a, b);",
+     "  return byCodePoint(a, b);",
+     UNITS),
+    ("12c-T04 the serving enumeration is suppressed by an EMPTY list rather than by a refusal, so a box whose instances really left never retires them",
+     OBS_SRC,
+     "  if (serving.read === 'all') read.add(SERVING_ENUMERATION);",
+     "  if (serving.read !== 'none' && serving.rows.length > 0) read.add(SERVING_ENUMERATION);",
+     WIRE),
+
+    # ================================================ 12c/RECONCILE — the seam, and four guards
+    #
+    # ⚠⚠ `12c-A1`: the refusal count reached §9's ledger and NOT §6.2's join, so a row this
+    # client dropped rendered the GPU card as `served by · no instance` — *we looked, and nobody
+    # claims it*. The fix is a type: `servedBy` takes a `ServingEnumeration` (the rows, and
+    # whether they are all of them) rather than an array, and the rule is that an INCOMPLETE
+    # list may only produce a POSITIVE answer. R3/R4 are the two halves of that rule, one per
+    # branch, because a single mutation proves only that *a* clause is there (HANDOVER §5).
+    ("12c-R3 a REFUSED list still produces `unserved`, so a dropped row reads as *nobody serves this card*",
+     OBS_SRC,
+     "  return !complete || rows.some((s) => declaresGpus(s) && s.gpus === null)",
+     "  return rows.some((s) => declaresGpus(s) && s.gpus === null)",
+     [OBS, WIRE]),
+    ("12c-R4 the old-server index fallback answers from a list it did not fully read, naming an instance for a row just dropped",
+     OBS_SRC,
+     "    if (matched === null && !complete) return { kind: 'unknown' };\n",
+     "",
+     [OBS, WIRE]),
+    # ⚠ The other direction of the same rule: a fix that answered `unknown` for everything would
+    # pass R3/R4 and would blind the panel instead of correcting it. `unserved` is what a
+    # MIS-PINNED instance produces, and it is the property the whole inversion was built for.
+    ("12c-R5 a COMPLETE list never produces `unserved` either, so a mis-pinned instance is invisible again",
+     OBS_SRC,
+     "  return !complete || rows.some((s) => declaresGpus(s) && s.gpus === null)",
+     "  return true || rows.some((s) => declaresGpus(s) && s.gpus === null)",
+     [OBS, WIRE]),
+    # ⚠⚠ Added after the step-8 ledger reported the anti-vacuity half of `12c-A1`'s fix INERT, and
+    # the harness was right: R3/R4/R5 all act on answers reached AFTER the claimant search, so
+    # none of them can blank a row that was found. This is the over-broad fix — the one a careless
+    # reading of A1 produces — completeness checked at the top, before anything is looked at. The
+    # rule is *no NEGATIVE answer from a partial list*, not *no answer*: a refusal elsewhere in the
+    # array is not a reason to put an em dash on a card whose instance is right there.
+    # ⚠⚠ `12c-A4` — the one decision this loop recorded as a SPEC SILENCE and tested with nothing.
+    # Measured by the adversarial: `'llama-models'`, `'dbus'` and `'ufw'` each left 3686 tests
+    # passing. `'ufw'` is the worst and is the one written here — it takes the note explaining a
+    # vanished SERVING row out of the SERVING panel entirely and renders it under SAFETY.
+    ("12c-R13 the wire refusal is filed under a source that does not reach the SERVING panel, so a dropped row loses its explanation",
+     WIRE_SRC,
+     "const WIRE_REFUSAL_SOURCE: ErrorSource = 'llama-env';",
+     "const WIRE_REFUSAL_SOURCE: ErrorSource = 'ufw';",
+     [WIRE, OBS]),
+    ("12c-R12 a PARTIAL list answers `unknown` for every card, blanking rows this client read perfectly well",
+     OBS_SRC,
+     "  const complete = serving.read === 'all';",
+     "  const complete = serving.read === 'all';\n  if (!complete) return { kind: 'unknown' };",
+     [OBS, WIRE]),
+
+    # ⚠⚠ `12c-A8`: `Number(a) - Number(b)` is not a total order on the identities the GRAMMAR
+    # admits — `9007199254740993` and `…992` compared EQUAL, and a 400-digit pair gave NaN,
+    # which leaves `Array.prototype.sort` implementation-defined. This mutation is the code as
+    # it stood, so the test that proves totality has the wrong implementation it was missing.
+    ("12c-R6 the comparator goes back to ARITHMETIC, so two identities past 2^53 tie and a long one gives NaN",
+     UNITS_SRC,
+     "  if (aNumeric && bNumeric) return a.length !== b.length ? a.length - b.length : byCodePoint(a, b);",
+     "  if (aNumeric && bNumeric) return Number(a) - Number(b);",
+     UNITS),
+    # ⚠ `12c-A11` #3 — the tie rule. Reverting `< 0` to `<= 0` stayed green because no fixture
+    # could produce a tie; §3's number bridge can (`0` and `"0"` are one identity), and the tie
+    # decides which row's MODEL the card carries.
+    ("12c-R7 the claimant TIE keeps the LAST row, so two spellings of one identity swap the model on the card",
+     OBS_SRC,
+     "    (best, s) => (best === null || compareInstances(s.instance, best.instance) < 0 ? s : best),",
+     "    (best, s) => (best === null || compareInstances(s.instance, best.instance) <= 0 ? s : best),",
+     [OBS, WIRE]),
+    # ⚠ `12c-A11` #2 — the invariant that replaced a provably dead `endsWith` guard. The label
+    # slices a fixed six characters, and nothing checked that the mapping only ever produces
+    # names ending in them.
+    ("12c-R8 a NAMED unit is listed without its `.service` suffix, so the row label is sliced apart",
+     UNITS_SRC,
+     "  split: 'llama-split.service',",
+     "  split: 'llama-split.socket',",
+     UNITS),
+    # ⚠ `12c-A11` #1 — the sign test that was deleted for being dead. Canonicality is now the
+    # ONLY thing refusing a negative identity, so it needs a mutation that takes it away.
+    ("12c-R9 a JSON-number identity is spelled without checking canonicality, so `-1` becomes an instance",
+     WIRE_SRC,
+     "    return isNumericInstance(spelled) ? spelled : undefined;",
+     "    return spelled;",
+     WIRE),
+    # ⚠⚠ `12c-A2` — a source that is already lost absorbed the next real failure of the same
+    # source: `previousBand === band` swallowed a genuine D-Bus outage arriving behind a
+    # permanently-present unit-name miss, and the event log wrote nothing at all.
+    ("12c-R10 the source debounce keys on PRESENCE alone, so a new failure of an already-lost source logs nothing",
+     EVENTS_SRC,
+     "          ? [band, ...[...said].sort()].join(MARK_SEP)",
+     "          ? band",
+     [EVENTS]),
+    # …and the other direction: a mark that is not a SET turns `errors[]`'s concatenation order
+    # into a log line, which §4 explicitly declines to fix.
+    ("12c-R11 the lost-source mark keeps the messages in ARRIVAL order, so two collectors swapping logs a line",
+     EVENTS_SRC,
+     "          ? [band, ...[...said].sort()].join(MARK_SEP)",
+     "          ? [band, ...said].join(MARK_SEP)",
+     [EVENTS]),
 ]
 
 

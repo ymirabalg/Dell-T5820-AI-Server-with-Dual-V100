@@ -10,7 +10,7 @@
 
 import { describe, expect, test } from 'vitest';
 
-import { everythingZero } from '../fixtures';
+import { everythingZero, wireRead } from '../fixtures';
 import { isoTimestamp } from '../types';
 import { MAX_SAMPLES, EMPTY_RING, appendSample, newestSample, samplesWithin } from './ring';
 import type { SampleRing } from './ring';
@@ -19,7 +19,7 @@ import type { WireSnapshot } from './wire';
 const at = (secondsPastTheHour: number): WireSnapshot => {
   const ms = Date.UTC(2026, 8, 6, 14, 0, 0, 0) + secondsPastTheHour * 1000;
   const ts = new Date(ms).toISOString();
-  return { snapshot: { ...everythingZero, ts: isoTimestamp(ts) }, tsMs: ms };
+  return wireRead({ ...everythingZero, ts: isoTimestamp(ts) }, ms);
 };
 
 const fill = (count: number, from = 0): SampleRing => {
