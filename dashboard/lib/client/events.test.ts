@@ -38,7 +38,7 @@ class Session {
       // `enumerationsRead(snapshot)`, which silently asserted *the serving enumeration was
       // read* (`12c-A5`); the argument is required now, so a harness that had not been updated
       // is a compile error rather than a retirement.
-      enumerationsRead: enumerationsRead(snapshot, servingEnumeration(snapshot.serving, 0)),
+      enumerationsRead: enumerationsRead(snapshot, servingEnumeration(snapshot.serving, [])),
       afterGap,
     });
     this.conditions = result.state;

@@ -53,6 +53,16 @@
  * | could **not** be read (`gpus: null`, `serving: null`) | **stale** — keeps its last confirmed band, its "since" and its place in §9's count |
  * | **was** read, and the subject was not in it (`gpus: [{index:0}]`, `serving: []`) | **retired** — it has left the machine, and it leaves the ledger, the dot and the count |
  *
+ * ⚠⚠ **A collection read in PART retires what it can — ruled 2026-09-22 (§9 row 2).** The
+ * first cut treated one refused `serving[]` row as *the whole enumeration was not read*, so an
+ * instance that genuinely left the machine kept its alarm in the count indefinitely because an
+ * unrelated row failed validation — safe, and unbounded. It is now per subject, and it turns on
+ * whether the refused row's identity parsed: if it did, **that identity alone** is held back
+ * and every other absent subject retires normally; if it did not, **no subject can be shown
+ * absent and the whole enumeration stays frozen**, which is the honest answer to *we cannot
+ * tell who is missing* rather than a case to optimise away. {@link EnumerationsRead} carries
+ * both, and a held-back subject goes **stale**, never retired.
+ *
  * Both are confirmed over the same ten seconds of *sampled* wall time §6.4 requires, so one
  * flickering enumeration cannot retire a card. Staleness never raises a severity and never
  * lowers one — it is the **mode** and the reading's age that say how current it is, not the
@@ -165,6 +175,80 @@ export const conditionId = (kind: ConditionKind, subject: string | null): Condit
 // ---------------------------------------------------------------------------
 
 /**
+ * ⚠⚠ **12d — where a condition's subject came from, as a COLLECTION and a MEMBER of it.**
+ *
+ * §9's ruling of 2026-09-22 makes retirement a per-subject question, and answering it needs
+ * something the old `enumeration: 'serving'` string could not carry: **which member of that
+ * collection this condition is about.** The two are not the same as the condition's own
+ * subject and must not be confused with it — `unit:llama-server@0.service`'s subject is a
+ * UNIT NAME and its member is the instance identity `'0'`, which is what a refused
+ * `serving[]` row names.
+ *
+ * ⚠ **The pair is one value precisely so neither half can be stated without the other.** An
+ * optional `enumerationMember` beside the existing `enumeration` was the cheaper change and
+ * was refused: a §6.3 kind added to a collection later would compile with the member missing,
+ * and the failure would be silent in the dangerous direction — an alarm retired because we
+ * could not tell it was the subject we had failed to read. `lib/units.ts`'s mapping is the
+ * only thing that knows `'0'` → `llama-server@0.service`, and this keeps the answer where the
+ * condition is minted rather than re-derived by pattern later (the second spelling that file
+ * exists to prevent).
+ */
+export interface EnumerationMembership {
+  /** §4's collection — `'gpus'`, `'serving'`. */
+  readonly name: string;
+  /** This subject's identity WITHIN that collection: a card index, a serving instance id. */
+  readonly member: string;
+}
+
+/**
+ * ⚠⚠ **12d/RECONCILE — one read of one of §4's enumerated collections: who was IN it, and
+ * whose row we threw away.**
+ *
+ * §9 row 2 gives retirement two conditions and this carries them as two fields, because
+ * **they are different facts and a later reader needs them apart**:
+ *
+ * - `members` — *"the collection … was read successfully **and it was not in it**"*. The
+ *   membership this poll actually saw, spelled exactly as the projection that minted the
+ *   condition spells its {@link EnumerationMembership.member}.
+ * - `held` — ⚠ 12d's own clause: a row we **refused** named this subject, so we did not read
+ *   it at all and may not show it absent even though it is not in `members`.
+ *
+ * ⚠⚠ **`members` is not an optimisation of `held`, and folding the two into one set was
+ * rejected.** The anti-vacuity assertions on this value depend on telling them apart — *"a fix
+ * that held everything back everywhere retires nothing"* is only checkable while "everything
+ * present" and "everything refused" are separate lists. It is this project's own rule one
+ * level in: two different facts must not render as one value (§0.17).
+ */
+export interface EnumerationRead {
+  /**
+   * The members of the collection **this poll read**. A condition whose member is in here is
+   * still on the machine, so its absence from this poll's *conditions* is O12's *no band, no
+   * condition* — a reading that stopped answering — and never a departure.
+   */
+  readonly members: ReadonlySet<string>;
+  /**
+   * The members whose row this client **refused**, so their absence from `members` is our
+   * failure to read rather than the server's omission. ⚠ Empty is the ordinary case.
+   */
+  readonly held: ReadonlySet<string>;
+}
+
+/**
+ * ⚠⚠ **12d — which of §4's enumerated collections this poll read, and, per collection, what
+ * it saw.**
+ *
+ * A key present is *this collection was read*, which is what §9's **retired** rests on. Its
+ * value is the {@link EnumerationRead} for that collection; a member in **either** of its two
+ * sets stays **stale**, keeping its band, its "since" and its place in the count, while every
+ * other absent member of the same collection retires normally.
+ *
+ * ⚠ An entry whose `held` is empty is the ordinary case and means *nothing was held back* — it
+ * is not the same as the key being absent, which is *the collection was not read at all*. This
+ * is §3.1's `null` ≠ `[]` discipline, one more level in.
+ */
+export type EnumerationsRead = ReadonlyMap<string, EnumerationRead>;
+
+/**
  * One §6.3 row evaluated against **this poll's** reading.
  *
  * ⚠ `rawSeverity` is the undebounced band, and it is named that way on purpose: it is
@@ -189,8 +273,8 @@ export interface ConditionObservation {
   /** This poll's §6.3 band, **undebounced**. */
   readonly rawSeverity: Severity;
   /**
-   * The §4 collection whose enumeration produced this subject — `'gpus'`, `'serving'` — or
-   * `null` when nothing enumerates it.
+   * The §4 collection whose enumeration produced this subject, **and this subject's identity
+   * within it** ({@link EnumerationMembership}) — or `null` when nothing enumerates it.
    *
    * ⚠ This is what makes §9's *retired* decidable without a second copy of any subject's
    * naming rule. `unit:llama-server@0.service` and `unit:gpu-fan-control.service` are the
@@ -200,8 +284,11 @@ export interface ConditionObservation {
    *
    * `null` (or absent) means the subject cannot be retired: nothing enumerates it, so its
    * disappearance is always *we stopped being able to look*.
+   *
+   * ⚠ 12d widened this from a bare collection name to the pair. The member is what §9's
+   * per-subject exclusion compares against, and it is **not** the condition's `subject`.
    */
-  readonly enumeration?: string | null;
+  readonly enumeration?: EnumerationMembership | null;
 }
 
 /** Build a {@link ConditionObservation}, deriving its {@link ConditionId}. */
@@ -472,11 +559,11 @@ export interface DisplayedCondition {
    */
   readonly lastSeenMs: number;
   /** {@link ConditionObservation.enumeration}, carried forward so §9 can retire it later. */
-  readonly enumeration: string | null;
+  readonly enumeration: EnumerationMembership | null;
 }
 
 /** No collection was read, so nothing may be retired. */
-const EMPTY_ENUMERATIONS: ReadonlySet<string> = new Set<string>();
+const EMPTY_ENUMERATIONS: EnumerationsRead = new Map<string, EnumerationRead>();
 
 /**
  * Two observations of one id that did not agree — §9's dedupe, reporting its own work.
@@ -562,8 +649,15 @@ export interface PollOptions {
    *
    * ⚠ Defaults to empty, so a caller that supplies nothing can only make the dashboard
    * **louder**. An alarm is never dropped by silence.
+   *
+   * ⚠⚠ **12d — it is a MAP now, and the value is the exclusion.** §9's ruling of 2026-09-22:
+   * a serving list read in part *retires what it can*. The collection's key being present
+   * still means *this collection was read*; the members in its value are the ones this poll
+   * could not account for and which therefore go **stale** rather than retired. A caller
+   * holding the old `ReadonlySet<string>` does not compile, which is the point — every reader
+   * of "was this read" now has to say *for whom*.
    */
-  readonly enumerationsRead?: ReadonlySet<string>;
+  readonly enumerationsRead?: EnumerationsRead;
   /**
    * §6.4: **a gap (§6.7) ends any pending run.** True when the client was not sampling
    * immediately before this reading — hidden, paused, or a run of failed polls.
@@ -735,7 +829,33 @@ export const observePoll = (
     const hold = presenceHold(before, false, nowMs);
     const confirmedAbsent = !hold.confirmed;
 
-    const enumerated = previous.enumeration !== null && enumerationsRead.has(previous.enumeration);
+    // ⚠⚠ 12d — §9's ruling of 2026-09-22, and the whole of it is these four lines.
+    //
+    // `entry` is what this poll read of the collection. `undefined` is the collection not
+    // being read at all (nothing retires, as before). Otherwise §9 row 2's sentence, in the
+    // order it is written:
+    //
+    //   1. ⚠⚠ *"…and it was NOT IN IT"* — `!entry.members.has(member)`. **A subject still in
+    //      the collection has not left**, whatever its readings did. O12 is *no band, no
+    //      condition*, so a card that is still enumerated and whose `tempC` went `null` emits
+    //      nothing this poll — and without this clause that silence is indistinguishable from
+    //      a card that was pulled, which is verbatim §9's own "Because": *"a card at 90 °C
+    //      whose `nvidia-smi` then fails takes the header from `● 1 alarm` to `● all healthy`
+    //      … the dashboard turns green at the moment it loses the ability to look."*
+    //   2. 12d's own clause — `!entry.held.has(member)`: the collection was read, this subject
+    //      was not in it, and we still may not say it has left, because the row that would
+    //      have named it was refused.
+    //
+    // ⚠ Both comparisons are against `enumeration.member`, NEVER against `previous.subject`. A
+    // `unit:` condition's subject is a unit NAME and a refusal names an INSTANCE; comparing
+    // the wrong one silently protects nothing and retires the alarm this rule exists to keep.
+    const membership = previous.enumeration;
+    const entry = membership === null ? undefined : enumerationsRead.get(membership.name);
+    const enumerated =
+      membership !== null &&
+      entry !== undefined &&
+      !entry.members.has(membership.member) &&
+      !entry.held.has(membership.member);
     if (confirmedAbsent && enumerated) {
       // §6.5: **retired.** The subject has left the machine, and that is an answer.
       retired.push(previous);

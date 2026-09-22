@@ -1172,9 +1172,14 @@ REGRESSIONS = [
     # mutation removes is the ORIGINAL one and is still exactly what the name says.
     ("08-O14 a null enumeration counts as read, so a failed nvidia-smi retires every card",
      OBS_SRC,
-     "  if (snapshot.gpus !== null) read.add(GPU_ENUMERATION);\n"
-     "  if (serving.read === 'all') read.add(SERVING_ENUMERATION);",
-     "  read.add(GPU_ENUMERATION);\n  read.add(SERVING_ENUMERATION);",
+     "  if (snapshot.gpus !== null) {\n"
+     "    read.set(GPU_ENUMERATION, { members: gpuMembersOf(snapshot), held: NOTHING_HELD_BACK });\n"
+     "  }\n"
+     "  if (serving.read === 'all') {\n"
+     "    read.set(SERVING_ENUMERATION, { members: servingMembersOf(snapshot), held: NOTHING_HELD_BACK });\n"
+     "  }",
+     "  read.set(GPU_ENUMERATION, { members: gpuMembersOf(snapshot), held: NOTHING_HELD_BACK });\n"
+     "  read.set(SERVING_ENUMERATION, { members: servingMembersOf(snapshot), held: NOTHING_HELD_BACK });",
      [OBS, RUNTIME]),
 
     # ============= lib/client/observations.ts — D4, §6.5's ErrorSource -> panel join
@@ -1307,12 +1312,12 @@ REGRESSIONS = [
      OBS),
     ("12b-OB2 `unserved` and `unknown` collapse — we-looked-and-nobody-claims-it becomes an em dash",
      OBS_SRC,
-     "  return !complete || rows.some((s) => declaresGpus(s) && s.gpus === null)",
-     "  return !complete || rows.some((s) => declaresGpus(s))",
+     "  return rows.some((s) => declaresGpus(s) && s.gpus === null)",
+     "  return rows.some((s) => declaresGpus(s))",
      OBS),
     ("12b-OB3 an unreadable `gpus` yields `unserved`, asserting nothing serves a card we cannot see",
      OBS_SRC,
-     """  return !complete || rows.some((s) => declaresGpus(s) && s.gpus === null)
+     """  return rows.some((s) => declaresGpus(s) && s.gpus === null)
     ? { kind: 'unknown' }
     : { kind: 'unserved' };""",
      "  return { kind: 'unserved' };",
@@ -1448,28 +1453,28 @@ REGRESSIONS = [
 
     ("12c-WR10 one invalid serving row refuses the WHOLE snapshot again, blanking the dashboard",
      WIRE_SRC,
-     "    if (checked.ok) rows.push(checked.row);\n    else refusals.push(`serving[${String(i)}] was dropped: ${checked.why}`);",
-     "    if (checked.ok) rows.push(checked.row);\n    else { rows.length = 0; refusals.push(`serving[${String(i)}] was dropped: ${checked.why}`); }",
+     "    if (checked.ok) rows.push(checked.row);\n    else refusals.push({ message: `serving[${String(i)}] was dropped: ${checked.why}`, identity: checked.identity });",
+     "    if (checked.ok) rows.push(checked.row);\n    else { rows.length = 0; refusals.push({ message: `serving[${String(i)}] was dropped: ${checked.why}`, identity: checked.identity }); }",
      WIRE),
     ("12c-WR11 a dropped row is dropped SILENTLY, so the header can still read `all healthy`",
      WIRE_SRC,
-     "    else refusals.push(`serving[${String(i)}] was dropped: ${checked.why}`);",
+     "    else refusals.push({ message: `serving[${String(i)}] was dropped: ${checked.why}`, identity: checked.identity });",
      "    else void checked;",
      WIRE),
     ("12c-WR12 the refusal names the row's own `instance`, which may be the very thing that was wrong",
      WIRE_SRC,
-     "    else refusals.push(`serving[${String(i)}] was dropped: ${checked.why}`);",
-     "    else refusals.push(`serving[${String((entry as {instance?: unknown})?.instance)}] was dropped: ${checked.why}`);",
+     "    else refusals.push({ message: `serving[${String(i)}] was dropped: ${checked.why}`, identity: checked.identity });",
+     "    else refusals.push({ message: `serving[${String((entry as {instance?: unknown})?.instance)}] was dropped: ${checked.why}`, identity: checked.identity });",
      WIRE),
     ("12c-WR13 only the FIRST bad field is named, so a wholesale-wrong row reads like a one-field typo",
      WIRE_SRC,
-     "    return { ok: false, why: `${bad.map(quoted).join(', ')} did not validate` };",
-     "    return { ok: false, why: `${quoted(bad[0] ?? '')} did not validate` };",
+     "    return { ok: false, why: `${bad.map(quoted).join(', ')} did not validate`, identity: instance ?? null };",
+     "    return { ok: false, why: `${quoted(bad[0] ?? '')} did not validate`, identity: instance ?? null };",
      WIRE),
     ("12c-WR14 the refusals are PREPENDED, re-ordering every entry the server sent",
      WIRE_SRC,
-     "        : [...errors, ...serving.refusals.map((message) => ({ source: WIRE_REFUSAL_SOURCE, message }))],",
-     "        : [...serving.refusals.map((message) => ({ source: WIRE_REFUSAL_SOURCE, message })), ...errors],",
+     "        : [...errors, ...serving.refusals.map((r) => ({ source: WIRE_REFUSAL_SOURCE, message: r.message }))],",
+     "        : [...serving.refusals.map((r) => ({ source: WIRE_REFUSAL_SOURCE, message: r.message })), ...errors],",
      WIRE),
     # ⚠ The `Array.isArray` guard is spelled twice in this file — `arrayOf` has one too — so the
     # anchor carries the line above it. A mutation matching two sites tests whichever comes first.
@@ -1534,15 +1539,19 @@ REGRESSIONS = [
      "  const aNumeric = isNumericInstance(a);\n  const bNumeric = isNumericInstance(b);",
      "  const aNumeric = /^[0-9]+$/.test(a);\n  const bNumeric = /^[0-9]+$/.test(b);",
      UNITS),
-    ("12c-T02 the count of wire-refused serving rows is thrown away, so nothing downstream can see one",
+    ("12c-T02 the wire-refused serving rows are thrown away, so nothing downstream can see one",
      WIRE_SRC,
-     "  return { snapshot, tsMs, serving: servingEnumeration(serving.rows, serving.refusals.length) };",
-     "  return { snapshot, tsMs, serving: servingEnumeration(serving.rows, 0) };",
+     "  return { snapshot, tsMs, serving: servingEnumeration(serving.rows, serving.refusals.map((r) => r.identity)) };",
+     "  return { snapshot, tsMs, serving: servingEnumeration(serving.rows, []) };",
      WIRE),
     ("12c-T03 a refused serving row still counts as a READ enumeration, so §9 retires the instance",
      OBS_SRC,
-     "  if (serving.read === 'all') read.add(SERVING_ENUMERATION);",
-     "  if (serving.read !== 'none') read.add(SERVING_ENUMERATION);",
+     "  if (serving.read === 'all') {\n"
+     "    read.set(SERVING_ENUMERATION, { members: servingMembersOf(snapshot), held: NOTHING_HELD_BACK });\n"
+     "  }",
+     "  if (serving.read !== 'none') {\n"
+     "    read.set(SERVING_ENUMERATION, { members: servingMembersOf(snapshot), held: NOTHING_HELD_BACK });\n"
+     "  }",
      WIRE),
     ("12c-T05 numbers and names share ONE lexical fall-through, so the order is INTRANSITIVE and Array.sort's result depends on which pairs it compared",
      UNITS_SRC,
@@ -1551,9 +1560,83 @@ REGRESSIONS = [
      UNITS),
     ("12c-T04 the serving enumeration is suppressed by an EMPTY list rather than by a refusal, so a box whose instances really left never retires them",
      OBS_SRC,
-     "  if (serving.read === 'all') read.add(SERVING_ENUMERATION);",
-     "  if (serving.read !== 'none' && serving.rows.length > 0) read.add(SERVING_ENUMERATION);",
+     "  if (serving.read === 'all') {\n"
+     "    read.set(SERVING_ENUMERATION, { members: servingMembersOf(snapshot), held: NOTHING_HELD_BACK });\n"
+     "  }",
+     "  if (serving.read !== 'none' && serving.rows.length > 0) {\n"
+     "    read.set(SERVING_ENUMERATION, { members: servingMembersOf(snapshot), held: NOTHING_HELD_BACK });\n"
+     "  }",
      WIRE),
+
+    # ================================================ 12d — the two rulings of 2026-09-22
+    #
+    # ⚠⚠ §3.4: a partially-read list gets its OWN form on the card, distinct from the em dash.
+    # ⚠⚠ §9: a partial read retires what it can — the refused row's identity, when it parsed,
+    # is the only subject held back; when it did NOT parse, nothing retires at all.
+    #
+    # ⚠ The pairs below are deliberate: each rule has two directions, and a single mutation of
+    # a clause can only prove that *a* clause is there, never that it points the right way
+    # (HANDOVER §5).
+    ("12d-W1 every refused row reports an ANONYMOUS identity, so retirement is frozen for the whole enumeration again",
+     WIRE_SRC,
+     "    return { ok: false, why: `${bad.map(quoted).join(', ')} did not validate`, identity: instance ?? null };",
+     "    return { ok: false, why: `${bad.map(quoted).join(', ')} did not validate`, identity: null };",
+     [WIRE, OBS]),
+    ("12d-W2 a row refused FOR its `instance` reports the raw value as an identity, so §9 retires the subjects it never read",
+     WIRE_SRC,
+     "    return { ok: false, why: `${bad.map(quoted).join(', ')} did not validate`, identity: instance ?? null };",
+     "    return { ok: false, why: `${bad.map(quoted).join(', ')} did not validate`, identity: instance ?? String(field(value, 'instance')) };",
+     [WIRE, OBS]),
+    ("12d-O1 an ANONYMOUS refusal still reports the enumeration READ, which is the frozen branch optimised away",
+     OBS_SRC,
+     "    if (!anonymous) read.set(SERVING_ENUMERATION, { members: servingMembersOf(snapshot), held });",
+     "    read.set(SERVING_ENUMERATION, { members: servingMembersOf(snapshot), held });",
+     [WIRE, OBS]),
+    ("12d-O2 a NAMED refusal holds nothing back, so the subject whose row was refused retires at `normal`",
+     OBS_SRC,
+     "    if (!anonymous) read.set(SERVING_ENUMERATION, { members: servingMembersOf(snapshot), held });",
+     "    if (!anonymous) read.set(SERVING_ENUMERATION, { members: servingMembersOf(snapshot), held: NOTHING_HELD_BACK });",
+     [WIRE, OBS]),
+
+    # ⚠⚠ 12d/RECONCILE — the MEMBERSHIP half of §9 row 2, at the producer. A PAIR, one per
+    # collection, and each one is the coincidence this project keeps being caught by: on every
+    # other fixture in the tree the card indices and the instance identities are the same
+    # strings, so a membership read off the wrong collection — or off the row's array position
+    # — is byte-identical to the right answer. Both are wrong implementations, not deletions.
+    ("12d-O7 the GPU membership is read off the SERVING rows, so a card still enumerated is not recognised as present",
+     OBS_SRC,
+     "const gpuMembersOf = (snapshot: TelemetrySnapshot): ReadonlySet<string> =>\n"
+     "  new Set((snapshot.gpus ?? []).map((gpu) => String(gpu.index)));",
+     "const gpuMembersOf = (snapshot: TelemetrySnapshot): ReadonlySet<string> =>\n"
+     "  new Set((snapshot.serving ?? []).map((instance) => instance.instance));",
+     [OBS, WIRE]),
+    ("12d-O8 the serving membership is the rows' ARRAY POSITION rather than their identity, so a named instance is never recognised as present",
+     OBS_SRC,
+     "const servingMembersOf = (snapshot: TelemetrySnapshot): ReadonlySet<string> =>\n"
+     "  new Set((snapshot.serving ?? []).map((instance) => instance.instance));",
+     "const servingMembersOf = (snapshot: TelemetrySnapshot): ReadonlySet<string> =>\n"
+     "  new Set((snapshot.serving ?? []).map((_instance, i) => String(i)));",
+     [OBS, WIRE]),
+    ("12d-O3 a `unit:` condition is enumerated by its UNIT NAME, so the identity a refusal names can never match it",
+     OBS_SRC,
+     "        { name: SERVING_ENUMERATION, member: instance.instance },",
+     "        { name: SERVING_ENUMERATION, member: unit },",
+     [WIRE, OBS]),
+    ("12d-O4 a partial list answers with the EM DASH again, collapsing *we discarded part of the list* into *the reading failed*",
+     OBS_SRC,
+     "  if (!complete) return { kind: 'incomplete' };",
+     "  if (!complete) return { kind: 'unknown' };",
+     [OBS, WIRE]),
+    ("12d-O5 the old-server index fallback answers the em dash rather than saying the list was cut",
+     OBS_SRC,
+     "    if (matched === null && !complete) return { kind: 'incomplete' };",
+     "    if (matched === null && !complete) return { kind: 'unknown' };",
+     [OBS, WIRE]),
+    ("12d-O6 an unreadable `gpus` on a row we DID read outranks the cut list, so a refusal renders as a failed reading",
+     OBS_SRC,
+     "  if (!complete) return { kind: 'incomplete' };\n  return rows.some((s) => declaresGpus(s) && s.gpus === null)",
+     "  if (rows.some((s) => declaresGpus(s) && s.gpus === null)) return { kind: 'unknown' };\n  return !complete\n    ? { kind: 'incomplete' }\n    : rows.some((s) => declaresGpus(s) && s.gpus === null)",
+     [OBS, WIRE]),
 
     # ================================================ 12c/RECONCILE — the seam, and four guards
     #
@@ -1565,12 +1648,12 @@ REGRESSIONS = [
     # branch, because a single mutation proves only that *a* clause is there (HANDOVER §5).
     ("12c-R3 a REFUSED list still produces `unserved`, so a dropped row reads as *nobody serves this card*",
      OBS_SRC,
-     "  return !complete || rows.some((s) => declaresGpus(s) && s.gpus === null)",
+     "  if (!complete) return { kind: 'incomplete' };\n  return rows.some((s) => declaresGpus(s) && s.gpus === null)",
      "  return rows.some((s) => declaresGpus(s) && s.gpus === null)",
      [OBS, WIRE]),
     ("12c-R4 the old-server index fallback answers from a list it did not fully read, naming an instance for a row just dropped",
      OBS_SRC,
-     "    if (matched === null && !complete) return { kind: 'unknown' };\n",
+     "    if (matched === null && !complete) return { kind: 'incomplete' };\n",
      "",
      [OBS, WIRE]),
     # ⚠ The other direction of the same rule: a fix that answered `unknown` for everything would
@@ -1578,7 +1661,7 @@ REGRESSIONS = [
     # MIS-PINNED instance produces, and it is the property the whole inversion was built for.
     ("12c-R5 a COMPLETE list never produces `unserved` either, so a mis-pinned instance is invisible again",
      OBS_SRC,
-     "  return !complete || rows.some((s) => declaresGpus(s) && s.gpus === null)",
+     "  return rows.some((s) => declaresGpus(s) && s.gpus === null)",
      "  return true || rows.some((s) => declaresGpus(s) && s.gpus === null)",
      [OBS, WIRE]),
     # ⚠⚠ Added after the step-8 ledger reported the anti-vacuity half of `12c-A1`'s fix INERT, and

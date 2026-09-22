@@ -2768,9 +2768,21 @@ REGRESSIONS = [
     # and its assertion that a refused row renders an em dash rather than `no instance` needs a
     # wrong implementation in THIS ledger to be worth anything (the same arrangement `12c-GP21`
     # already uses one finding over).
+    # ⚠⚠ 12d — §3.4's ruling of 2026-09-22 at the panel that renders it: the third form.
+    ("12d-GP1 the partially-read card renders the EM DASH, which is what an unreadable `gpus` renders",
+     GPU_PANEL_SRC,
+     "      return { k: 'served by', v: 'list not fully read', title: null };",
+     "      return { k: 'served by', v: EM_DASH, title: null };",
+     [GPU_PANEL_TEST]),
+    ("12d-GP2 the partially-read card claims `no instance`, the positive claim a cut list cannot support",
+     GPU_PANEL_SRC,
+     "      return { k: 'served by', v: 'list not fully read', title: null };",
+     "      return { k: 'served by', v: 'no instance', title: null };",
+     [GPU_PANEL_TEST]),
+
     ("12c-GP22 a wire-REFUSED serving row makes the CARD claim `no instance`, which is the retirement defect one panel over",
      OBSERVATIONS_SRC,
-     "  return !complete || rows.some((s) => declaresGpus(s) && s.gpus === null)",
+     "  if (!complete) return { kind: 'incomplete' };\n  return rows.some((s) => declaresGpus(s) && s.gpus === null)",
      "  return rows.some((s) => declaresGpus(s) && s.gpus === null)",
      [GPU_PANEL_TEST]),
     # …and the panel's own half: the enumeration stops reaching the join, so the card is back to
@@ -2843,17 +2855,20 @@ def _assert_unique_ids() -> None:
     # ⚠ `12c-` added by 12c (§3.4's two rulings of 2026-09-17: instance ids become STRINGS and
     #   discovery accepts named instances; and `wire.ts` refuses the ROW, not the snapshot)
     #   — same instruction, same reasoning.
+    # ⚠ `12d-` added by 12d (§3.4's and §9's rulings of 2026-09-22: a partially-read `serving[]`
+    #   says so on the GPU card, and retires the subjects it could account for)
+    #   — same instruction, same reasoning.
     bad_prefix = sorted(
         k
         for k in seen
         if not k.startswith(
-            ("10a-", "10b-", "10c-", "10e-", "10f-", "10g-", "10h-", "12a-", "12b-", "12c-")
+            ("10a-", "10b-", "10c-", "10e-", "10f-", "10g-", "10h-", "12a-", "12b-", "12c-", "12d-")
         )
     )
     if bad_prefix:
         raise SystemExit(
             "!!! mutation ids must carry the creating step's prefix "
-            f"(10a-/10b-/10c-/10e-/10f-/10g-/10h-/12a-/12b-/12c-): {', '.join(bad_prefix)}"
+            f"(10a-/10b-/10c-/10e-/10f-/10g-/10h-/12a-/12b-/12c-/12d-): {', '.join(bad_prefix)}"
         )
 
 

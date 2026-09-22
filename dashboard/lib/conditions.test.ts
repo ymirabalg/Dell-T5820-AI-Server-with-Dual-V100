@@ -37,6 +37,8 @@ import type {
   ConditionObservation,
   ConditionState,
   DisplayedCondition,
+  EnumerationRead,
+  EnumerationsRead,
   StandingIds,
 } from './conditions';
 import { severityUfw } from './severity';
@@ -834,7 +836,26 @@ describe('⚠ §9: one reading in two panels is one condition, at the worst seve
 // §9 / §6.5 — a condition whose subject stops being reported
 // ---------------------------------------------------------------------------
 
-const GPUS = new Set(['gpus']);
+/**
+ * ⚠⚠ 12d — `enumerationsRead` is a MAP now (§9's ruling of 2026-09-22): the key is *this
+ * collection was read* and the value is what this poll saw in it. `GPUS` is the ordinary
+ * answer for a BLIND poll — `gpus` read, nobody in it, nothing held back — and `NOTHING_READ`
+ * is the collection that was not read at all, which every test below pairs it with.
+ *
+ * ⚠⚠ 12d/RECONCILE — the value is a PAIR. `members` is §9's *"and it was not in it"*, `held`
+ * is 12d's *"and its row was not one we refused"*, and a subject retires only when it is in
+ * neither. Spelling them out at every call site is deliberate: a helper that defaulted one of
+ * them would put the unsafe answer where nobody reads it, which is `12c-A5` exactly.
+ */
+const readSaw = (members: readonly string[], held: readonly string[]): EnumerationRead => ({
+  members: new Set(members),
+  held: new Set(held),
+});
+
+const GPUS: EnumerationsRead = new Map([['gpus', readSaw([], [])]]);
+
+/** No collection was read at all, so nothing may retire. */
+const NOTHING_READ: EnumerationsRead = new Map();
 
 const gpuTempIn = (index: string, rawSeverity: Severity): ConditionObservation =>
   observation({
@@ -843,7 +864,7 @@ const gpuTempIn = (index: string, rawSeverity: Severity): ConditionObservation =
     label: `GPU ${index} temperature`,
     value: '90 °C',
     rawSeverity,
-    enumeration: 'gpus',
+    enumeration: { name: 'gpus', member: index },
   });
 
 /** A session with GPU 0 confirmed at `alarm` — the 90 °C card §9's row is written about. */
@@ -874,7 +895,7 @@ describe('⚠ §9: an unobservable alarm is unknown, not resolved', () => {
     expect(alarmCount(hot.displayed)).toBe(1);
 
     // `gpus: null` — the enumeration could not be read, so nothing was learned about the card.
-    const blind = observePoll(hot.state, [], NOTHING_STANDING, 90_000, { enumerationsRead: new Set() });
+    const blind = observePoll(hot.state, [], NOTHING_STANDING, 90_000, { enumerationsRead: NOTHING_READ });
     expect(aggregateSeverity(blind.displayed)).toBe('alarm');
     expect(alarmCount(blind.displayed)).toBe(1);
     expect(blind.displayed[0]?.stale).toBe(true);
@@ -943,7 +964,7 @@ describe('⚠ §9: an unobservable alarm is unknown, not resolved', () => {
         enumerationsRead: GPUS,
       }).state;
     }
-    const blind = observePoll(state, [], NOTHING_STANDING, 90_000, { enumerationsRead: new Set() });
+    const blind = observePoll(state, [], NOTHING_STANDING, 90_000, { enumerationsRead: NOTHING_READ });
     expect(blind.displayed[0]?.severity).toBe('normal');
     expect(blind.displayed[0]?.displaySeverity).toBe('normal');
     expect(aggregateSeverity(blind.displayed)).toBe('normal');
@@ -966,16 +987,16 @@ describe('⚠ §9: an unobservable alarm is unknown, not resolved', () => {
 
   test('⚠ the stale edge is reported once, and the reading returning is reported once', () => {
     const state = hotCard();
-    const first = observePoll(state, [], NOTHING_STANDING, 40_000, { enumerationsRead: new Set() });
+    const first = observePoll(state, [], NOTHING_STANDING, 40_000, { enumerationsRead: NOTHING_READ });
     expect(first.wentStale).toEqual([]);
 
     const confirmed = observePoll(first.state, [], NOTHING_STANDING, 55_000, {
-      enumerationsRead: new Set(),
+      enumerationsRead: NOTHING_READ,
     });
     expect(confirmed.wentStale.map((d) => d.id)).toEqual(['gpu_temp:0']);
 
     const again = observePoll(confirmed.state, [], NOTHING_STANDING, 70_000, {
-      enumerationsRead: new Set(),
+      enumerationsRead: NOTHING_READ,
     });
     expect(again.wentStale).toEqual([]);
 
@@ -1006,7 +1027,7 @@ describe('⚠ §9: an unobservable alarm is unknown, not resolved', () => {
     }
     // `nvidia-smi` stops answering for long enough to confirm both cards stale…
     for (const at of [40_000, 55_000]) {
-      state = observePoll(state, [], NOTHING_STANDING, at, { enumerationsRead: new Set() }).state;
+      state = observePoll(state, [], NOTHING_STANDING, at, { enumerationsRead: NOTHING_READ }).state;
     }
     // …then it answers again, with both cards…
     state = observePoll(state, both, NOTHING_STANDING, 60_000, { enumerationsRead: GPUS }).state;
@@ -1021,9 +1042,9 @@ describe('⚠ §9: an unobservable alarm is unknown, not resolved', () => {
 
   test('⚠ a returning reading is believed at once, not after another ten seconds', () => {
     const state = hotCard();
-    const gone = observePoll(state, [], NOTHING_STANDING, 40_000, { enumerationsRead: new Set() });
+    const gone = observePoll(state, [], NOTHING_STANDING, 40_000, { enumerationsRead: NOTHING_READ });
     const confirmed = observePoll(gone.state, [], NOTHING_STANDING, 55_000, {
-      enumerationsRead: new Set(),
+      enumerationsRead: NOTHING_READ,
     });
     const back = observePoll(confirmed.state, [gpuTempIn('0', 'alarm')], NOTHING_STANDING, 55_100, {
       enumerationsRead: GPUS,
@@ -1057,7 +1078,7 @@ describe('⚠ §9: an unobservable alarm is unknown, not resolved', () => {
     const holdBefore = state.holds.get('gpu_temp:0');
 
     // Twenty minutes of not being read.
-    const blind = observePoll(state, [], NOTHING_STANDING, 1_200_000, { enumerationsRead: new Set() });
+    const blind = observePoll(state, [], NOTHING_STANDING, 1_200_000, { enumerationsRead: NOTHING_READ });
     expect(blind.state.holds.get('gpu_temp:0')).toBe(holdBefore);
     expect(blind.displayed[0]?.severity).toBe('normal');
   });
@@ -1128,3 +1149,211 @@ describe('⚠ §6.4: ten seconds of wall time means ten seconds the client was S
     expect(after?.pendingSinceMs).toBe(500_000);
   });
 });
+
+// ---------------------------------------------------------------------------
+// ⚠⚠ 12d — §9's ruling of 2026-09-22: an enumeration read IN PART
+// ---------------------------------------------------------------------------
+
+/**
+ * ⚠⚠ **A collection read in part retires what it can, and the exclusion is PER SUBJECT.**
+ *
+ * `observePoll` is handed a map — collection name → the members whose absence this poll may
+ * not interpret. A key present still means *this collection was read*; a member in its value
+ * is *and this one we could not account for*, which is **stale**, never retired.
+ *
+ * ⚠ **The subjects below deliberately do NOT equal their members**, because that is the
+ * conflation this rule can be written with and still pass: a `unit:` condition's subject is
+ * `llama-server@0.service` while the thing a refused `serving[]` row names is `0`. A fixture
+ * whose subject and member coincide — every GPU condition in this file — cannot tell a
+ * correct exclusion from one compared against the wrong field.
+ */
+const SERVING = 'serving';
+
+const servingUnit = (member: string, rawSeverity: Severity): ConditionObservation =>
+  observation({
+    kind: 'unit',
+    subject: `llama-server@${member}.service`,
+    label: `llama-server@${member}.service`,
+    value: 'failed',
+    rawSeverity,
+    enumeration: { name: SERVING, member },
+  });
+
+const servingHealth = (member: string, rawSeverity: Severity): ConditionObservation =>
+  observation({
+    kind: 'health',
+    subject: member,
+    label: `llama-server@${member} /health`,
+    value: 'unreachable',
+    rawSeverity,
+    enumeration: { name: SERVING, member },
+  });
+
+/** Two instances confirmed — `0`, which a later poll refuses, and `7`, which leaves. */
+const twoInstances = (): ConditionState => {
+  let state = EMPTY_CONDITION_STATE;
+  const observed = [
+    servingUnit('0', 'alarm'),
+    servingHealth('0', 'alarm'),
+    servingUnit('7', 'alarm'),
+    servingHealth('7', 'alarm'),
+  ];
+  for (const at of [0, 30_000]) {
+    state = observePoll(state, observed, NOTHING_STANDING, at, {
+      enumerationsRead: new Map([[SERVING, readSaw(['0', '7'], [])]]),
+    }).state;
+  }
+  return state;
+};
+
+/** Four polls with nothing observed, so §6.4's ten-second absence debounce clears. */
+const goBlind = (state: ConditionState, read: EnumerationsRead) => {
+  const retired: string[] = [];
+  const stale: string[] = [];
+  let next = state;
+  let at = 60_000;
+  for (let i = 0; i < 4; i += 1) {
+    const poll = observePoll(next, [], NOTHING_STANDING, at, { enumerationsRead: read });
+    retired.push(...poll.retired.map((c) => c.id));
+    stale.push(...poll.wentStale.map((c) => c.id));
+    next = poll.state;
+    at += 5_000;
+  }
+  return { retired: retired.sort(), stale: stale.sort(), displayed: next };
+};
+
+describe('⚠⚠ 12d — §9: an enumeration read in PART retires the subjects it could account for', () => {
+  test('⚠⚠ the held-back member goes STALE while every other absent member RETIRES', () => {
+    // ⚠⚠ The ruling, in one assertion pair. Instance `0`'s row was refused (we could not read
+    // it), instance `7` genuinely left the machine, and the two must not share an answer —
+    // which is exactly what 12c's all-or-nothing gave them, keeping `7`'s alarm in the count
+    // indefinitely.
+    const { retired, stale } = goBlind(twoInstances(), new Map([[SERVING, readSaw([], ['0'])]]));
+    expect(retired).toEqual(['health:7', 'unit:llama-server@7.service']);
+    expect(stale).toEqual(['health:0', 'unit:llama-server@0.service']);
+  });
+
+  test('⚠⚠ the exclusion is matched against the MEMBER, never against the condition’s own subject', () => {
+    // ⚠⚠ The `unit:` half is the whole reason `EnumerationMembership` is a pair. Its subject
+    // is `llama-server@0.service` and the exclusion names `0`; a comparison against `subject`
+    // finds nothing, retires the row, and looks exactly like the correct implementation on
+    // every GPU fixture in this file, where subject and member are the same string.
+    const { retired, stale } = goBlind(twoInstances(), new Map([[SERVING, readSaw([], ['0'])]]));
+    expect(retired).not.toContain('unit:llama-server@0.service');
+    expect(stale).toContain('unit:llama-server@0.service');
+    // …and the exclusion spelled the WRONG way round protects nothing, so the twin below is
+    // what says the map is being read at all rather than everything surviving by accident.
+    const bySubject = goBlind(
+      twoInstances(),
+      new Map([[SERVING, readSaw([], ['llama-server@0.service'])]]),
+    );
+    expect(bySubject.retired).toContain('unit:llama-server@0.service');
+    expect(bySubject.retired).toContain('health:0');
+  });
+
+  test('⚠⚠ an EMPTY exclusion set retires everything absent — it is not the same as the key being missing', () => {
+    // §3.1's `null` ≠ `[]`, one level further in, and it is the anti-vacuity half of the test
+    // above: a rule that protected every subject would pass "the refused one stayed" and
+    // would never retire anything again.
+    const read = goBlind(twoInstances(), new Map([[SERVING, readSaw([], [])]]));
+    expect(read.retired).toEqual([
+      'health:0',
+      'health:7',
+      'unit:llama-server@0.service',
+      'unit:llama-server@7.service',
+    ]);
+    expect(read.stale).toEqual([]);
+  });
+
+  test('⚠⚠ a MISSING key still retires nothing at all — the frozen branch survives the narrowing', () => {
+    // ⚠⚠ §9: *"not a special case to be optimised away, it is the honest answer to we cannot
+    // tell who is missing."* This is that branch at `observePoll`, and the `wire.test.ts` pair
+    // is the same rule end to end from a real refused row.
+    const unread = goBlind(twoInstances(), new Map());
+    expect(unread.retired).toEqual([]);
+    expect(unread.stale).toEqual([
+      'health:0',
+      'health:7',
+      'unit:llama-server@0.service',
+      'unit:llama-server@7.service',
+    ]);
+  });
+
+  test('⚠⚠ 12d/RECONCILE — a member STILL IN the collection is never retired, however silent its readings', () => {
+    // ⚠⚠ §9 row 2's own "Because", at the layer that decides it: *"a card at 90 °C whose
+    // `nvidia-smi` then fails takes the header from `● 1 alarm` to `● all healthy` … the
+    // dashboard turns green at the moment it loses the ability to look."* O12 is *no band, no
+    // condition*, so a subject that is still in the collection and has merely stopped
+    // reporting emits nothing — and *emitted nothing* is not *left the machine*.
+    //
+    // Nothing is held back here: `held` is empty, so the ONLY thing standing between these
+    // four alarms and the reduction is membership.
+    const { retired, stale } = goBlind(twoInstances(), new Map([[SERVING, readSaw(['0', '7'], [])]]));
+    expect(retired).toEqual([]);
+    expect(stale).toEqual([
+      'health:0',
+      'health:7',
+      'unit:llama-server@0.service',
+      'unit:llama-server@7.service',
+    ]);
+  });
+
+  test('⚠⚠ 12d/RECONCILE — membership is per MEMBER, so the one that left retires while the one still listed stays', () => {
+    // The anti-vacuity twin of the test above, and the pair is what makes either mean
+    // anything: a rule that protected everything present would also protect `7`, and a rule
+    // that ignored membership would retire `0`. ⚠ `0` is still in the collection, `7` is not,
+    // and nothing is held back — so `held` cannot be what produces this answer.
+    const { retired, stale } = goBlind(twoInstances(), new Map([[SERVING, readSaw(['0'], [])]]));
+    expect(retired).toEqual(['health:7', 'unit:llama-server@7.service']);
+    expect(stale).toEqual(['health:0', 'unit:llama-server@0.service']);
+  });
+
+  test('⚠⚠ 12d/RECONCILE — membership is matched against the MEMBER, never against the subject', () => {
+    // The same conflation `held` is pinned against, one clause over: a `unit:` condition's
+    // subject is `llama-server@0.service` and the collection lists `0`. Reading membership off
+    // `subject` finds nothing, and every GPU fixture in this file would still pass.
+    const bySubject = goBlind(
+      twoInstances(),
+      new Map([[SERVING, readSaw(['llama-server@0.service', 'llama-server@7.service'], [])]]),
+    );
+    expect(bySubject.retired).toEqual([
+      'health:0',
+      'health:7',
+      'unit:llama-server@0.service',
+      'unit:llama-server@7.service',
+    ]);
+  });
+
+  test('⚠ a member listed in ANOTHER collection does not protect this one', () => {
+    // The membership clause's own cross-collection case. `gpus` listing `0` must not keep a
+    // serving subject called `0` alive — a card index and an instance identity are both `0` on
+    // this box, which is the coincidence available to be relied on by accident.
+    const { retired } = goBlind(
+      twoInstances(),
+      new Map([
+        [SERVING, readSaw([], [])],
+        ['gpus', readSaw(['0', '7'], [])],
+      ]),
+    );
+    expect(retired).toContain('health:0');
+    expect(retired).toContain('unit:llama-server@0.service');
+    expect(retired).toContain('health:7');
+  });
+
+  test('⚠ a member held back in ANOTHER collection does not protect this one', () => {
+    // The exclusion is looked up by collection, so `gpus` holding back `0` must not keep a
+    // serving subject called `0` alive. Two collections can name the same member — a card
+    // index and an instance identity are both `0` on this box — which is the second
+    // coincidence available to be relied on by accident.
+    const { retired } = goBlind(
+      twoInstances(),
+      new Map([
+        [SERVING, readSaw([], [])],
+        ['gpus', readSaw([], ['0'])],
+      ]),
+    );
+    expect(retired).toContain('health:0');
+    expect(retired).toContain('unit:llama-server@0.service');
+  });
+});
+

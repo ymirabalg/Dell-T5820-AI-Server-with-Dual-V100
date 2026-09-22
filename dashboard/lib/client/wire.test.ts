@@ -29,6 +29,7 @@ import {
   conditionsFrom,
   enumerationsRead,
   errorsForPanel,
+  servedBy,
 } from './observations';
 import { parseSnapshot } from './wire';
 
@@ -733,6 +734,19 @@ describe('⚠⚠ 12c/TEST — a refused row is NOT READ, which is not the same a
     };
   };
 
+  /**
+   * ⚠⚠ 12d — the OTHER kind of refusal: the row's own `instance` is what failed, so the
+   * refusal names nobody. `1.5` is not a safe-integer identity and is refused by
+   * `instanceId`; every other field is left valid, so `instance` is the ONLY reason.
+   */
+  const withAnonymousRows = (howMany: number): Record<string, unknown> => {
+    const rows = body(servingPopulated)['serving'] as Record<string, unknown>[];
+    return {
+      ...body(servingPopulated),
+      serving: rows.map((row, i) => (i < howMany ? { ...row, instance: 1.5 } : row)),
+    };
+  };
+
   test('⚠⚠ `WireSnapshot.serving` says whether the rows are ALL of them, and names how many were dropped', () => {
     // ⚠ The fact is carried on `WireSnapshot` rather than recovered from `errors[]`, because
     // recovering it means matching `serving[…] was dropped` in a message — the text-matching
@@ -746,8 +760,52 @@ describe('⚠⚠ 12c/TEST — a refused row is NOT READ, which is not the same a
     // ⚠ An empty `serving[]` is READ and declares none. Retiring is the right answer there,
     // and an enumeration that could not tell the two apart would suppress it.
     expect(parseSnapshot(withField('serving', []))?.serving).toEqual({ read: 'all', rows: [] });
-    expect(parseSnapshot(withBrokenRows(1))?.serving).toMatchObject({ read: 'partial', refused: 1 });
-    expect(parseSnapshot(withBrokenRows(2))?.serving).toMatchObject({ read: 'partial', refused: 2 });
+    // ⚠⚠ 12d — `refused` is the refused rows' IDENTITIES, because §9's ruling of 2026-09-22
+    // does opposite things depending on whether they parsed. A bad `port` leaves the identity
+    // intact, so these name their rows…
+    expect(parseSnapshot(withBrokenRows(1))?.serving).toMatchObject({ read: 'partial', refused: ['0'] });
+    expect(parseSnapshot(withBrokenRows(2))?.serving).toMatchObject({ read: 'partial', refused: ['0', '1'] });
+    // …and a bad `instance` leaves nothing to name. ⚠ The pair is the test: a count could not
+    // tell these two apart, and they are the two branches of the ruling.
+    expect(parseSnapshot(withAnonymousRows(1))?.serving).toMatchObject({ read: 'partial', refused: [null] });
+    expect(parseSnapshot(withAnonymousRows(2))?.serving).toMatchObject({ read: 'partial', refused: [null, null] });
+  });
+
+  test('⚠⚠ 12d — a row refused for its `instance` reports NO identity even when the rest of it is perfect', () => {
+    // ⚠ The anti-vacuity half of the line above, and it needs saying separately: `identity`
+    // must come from the `instance` field's OWN validation, not from "did anything fail".
+    // A refusal that reported the raw value, or `String(value)`, or the row's array position
+    // would put an identity no condition can ever carry into §9's exclusion set — and an
+    // exclusion that matches nothing silently retires the alarm this rule exists to keep.
+    const anonymous = parseSnapshot(withAnonymousRows(1))!;
+    expect(anonymous.serving.read === 'partial' ? anonymous.serving.refused : null).toEqual([null]);
+    expect(anonymous.snapshot.errors.filter((e) => e.message.startsWith('serving['))[0]?.message).toBe(
+      'serving[0] was dropped: `instance` did not validate',
+    );
+    // …and the twin: the same row with a bad `port` instead names `0`, and says so in the
+    // message too, so this test cannot pass by the refusal machinery being broken outright.
+    const named = parseSnapshot(withBrokenRows(1))!;
+    expect(named.serving.read === 'partial' ? named.serving.refused : null).toEqual(['0']);
+    expect(named.snapshot.errors.filter((e) => e.message.startsWith('serving['))[0]?.message).toBe(
+      'serving[0] was dropped: `port` did not validate',
+    );
+
+    // ⚠⚠ 12d/TEST — `''` IS NOT `null`, and one of them is falsy. §9's two branches are
+    // separated by `identity === null`, so an implementation that asked `if (!identity)` — or
+    // one that let an empty string through `instanceId` — would put `''` into the exclusion
+    // set, where it matches no condition and therefore protects nothing while claiming to.
+    // Both spellings below must arrive as `null`, the anonymous branch, not as an identity.
+    const rows = body(servingPopulated)['serving'] as Record<string, unknown>[];
+    for (const rubbish of ['', '01', ' 0', 'a b']) {
+      const parsed = parseSnapshot({
+        ...body(servingPopulated),
+        serving: [{ ...(rows[0] as object), instance: rubbish }, rows[1] as object],
+      });
+      expect(parsed!.serving.read === 'partial' ? parsed!.serving.refused : null).toEqual([null]);
+      // …and nothing is held back, so the whole enumeration stays frozen rather than the
+      // client silently excluding an identity no row could ever carry.
+      expect([...enumerationsRead(parsed!.snapshot, parsed!.serving).keys()]).toEqual([GPU_ENUMERATION]);
+    }
   });
 
   test('⚠⚠ the enumeration holds the SAME array as `snapshot.serving`, so the two cannot drift', () => {
@@ -790,19 +848,59 @@ describe('⚠⚠ 12c/TEST — a refused row is NOT READ, which is not the same a
     expect('instance' in (refusal[0] as object)).toBe(false);
   });
 
-  test('⚠⚠ ONE refused row suppresses the WHOLE enumeration, because the client cannot say which', () => {
-    // A row may have been refused FOR ITS `instance` — that is one of the seven fields — so
-    // there is no identity to exclude and no way to narrow the suppression to the row. The
-    // client knows only that it failed to read some of them.
+  test('⚠⚠ 12d — a NAMED refusal leaves the enumeration READ, holding back only the row it named', () => {
+    // ⚠⚠ This test said the opposite until §9's ruling of 2026-09-22, and the sentence it used
+    // to make — *one refusal suppresses the whole enumeration, because the client cannot say
+    // which* — is now true of exactly one case and is pinned as such in the test below. The
+    // owner's finding: 12c's all-or-nothing kept an instance that genuinely LEFT the machine
+    // in the alarm count indefinitely, measured still there at 20 minutes, because an
+    // unrelated row failed validation. Safe, and unbounded.
     const one = parseSnapshot(withBrokenRows(1));
     expect(one?.snapshot.serving?.map((row) => row.instance)).toEqual(['1']);
-    expect([...enumerationsRead(one!.snapshot, one!.serving)]).toEqual([GPU_ENUMERATION]);
-    // …and with nothing refused the enumeration is read, which is the other half of the rule.
+    const read = enumerationsRead(one!.snapshot, one!.serving);
+    expect([...read.keys()].sort()).toEqual([GPU_ENUMERATION, SERVING_ENUMERATION]);
+    // ⚠ Exactly the refused identity, and nothing else. `['0','1']` would freeze the instance
+    // that is right there in the array, and `[]` would retire the one we could not read.
+    expect([...(read.get(SERVING_ENUMERATION)?.held ?? [])]).toEqual(['0']);
+    // ⚠⚠ 12d/RECONCILE — and the membership beside it is the row we DID read. Two lists, not
+    // one: `'0'` is who we failed to read, `'1'` is who is demonstrably still there.
+    expect([...(read.get(SERVING_ENUMERATION)?.members ?? [])]).toEqual(['1']);
+    // …and with nothing refused the enumeration is read holding NOTHING back, which is the
+    // other half of the rule — an empty set and an absent key are different answers (§3.1).
     const clean = parseSnapshot(body(servingPopulated));
-    expect([...enumerationsRead(clean!.snapshot, clean!.serving)].sort()).toEqual([
+    const cleanRead = enumerationsRead(clean!.snapshot, clean!.serving);
+    expect([...cleanRead.keys()].sort()).toEqual([GPU_ENUMERATION, SERVING_ENUMERATION]);
+    expect([...(cleanRead.get(SERVING_ENUMERATION)?.held ?? [])]).toEqual([]);
+    expect([...(cleanRead.get(SERVING_ENUMERATION)?.members ?? [])].sort()).toEqual(['0', '1']);
+  });
+
+  test('⚠⚠ 12d — a row refused for its own IDENTITY freezes retirement for the WHOLE enumeration, and that is the honest answer', () => {
+    // ⚠⚠ **THE BRANCH §9's ruling says must not be optimised away**, pinned here so that
+    // narrowing it later is a deliberate act rather than a tidy-up. A row whose `instance`
+    // did not validate names no subject, so NO subject can be shown absent: the serving key
+    // is not reported at all and every remembered serving condition goes stale.
+    const anonymous = parseSnapshot(withAnonymousRows(1));
+    expect(anonymous?.snapshot.serving?.map((row) => row.instance)).toEqual(['1']);
+    expect([...enumerationsRead(anonymous!.snapshot, anonymous!.serving).keys()]).toEqual([
       GPU_ENUMERATION,
-      SERVING_ENUMERATION,
     ]);
+    // ⚠ And ONE anonymous refusal among named ones is enough — a partially-identified list is
+    // still a list we cannot read absences from. The named twin beside it is what stops this
+    // from being "the serving enumeration is never reported".
+    const rows = body(servingPopulated)['serving'] as Record<string, unknown>[];
+    const mixed = parseSnapshot({
+      ...body(servingPopulated),
+      serving: [{ ...(rows[0] as object), port: 'nope' }, { ...(rows[1] as object), instance: 1.5 }],
+    });
+    expect(mixed!.serving.read).toBe('partial');
+    expect([...enumerationsRead(mixed!.snapshot, mixed!.serving).keys()]).toEqual([GPU_ENUMERATION]);
+    const bothNamed = parseSnapshot(withBrokenRows(2));
+    const bothRead = enumerationsRead(bothNamed!.snapshot, bothNamed!.serving);
+    expect([...bothRead.keys()].sort()).toEqual([GPU_ENUMERATION, SERVING_ENUMERATION]);
+    expect([...(bothRead.get(SERVING_ENUMERATION)?.held ?? [])].sort()).toEqual(['0', '1']);
+    // ⚠ Both rows refused, so the list we read is EMPTY — and that is not the same fact as
+    // both identities being held back, which is why they are separate sets.
+    expect([...(bothRead.get(SERVING_ENUMERATION)?.members ?? [])]).toEqual([]);
   });
 
   test('⚠⚠ a refused row leaves its ALARM in the ledger instead of retiring it at `normal`', () => {
@@ -850,6 +948,317 @@ describe('⚠⚠ 12c/TEST — a refused row is NOT READ, which is not the same a
     const alarmRow = displayed.find((c) => c.id === 'health:1');
     expect(alarmRow?.stale).toBe(true);
     expect(displayed.filter((c) => c.id.startsWith('health:')).map((c) => c.id)).toEqual(['health:0', 'health:1']);
+  });
+
+  /**
+   * ⚠⚠ **12d/RECONCILE — the four polls, then four more, that every test below shares.**
+   *
+   * Confirm the first body past §6.4's ten-second debounce, then run the second body four
+   * times so an absence has cleared it too. ⚠ A shorter sequence retires nothing whatever the
+   * rule is, which is how both defects in this file stayed invisible.
+   */
+  const retireSequence = (first: unknown, then: unknown) => {
+    const before = parseSnapshot(first);
+    const after = parseSnapshot(then);
+    if (before === null || after === null) throw new Error('a fixture stopped validating');
+    let state = EMPTY_CONDITION_STATE;
+    let at = 1_000;
+    for (let i = 0; i < 4; i += 1) {
+      state = observePoll(state, conditionsFrom(before.snapshot), NOTHING_STANDING, at, {
+        enumerationsRead: enumerationsRead(before.snapshot, before.serving),
+      }).state;
+      at += 5_000;
+    }
+    const retired: string[] = [];
+    const stale: string[] = [];
+    let displayed: readonly { id: string; stale: boolean }[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const poll = observePoll(state, conditionsFrom(after.snapshot), NOTHING_STANDING, at, {
+        enumerationsRead: enumerationsRead(after.snapshot, after.serving),
+      });
+      retired.push(...poll.retired.map((c) => c.id));
+      stale.push(...poll.wentStale.map((c) => c.id));
+      displayed = poll.displayed;
+      state = poll.state;
+      at += 5_000;
+    }
+    return { retired: retired.sort(), stale: stale.sort(), displayed, after };
+  };
+
+  /** Two cards, the second one alarming at 95 °C, on a body that also carries `serving[]`. */
+  const twoCards = (secondTempC: number | null): Record<string, unknown> => {
+    const base = body(servingPopulated);
+    const card = (base['gpus'] as Record<string, unknown>[])[0] as Record<string, unknown>;
+    return { ...base, gpus: [card, { ...card, index: 1, bus: '17:00.0', tempC: secondTempC }] };
+  };
+
+  test('⚠⚠ 12d/RECONCILE — a card STILL ENUMERATED whose `tempC` goes null KEEPS its alarm', () => {
+    // ⚠⚠ **§9 row 2's own "Because", as a test**: *"a card at 90 °C whose `nvidia-smi` then
+    // fails takes the header from `● 1 alarm` to `● all healthy` with no log line — the
+    // dashboard turns green at the moment it loses the ability to look."* Measured doing
+    // exactly that on this tree before this phase: `gpus` carried `[0, 1]` on EVERY poll,
+    // card 1's `tempC` went `null`, and `gpu_temp:1` was **retired** — alarms 7 → 6.
+    //
+    // The mechanism is one layer above the exclusion set. O12 is *no band, no condition*, so a
+    // card that stops reporting emits nothing; `observePoll` used to read *no condition* as
+    // *not in the collection*, which is not what §9 says. It says *"was read successfully and
+    // it was NOT IN IT"*, and card 1 is in it.
+    const { retired, stale, displayed, after } = retireSequence(twoCards(95), twoCards(null));
+    // ⚠ The anti-vacuity line, in the same breath as the verdict: the card is still ON the
+    // wire. Without this the test passes for a snapshot that lost the card entirely.
+    expect(after.snapshot.gpus?.map((g) => g.index)).toEqual([0, 1]);
+    expect(retired).toEqual([]);
+    expect(stale).toEqual(['gpu_temp:1']);
+    // …and the alarm is still in the reduction, stale, keeping its band and its place in the
+    // count — which is exactly what the retirement took away.
+    const alarm = displayed.find((c) => c.id === 'gpu_temp:1');
+    expect(alarm?.stale).toBe(true);
+  });
+
+  test('⚠⚠ 12d/RECONCILE — the twin: a card that really LEAVES still retires', () => {
+    // ⚠⚠ The half that stops the test above being *"nothing ever retires"*. One field differs
+    // from that sequence — the second body lists ONE card instead of two — and the answer
+    // flips. `gpus: [{index:0}]` for GPU 1 is §9 row 2's own worked example of a retirement.
+    const oneCard = (): Record<string, unknown> => {
+      const base = body(servingPopulated);
+      return { ...base, gpus: [(base['gpus'] as unknown[])[0]] };
+    };
+    const { retired, stale, after } = retireSequence(twoCards(95), oneCard());
+    expect(after.snapshot.gpus?.map((g) => g.index)).toEqual([0]);
+    expect(retired).toEqual(['gpu_temp:1', 'gpu_throttle:1', 'gpu_vram:1']);
+    expect(stale).toEqual([]);
+  });
+
+  test('⚠⚠ 12d/RECONCILE — a row STILL IN `serving[]` that stops reporting keeps its alarms, even while another row is refused', () => {
+    // ⚠⚠ **Finding 2's exact wire, and it is the state 12d opened.** Under 12c any refusal
+    // froze the whole enumeration, so this wire could delete nothing; 12d's named refusal
+    // reports the enumeration READ, which made every subject not in the exclusion set
+    // retirable — including instance `'7'`, which is **present in `serving[]` on every poll**
+    // and has merely stopped answering. Measured: both of its alarms left the ledger, the dot
+    // and the count at poll 6, alarms 8 → 6.
+    //
+    // ⚠ `'7'` is neither a card index nor a row position, and the refused identity `'0'` is a
+    // third value again — so *present*, *held back* and *absent* cannot coincide.
+    const alarming = { instance: 7, port: 8081, unitState: 'failed', model: 'm', ctx: 1, health: 'unreachable', gpus: [1] };
+    const silent = { instance: 7, port: 8081, unitState: null, model: 'm', ctx: 1, health: null, gpus: [1] };
+    const good0 = { instance: 0, port: 8080, unitState: 'active', model: 'm', ctx: 1, health: 'ok', gpus: [0] };
+    const refused0 = { ...good0, port: 'nope' };
+    const { retired, stale, after } = retireSequence(
+      { ...body(servingPopulated), serving: [good0, alarming] },
+      { ...body(servingPopulated), serving: [refused0, silent] },
+    );
+    // ⚠ Both halves of the wire, asserted: row `'7'` is STILL THERE, and row `'0'` really was
+    // refused by name — so this is the partial-read branch and not a clean read.
+    expect(after.snapshot.serving?.map((r) => r.instance)).toEqual(['7']);
+    expect(after.serving).toMatchObject({ read: 'partial', refused: ['0'] });
+    expect(retired).toEqual([]);
+    expect(stale).toEqual(['health:0', 'health:7', 'unit:llama-server@0.service', 'unit:llama-server@7.service']);
+  });
+
+  test('⚠⚠ 12d — a PARTIAL read RETIRES WHAT IT CAN: the refused subject goes stale, the departed one leaves', () => {
+    // ⚠⚠ **THE MEASUREMENT §9's ruling of 2026-09-22 was made from.** Under 12c this sequence
+    // ended with `retired = []`: one refused row froze retirement for EVERY instance, so an
+    // instance that genuinely left the machine kept its alarm in the ledger, the dot and the
+    // count indefinitely — measured still there at 20 minutes — because an unrelated row
+    // failed validation. Safe, and unbounded.
+    //
+    // The two subjects DISAGREE by construction, which is what makes the assertion mean
+    // anything: instance `0` is the one whose row was refused (a bad `port`, so its identity
+    // still parsed) and instance `1` is the one the server stopped sending. A rule that
+    // protected everything, or nothing, gives the same answer for both.
+    const healthy = parseSnapshot(wireBodyOf(servingPopulated));
+    let state = EMPTY_CONDITION_STATE;
+    let at = 1_000;
+    for (let i = 0; i < 4; i += 1) {
+      state = observePoll(state, conditionsFrom(healthy!.snapshot), NOTHING_STANDING, at, {
+        enumerationsRead: enumerationsRead(healthy!.snapshot, healthy!.serving),
+      }).state;
+      at += 5_000;
+    }
+
+    const rows = body(servingPopulated)['serving'] as Record<string, unknown>[];
+    // The server now sends ONE row — instance 1 has left the machine — and that row is
+    // refused for its `port`. `serving[]` therefore arrives EMPTY, which is the shape §9 used
+    // to read as *both instances are gone* and 12c read as *neither may be judged*.
+    const mixed = parseSnapshot({ ...body(servingPopulated), serving: [{ ...(rows[0] as object), port: 'nope' }] });
+    expect(mixed!.snapshot.serving).toEqual([]);
+    expect(mixed!.serving).toMatchObject({ read: 'partial', refused: ['0'] });
+
+    const retired: string[] = [];
+    const stale: string[] = [];
+    let displayed: readonly { id: string; stale: boolean }[] = [];
+    // ⚠ Four polls, because §6.4's ten-second absence debounce has to clear first — a shorter
+    // sequence retires nothing whatever the rule is, which is how the 12c defect hid.
+    for (let i = 0; i < 4; i += 1) {
+      const poll = observePoll(state, conditionsFrom(mixed!.snapshot), NOTHING_STANDING, at, {
+        enumerationsRead: enumerationsRead(mixed!.snapshot, mixed!.serving),
+      });
+      retired.push(...poll.retired.map((c) => c.id));
+      stale.push(...poll.wentStale.map((c) => c.id));
+      displayed = poll.displayed;
+      state = poll.state;
+      at += 5_000;
+    }
+
+    // ⚠ Asserted on ids, never on counts: *nothing retired* and *nothing was ever there* are
+    // the same number and different facts, so both lists are named in full.
+    expect(retired.sort()).toEqual(['health:1', 'unit:llama-server@1.service']);
+    expect(stale.sort()).toEqual(['health:0', 'unit:llama-server@0.service']);
+    // ⚠⚠ The `unit:` half is the one a wrong implementation gets wrong: its SUBJECT is
+    // `llama-server@0.service` while the refusal names `0`, so an exclusion compared against
+    // the condition's subject protects nothing and retires this row with the other.
+    expect(displayed.map((c) => c.id).filter((id) => id.startsWith('unit:llama-server'))).toEqual([
+      'unit:llama-server@0.service',
+    ]);
+    expect(displayed.find((c) => c.id === 'health:0')?.stale).toBe(true);
+    expect(displayed.some((c) => c.id === 'health:1')).toBe(false);
+  });
+
+  test('⚠⚠ 12d — an ANONYMOUS refusal retires NOTHING, including the instance that really left', () => {
+    // ⚠⚠ The frozen branch, and §9 says in as many words that it is *"not a special case to be
+    // optimised away, it is the honest answer to we cannot tell who is missing"*. Same
+    // sequence as the test above, differing in ONE field — row 0's `instance` is `1.5` rather
+    // than its `port` being `'nope'` — so the refusal names nobody and instance 1's departure
+    // cannot be believed either.
+    const healthy = parseSnapshot(wireBodyOf(servingPopulated));
+    let state = EMPTY_CONDITION_STATE;
+    let at = 1_000;
+    for (let i = 0; i < 4; i += 1) {
+      state = observePoll(state, conditionsFrom(healthy!.snapshot), NOTHING_STANDING, at, {
+        enumerationsRead: enumerationsRead(healthy!.snapshot, healthy!.serving),
+      }).state;
+      at += 5_000;
+    }
+
+    const rows = body(servingPopulated)['serving'] as Record<string, unknown>[];
+    const anonymous = parseSnapshot({
+      ...body(servingPopulated),
+      serving: [{ ...(rows[0] as object), instance: 1.5 }],
+    });
+    expect(anonymous!.snapshot.serving).toEqual([]);
+    expect(anonymous!.serving).toMatchObject({ read: 'partial', refused: [null] });
+
+    const retired: string[] = [];
+    const stale: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const poll = observePoll(state, conditionsFrom(anonymous!.snapshot), NOTHING_STANDING, at, {
+        enumerationsRead: enumerationsRead(anonymous!.snapshot, anonymous!.serving),
+      });
+      retired.push(...poll.retired.map((c) => c.id));
+      stale.push(...poll.wentStale.map((c) => c.id));
+      state = poll.state;
+      at += 5_000;
+    }
+
+    // ⚠ The guard judges its own failure: `retired` being empty would also be true of a poll
+    // that observed nothing at all, so the stale list — all FOUR subjects, including the
+    // departed instance 1 — is what says the sequence really ran.
+    expect(retired).toEqual([]);
+    expect(stale.sort()).toEqual([
+      'health:0',
+      'health:1',
+      'unit:llama-server@0.service',
+      'unit:llama-server@1.service',
+    ]);
+  });
+
+  test('⚠⚠ 12d/TEST — a DUPLICATE identity is held back anyway, on the poll after the good row leaves', () => {
+    // ⚠⚠ `12d-Q5`, the spec silence the build recorded and did not fixture. `12c-Q6` records
+    // that the wire does not police duplicate identities, so a server may send instance `0`
+    // TWICE — one row valid, one refused — which puts `0` into the exclusion set while a
+    // perfectly good row for `0` is on the page. The build chose *held back anyway*, the
+    // conservative direction, because §9 does not say that a subject read about elsewhere in
+    // the same array counts as accounted for and guessing that it does DELETES an alarm.
+    //
+    // ⚠ It bites on the poll AFTER the good row disappears, which is the only place the two
+    // candidate answers differ — while the good row is present nothing is absent and every
+    // implementation agrees. This test is that poll, and it says what actually happens rather
+    // than what was intended.
+    const withGpus = (instance: string, port: number, gpus: readonly number[]): Record<string, unknown> => ({
+      instance,
+      port,
+      unitState: 'failed',
+      model: null,
+      ctx: 131072,
+      health: 'unreachable',
+      gpus,
+    });
+    const good = withGpus('0', 8080, [0]);
+    // ⚠ Instance `7` disagrees with every card index in the fixture, so *the subject that
+    // retires* and *a card index* cannot coincide.
+    const departing = withGpus('7', 8081, [1]);
+    // The duplicate: the SAME identity as `good`, refused for its `port`. Its identity parses.
+    const duplicate = { ...good, port: 'nope' };
+
+    const before = parseSnapshot({ ...body(everythingZero), serving: [good, departing, duplicate] });
+    expect(before!.snapshot.serving?.map((row) => row.instance)).toEqual(['0', '7']);
+    expect(before!.serving).toMatchObject({ read: 'partial', refused: ['0'] });
+
+    let state = EMPTY_CONDITION_STATE;
+    let at = 1_000;
+    for (let i = 0; i < 4; i += 1) {
+      state = observePoll(state, conditionsFrom(before!.snapshot), NOTHING_STANDING, at, {
+        enumerationsRead: enumerationsRead(before!.snapshot, before!.serving),
+      }).state;
+      at += 5_000;
+    }
+
+    // …and now the good row for `0` is gone from the array entirely, leaving only the refused
+    // duplicate. Instance `7` has left the machine in the same poll.
+    const after = parseSnapshot({ ...body(everythingZero), serving: [duplicate] });
+    expect(after!.snapshot.serving).toEqual([]);
+    expect(after!.serving).toMatchObject({ read: 'partial', refused: ['0'] });
+
+    const retired: string[] = [];
+    const stale: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const poll = observePoll(state, conditionsFrom(after!.snapshot), NOTHING_STANDING, at, {
+        enumerationsRead: enumerationsRead(after!.snapshot, after!.serving),
+      });
+      retired.push(...poll.retired.map((c) => c.id));
+      stale.push(...poll.wentStale.map((c) => c.id));
+      state = poll.state;
+      at += 5_000;
+    }
+
+    // ⚠ Both lists are named in full: *nothing retired* and *nothing was ever there* are the
+    // same number and different facts, so `7` leaving is what says the sequence really ran.
+    expect(retired.sort()).toEqual(['health:7', 'unit:llama-server@7.service']);
+    expect(stale.sort()).toEqual(['health:0', 'unit:llama-server@0.service']);
+  });
+
+  test('⚠⚠ 12d/TEST — a cut list OUTRANKS an unreadable `gpus`, end to end from real wire bytes', () => {
+    // ⚠⚠ `12d-Q1`'s precedence, at a second layer and from raw JSON rather than a hand-built
+    // enumeration. §6.2 does not say which form wins when the list was cut AND a row we DID
+    // read carries a `gpus` we could not read; the build chose the cut, and `12d-O6` is the
+    // wrong implementation that reverses it. Until this test, that choice was pinned in one
+    // place only.
+    const row = (instance: string, port: number, gpus: readonly number[] | null): Record<string, unknown> => ({
+      instance,
+      port,
+      unitState: 'active',
+      model: 'qwen3.6-27b',
+      ctx: 131072,
+      health: 'ok',
+      gpus,
+    });
+    // Row `0` is HERE and its `gpus` could not be read; row `7` was refused for its `port`.
+    const cut = parseSnapshot({
+      ...body(everythingZero),
+      serving: [row('0', 8080, null), { ...row('7', 8081, [1]), port: 'nope' }],
+    });
+    expect(cut!.serving).toMatchObject({ read: 'partial', refused: ['7'] });
+    expect(servedBy(cut!.serving, 0)).toEqual({ kind: 'incomplete' });
+
+    // ⚠ The twin, differing in ONE field: the same two rows with row `7`'s port valid. Nothing
+    // is cut, so the unreadable `gpus` is the only thing left to say and the em dash is right.
+    // Without it this test would pass for an implementation that answered `incomplete` always.
+    const whole = parseSnapshot({
+      ...body(everythingZero),
+      serving: [row('0', 8080, null), row('7', 8081, [1])],
+    });
+    expect(whole!.serving.read).toBe('all');
+    expect(servedBy(whole!.serving, 0)).toEqual({ kind: 'unknown' });
   });
 
   test('⚠ a genuinely EMPTY serving[] still retires, so the fix did not disable §9’s verdict', () => {

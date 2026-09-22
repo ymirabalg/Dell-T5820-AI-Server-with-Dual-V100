@@ -19,7 +19,8 @@ import type { Gpu, ServingInstance, TelemetrySnapshot } from '@/lib/types';
 
 import { CHART_SIZE } from '../grid';
 import { GpuPanel } from './gpu-panel';
-import { BASE_MS, allReadingsNull, emptyState, ringOfSeries, stateOf, stateWith, stateWithRefused, valueCells } from './test-support';
+import { BASE_MS, allReadingsNull, emptyState, ringOfSeries, servingReadCases, stateFromWire, stateOf, stateWith, stateWithRefused, valueCells } from './test-support';
+import type { WireSnapshot } from '@/lib/client/wire';
 import type { Gap } from '@/lib/client/gaps';
 
 /**
@@ -904,16 +905,24 @@ describe('⚠⚠ 12b — the join is INVERTED: a card asks which instance lists 
    * and §9's ratified wording says so in as many words. The honest answer — invariant 1's em
    * dash — was one branch away and untaken.
    */
-  test('⚠⚠ 12c/RECONCILE — a REFUSED row renders an em dash, never `no instance`', () => {
+  test('⚠⚠ 12c/RECONCILE — a REFUSED row never renders `no instance`, and since 12d says WHY', () => {
     const refusedPage = (panelId: 'gpu0' | 'gpu1'): string =>
       renderToStaticMarkup(
-        <GpuPanel state={stateWithRefused(twoCards([servingPerGpu[1] as ServingInstance]), 1)} nowMs={0} panelId={panelId} />,
+        <GpuPanel
+          state={stateWithRefused(twoCards([servingPerGpu[1] as ServingInstance]), [null])}
+          nowMs={0}
+          panelId={panelId}
+        />,
       );
     const html = refusedPage('gpu0');
     // ⚠ The whole finding in one assertion: the card must not claim that nothing serves it.
     expect(html).not.toContain('no instance');
     expect(html).toContain('served by<');
-    expect(rowContaining(html, 'served by')).toContain('—');
+    // ⚠⚠ 12d — this was an em dash until §3.4's ruling of 2026-09-22. The em dash was honest
+    // about *we cannot answer* and silent about *why the question is open*, and it was the
+    // same glyph a `gpus` we could not read renders, which is what the ruling forbids.
+    expect(rowContaining(html, 'served by')).toContain('list not fully read');
+    expect(rowContaining(html, 'served by')).not.toContain('—');
 
     // ⚠ The anti-vacuity half, twice over. A fix that answered `unknown` for everything would
     // pass the three lines above and would have blinded the panel instead of correcting it.
@@ -1053,5 +1062,125 @@ describe('⚠⚠ 12b — the join is INVERTED: a card asks which instance lists 
     expect(html).toContain('qwen3.6-27b');
     expect(html).not.toContain('no instance');
     expect(rowContaining(html, 'served by instance 1')).not.toContain('—');
+  });
+});
+
+/**
+ * ⚠⚠ **12d — §3.4's ruling of 2026-09-22, RENDERED: five reads, one card, five strips.**
+ *
+ * The acceptance is a render and not an argument: every body below goes through the real
+ * `parseSnapshot`, so what these tests assert is what a browser would paint. The five are
+ * built once, in `test-support.ts`, so the SERVING panel's own acceptance is of the same
+ * five machines.
+ *
+ * | read | GPU 0 | GPU 1 |
+ * |---|---|---|
+ * | complete | `served by instance 0 · qwen3.6-27b` | `served by instance 7 · gemma-4-31b` |
+ * | partial, identity parsed | `served by instance 0 · qwen3.6-27b` | `served by · list not fully read` |
+ * | partial, identity NOT parsed | `served by instance 0 · qwen3.6-27b` | `served by · list not fully read` |
+ * | `gpus: null` on row 1 | `served by instance 0 · qwen3.6-27b` | `served by · —` |
+ * | `gpus` absent | `served by instance 0 · qwen3.6-27b` | `served by instance 1 · —` |
+ *
+ * ⚠ **The two partial rows are deliberately identical, and that is the design.** §3.4's
+ * ruling is about the LIST; §9's is about RETIREMENT. Which branch of §9 a refusal falls into
+ * changes what the ledger does and changes nothing a card can honestly say — the card did not
+ * read the whole list either way. Asserting their equality is what stops a later loop from
+ * leaking §9's distinction onto a panel that has no standing to make it.
+ */
+describe('⚠⚠ 12d — the five reads, rendered on the GPU card', () => {
+  const cases = servingReadCases();
+  const render = (wire: WireSnapshot, panelId: 'gpu0' | 'gpu1'): string =>
+    renderToStaticMarkup(<GpuPanel state={stateFromWire(wire)} nowMs={0} panelId={panelId} />);
+  const strip = (wire: WireSnapshot, panelId: 'gpu0' | 'gpu1'): string =>
+    rowContaining(render(wire, panelId), 'served by');
+
+  test('⚠⚠ RENDER 1 of 5 — a COMPLETE list names the instance that lists the card, identity and model', () => {
+    // ⚠ The anchor every other render is read against. Instance `7` serves card 1, so the
+    // label cannot have come from the card's index or the row's position.
+    expect(strip(cases.complete, 'gpu0')).toContain('served by instance 0');
+    expect(strip(cases.complete, 'gpu0')).toContain('qwen3.6-27b');
+    expect(strip(cases.complete, 'gpu1')).toContain('served by instance 7');
+    expect(strip(cases.complete, 'gpu1')).toContain('gemma-4-31b');
+    expect(strip(cases.complete, 'gpu1')).not.toContain('list not fully read');
+  });
+
+  test('⚠⚠ RENDER 2 of 5 — a PARTIAL list whose refused row named its subject says the list was not fully read', () => {
+    expect(strip(cases.refusedNamed, 'gpu1')).toContain('served by');
+    expect(strip(cases.refusedNamed, 'gpu1')).toContain('list not fully read');
+    // ⚠ Not the em dash, not `no instance`, and not a model it never read.
+    expect(strip(cases.refusedNamed, 'gpu1')).not.toContain('—');
+    expect(strip(cases.refusedNamed, 'gpu1')).not.toContain('no instance');
+    expect(render(cases.refusedNamed, 'gpu1')).not.toContain('gemma-4-31b');
+    // ⚠ The anti-vacuity half: the card whose row this client DID read is untouched, and its
+    // strip is byte-identical to the complete render's. A fix that blanked the whole page on
+    // any refusal would pass every line above.
+    expect(strip(cases.refusedNamed, 'gpu0')).toBe(strip(cases.complete, 'gpu0'));
+    // ⚠⚠ 12d/TEST — the four words appear ONCE on the page and on the served-by cell only.
+    // `strip()` is row-scoped (HANDOVER §0.4: assert over the element that carries the claim),
+    // so on its own it cannot see a second cell that happens to print the same sentence — and
+    // a form that reads as an answer must not be ambient on a panel of readings.
+    expect(render(cases.refusedNamed, 'gpu1').split('list not fully read').length - 1).toBe(1);
+    // …and none of it leaks onto the card whose row this client read in full.
+    expect(render(cases.refusedNamed, 'gpu0')).not.toContain('list not fully read');
+  });
+
+  test('⚠⚠ RENDER 3 of 5 — a PARTIAL list whose refused row named NOBODY renders exactly the same card', () => {
+    // §9's two branches do opposite things; §3.4's one form covers both, because the card's
+    // claim — *we did not read the whole list* — is equally true in each.
+    expect(strip(cases.refusedAnonymous, 'gpu1')).toContain('list not fully read');
+    expect(strip(cases.refusedAnonymous, 'gpu1')).toBe(strip(cases.refusedNamed, 'gpu1'));
+    expect(strip(cases.refusedAnonymous, 'gpu0')).toBe(strip(cases.complete, 'gpu0'));
+  });
+
+  test('⚠⚠ RENDER 4 of 5 — an unreadable `gpus` still renders the EM DASH, and it differs from render 2 in the DOM and to a screen reader', () => {
+    // ⚠⚠ The whole of `12c-Q1`, as two strings. Until the ruling these two produced the same
+    // markup, which is invariant 1's own failure one level up: *we discarded part of the
+    // list* is not *this reading could not be taken*.
+    const unreadable = strip(cases.gpusUnreadable, 'gpu1');
+    const cut = strip(cases.refusedNamed, 'gpu1');
+    expect(unreadable).toContain('—');
+    expect(unreadable).not.toContain('list not fully read');
+    expect(cut).not.toBe(unreadable);
+    // ⚠ **Distinguishable to a screen reader, not merely in an attribute.** The difference is
+    // the announced TEXT of the value cell — four words against one glyph — so a reader who
+    // cannot see the card hears two different answers. An attribute or a colour would satisfy
+    // "different in the DOM" and fail this.
+    const spoken = (wire: WireSnapshot): string =>
+      valueCells(render(wire, 'gpu1')).filter((v) => v === '—' || v === 'list not fully read').join('|');
+    expect(spoken(cases.gpusUnreadable)).toContain('—');
+    expect(spoken(cases.refusedNamed)).toContain('list not fully read');
+    expect(spoken(cases.refusedNamed)).not.toBe(spoken(cases.gpusUnreadable));
+    // ⚠ 12d/TEST — and GPU 0 is untouched here too, so the anti-vacuity half covers all four
+    // non-complete reads rather than only the two refusals.
+    expect(strip(cases.gpusUnreadable, 'gpu0')).toBe(strip(cases.complete, 'gpu0'));
+  });
+
+  test('⚠⚠ RENDER 5 of 5 — an ABSENT `gpus` keeps §3.4’s silent index join, and says nothing about completeness', () => {
+    // An older SERVER, not a failed reading and not a cut list. Card 0 matches instance `0`
+    // by index and carries its model; card 1 has no instance `1` to match, so the label is
+    // the index join's and the model is invariant 1's em dash.
+    expect(strip(cases.gpusAbsent, 'gpu0')).toContain('served by instance 0');
+    expect(strip(cases.gpusAbsent, 'gpu0')).toContain('qwen3.6-27b');
+    expect(strip(cases.gpusAbsent, 'gpu1')).toContain('served by instance 1');
+    expect(strip(cases.gpusAbsent, 'gpu1')).not.toContain('list not fully read');
+    expect(strip(cases.gpusAbsent, 'gpu1')).not.toContain('no instance');
+    // ⚠ 12d/TEST — GPU 0's strip is byte-identical to the complete render's, because the
+    // `indexed` fallback and the `declared` join agree on THIS card. That equality is a claim
+    // the build makes for all five reads and only two of them asserted it.
+    expect(strip(cases.gpusAbsent, 'gpu0')).toBe(strip(cases.complete, 'gpu0'));
+  });
+
+  test('⚠⚠ the five reads produce FOUR distinct strips on GPU 1, and the two that coincide are the two partials', () => {
+    // ⚠ The census, so no pair can silently collapse again. This is the assertion `12c-Q1`
+    // would have failed: before the ruling, `refusedNamed` and `gpusUnreadable` were equal.
+    const strips = {
+      complete: strip(cases.complete, 'gpu1'),
+      refusedNamed: strip(cases.refusedNamed, 'gpu1'),
+      refusedAnonymous: strip(cases.refusedAnonymous, 'gpu1'),
+      gpusUnreadable: strip(cases.gpusUnreadable, 'gpu1'),
+      gpusAbsent: strip(cases.gpusAbsent, 'gpu1'),
+    };
+    expect(new Set(Object.values(strips)).size).toBe(4);
+    expect(strips.refusedNamed).toBe(strips.refusedAnonymous);
   });
 });

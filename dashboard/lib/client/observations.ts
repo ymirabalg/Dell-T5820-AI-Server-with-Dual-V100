@@ -51,7 +51,13 @@
  */
 
 import { EM_DASH, formatCelsius, formatCh5Pwm, formatGiB, formatMiBPair, formatRpm, formatSwapGiB, formatText } from '../format';
-import type { ConditionKind, ConditionObservation } from '../conditions';
+import type {
+  ConditionKind,
+  ConditionObservation,
+  EnumerationMembership,
+  EnumerationRead,
+  EnumerationsRead,
+} from '../conditions';
 import { observation } from '../conditions';
 import {
   severityCpuTemp,
@@ -98,8 +104,34 @@ export const GPU_ENUMERATION = 'gpus';
 export const SERVING_ENUMERATION = 'serving';
 
 /**
+ * ⚠ 12d — the ordinary case: this collection was read and **nothing** in it is held back from
+ * retirement. Frozen and shared, because it is the value almost every poll produces.
+ */
+const NOTHING_HELD_BACK: ReadonlySet<string> = new Set<string>();
+
+/**
+ * ⚠⚠ **12d/RECONCILE — the membership this poll SAW, spelled the way the projection spells it.**
+ *
+ * §9 row 2 retires a subject only when the collection *"was read successfully **and it was not
+ * in it**"*, and these two expressions are the *"in it"*. They are deliberately the same
+ * expressions {@link conditionsFrom} passes as {@link EnumerationMembership.member} —
+ * `String(gpu.index)` and `instance.instance` — because the comparison is only meaningful
+ * while the two spellings agree, and reading them off the **same arrays** `conditionsFrom`
+ * walks (`snapshot.gpus`, `snapshot.serving`) is what makes that structural rather than a
+ * convention two files have to keep.
+ */
+const gpuMembersOf = (snapshot: TelemetrySnapshot): ReadonlySet<string> =>
+  new Set((snapshot.gpus ?? []).map((gpu) => String(gpu.index)));
+
+/** {@link gpuMembersOf}, for §4's other enumerated collection. */
+const servingMembersOf = (snapshot: TelemetrySnapshot): ReadonlySet<string> =>
+  new Set((snapshot.serving ?? []).map((instance) => instance.instance));
+
+/**
  * Which enumerations this poll **read** — §9's evidence that a subject has left rather than
- * merely stopped answering.
+ * merely stopped answering — and, ⚠ 12d, what it saw in each: the members that were IN it and
+ * the members whose row this client refused. {@link EnumerationRead} carries both, and §9
+ * retires only a subject that is in neither.
  *
  * ⚠ `null` is not `[]`, and this is where the whole cost of keeping them apart is repaid:
  * `gpus: null` means *we could not enumerate*, so a card that was at 90 °C keeps its alarm;
@@ -123,6 +155,14 @@ export const enumerationsRead = (
    * the conditions go **stale** — keeping their band, still counted — instead. `wire.ts` carries
    * the count structurally rather than leaving it to be recovered from a message.
    *
+   * ⚠⚠ **12d SUPERSEDES the paragraph below — one refusal no longer suppresses the whole
+   * enumeration unless it has to.** §9's ruling of 2026-09-22: *a partial read retires what it
+   * can*. 12c's all-or-nothing was safe and unbounded — an instance that genuinely left the
+   * machine kept its alarm in the count indefinitely because an unrelated row failed
+   * validation, measured still there at 20 minutes. The rule is now per subject and turns on
+   * whether the refused row's own `instance` parsed; the sentence below is exactly right about
+   * the case where it did **not**, and that case is still all-or-nothing.
+   *
    * ⚠ **One refusal suppresses the WHOLE enumeration, and that is not laziness.** A refused row
    * may have been refused *for its `instance`*, so there is no identity to exclude: the client
    * cannot know which subjects it failed to read, only that it failed to read some.
@@ -137,10 +177,35 @@ export const enumerationsRead = (
    * §6.2's join (`servedBy`) and this ledger from one place.
    */
   serving: ServingEnumeration,
-): ReadonlySet<string> => {
-  const read = new Set<string>();
-  if (snapshot.gpus !== null) read.add(GPU_ENUMERATION);
-  if (serving.read === 'all') read.add(SERVING_ENUMERATION);
+): EnumerationsRead => {
+  const read = new Map<string, EnumerationRead>();
+  // ⚠ `gpus[]` has no row-level refusal — `wire.ts` argues at length why `serving[]` is the one
+  // array whose members may be dropped — so a `gpus` that was read holds nothing back.
+  if (snapshot.gpus !== null) {
+    read.set(GPU_ENUMERATION, { members: gpuMembersOf(snapshot), held: NOTHING_HELD_BACK });
+  }
+  if (serving.read === 'all') {
+    read.set(SERVING_ENUMERATION, { members: servingMembersOf(snapshot), held: NOTHING_HELD_BACK });
+  }
+  if (serving.read === 'partial') {
+    // ⚠⚠ 12d / §9's ruling of 2026-09-22 — the two branches, and the second is the one that
+    // must not be optimised away.
+    //
+    // Every refused row named its subject → the enumeration IS read, and exactly those
+    // subjects are held back. An instance that genuinely left the machine retires on this
+    // poll like any other, which is what the first cut could not do.
+    //
+    // Any refused row named NOBODY (`null`) → we cannot tell who is missing, so no subject may
+    // be shown absent and the key is not added at all. That is the same suppression 12c
+    // shipped, now confined to the case that actually warrants it.
+    const held = new Set<string>();
+    let anonymous = false;
+    for (const identity of serving.refused) {
+      if (identity === null) anonymous = true;
+      else held.add(identity);
+    }
+    if (!anonymous) read.set(SERVING_ENUMERATION, { members: servingMembersOf(snapshot), held });
+  }
   return read;
 };
 
@@ -446,6 +511,14 @@ export type ServedBy =
     }
   | { readonly kind: 'indexed'; readonly instance: ServingInstance | null }
   | { readonly kind: 'unknown' }
+  /**
+   * ⚠⚠ **12d — §3.4's ruling of 2026-09-22: a partially-read list says so.** Not *this reading
+   * could not be taken* (`unknown`, the em dash) and not *nobody claims this card*
+   * (`unserved`): **we did not read the whole list**, so the question of who serves this card
+   * is open. It is a statement about our own knowledge rather than about the machine, and the
+   * card must render it as one.
+   */
+  | { readonly kind: 'incomplete' }
   | { readonly kind: 'unserved' };
 
 /**
@@ -494,6 +567,13 @@ const declaresGpus = (instance: ServingInstance): boolean => Object.hasOwn(insta
  * > here, and after a refusal we do not know what was in them. Both become `unknown` — §6.2's
  * > em dash, invariant 1, the honest branch that already existed one line away.
  *
+ * ⚠⚠ **12d — the rule stands and its ANSWER changed.** `12c-Q1` asked what a card may say when
+ * the list was read in part, and the owner ruled on 2026-09-22 (§3.4): not the em dash. An em
+ * dash already means *this reading could not be taken*, which is what an unreadable `gpus`
+ * shows; *we discarded part of the list* is a different fact and rendering the two identically
+ * is invariant 1's own failure one level up. The negative branches below therefore return
+ * {@link ServedBy} `incomplete`, a fifth variant, and nothing else about the rule moves.
+ *
  * Measured before the change, three rendered pages differing only in row 1's `port`: a valid
  * pair gave `served by instance 1 · gemma-4-31b`, a refused row gave **`served by · no
  * instance`**, and an instance that had genuinely left the machine gave the same strip byte
@@ -517,7 +597,9 @@ export const servedBy = (serving: ServingEnumeration, index: number): ServedBy =
     // DECIMAL STRING. A named instance can never match, which is right: a server old enough
     // not to publish `gpus` is one whose discovery could not admit a named instance at all.
     const matched = rows.find((s) => s.instance === String(index)) ?? null;
-    if (matched === null && !complete) return { kind: 'unknown' };
+    // ⚠ 12d — `incomplete`, not `unknown`. Nothing failed to be READ here; we simply do not
+    // have the whole list, and §3.4's 2026-09-22 ruling forbids spelling those two alike.
+    if (matched === null && !complete) return { kind: 'incomplete' };
     return { kind: 'indexed', instance: matched };
   }
   // ⚠⚠ 12c — the claimant is chosen by `compareInstances`, NOT by position in `serving[]`.
@@ -547,7 +629,16 @@ export const servedBy = (serving: ServingEnumeration, index: number): ServedBy =
   // available only when every row is here. A refusal makes it false, and the honest answer for
   // "we could not read enough to say" is the one the next line already gives an unreadable
   // `gpus`: invariant 1's em dash.
-  return !complete || rows.some((s) => declaresGpus(s) && s.gpus === null)
+  //
+  // ⚠⚠ 12d — the two non-answers are now SPELLED APART, and the order below is a decision.
+  // `incomplete` wins when the list was cut, even if a row we DID read also has an unreadable
+  // `gpus`: both are true, and the more specific statement about our knowledge is the one
+  // §3.4's ruling asked for. A refused row has no row on SERVING to sit beside, whereas an
+  // unreadable `gpus` already carries its `dbus` entry on the row it belongs to — so folding
+  // the refusal back into the em dash is the collapse the ruling exists to stop. ⚠ §6.2 does
+  // not say which wins when both hold; recorded as a spec silence in `12d-build.md`.
+  if (!complete) return { kind: 'incomplete' };
+  return rows.some((s) => declaresGpus(s) && s.gpus === null)
     ? { kind: 'unknown' }
     : { kind: 'unserved' };
 };
@@ -609,9 +700,13 @@ export const conditionsFrom = (snapshot: TelemetrySnapshot): readonly ConditionO
     label: string,
     value: string,
     rawSeverity: ReturnType<typeof severityGpuTemp>,
-    // ⚠ Which enumeration produced this subject, or `null` for one nothing enumerates. §9
-    // reads it back to decide *retired* against *stale*; see {@link enumerationsRead}.
-    enumeration: string | null = null,
+    // ⚠ Which enumeration produced this subject **and which member of it this is**, or `null`
+    // for one nothing enumerates. §9 reads it back to decide *retired* against *stale*; see
+    // {@link enumerationsRead}.
+    //
+    // ⚠⚠ 12d — the member is NOT the condition's subject. `unit:llama-server@0.service` is
+    // enumerated as instance `'0'`, and `'0'` is what a refused `serving[]` row can name.
+    enumeration: EnumerationMembership | null = null,
   ): void => {
     // O12: no band, no condition. Never invent one.
     if (rawSeverity === null) return;
@@ -627,7 +722,7 @@ export const conditionsFrom = (snapshot: TelemetrySnapshot): readonly ConditionO
       `GPU ${at} temperature`,
       formatCelsius(gpu.tempC),
       severityGpuTemp(gpu.tempC),
-      GPU_ENUMERATION,
+      { name: GPU_ENUMERATION, member: at },
     );
     push(
       'gpu_throttle',
@@ -635,7 +730,7 @@ export const conditionsFrom = (snapshot: TelemetrySnapshot): readonly ConditionO
       `GPU ${at} throttle`,
       formatText(gpu.throttleReasons),
       severityThrottle(gpu.throttleReasons),
-      GPU_ENUMERATION,
+      { name: GPU_ENUMERATION, member: at },
     );
     push(
       'gpu_vram',
@@ -643,7 +738,7 @@ export const conditionsFrom = (snapshot: TelemetrySnapshot): readonly ConditionO
       `GPU ${at} VRAM`,
       formatMiBPair(gpu.memUsedMiB, gpu.memTotalMiB),
       severityVram(gpu.memUsedMiB, gpu.memTotalMiB),
-      GPU_ENUMERATION,
+      { name: GPU_ENUMERATION, member: at },
     );
   }
 
@@ -699,7 +794,10 @@ export const conditionsFrom = (snapshot: TelemetrySnapshot): readonly ConditionO
         unit,
         formatText(instance.unitState),
         severityUnitState(instance.unitState),
-        SERVING_ENUMERATION,
+        // ⚠⚠ 12d — the member is the INSTANCE IDENTITY, not `unit` (this condition's own
+        // subject). A refused `serving[]` row names an identity; comparing it against a unit
+        // name would protect nothing and retire the alarm §9's ruling exists to keep.
+        { name: SERVING_ENUMERATION, member: instance.instance },
       );
     }
     push(
@@ -710,7 +808,7 @@ export const conditionsFrom = (snapshot: TelemetrySnapshot): readonly ConditionO
       `${servingUnitLabel(instance.instance)} /health`,
       formatText(instance.health),
       severityHealth(instance.health),
-      SERVING_ENUMERATION,
+      { name: SERVING_ENUMERATION, member: instance.instance },
     );
   }
 

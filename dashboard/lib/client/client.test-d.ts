@@ -3,7 +3,7 @@ import { describe, expectTypeOf, test } from 'vitest';
 import type { BrowserWindow, RuntimeEnv } from './env';
 import type { PrefStorage } from './prefs';
 import type { RuntimeState } from './runtime';
-import type { WireSnapshot } from './wire';
+import type { ServingEnumeration, WireSnapshot } from './wire';
 import { parseSnapshot } from './wire';
 import type { ServingInstance, TelemetrySnapshot } from '../types';
 
@@ -51,6 +51,25 @@ describe('⚠ O10: the validator narrows, it does not assert', () => {
       readonly ServingInstance[] | null
     >();
     expectTypeOf<WireSnapshot['snapshot']>().toEqualTypeOf<TelemetrySnapshot>();
+  });
+
+  test('⚠⚠ 12d/RECONCILE — a PARTIAL read cannot be written with an EMPTY `refused`', () => {
+    // ⚠⚠ The value this forbids is not hypothetical — it was forged and measured (12d
+    // adversarial, finding 7): `{ read: 'partial', rows: [], refused: [] }` makes
+    // `enumerationsRead` report *serving was read, nothing held back* — the permissive answer,
+    // which retires — while `servedBy` on the same value answers `incomplete`. One value, two
+    // contradictory readings, and the ledger takes the dangerous one. `servingEnumeration` is
+    // the only producer and cannot make it; this is what stops a hand-written one compiling.
+    // @ts-expect-error — `refused` is a NON-EMPTY tuple: a partial read is a read that
+    // refused at least one row, and *partial with nothing refused* is `read: 'all'`.
+    const forged: ServingEnumeration = { read: 'partial', rows: [], refused: [] };
+    void forged;
+    // …and the twin, so this is not "`partial` never type-checks": one refusal is enough, and
+    // an ANONYMOUS one is still a refusal.
+    const named: ServingEnumeration = { read: 'partial', rows: [], refused: ['0'] };
+    const anonymous: ServingEnumeration = { read: 'partial', rows: [], refused: [null] };
+    void named;
+    void anonymous;
   });
 
   test('a validated snapshot is not assignable from an unchecked object', () => {

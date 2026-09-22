@@ -135,6 +135,7 @@ const gpuAt = (snapshot: TelemetrySnapshot | null, index: number): Gpu | null =>
  * | `[0, 1]` | `served jointly with GPU M` | the model |
  * | `null` | `served by` | `—` |
  * | read, unclaimed | `served by` | `no instance` |
+ * | ⚠⚠ 12d — the list was read in PART | `served by` | `list not fully read` |
  *
  * ⚠ **`k` takes the instance's own number in the `declared` case, and that is the whole
  * change.** They coincide in per-GPU mode — so this renders byte-identically on the box as it
@@ -177,6 +178,38 @@ const servedItem = (
       // borrowed its explanation from, since `llama-env` has never reached the GPU card
       // either (`panelsForSource`, unchanged by this loop).
       return { k: 'served by', v: EM_DASH, title: null };
+    case 'incomplete':
+      // ⚠⚠ 12d — §3.4's ruling of 2026-09-22, and the four words are the whole of it.
+      //
+      // The em dash above says *this reading could not be taken*; this says **we did not read
+      // the whole list**, which is a statement about OUR KNOWLEDGE rather than about the
+      // machine — nothing on the box has failed, and the card must not imply that something
+      // has. Hence `not fully read`: the verb is ours, in the passive of an act this client
+      // performed, and the noun is the LIST rather than the instance, the card or the unit.
+      // `list incomplete` was rejected for reading as a claim about the machine's own list,
+      // and `no instance` is the positive claim (`unserved`) this branch exists to avoid.
+      //
+      // ⚠ Four words, no count and no reason. ⚠⚠ **The citation this comment carried until
+      // 12d/RECONCILE was FABRICATED**: it quoted §3.4 as saying *"keep it short — …"*, and
+      // `SPEC.md` contains no such sentence (`grep`: no *"keep it short"*, no *"value slot"*).
+      // *Keep it short; §3.7 forbids explanatory prose in a value slot* is the **parent's own
+      // brief** (`pipeline/handoffs/12d-partial-reads.md` §2) — a legitimate instruction, and
+      // not a line of the spec. What the spec really says, and it is enough on its own:
+      //
+      //   §3.4, verbatim — *"The full reason stays on SERVING beside the refused row; the card
+      //   says only that it cannot answer and why the question is open."*
+      //   §6.4, verbatim — *"§3.7 exists so an alarm is actionable, not so every cell carries
+      //   prose"* (which is about repeating one explanation across cells, not about length).
+      //
+      // Four words satisfy both: the card states that it cannot answer and why the question is
+      // open, and says it once. The `llama-env` entry naming which row and why is
+      // already rendered there by `PanelNotes`; this cell says only that the question is open
+      // and why, which is precisely what 12c's em dash could not say.
+      //
+      // ⚠ Distinguishable from the em dash BOTH ways by construction: four words against one
+      // glyph is a different text node in the DOM and different announced content to a screen
+      // reader — not an attribute a reader cannot hear, and not a colour.
+      return { k: 'served by', v: 'list not fully read', title: null };
     case 'unserved':
       // Not an em dash: every list was READ and none of them names this card. §6.5's
       // retired-vs-stale distinction, one level down — "we looked, and nobody claims it".

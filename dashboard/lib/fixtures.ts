@@ -511,19 +511,26 @@ export const servingTwoClaimants: readonly ServingInstance[] = [
 export const wireRead = (snapshot: TelemetrySnapshot, tsMs: number): WireSnapshot => ({
   snapshot,
   tsMs,
-  serving: servingEnumeration(snapshot.serving, 0),
+  serving: servingEnumeration(snapshot.serving, []),
 });
 
 /**
  * A {@link WireSnapshot} whose `serving[]` is SHORTER than what the server sent, because
- * `parseSnapshot` refused `refused` of its rows.
+ * `parseSnapshot` refused the rows `refused` describes.
  *
  * ⚠ This is the state §9 must not read as *the instances left the machine* and §6.2's join
  * must not read as *nobody serves this card* — `12c-A1`, and the reason the completeness is
  * part of the value rather than an argument beside it.
+ *
+ * ⚠⚠ **12d — `refused` is one entry per refused row: the identity it named, or `null` when
+ * the identity is what failed.** A count would let a fixture describe a partial read without
+ * saying WHICH of §9's two branches it is in, and those branches do opposite things —
+ * `['7']` retires every subject but instance 7, `[null]` retires nothing at all. The two are
+ * one character apart in a fixture and a world apart in the ledger, which is exactly why the
+ * fixture has to say it.
  */
 export const wireRefused = (
   snapshot: TelemetrySnapshot,
   tsMs: number,
-  refused: number,
+  refused: readonly (string | null)[],
 ): WireSnapshot => ({ snapshot, tsMs, serving: servingEnumeration(snapshot.serving, refused) });

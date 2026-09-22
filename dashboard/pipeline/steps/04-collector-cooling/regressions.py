@@ -734,9 +734,59 @@ REGRESSIONS = [
 
     # ⚠ §9: "A collection that could NOT be read retires nothing." Dropping the evidence check
     # retires a card whenever `nvidia-smi` fails, which is F3 wearing the opposite mask.
+    # ===================================================================================
+    # ⚠⚠ 12d — §9's ruling of 2026-09-22: an enumeration may be read IN PART, and the
+    # exclusion is PER SUBJECT. The three below are the three ways to get that wrong, and
+    # each is a wrong implementation somebody would actually write rather than a deletion.
+    # ===================================================================================
+    ("12d-C1 the exclusion is matched against the condition's own SUBJECT, so a `unit:` row is never protected",
+     "lib/conditions.ts",
+     "      !entry.members.has(membership.member) &&\n"
+     "      !entry.held.has(membership.member);",
+     "      !entry.members.has(membership.member) &&\n"
+     "      !entry.held.has(previous.subject ?? '');",
+     COND),
+    ("12d-C2 the per-subject exclusion is ignored entirely, so a refused row's alarm retires anyway",
+     "lib/conditions.ts",
+     "      !entry.members.has(membership.member) &&\n"
+     "      !entry.held.has(membership.member);",
+     "      !entry.members.has(membership.member);",
+     COND),
+    ("12d-C3 the exclusion is INVERTED, so the only subject that retires is the one we could not read",
+     "lib/conditions.ts",
+     "      !entry.members.has(membership.member) &&\n"
+     "      !entry.held.has(membership.member);",
+     "      !entry.members.has(membership.member) &&\n"
+     "      entry.held.has(membership.member);",
+     COND),
+
+    # ⚠⚠ 12d/RECONCILE — the MEMBERSHIP clause, which is §9 row 2's *"and it was NOT IN IT"*.
+    # A pair, one per direction: `C4` points the comparison at the wrong field (the same
+    # subject-vs-member conflation `C1` covers for the exclusion, one clause over), `C5`
+    # inverts it. A single mutation of a clause can only prove *a* clause is there, never that
+    # it points the right way (HANDOVER §5).
+    ("12d-C4 membership is matched against the condition's own SUBJECT, so a subject still IN the collection is retired anyway",
+     "lib/conditions.ts",
+     "      !entry.members.has(membership.member) &&\n"
+     "      !entry.held.has(membership.member);",
+     "      !entry.members.has(previous.subject ?? '') &&\n"
+     "      !entry.held.has(membership.member);",
+     COND),
+    ("12d-C5 the membership clause is INVERTED, so the only subject that retires is one the collection still lists",
+     "lib/conditions.ts",
+     "      !entry.members.has(membership.member) &&\n"
+     "      !entry.held.has(membership.member);",
+     "      entry.members.has(membership.member) &&\n"
+     "      !entry.held.has(membership.member);",
+     COND),
+
     ("04-T72 an unread collection retires its subjects, so gpus: null looks like gpus: [] (F3)",
      "lib/conditions.ts",
-     "    const enumerated = previous.enumeration !== null && enumerationsRead.has(previous.enumeration);",
+     "    const enumerated =\n"
+     "      membership !== null &&\n"
+     "      entry !== undefined &&\n"
+     "      !entry.members.has(membership.member) &&\n"
+     "      !entry.held.has(membership.member);",
      "    const enumerated = true;",
      COND),
 

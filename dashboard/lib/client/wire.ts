@@ -555,10 +555,22 @@ const coolingOf = (value: unknown): Checked<Cooling> => {
  * The variant carries **why**, because §3.4's second ruling of 2026-09-17 requires the
  * `errors[]` entry to name *which* row and *why* — and "why" cannot be reconstructed after the
  * fact from a bare `undefined`.
+ *
+ * ⚠⚠ **12d — it also carries WHO, when we know.** §9's ruling of 2026-09-22 makes retirement
+ * turn on *whether the refused row's identity parsed*: a row refused for a bad `port` still
+ * names the subject it was about, and every OTHER absent instance may retire normally. A row
+ * refused **for its `instance`** names nobody, and freezes the whole enumeration. That is a
+ * fact only this function knows — `instance` is validated here and nowhere else — so it is
+ * carried out rather than re-derived from the message, which is the text-matching this file
+ * forbids everywhere else.
+ *
+ * ⚠ `identity` is `null` for both *the key was missing* and *the key was there and was
+ * rubbish*: neither tells us which instance the row was about, which is the only question §9
+ * asks of it. They stay apart in `why`, which is what the operator reads.
  */
 type CheckedRow =
   | { readonly ok: true; readonly row: ServingInstance }
-  | { readonly ok: false; readonly why: string };
+  | { readonly ok: false; readonly why: string; readonly identity: string | null };
 
 /** The members of §3.4's row, in §4's own order, so a refusal lists them the way the wire does. */
 const SERVING_FIELDS = ['instance', 'port', 'unitState', 'model', 'ctx', 'health', 'gpus'] as const;
@@ -579,7 +591,10 @@ const SERVING_FIELDS = ['instance', 'port', 'unitState', 'model', 'ctx', 'health
 const quoted = (name: string): string => '`' + name + '`';
 
 const servingInstanceOf = (value: unknown): CheckedRow => {
-  if (!isRecord(value)) return { ok: false, why: 'the row is not a JSON object' };
+  // ⚠ 12d — a row that is not an object has no `instance` to read, so it names no subject and
+  // freezes the enumeration. That is the same answer as a row whose `instance` is rubbish, and
+  // for the same reason: we cannot tell who is missing.
+  if (!isRecord(value)) return { ok: false, why: 'the row is not a JSON object', identity: null };
   const instance = instanceId(field(value, 'instance'));
   const portValue = branded(numberOrNull(field(value, 'port')), port);
   const unitState = memberOrNull(UNIT_STATES, field(value, 'unitState'));
@@ -605,7 +620,11 @@ const servingInstanceOf = (value: unknown): CheckedRow => {
     health === undefined ||
     gpus === undefined
   ) {
-    return { ok: false, why: `${bad.map(quoted).join(', ')} did not validate` };
+    // ⚠⚠ 12d — `instance ?? null` is the whole of §9's new rule at its source. When `instance`
+    // validated and something else did not, the refusal still NAMES its subject and only that
+    // subject is protected from retirement; when `instance` itself is what failed, this is
+    // `null` and no subject can be shown absent at all.
+    return { ok: false, why: `${bad.map(quoted).join(', ')} did not validate`, identity: instance ?? null };
   }
   const row = { instance, port: portValue, unitState, model, ctx, health };
   // ⚠ The key is OMITTED, not set to `undefined`. `exactOptionalPropertyTypes` is on, and
@@ -679,8 +698,22 @@ const WIRE_REFUSAL_SOURCE: ErrorSource = 'llama-env';
  */
 interface ServingList {
   readonly rows: readonly ServingInstance[] | null;
-  /** One sentence per dropped row, already naming the row and the reason. */
-  readonly refusals: readonly string[];
+  /**
+   * One entry per dropped row: the sentence naming the row and the reason, and — ⚠ 12d — the
+   * identity that row was about, or `null` when the identity is what failed.
+   */
+  readonly refusals: readonly RefusedRow[];
+}
+
+/** ⚠ 12d — one refused `serving[]` row as the two readers of a refusal need it. */
+interface RefusedRow {
+  /** §3.4's required `errors[]` sentence: which row, and why. */
+  readonly message: string;
+  /**
+   * The subject the row would have been about — §9's 2026-09-22 ruling — or `null` when the
+   * row's own `instance` did not validate and we therefore cannot tell who is missing.
+   */
+  readonly identity: string | null;
 }
 
 /**
@@ -716,14 +749,43 @@ interface ServingList {
 export type ServingEnumeration =
   /** `serving: null` — §3.1's *which instances exist is unknown*. Nothing was read. */
   | { readonly read: 'none' }
-  /** The server sent more rows than these; {@link servingListOf} refused `refused` of them. */
-  | { readonly read: 'partial'; readonly rows: readonly ServingInstance[]; readonly refused: number }
+  /**
+   * The server sent more rows than these; {@link servingListOf} refused the ones `refused`
+   * describes.
+   *
+   * ⚠⚠ **12d — `refused` is the refused rows' IDENTITIES, not a count.** §9's ruling of
+   * 2026-09-22 retires what it can: a refused row whose `instance` parsed protects that one
+   * identity and lets every other absent subject retire, while a refused row whose identity
+   * did **not** parse (`null` here) freezes retirement for the whole enumeration, because no
+   * subject can then be shown absent. The count is `refused.length` and is never stored
+   * separately — a count beside a list is a second copy of one fact, and this loop exists
+   * because a fact travelled without the thing that qualified it.
+   */
+  | {
+      readonly read: 'partial';
+      readonly rows: readonly ServingInstance[];
+      /**
+       * ⚠⚠ **12d/RECONCILE — a NON-EMPTY tuple, because `{ read: 'partial', refused: [] }` is a
+       * value with two contradictory readings** (adversarial finding 7). Measured on a
+       * hand-forged one: `enumerationsRead` answers *serving was read, nothing held back* —
+       * the permissive reading — while `servedBy` on the same value answers `incomplete`. It
+       * is unreachable through {@link servingEnumeration}, which is the only producer; but
+       * `ServingEnumeration` is exported and structural, and *"a fact travelled without the
+       * thing that qualified it"* is this loop family's own founding defect. The tuple costs
+       * nothing at run time and makes the contradiction unwritable.
+       */
+      readonly refused: readonly [string | null, ...(string | null)[]];
+    }
   /** Every row the server sent is here. The only state that supports a negative answer. */
   | { readonly read: 'all'; readonly rows: readonly ServingInstance[] };
 
 /**
  * The one constructor for a {@link ServingEnumeration}, and it cannot be called without saying
- * how many rows were refused.
+ * which rows were refused.
+ *
+ * ⚠ 12d — `refused` is one entry per refused row, holding that row's identity or `null`. An
+ * empty array is *nothing was refused*, which is `read: 'all'`; it is NOT the same as a
+ * one-element array holding `null`, which is *one row was refused and we cannot say whose*.
  *
  * ⚠ `refused` is **required**, and deliberately has no default. The TEST phase's
  * `enumerationsRead(snapshot, servingRowsRefused = 0)` defaulted the unsafe way — `0` asserts
@@ -734,10 +796,15 @@ export type ServingEnumeration =
  */
 export const servingEnumeration = (
   rows: readonly ServingInstance[] | null,
-  refused: number,
+  refused: readonly (string | null)[],
 ): ServingEnumeration => {
   if (rows === null) return { read: 'none' };
-  return refused > 0 ? { read: 'partial', rows, refused } : { read: 'all', rows };
+  // ⚠ 12d/RECONCILE — destructured rather than length-tested, because `refused.length > 0` does
+  // not narrow an array to a non-empty tuple and the alternative is a cast, which is the
+  // unchecked assertion the tuple exists to remove. `refused` holds `string | null`, never
+  // `undefined`, so `first === undefined` is exactly *the array is empty*.
+  const [first, ...rest] = refused;
+  return first === undefined ? { read: 'all', rows } : { read: 'partial', rows, refused: [first, ...rest] };
 };
 
 /** Before the first poll there is no snapshot, and therefore nothing read. */
@@ -747,14 +814,18 @@ const servingListOf = (value: unknown): Checked<ServingList> => {
   if (value === null) return { rows: null, refusals: [] };
   if (!Array.isArray(value)) return undefined;
   const rows: ServingInstance[] = [];
-  const refusals: string[] = [];
+  const refusals: RefusedRow[] = [];
   value.forEach((entry, i) => {
     const checked = servingInstanceOf(entry);
     // ⚠ The row is named by its INDEX in the array it arrived in, not by its `instance` — the
     // identity is one of the things that may be the reason it was refused, and a refusal that
     // names an unusable value tells the reader nothing they can look up.
+    //
+    // ⚠⚠ 12d — the identity still travels, in its own field rather than in the sentence. §9's
+    // ruling needs *which subject this row was about* and the OPERATOR needs *which row in the
+    // array*; they are different questions and the message answers only the second.
     if (checked.ok) rows.push(checked.row);
-    else refusals.push(`serving[${String(i)}] was dropped: ${checked.why}`);
+    else refusals.push({ message: `serving[${String(i)}] was dropped: ${checked.why}`, identity: checked.identity });
   });
   return { rows, refusals };
 };
@@ -866,6 +937,12 @@ export interface WireSnapshot {
    * `SERVING_ENUMERATION`, and filing an `errors[]` entry does not stop it — the entry keeps
    * §9's HEADER honest (`failingSourceCount`), which is a different claim.
    *
+   * ⚠⚠ **12d — it is the refused rows' IDENTITIES now, not a count.** §9's ruling of
+   * 2026-09-22 retires what it can, and *what it can* is decided per subject by whether the
+   * refused row's own `instance` validated. The paragraph below argued a count over a boolean
+   * because a boolean loses information the readers need; the identities are that argument one
+   * step further, and they come from the one place that validated the field.
+   *
    * ⚠ **A count, not a boolean, and it lives here rather than in `errors[]`.** The refusal
    * entries are already in `snapshot.errors`, but recovering this fact from them means matching
    * `'serving[… ] was dropped'` in a message — the text-matching this project forbids
@@ -953,7 +1030,7 @@ export const parseSnapshot = (value: unknown): WireSnapshot | null => {
     errors:
       serving.refusals.length === 0
         ? errors
-        : [...errors, ...serving.refusals.map((message) => ({ source: WIRE_REFUSAL_SOURCE, message }))],
+        : [...errors, ...serving.refusals.map((r) => ({ source: WIRE_REFUSAL_SOURCE, message: r.message }))],
   };
-  return { snapshot, tsMs, serving: servingEnumeration(serving.rows, serving.refusals.length) };
+  return { snapshot, tsMs, serving: servingEnumeration(serving.rows, serving.refusals.map((r) => r.identity)) };
 };

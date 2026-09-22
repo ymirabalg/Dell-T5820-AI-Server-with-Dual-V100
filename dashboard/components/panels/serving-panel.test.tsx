@@ -18,7 +18,8 @@ import { parseSnapshot } from '@/lib/client/wire';
 import type { ServingInstance, TelemetrySnapshot } from '@/lib/types';
 
 import { ServingPanel } from './serving-panel';
-import { allReadingsNull, displayedConditionOf, emptyState, stateWith, valueCells } from './test-support';
+import { allReadingsNull, displayedConditionOf, emptyState, servingReadCases, stateFromWire, stateWith, valueCells } from './test-support';
+import type { WireSnapshot } from '@/lib/client/wire';
 
 describe('§6.2 — SERVING', () => {
   test('one compact row per instance: unit state, port, model, context and health', () => {
@@ -578,5 +579,96 @@ describe('⚠⚠ 12c — a NAMED instance, and the unit-name mapping made visibl
     expect(rowContaining(html, '>llama-split<')).toContain('the split process never answered');
     expect(rowContaining(html, '>default<')).not.toContain('the split process never answered');
     expect(occurrences(html, '>default<')).toBe(1);
+  });
+});
+
+/**
+ * ⚠⚠ **12d — the same five reads, rendered on the SERVING panel.**
+ *
+ * §3.4's ruling of 2026-09-22 puts a third form on the GPU card and says *"the full reason
+ * stays on SERVING beside the refused row"*. This is the other half of that sentence, and it
+ * is asserted rather than assumed: the GPU card says only that the question is open, so if
+ * the explanation is not HERE it is nowhere on the page.
+ *
+ * The bodies are the same five `test-support.ts` builds for the GPU acceptance, taken through
+ * the real `parseSnapshot`, so the `llama-env` sentence below is the validator's own.
+ */
+describe('⚠⚠ 12d — the five reads, rendered on the SERVING panel', () => {
+  const cases = servingReadCases();
+  const render = (wire: WireSnapshot): string =>
+    renderToStaticMarkup(<ServingPanel state={stateFromWire(wire)} nowMs={0} panelId="serving" />);
+  const rowsIn = (html: string): number => html.split('llama-server@').length - 1;
+
+  test('⚠⚠ RENDER 1 of 5 — a COMPLETE list renders both processes and explains nothing, because nothing failed', () => {
+    const html = render(cases.complete);
+    expect(html).toContain('>llama-server@0<');
+    expect(html).toContain('>llama-server@7<');
+    expect(html).toContain(':8080 · GPU 0');
+    expect(html).toContain(':8081 · GPU 1');
+    // ⚠ The anchor the other four are read against: no refusal note on a clean read.
+    expect(html).not.toContain('was dropped');
+  });
+
+  test('⚠⚠ RENDER 2 of 5 — a refused row is GONE from the rows and its reason is under them, naming which row and why', () => {
+    const html = render(cases.refusedNamed);
+    expect(html).toContain('>llama-server@0<');
+    expect(html).not.toContain('>llama-server@7<');
+    // ⚠⚠ The sentence itself, quoted: this is the explanation the GPU card sends the reader
+    // here for. It names the row by its position in the array the server sent — not by the
+    // identity, which may be the reason for the refusal.
+    expect(html).toContain('serving[1] was dropped: `port` did not validate');
+  });
+
+  test('⚠⚠ RENDER 3 of 5 — an anonymous refusal is on this panel too, and it names the field that failed', () => {
+    const html = render(cases.refusedAnonymous);
+    expect(html).toContain('>llama-server@0<');
+    // ⚠ Exactly ONE row survives — the refused one is not rendered as a blank or a ghost.
+    expect(rowsIn(html)).toBe(1);
+    expect(html).toContain('serving[1] was dropped: `instance` did not validate');
+    // ⚠ The pair with render 2: the two refusals differ HERE, on the panel that can say which
+    // field failed, while the GPU card renders them identically. That asymmetry is the ruling
+    // — the card says the question is open, the panel says why.
+    expect(html).not.toContain('`port` did not validate');
+  });
+
+  test('⚠⚠ RENDER 4 of 5 — an unreadable `gpus` keeps its row and shows an em dash beside the port', () => {
+    const html = render(cases.gpusUnreadable);
+    expect(html).toContain('>llama-server@7<');
+    expect(html).toContain(':8081 · —');
+    // ⚠ Nothing was discarded here, so there is no refusal sentence. This is what separates a
+    // failed READING from a cut LIST on this panel, one row apart from the GPU card's own two
+    // forms.
+    expect(html).not.toContain('was dropped');
+  });
+
+  test('⚠⚠ RENDER 5 of 5 — an ABSENT `gpus` renders the row exactly as an older server always did', () => {
+    const html = render(cases.gpusAbsent);
+    expect(html).toContain('>llama-server@0<');
+    expect(html).toContain('>llama-server@7<');
+    expect(html).toContain(':8080');
+    // ⚠ No card text at all — not `—`, which would claim a reading failed on a server that
+    // has never published the field (§3.4 forbids collapsing absent and `null`).
+    expect(html).not.toContain(':8080 · ');
+    expect(html).not.toContain(':8081 · ');
+  });
+
+  test('⚠⚠ every refusal reaches THIS panel, which is what lets the GPU card keep its answer short', () => {
+    // The property behind §3.4's *"the full reason stays on SERVING"*: for both partial reads
+    // the explaining sentence is on this panel, and the row it was about is not.
+    for (const wire of [cases.refusedNamed, cases.refusedAnonymous]) {
+      const html = render(wire);
+      expect(html).toContain('was dropped');
+      expect(html).not.toContain('>llama-server@7<');
+      // ⚠⚠ 12d/TEST — and the CARD's four words are not here. §3.4 splits the two statements
+      // deliberately: the card says the question is open, this panel says which row and why.
+      // A panel that also printed `list not fully read` would be the second spelling of one
+      // fact that the ruling's own wording exists to prevent.
+      expect(html).not.toContain('list not fully read');
+    }
+    // ⚠ …and the twin, so this is not "the panel always says something was dropped": the
+    // three non-partial reads carry no refusal sentence at all.
+    for (const wire of [cases.complete, cases.gpusUnreadable, cases.gpusAbsent]) {
+      expect(render(wire)).not.toContain('was dropped');
+    }
   });
 });

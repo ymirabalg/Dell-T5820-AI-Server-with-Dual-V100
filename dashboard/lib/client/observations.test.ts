@@ -38,9 +38,17 @@ import { wireBodyOf } from './fake-env';
  * every call below has to say whether the list is all of it. These two helpers are the two
  * answers; there is no third, and no default.
  */
-const allRead = (rows: readonly ServingInstance[] | null) => servingEnumeration(rows, 0);
-/** …and the state `12c-A1` was found in: the server sent more rows than these. */
-const partlyRead = (rows: readonly ServingInstance[], refused: number) =>
+const allRead = (rows: readonly ServingInstance[] | null) => servingEnumeration(rows, []);
+/**
+ * …and the state `12c-A1` was found in: the server sent more rows than these.
+ *
+ * ⚠⚠ 12d — `refused` is now the refused rows' IDENTITIES, or `null` for a row whose own
+ * `instance` did not validate, because §9's ruling of 2026-09-22 does opposite things in the
+ * two cases. ⚠ The default is `[null]` — *one row was refused and we cannot say whose* — which
+ * is the CONSERVATIVE branch (retirement frozen), so a call that does not care about §9 cannot
+ * accidentally assert the permissive one.
+ */
+const partlyRead = (rows: readonly ServingInstance[], refused: readonly (string | null)[] = [null]) =>
   servingEnumeration(rows, refused);
 
 const card = everythingZero.gpus?.[0];
@@ -394,33 +402,116 @@ describe('⚠ which enumerations a poll could read', () => {
    * goes with it. Getting this backwards turns the header green at the moment the dashboard
    * loses the ability to look.
    */
+  /**
+   * ⚠⚠ 12d — the collections this poll READ, as a sorted list of keys. The value beside each
+   * key is the per-subject exclusion and is asserted separately below, because the two
+   * questions — *was it read* and *for whom* — are what §9's 2026-09-22 ruling pulled apart.
+   */
+  const keys = (r: ReturnType<typeof enumerationsRead>): string[] => [...r.keys()].sort();
   const read = (snapshot: TelemetrySnapshot) => enumerationsRead(snapshot, allRead(snapshot.serving));
 
   test('⚠ null is not [] — an unread collection retires nothing', () => {
-    expect([...read({ ...loaded, gpus: null, serving: null })]).toEqual([]);
-    expect([...read({ ...loaded, gpus: [], serving: [] })].sort()).toEqual([
+    expect(keys(read({ ...loaded, gpus: null, serving: null }))).toEqual([]);
+    expect(keys(read({ ...loaded, gpus: [], serving: [] }))).toEqual([
       GPU_ENUMERATION,
       SERVING_ENUMERATION,
     ]);
   });
 
   test('each collection is reported independently', () => {
-    expect([...read({ ...loaded, gpus: null })]).toEqual([SERVING_ENUMERATION]);
-    expect([...read({ ...loaded, serving: null })]).toEqual([GPU_ENUMERATION]);
+    expect(keys(read({ ...loaded, gpus: null }))).toEqual([SERVING_ENUMERATION]);
+    expect(keys(read({ ...loaded, serving: null }))).toEqual([GPU_ENUMERATION]);
   });
 
-  test('⚠⚠ a REFUSED row is not a read enumeration, and there is no default that says it is', () => {
+  test('⚠⚠ a row refused for its own IDENTITY is not a read enumeration, and there is no default that says it is', () => {
     // ⚠ `12c-A5`: this argument arrived as `servingRowsRefused = 0`, and `0` means *the
     // enumeration WAS read*. A caller that had not been updated therefore retired an instance
     // for a validation failure — the exact defect the argument exists to close, reintroduced by
     // its own default. It is required now, and it is the same VALUE `servedBy` takes, so the
     // ledger and the join cannot be told different things about one array.
+    //
+    // ⚠⚠ 12d narrowed this to the row it is still true of: an ANONYMOUS refusal (`[null]`).
     const rows = loaded.serving ?? [];
-    expect([...enumerationsRead(loaded, partlyRead(rows, 1))]).toEqual([GPU_ENUMERATION]);
-    expect([...enumerationsRead(loaded, allRead(rows))].sort()).toEqual([
+    expect(keys(enumerationsRead(loaded, partlyRead(rows, [null])))).toEqual([GPU_ENUMERATION]);
+    expect(keys(enumerationsRead(loaded, allRead(rows)))).toEqual([
       GPU_ENUMERATION,
       SERVING_ENUMERATION,
     ]);
+  });
+
+  /**
+   * ⚠⚠ **12d — §9's ruling of 2026-09-22, both branches, and the pair IS the test.**
+   *
+   * *A partial read retires what it can.* A refused row whose `instance` parsed names the one
+   * subject we failed to read, so the enumeration counts as READ and holds back that identity
+   * alone; a refused row whose identity did **not** parse names nobody, so no subject may be
+   * shown absent and the enumeration is not reported as read at all.
+   *
+   * ⚠ Every fixture below uses an identity (`'7'`) that is neither of the loaded snapshot's
+   * instances and neither card index, so *protected*, *present* and *absent* cannot coincide
+   * — a fixture whose two candidate answers are the same value cannot discriminate between
+   * them (HANDOVER §0.6).
+   */
+  test('⚠⚠ a refused row whose identity PARSED holds back that identity and reports the enumeration read', () => {
+    const rows = loaded.serving ?? [];
+    const result = enumerationsRead(loaded, partlyRead(rows, ['7']));
+    expect(keys(result)).toEqual([GPU_ENUMERATION, SERVING_ENUMERATION]);
+    expect([...(result.get(SERVING_ENUMERATION)?.held ?? [])]).toEqual(['7']);
+    // ⚠ The anti-vacuity half: `gpus` was read too, and NOTHING is held back there. A fix that
+    // held everything back everywhere would satisfy the line above and retire nothing at all.
+    expect([...(result.get(GPU_ENUMERATION)?.held ?? [])]).toEqual([]);
+    // ⚠⚠ 12d/RECONCILE — and the OTHER half of the pair is the membership, which is a
+    // different list: `'7'` is the identity we could not read and `['0','1']` are the rows we
+    // did. A single set could not say both, which is why this value is a pair.
+    expect([...(result.get(SERVING_ENUMERATION)?.members ?? [])].sort()).toEqual(['0', '1']);
+    expect([...(result.get(GPU_ENUMERATION)?.members ?? [])].sort()).toEqual(['0', '1']);
+  });
+
+  test('⚠⚠ an ANONYMOUS refusal freezes the whole serving enumeration, and one anonymous row among named ones is enough', () => {
+    const rows = loaded.serving ?? [];
+    // Two refusals, one of which could not be identified. The named one is NOT a licence to
+    // retire the rest: we still cannot tell who the other row was about.
+    expect(keys(enumerationsRead(loaded, partlyRead(rows, ['7', null])))).toEqual([GPU_ENUMERATION]);
+    expect(keys(enumerationsRead(loaded, partlyRead(rows, [null, '7'])))).toEqual([GPU_ENUMERATION]);
+    // …and the twin, so this is not the vacuous "never report serving": two NAMED refusals do
+    // report it, holding back exactly the two identities.
+    const named = enumerationsRead(loaded, partlyRead(rows, ['7', '9']));
+    expect(keys(named)).toEqual([GPU_ENUMERATION, SERVING_ENUMERATION]);
+    expect([...(named.get(SERVING_ENUMERATION)?.held ?? [])].sort()).toEqual(['7', '9']);
+  });
+
+  test('⚠⚠ 12d/RECONCILE — each collection reports ITS OWN membership, on a fixture where the two DISAGREE', () => {
+    // ⚠⚠ The coincidence this test exists to break: `loaded`'s cards are 0 and 1 and its
+    // instances are `'0'` and `'1'`, so a membership read off the WRONG collection is
+    // byte-identical to the right one on every other fixture in this file (HANDOVER §0.6 —
+    // "a fixture whose two candidate answers are the same value cannot discriminate").
+    // Here the serving list holds one instance called `'7'`, which is no card index.
+    const first = (loaded.serving ?? [])[0];
+    if (first === undefined) throw new Error('fixture lost its serving rows');
+    const crossed: TelemetrySnapshot = { ...loaded, serving: [{ ...first, instance: '7' }] };
+    const result = enumerationsRead(crossed, allRead(crossed.serving));
+    expect([...(result.get(GPU_ENUMERATION)?.members ?? [])].sort()).toEqual(['0', '1']);
+    expect([...(result.get(SERVING_ENUMERATION)?.members ?? [])]).toEqual(['7']);
+    // ⚠ And the membership is the row's IDENTITY, never its position in the array — `'7'` sits
+    // at index 0, so a position-shaped implementation answers `['0']` here and is right on
+    // every fixture where the identities happen to count from zero.
+    expect([...(result.get(SERVING_ENUMERATION)?.members ?? [])]).not.toEqual(['0']);
+  });
+
+  test('⚠ a complete read holds nothing back, which is not the same as not being read', () => {
+    // ⚠ §3.1's `null` ≠ `[]` one level further in: an EMPTY exclusion set and an ABSENT key
+    // are different answers, and only one of them retires. `serving: null` gives no key at
+    // all; a clean read gives the key with an empty set.
+    const clean = enumerationsRead(loaded, allRead(loaded.serving));
+    expect(clean.has(SERVING_ENUMERATION)).toBe(true);
+    expect([...(clean.get(SERVING_ENUMERATION)?.held ?? [])]).toEqual([]);
+    // ⚠⚠ 12d/RECONCILE — *nothing held back* is not *nobody there*. The membership of a clean
+    // read is the rows themselves, and reading the two off one set is what let a subject still
+    // in the list be retired for going quiet (§9 row 2's own "Because").
+    expect([...(clean.get(SERVING_ENUMERATION)?.members ?? [])].sort()).toEqual(['0', '1']);
+    const unread = enumerationsRead(loaded, servingEnumeration(null, []));
+    expect(unread.has(SERVING_ENUMERATION)).toBe(false);
+    expect(unread.get(SERVING_ENUMERATION)).toBeUndefined();
   });
 
   /*
@@ -431,10 +522,18 @@ describe('⚠ which enumerations a poll could read', () => {
    * pattern — a second spelling of the name `lib/units.ts` exists to prevent.
    */
   test('⚠ an enumerated subject names its collection, and an unenumerated one names none', () => {
-    expect(find(loaded, 'gpu_temp:0')?.enumeration).toBe(GPU_ENUMERATION);
-    expect(find(loaded, 'gpu_vram:1')?.enumeration).toBe(GPU_ENUMERATION);
-    expect(find(loaded, 'health:0')?.enumeration).toBe(SERVING_ENUMERATION);
-    expect(find(loaded, 'unit:llama-server@0.service')?.enumeration).toBe(SERVING_ENUMERATION);
+    expect(find(loaded, 'gpu_temp:0')?.enumeration).toEqual({ name: GPU_ENUMERATION, member: '0' });
+    expect(find(loaded, 'gpu_vram:1')?.enumeration).toEqual({ name: GPU_ENUMERATION, member: '1' });
+    expect(find(loaded, 'health:0')?.enumeration).toEqual({ name: SERVING_ENUMERATION, member: '0' });
+    // ⚠⚠ 12d — the member of a `unit:` condition is the INSTANCE IDENTITY, not the unit name
+    // that is its own subject. A refused `serving[]` row names `'0'`, never
+    // `llama-server@0.service`, so a member taken from `subject` would protect nothing and
+    // retire the alarm §9's ruling exists to keep. This assertion is the whole difference.
+    expect(find(loaded, 'unit:llama-server@0.service')?.enumeration).toEqual({
+      name: SERVING_ENUMERATION,
+      member: '0',
+    });
+    expect(find(loaded, 'unit:llama-server@0.service')?.subject).toBe('llama-server@0.service');
 
     // Nothing enumerates these, so they can only ever go stale — never be retired.
     expect(find(loaded, `unit:${FAN_SERVICE_UNIT}`)?.enumeration ?? null).toBeNull();
@@ -869,14 +968,17 @@ describe('⚠⚠ 12c/RECONCILE — a REFUSED row cannot make the card say `no in
     // which is the property the inversion was built for.
     const claimedElsewhere = [{ ...(perGpu[0] as ServingInstance), gpus: [1] }];
     expect(servedBy(allRead(claimedElsewhere), 0).kind).toBe('unserved');
-    expect(servedBy(partlyRead(claimedElsewhere, 1), 0).kind).toBe('unknown');
+    // ⚠⚠ 12d — `incomplete`, not `unknown`. §3.4's ruling of 2026-09-22 gives a partially-read
+    // list its OWN answer; `unknown` is *this reading could not be taken*, which is a different
+    // fact and is asserted apart from this one below.
+    expect(servedBy(partlyRead(claimedElsewhere, [null]), 0).kind).toBe('incomplete');
   });
 
   test('⚠⚠ a row that IS here still wins on a partial list — the refusal blanks nothing it did read', () => {
     // The other direction, and the reason the rule is "no NEGATIVE answer" rather than "no
     // answer". A refusal elsewhere in the array is not a reason to drop a model this client
     // parsed: that would put an em dash on a card whose instance is right there.
-    const declared = servedBy(partlyRead(perGpu, 1), 0);
+    const declared = servedBy(partlyRead(perGpu, [null]), 0);
     expect(declared.kind).toBe('declared');
     expect(declared.kind === 'declared' ? declared.instance.instance : null).toBe('0');
     expect(declared.kind === 'declared' ? declared.instance.model : null).toBe(
@@ -890,13 +992,13 @@ describe('⚠⚠ 12c/RECONCILE — a REFUSED row cannot make the card say `no in
     // printed `served by instance 0` — naming an instance for a row that had just been thrown
     // away. Q7's own case (a genuinely empty list on a pre-`gpus` server) is `allRead` and is
     // asserted beside it, unchanged.
-    expect(servedBy(partlyRead([], 1), 0)).toEqual({ kind: 'unknown' });
+    expect(servedBy(partlyRead([], [null]), 0)).toEqual({ kind: 'incomplete' });
     expect(servedBy(allRead([]), 0)).toEqual({ kind: 'indexed', instance: null });
     // ⚠ …but a row the client DID read still answers by index: it is a positive match on a row
     // that is here, and an old server's index join is the only arrangement that exists on it.
     const older = [servingInstances[0] as ServingInstance];
-    expect(servedBy(partlyRead(older, 1), 0)).toEqual({ kind: 'indexed', instance: older[0] });
-    expect(servedBy(partlyRead(older, 1), 1).kind).toBe('unknown');
+    expect(servedBy(partlyRead(older, [null]), 0)).toEqual({ kind: 'indexed', instance: older[0] });
+    expect(servedBy(partlyRead(older, [null]), 1).kind).toBe('incomplete');
   });
 
   test('⚠ `serving: null` is unchanged — `unread` is not the same state as `partial`', () => {
@@ -953,7 +1055,61 @@ describe('⚠⚠ 12c/RECONCILE — a REFUSED row cannot make the card say `no in
     const broken = parseSnapshot(body([{ ...(withGpus[0] as object), port: 'nope' }, withGpus[1]]));
     expect(broken!.serving.read).toBe('partial');
     expect(servedBy(broken!.serving, 1).kind).toBe('declared'); // row 1 is here and claims it
-    expect(servedBy(broken!.serving, 0).kind).toBe('unknown'); // row 0 was refused, not absent
+    expect(servedBy(broken!.serving, 0).kind).toBe('incomplete'); // row 0 was refused, not absent
+  });
+});
+
+/**
+ * ⚠⚠ **12d — §3.4's ruling of 2026-09-22: a partially-read list gets its OWN answer.**
+ *
+ * 12c built the negative branches as `unknown`, invariant 1's em dash, and recorded it as
+ * `12c-Q1` because an em dash already means *this reading could not be taken* — which is what
+ * an unreadable `gpus` shows. Two different facts rendering identically is invariant 1's own
+ * failure one level up, and the owner ruled a third form. These tests are the DISCRIMINATION:
+ * each one puts the two states side by side and asserts they differ.
+ */
+describe('⚠⚠ 12d — a partial read and an unreadable `gpus` are different answers', () => {
+  test('⚠⚠ a refused row answers `incomplete` where an unreadable `gpus` answers `unknown`', () => {
+    // ⚠ The pair IS the test — asserting `incomplete` alone would pass for an implementation
+    // that answered `incomplete` everywhere, which would lose the em dash instead of the
+    // conflation. The two fixtures differ in exactly one thing: whether the list was cut.
+    const cut = servedBy(partlyRead([{ ...(servingPerGpu[1] as ServingInstance) }], ['0']), 0);
+    const unreadable = servedBy(allRead(servingGpusUnreadable), 1);
+    expect(cut.kind).toBe('incomplete');
+    expect(unreadable.kind).toBe('unknown');
+    expect(cut.kind).not.toBe(unreadable.kind);
+  });
+
+  test('⚠⚠ `incomplete` never displaces a POSITIVE answer, and never displaces `unserved` on a complete list', () => {
+    // The two anti-vacuity halves, together. A fix that returned `incomplete` from the top of
+    // the function would satisfy the test above and blind the panel — `declared` must survive
+    // on a partial list (the row is here and claims the card) and `unserved` must survive on a
+    // complete one (nobody claims it), or a mis-pinned instance goes invisible again.
+    expect(servedBy(partlyRead([...servingPerGpu], ['7']), 0).kind).toBe('declared');
+    expect(servedBy(allRead([{ ...(servingPerGpu[0] as ServingInstance), gpus: [1] }]), 0).kind).toBe(
+      'unserved',
+    );
+    // …and neither of those is `incomplete`, which is what "never displaces" means.
+    expect(servedBy(partlyRead([...servingPerGpu], ['7']), 0).kind).not.toBe('incomplete');
+  });
+
+  test('⚠ when the list was cut AND a row we did read has an unreadable `gpus`, the cut is what the card says', () => {
+    // ⚠ Both statements are true at once and §6.2 does not say which wins — recorded as a spec
+    // silence in `12d-build.md`. Built as: the cut wins, because a refused row has no SERVING
+    // row to carry its explanation while an unreadable `gpus` already has its `dbus` entry on
+    // the row it belongs to. This test pins the CHOICE so a later change to it is deliberate.
+    const both = servedBy(partlyRead([...servingGpusUnreadable], ['7']), 1);
+    expect(both.kind).toBe('incomplete');
+    // The twin: the same rows with nothing refused still answer `unknown`, so this test is
+    // about precedence and not about having broken the em dash.
+    expect(servedBy(allRead(servingGpusUnreadable), 1).kind).toBe('unknown');
+  });
+
+  test('⚠⚠ `serving: null` stays `indexed` — the third form is for a list read in PART, not one not read', () => {
+    // Three states, and the new form belongs to exactly one of them. `none` keeps 12b's
+    // rendering, which is what the live box shows when `serving` cannot be enumerated at all.
+    expect(servedBy(servingEnumeration(null, []), 0)).toEqual({ kind: 'indexed', instance: null });
+    expect(servedBy(partlyRead([], [null]), 0)).toEqual({ kind: 'incomplete' });
   });
 });
 

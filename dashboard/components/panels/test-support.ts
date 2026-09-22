@@ -15,7 +15,10 @@ import type { WindowMinutes } from '@/lib/client/prefs';
 import { EMPTY_RING, appendSample } from '@/lib/client/ring';
 import type { SampleRing } from '@/lib/client/ring';
 import type { RuntimeState } from '@/lib/client/runtime';
-import { nothingReadable, wireRead, wireRefused } from '@/lib/fixtures';
+import { everythingZero, nothingReadable, wireRead, wireRefused } from '@/lib/fixtures';
+import { wireBodyOf } from '@/lib/client/fake-env';
+import { parseSnapshot } from '@/lib/client/wire';
+import type { WireSnapshot } from '@/lib/client/wire';
 import { isoTimestamp } from '@/lib/types';
 import type { Gpu, ServingInstance, TelemetrySnapshot } from '@/lib/types';
 
@@ -96,7 +99,12 @@ export const stateWith = (snapshot: TelemetrySnapshot, overrides: StateOverrides
  */
 export const stateWithRefused = (
   snapshot: TelemetrySnapshot,
-  refused: number,
+  /**
+   * ⚠⚠ 12d — one entry per refused row: the identity that row named, or `null` when the
+   * identity itself is what did not validate. A panel test that wants only *the list was cut*
+   * still has to say which, because §9's two branches disagree about everything else.
+   */
+  refused: readonly (string | null)[],
   overrides: StateOverrides = {},
 ): RuntimeState =>
   stateOf(
@@ -110,6 +118,91 @@ export const stateWithRefused = (
     ),
     overrides,
   );
+
+/**
+ * A `RuntimeState` whose one sample is EXACTLY what {@link parseSnapshot} produced — the
+ * snapshot, its `errors[]` (the refusal entries included) and its {@link ServingEnumeration}.
+ *
+ * ⚠⚠ 12d — this is what makes an acceptance a RENDER rather than an argument. `stateWith` and
+ * `stateWithRefused` take a hand-built snapshot and a hand-stated completeness, so a test
+ * using them asserts what the panel does with a fixture somebody wrote. This one starts from
+ * raw JSON, runs the real validator, and renders whatever comes out — so the `llama-env`
+ * entry under the SERVING rows is the validator's own sentence and not a fixture's.
+ */
+export const stateFromWire = (wire: WireSnapshot, overrides: StateOverrides = {}): RuntimeState =>
+  stateOf(appendSample(EMPTY_RING, wire), overrides);
+
+/**
+ * ⚠⚠ **12d — the five states §3.4's and §9's 2026-09-22 rulings have to be told apart in, as
+ * five REAL wire bodies taken through `parseSnapshot`.**
+ *
+ * Both panels render all five, and they are built once here so the two renders are of the
+ * same machine. Each differs from `complete` in exactly one field.
+ *
+ * | case | what the wire carries | what it is |
+ * |---|---|---|
+ * | `complete` | two valid rows | every row is here |
+ * | `refusedNamed` | row 1's `port` is `'nope'` | refused, and it still NAMES instance `7` |
+ * | `refusedAnonymous` | row 1's `instance` is `1.5` | refused, and it names NOBODY |
+ * | `gpusUnreadable` | row 1's `gpus` is `null` | a reading that failed, on a row that is here |
+ * | `gpusAbsent` | neither row carries `gpus` | an older SERVER, §3.4's licensed index join |
+ *
+ * ⚠ **The identities and the card indices DISAGREE by construction.** Instance `'7'` serves
+ * card 1, so a join that read the card's own index, the row's position, or `String(index)`
+ * produces a different page — and "the subject we protected" (`7`) is not "a card index"
+ * either, which is the second coincidence §9's per-subject rule could otherwise rest on.
+ */
+export const servingReadCases = (): {
+  readonly complete: WireSnapshot;
+  readonly refusedNamed: WireSnapshot;
+  readonly refusedAnonymous: WireSnapshot;
+  readonly gpusUnreadable: WireSnapshot;
+  readonly gpusAbsent: WireSnapshot;
+} => {
+  const rowZero = {
+    instance: '0',
+    port: 8080,
+    unitState: 'active',
+    model: 'qwen3.6-27b',
+    ctx: 131072,
+    health: 'ok',
+    gpus: [0],
+  };
+  const rowSeven = {
+    instance: '7',
+    port: 8081,
+    unitState: 'active',
+    model: 'gemma-4-31b',
+    ctx: 131072,
+    health: 'ok',
+    gpus: [1],
+  };
+  // ⚠ BOTH cards enumerated, so neither GPU panel takes §6.5's absent-card takeover branch
+  // and each renders the served-by strip this acceptance is about.
+  const card0 = everythingZero.gpus?.[0] as Gpu;
+  const body = (serving: readonly unknown[]): unknown => ({
+    ...(wireBodyOf({ ...everythingZero, gpus: [card0, { ...card0, index: 1 }] }) as Record<string, unknown>),
+    serving,
+  });
+  // ⚠ A non-null assertion would hide a fixture that stopped validating, and every case below
+  // is meant to be a snapshot the validator ACCEPTS — a refused ROW is not a refused snapshot.
+  const parsed = (serving: readonly unknown[]): WireSnapshot => {
+    const wire = parseSnapshot(body(serving));
+    if (wire === null) throw new Error('a 12d fixture stopped being a valid snapshot');
+    return wire;
+  };
+  const withoutGpus = (row: Record<string, unknown>): Record<string, unknown> => {
+    const { gpus: _dropped, ...rest } = row;
+    return rest;
+  };
+  return {
+    complete: parsed([rowZero, rowSeven]),
+    refusedNamed: parsed([rowZero, { ...rowSeven, port: 'nope' }]),
+    refusedAnonymous: parsed([rowZero, { ...rowSeven, instance: 1.5 }]),
+    gpusUnreadable: parsed([rowZero, { ...rowSeven, gpus: null }]),
+    gpusAbsent: parsed([withoutGpus(rowZero), withoutGpus(rowSeven)]),
+  };
+};
 
 const conditionDefaults: DisplayedCondition = {
   kind: 'fan5_absolute',
