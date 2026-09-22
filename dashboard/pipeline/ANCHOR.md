@@ -27,53 +27,46 @@ adversarial and review phases and fixed before they became wrong code. Several w
 
 ---
 
-## 2. State — READ THIS FIRST. Written 2026-09-09 by the session that ran Q1–Q3, 10a–10c, 10d, 10e and 10f; it is the only inheritance.
+## 2. State — READ THIS FIRST. Rewritten 2026-09-22 by the session that ran step 10's tail, steps 11–12, `serving-mode.sh` and 12a–12c. It is the only inheritance.
 
-### 2.0 ⚠ The one-paragraph version
+### 2.0 The one-paragraph version
 
-> ⚠⚠ **CORRECTED AGAIN 2026-09-10 by 10h's reconciliation — the three lines below about which
-> loop is uncommitted stopped being true when 10g was committed. 10e, 10f and 10g are ALL
-> committed (`8ad8b9c`, `5769522`, `29e2240`); the dirty tree is now 10h**, the loop that bounds
-> the grid. 10h's own state: §6.1's page-fit promise holds on every graded fixture INCLUDING a
-> hostile one (spare 28 / 4 / 36 px), **and** — new in 10h's reconciliation — no panel body hides
-> a reading on the healthy, real-box-degraded, all-collectors-failed or all-sources-explained
-> pages, which is the half of the acceptance the caps made necessary and nothing graded until
-> now. `measure-breakpoints.mjs` **59/59 exit 0**, `pnpm verify` **101 files / 3061 tests exit
-> 0**, nine harnesses **1180 mutations, all exit 0**. ⚠ Two things are DEFERRED to the owner and
-> named in `steps/10-panels-assembly/10h-reconciliation.md` §6: the band is bounded against
-> telemetry but not against a browser's minimum-font-size setting (`10h-Q1`), and the owner's
-> "shares sum to 0.98" headroom ruling was measured both ways and **hides readings on two graded
-> pages**, so 1.0 was kept and the headroom recommended out of `--band-reserve` instead
-> (`10h-Q3`, §3 there).
->
-> ⚠⚠ **CORRECTED AND EXTENDED 2026-09-10 by 10g's reconciliation** — kept for its reasoning; its
-> "10g is the uncommitted work" is superseded by the paragraph above.
-> 10e and 10f are **committed** (`8ad8b9c`, `5769522`); **10g** is the uncommitted work. §6.1's
-> promise is measured TRUE on every fixture this project grades — healthy (263/228/284 px spare),
-> all-collectors-failed (140/104/160), the real box's DKMS failure (164/129/185) and the
-> all-sources-explained page (41/6/62) — and 10g's adversarial then measured it **FALSE on
-> ordinary telemetry no fixture carries**: one notable throttle mask, or §6.3's four alarm bits,
-> or a third `llama-server` instance §3.4 requires to work, or a `model` that is a path, each
-> breaks the fold on its own. So the owner ruled on 2026-09-10 that **the GRID itself is bounded**
-> — every panel gets a max-height from its grid row and its body scrolls, head pinned — plus a
-> `+N more` banner and `model` rendered as its filename. That is **10h**, and it is what closes
-> §6.1 for good. Everything below stands as the record of how the term-by-term approach ran out.
+**Steps 1–12 are DONE and the dashboard is DEPLOYED and RUNNING on the box** at
+`http://192.168.4.71:8090/`, survived a reboot, and has not disturbed inference. Since then five
+more loops closed: **12a** (a collector that cannot read is now visible — it was not, and that was
+the first production failure), **`serving-mode.sh`** (switch the box between one model across both
+cards and one per card), **12b** (the GPU↔instance join inverted), **12c** (named instances + the
+wire refusing a row rather than the page). **The next work is `12d`** — two owner rulings from
+2026-09-22, both already written into `SPEC.md`. See §2.6.
 
-**Step 10 is built and, as of 10f (2026-09-09, uncommitted), it MEETS §6.1's only quantitative
-promise on the healthy page AND on a degraded one.** The build used to overflow the fold by
-356 / 418 / 362 px at 1280×1024 / 1600×1024 / 1920×1080; measured on today's tree with
-`--fixture box` it **fits at all three with 263 / 228 / 284 px to spare, and still fits with §6.4's
-alarm banner pinned**. The cause was never the grid — `MOCK.html`, the same four-row nine-panel
-layout, always fitted — it was density, and 10e brought `components/` to the mock's. **10e's one
-remaining failure is CLOSED:** the owner ruled the promise unconditional on telemetry, 10f made
-every `errors[]` block a bounded scroll box, and `measure-breakpoints.mjs` is now **16/16, exit 0**
-— measurement 9 (all seven non-GPU collectors failed) passes with 140 / 104 / 160 px to spare, and
-a new measurement 10 grades the real box's own DKMS failure at 157 / 122 / 178. **What is left is
-three UNBOUNDED terms, none of them 10f's and all of them spec wording:** the chart table views
-(five reachable at once at 40vh each — measured +851 px on a healthy page), §6.4's banner (no cap
-at all), and the throttle line. They are `HANDOVER.md` §8's `10f-Q1`, `10f-Q2` and `10e-Q2`.
-**Next: the parent's review of `steps/10-panels-assembly/10f-reconciliation.md`, then a commit,
-then step 11.**
+⚠ **Everything below §2.3a about 10d–10h is HISTORY.** It is kept for its reasoning, not as a
+to-do list. Nothing in it is outstanding.
+
+### 2.0a Where the code is
+
+| | |
+|---|---|
+| branch | `dashboard-frontend`, **clean**, HEAD `c7070a2` |
+| last pushed | ⚠ **`b523199`** — **five commits are UNPUSHED** (`940e9b2`, `60e11e3`, `e1b1ff1`, … through `c7070a2`). `git push origin dashboard-frontend` needs the owner's ask |
+| `pnpm verify` | exit 0 — **109 files, 3810 tests** (parent-run) |
+| harnesses | **ten**, 1571 mutations, zero id collisions. ⚠ Step 2's three orphans were re-aimed; its ledger runs again |
+| browser | `measure-breakpoints.mjs` **102/102**, `check-density.mjs` ALL PASS. ⚠ **They were unrunnable 2026-09-11 → 09-15** (the secrets left the environment and both scripts log in with env credentials); fixed with a harness-only preload |
+| the box | inference on 8080/8081 at **ctx 163840**, dashboard on 8090, fan control active, all four services survive a reboot |
+
+### 2.0b ⚠ The five things this stretch learned that cost the most
+
+1. **A check whose pass condition is "nothing found" passes hardest when it cannot look.** Found
+   **six** times now, including once by the parent's own hand and once in the loop that cites it.
+2. **A hand-written table cannot falsify its own property.** The reader-vs-Docker comparison, the
+   check-vs-server differential, and the D-Bus model were each wrong until someone read the real
+   source or generated the corpus instead.
+3. **A bounds check that is not stated as an invariant will be re-found as a symptom, once per
+   phase.** The D-Bus codec: build shipped it, test found two symptoms, adversarial found the
+   missing rule, reconcile deleted two checks and stated one.
+4. ⚠ **Never act beside a running harness.** `ebc60c6` committed a source file with a mutation
+   applied because the parent ran `git add -A` mid-run. Repaired in `7275e12`.
+5. **A shortened array means two different things** — the server omitted it, or we discarded it —
+   **and every reader of one must be told which.** Cost two phases in 12c.
 
 ### 2.1 Branches and tree
 
@@ -232,50 +225,33 @@ term appeared every time. 10g-A1 measured four of them breaking the fold on the 
 **10h**. The "unnecessary in the healthy state" reasoning was right about the healthy state and
 that was the wrong state to reason about.
 
-### 2.6 ⚠ What to do next, in order
+### 2.6 ⚠ What to do next, in order — rewritten 2026-09-22
 
-> **Progress 2026-09-09, evening:** **10f is COMMITTED at `5769522`** (full loop; parent re-ran verify
-> 2967/exit 0 and all browser measurements: m9 140/104/160, m10 157/122/178, density ALL PASS).
-> §6.1 holds on healthy AND all-collectors-failed pages. The owner then ruled the last four
-> (SPEC §6.1/§6.4, WORK-ITEMS §11): **10g** = table view inside the chart's box (10f-Q1) · fixed
-> two-line scrolling banner (10f-Q2) · throttle line as a one-line well + roomy wells to 46 px, then
-> re-measure the all-explained page (10f-Q3/10e-Q2) · `… N more` affordance (10f-Q4/Q5). **10g's build
-> was launched from `handoffs/10g-bounded-terms.md`**; test → adversarial → reconcile → parent review
-> follow, then step 11. Still open, none blocking: `10e-Q4`–`Q11`, `10f-Q6`.
+**1. Loop `12d` — two owner rulings, already in `SPEC.md`.** Read
+`pipeline/handoffs/12d-partial-reads.md`; it is written and is the brief.
 
-> **Progress 2026-09-09, later:** **10e is COMMITTED at `8ad8b9c`** after the full loop (build ×2,
-> test, adversarial, reconcile, parent review — parent re-ran `pnpm verify` 2933/exit 0 and all three
-> browser measurements itself). §6.1 is measured TRUE on the healthy page with 263 / 228 / 284 px
-> spare and the banner pinned. The owner ruled four of the thirteen 10e questions the same day
-> (SPEC §6.1/§6.2, WORK-ITEMS §11): **10f** = bound `errors[]`/`detail` blocks so DEGRADED pages fit
-> (Q1) · `0x4` neutral chip (Q3) · delete `Row` (Q12) · re-aim `02-R20/R30/R31` (Q13). **10f's build
-> was launched from `handoffs/10f-degraded-fit.md`**; test → adversarial → reconcile → parent review
-> follow, then step 11. Remaining open owner questions: `10e-Q2`, `Q4`–`Q11` (HANDOVER §8).
+- **12c-Q1** — a partially-read `serving[]` gets its **own form** on the GPU card, distinct from
+  the em dash. *We discarded part of the list* is not *this reading could not be taken*; collapsing
+  them is invariant 1's failure one level up. `SPEC.md` §3.4 carries it.
+- **12c-Q2** — a partial read **retires what it can**: if the refused row's identity parsed,
+  protect that identity alone and let every other absent subject retire. ⚠ **If the identity did
+  not parse, retirement stays frozen for the whole enumeration** — we cannot tell who is missing,
+  and that branch is the honest answer, not a case to optimise away. `SPEC.md` §9 row 2 carries it.
 
-> **Progress 2026-09-09, end of day:** steps 1–5 below are **DONE**. The owner ruled on all nine
-> questions (banner **unconditional**; OQ-1/2/3/5/6 **declined**; OQ-4 **no chip** on the log;
-> **OQ-7 keep BOTH CPU traces** → CPU target 216.1 / 240.1 / 240.1; OQ-8 recorded), `SPEC.md` §6.1/§6.2
-> were rewritten by the parent, and the **full 10e loop ran**: build → test → adversarial →
-> reconcile, all four notes in `steps/10-panels-assembly/`. Acceptance was measured, twice, by two
-> sessions: `check-density.mjs` **ALL PASS**, `measure-breakpoints.mjs` **10/12** with measurement 9
-> failing under the dev-Mac fixture only. **What is left is the parent's review and the commit.**
+**2. Then the box.** `SERVING-MODES.md` §9's acceptance can only be settled by running it, and
+`sudo` needs the owner's password:
+   - a **reboot in each mode**, with `journalctl -b | grep "ordering cycle"` empty;
+   - **two switches in a row**, with a real 32.6 GB load;
+   - a **forced impossible split** (`split 524288`), to watch the rollback verify and exit 3.
+   ⚠ **Redeploy the dashboard BEFORE switching to split**, or the older client refuses the
+   snapshot — row-level refusal does not exist in code that predates 12c.
 
-1. ✅ **DONE** — 10e's spec was written and its owner questions put to the owner.
-2. ✅ **DONE** — all nine ruled.
-3. ✅ **DONE** — `SPEC.md` §6.1/§6.2 rewritten by the parent.
-4. ✅ **DONE** — the density build ran as a full loop. ⚠ **What is NOT done is the fifth phase:**
-   **the parent's review** (§8 — re-run `pnpm verify` yourself, read every rejection and deferral in
-   `10e-reconciliation.md` §1, spot-check the headline claims against the tree, then commit). Start
-   with §8's four checks and with that file's own §8, which names what to check first.
-5. ✅ **DONE** — the real app is measured. `measure-breakpoints.mjs` does **not** exit 0: it is
-   10 pass / 2 fail, and both failures are measurement 9 under the **dev-Mac** fixture, where every
-   Linux-only collector has failed. Under `--fixture box` the page fits at all three viewports with
-   227–284 px to spare, banner included. **Whether that is enough is `HANDOVER.md` §8's `10e-Q1`,
-   and it is the owner's** — do not treat the non-zero exit as a density regression.
-6. **Then rule on stage 2** ("bound the grid", §2.5) with those numbers — on this evidence it looks
-   unnecessary in the healthy state.
-7. Then **step 11** (packaging), then **redeploy the box** (owner ruled: at step 10 complete; it
-   still serves `b3969cd`).
+**3. Still open, none blocking** — `HANDOVER.md` §8 (four new from 12c), `12b-Q3…Q6`, and
+`serving-mode.sh`'s seven. The oldest carried items are `S-G-Q1…Q4` and `D1`.
+
+⚠ **The loop is build → test → adversarial → reconcile → parent review, and it applies to the ROOT
+SCRIPTS too** (owner's instruction, root `CLAUDE.md`). Work runs **in sequence, never in parallel**
+— see §2.0b item 4 for what parallel cost.
 
 ### 2.7 Owner questions still open, carried from earlier loops
 

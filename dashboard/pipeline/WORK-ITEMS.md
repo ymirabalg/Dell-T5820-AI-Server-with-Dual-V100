@@ -891,3 +891,11 @@ row-refusal ruling leaves `serving[]` shorter, which retirement read as "it has 
 and one malformed `port` was measured silently deleting a live `alarm` from the ledger, the dot and
 the count. Refused rows go **stale**; the `errors[]` entry naming the refusal says why. The ruling
 was right; this is the second-order consequence it needed.
+
+**Ruled 2026-09-22 → loop 12d.** (1) **12c-Q1**: a partially-read `serving[]` gets its **own form**
+on the GPU card, distinct from the em dash — *we discarded part of the list* is not *this reading
+could not be taken*, and collapsing them is invariant 1's failure one level up. (2) **12c-Q2**:
+a partial read **retires what it can** — if the refused row's identity parsed, protect that
+identity alone and let every other absent subject retire; ⚠ if the identity did **not** parse,
+retirement stays frozen for the whole enumeration, because we cannot tell who is missing. That
+second branch is the honest answer, not a case to optimise away.
